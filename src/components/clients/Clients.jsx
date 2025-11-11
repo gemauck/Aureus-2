@@ -369,6 +369,44 @@ const Clients = React.memo(() => {
         };
     }, [viewMode, pipelineStatus]);
 
+    useEffect(() => {
+        if (viewMode !== 'pipeline') {
+            return;
+        }
+
+        const elementsToCheck = ['button', 'a[role="button"]', 'div[role="button"]'];
+
+        const removeLegacyPipelineButtons = () => {
+            try {
+                const candidates = document.querySelectorAll(elementsToCheck.join(','));
+                candidates.forEach((element) => {
+                    const text = element?.textContent?.replace(/\s+/g, ' ').trim().toLowerCase();
+                    if (!text) {
+                        return;
+                    }
+
+                    if (
+                        text.includes('new deal') ||
+                        text.includes('forecast') ||
+                        text === 'refresh'
+                    ) {
+                        // Hide instead of remove to avoid layout shifts if other scripts rely on the node
+                        element.style.display = 'none';
+                        element.setAttribute('data-legacy-pipeline-hidden', 'true');
+                    }
+                });
+            } catch (error) {
+                console.warn('⚠️ Pipeline: Failed to remove legacy buttons', error);
+            }
+        };
+
+        removeLegacyPipelineButtons();
+        const observer = new MutationObserver(() => removeLegacyPipelineButtons());
+        observer.observe(document.body, { childList: true, subtree: true });
+
+        return () => observer.disconnect();
+    }, [viewMode, pipelineRenderKey]);
+
     // Utility function to calculate time since first contact
     const getTimeSinceFirstContact = (firstContactDate) => {
         if (!firstContactDate) return 'Not set';
@@ -3519,7 +3557,12 @@ const Clients = React.memo(() => {
                                                         e.preventDefault();
                                                         return;
                                                     }
-                                                    handleOpenClient(client);
+                                                    openOpportunityFromPipeline({
+                                                        opportunityId: opp.id,
+                                                        clientId: client?.id || opp.clientId,
+                                                        clientName: client?.name || opp.clientName,
+                                                        opportunity: opp
+                                                    });
                                                 }}
                                                 className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} rounded-lg p-2.5 border shadow-sm hover:shadow-md cursor-move transition ${
                                                     draggedItem?.id === opp.id ? 'opacity-50' : ''

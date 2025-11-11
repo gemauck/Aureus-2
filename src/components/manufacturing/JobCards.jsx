@@ -1,16 +1,11 @@
 // Job Cards Page Component for Manufacturing
 // Features:
-// - Full offline support with localStorage + API sync
-//   - All job card data (including photos and documents) cached locally
-//   - Photos stored as data URLs for offline access
-//   - Documents stored as data URLs for offline access
-//   - All related data (users, clients, vehicles, inventory) cached
-//   - Automatic sync when connection is restored
+// - Offline support with localStorage + API sync
 // - Technicians selectable from users list
 // - Clients selectable from clients list
 // - Sites selectable per client
 
-const { useState, useEffect, useCallback, useRef, memo } = React;
+const { useState, useEffect, useCallback, useRef } = React;
 const { useAuth } = window;
 
 const JobCards = ({ clients: clientsProp, users: usersProp }) => {
@@ -21,7 +16,6 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [showAddPage, setShowAddPage] = useState(false);
   const [editingJobCard, setEditingJobCard] = useState(null);
-  const [viewingJobCard, setViewingJobCard] = useState(null);
   const [formData, setFormData] = useState({
     agentName: '',
     otherTechnicians: [],
@@ -30,14 +24,9 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     siteId: '',
     siteName: '',
     location: '',
-    locationLatitude: '',
-    locationLongitude: '',
-    vehicleId: '',
-    vehicleUsed: '',
     timeOfDeparture: '',
     timeOfArrival: '',
-    departureFromSite: '',
-    arrivalBackAtOffice: '',
+    vehicleUsed: '',
     kmReadingBefore: '',
     kmReadingAfter: '',
     reasonForVisit: '',
@@ -47,137 +36,55 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     materialsBought: [],
     otherComments: '',
     photos: [],
-    documents: [],
     status: 'draft'
   });
   const [technicianInput, setTechnicianInput] = useState('');
   const [selectedPhotos, setSelectedPhotos] = useState([]);
-  const [selectedDocuments, setSelectedDocuments] = useState([]);
   const [availableSites, setAvailableSites] = useState([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [inventory, setInventory] = useState([]);
   const [stockLocations, setStockLocations] = useState([]);
-  const [vehicles, setVehicles] = useState([]);
   const [newStockItem, setNewStockItem] = useState({ sku: '', quantity: 0, locationId: '' });
   const [newMaterialItem, setNewMaterialItem] = useState({ itemName: '', description: '', reason: '', cost: 0 });
-  const [mapInstance, setMapInstance] = useState(null);
-  const [locationMarker, setLocationMarker] = useState(null);
-  const [isGettingLocation, setIsGettingLocation] = useState(false);
-  const locationMapRef = useRef(null);
-  const [showVehicleModal, setShowVehicleModal] = useState(false);
-  const [editingVehicle, setEditingVehicle] = useState(null);
-  const [vehicleFormData, setVehicleFormData] = useState({ name: '', model: '', type: '', reg: '', assetNumber: '', notes: '', status: 'active' });
+  const [locationData, setLocationData] = useState(null);
+
+  // Handle location selection from LocationPicker
+  const handleLocationSelect = (location) => {
+    setLocationData(location);
+    if (location) {
+      const locationText = location.address || '';
+      setFormData(prev => ({ ...prev, location: locationText }));
+    } else {
+      setFormData(prev => ({ ...prev, location: '' }));
+    }
+  };
 
   // Load job cards with offline support - defined as a stable function reference
   const loadJobCardsRef = useRef(null);
   const syncPendingJobCardsRef = useRef(null);
   
-  // Function to ensure job card data is fully accessible offline
-  const ensureJobCardOfflineAccess = useCallback((jobCard) => {
-    if (!jobCard) return jobCard;
-    
-    // Ensure all arrays exist
-    const enhanced = {
-      ...jobCard,
-      photos: Array.isArray(jobCard.photos) ? jobCard.photos : [],
-      documents: Array.isArray(jobCard.documents) ? jobCard.documents : [],
-      stockUsed: Array.isArray(jobCard.stockUsed) ? jobCard.stockUsed : [],
-      materialsBought: Array.isArray(jobCard.materialsBought) ? jobCard.materialsBought : [],
-      otherTechnicians: Array.isArray(jobCard.otherTechnicians) ? jobCard.otherTechnicians : []
-    };
-    
-    // Ensure photos are data URLs (for offline access)
-    enhanced.photos = enhanced.photos.map(photo => {
-      if (typeof photo === 'string') {
-        // If it's already a data URL, keep it
-        if (photo.startsWith('data:')) {
-          return photo;
-        }
-        // If it's a URL, try to get from cache or return as-is
-        // (Note: We can't convert URLs to data URLs without network, so keep as-is)
-        return photo;
-      }
-      // If it's an object with url property
-      return typeof photo === 'object' && photo.url ? photo.url : photo;
-    });
-    
-    // Ensure documents are properly formatted
-    enhanced.documents = enhanced.documents.map(doc => {
-      if (typeof doc === 'string') {
-        // Convert string to object format if needed
-        return {
-          id: `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          name: 'Document',
-          url: doc,
-          size: 0,
-          type: 'application/octet-stream',
-          uploadedAt: jobCard.createdAt || new Date().toISOString()
-        };
-      }
-      return doc;
-    });
-    
-    return enhanced;
-  }, []);
-  
-  const loadJobCards = useCallback(async (forceRefresh = false) => {
+  const loadJobCards = useCallback(async () => {
     setIsLoading(true);
     try {
-      // If forceRefresh is true, skip localStorage and go straight to API
-      // This ensures we get fresh data after delete operations
-      if (!forceRefresh) {
-        // First, try to load from localStorage (offline support)
-        const cached = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
-        if (cached.length > 0) {
-          // Ensure all job cards are accessible offline
-          const enhancedCards = cached.map(card => ensureJobCardOfflineAccess(card));
-          setJobCards(enhancedCards);
-          setIsLoading(false);
-        }
-      } else {
-        // Force refresh mode - clear localStorage first to prevent stale data
-        console.log('🔄 Force refresh: Clearing localStorage cache');
-        localStorage.removeItem('manufacturing_jobcards');
+      // First, try to load from localStorage (offline support)
+      const cached = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
+      if (cached.length > 0) {
+        setJobCards(cached);
+        setIsLoading(false);
       }
 
       // Then try to sync from API if online
       const onlineStatus = navigator.onLine;
       if (onlineStatus && window.DatabaseAPI?.getJobCards) {
         try {
-          console.log('📡 JobCards: Fetching from API...', forceRefresh ? '(force refresh)' : '');
-          
-          // Force cache bypass if forceRefresh is true
-          if (forceRefresh && window.DatabaseAPI._responseCache) {
-            window.DatabaseAPI._responseCache.delete('GET:/jobcards');
-            console.log('🗑️ Cleared job cards cache for force refresh');
-          }
-          
-          // Add cache-busting query parameter to force fresh request
-          const cacheBuster = forceRefresh ? `?_t=${Date.now()}` : '';
-          const response = await window.DatabaseAPI.makeRequest(`/jobcards${cacheBuster}`);
-          
-          // Normalize response (same logic as getJobCards)
-          const normalized = {
-            data: {
-              jobCards: Array.isArray(response?.data?.jobCards)
-                ? response.data.jobCards
-                : Array.isArray(response?.jobCards)
-                  ? response.jobCards
-                  : Array.isArray(response?.data)
-                    ? response.data
-                    : []
-            }
-          };
-          console.log('📡 JobCards: API response:', normalized);
-          const jobCardsData = normalized.data.jobCards;
+          console.log('📡 JobCards: Fetching from API...');
+          const response = await window.DatabaseAPI.getJobCards();
+          console.log('📡 JobCards: API response:', response);
+          const jobCardsData = response?.data?.jobCards || response?.data || [];
           console.log('📡 JobCards: Parsed job cards:', jobCardsData.length);
           if (Array.isArray(jobCardsData)) {
             // Mark all API-loaded cards as synced to prevent duplicate creation
-            // Ensure all job cards are accessible offline
-            const syncedCards = jobCardsData.map(jc => {
-              const enhanced = ensureJobCardOfflineAccess({ ...jc, synced: true });
-              return enhanced;
-            });
+            const syncedCards = jobCardsData.map(jc => ({ ...jc, synced: true }));
             // Always set the job cards array (even if empty) so the UI shows the empty state
             setJobCards(syncedCards);
             localStorage.setItem('manufacturing_jobcards', JSON.stringify(syncedCards));
@@ -190,28 +97,13 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             console.warn('⚠️ JobCards: API response is not an array:', typeof jobCardsData);
             // Set empty array if response is invalid
             setJobCards([]);
-            localStorage.setItem('manufacturing_jobcards', JSON.stringify([]));
           }
         } catch (error) {
-          // Handle authentication errors gracefully
-          const isAuthError = error.message?.includes('401') || 
-                              error.message?.includes('Unauthorized') ||
-                              error.message?.includes('No authentication token');
-          
-          if (isAuthError) {
-            console.warn('⚠️ JobCards: Authentication error - will retry when user logs in');
-            // Don't clear cached data on auth errors - user might just need to refresh token
-          } else {
-            console.error('❌ JobCards: Failed to sync from API:', error);
-            console.error('❌ Error details:', error.message, error.stack);
-          }
-          
-          // Still show cached data if available (unless forceRefresh)
-          if (!forceRefresh) {
-            const cached = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
-            if (cached.length > 0) {
-              console.log('📦 JobCards: Using cached data due to API error');
-            }
+          console.error('❌ JobCards: Failed to sync from API:', error);
+          console.error('❌ Error details:', error.message, error.stack);
+          // Still show cached data if available
+          if (cached.length > 0) {
+            console.log('📦 JobCards: Using cached data due to API error');
           }
         }
       } else {
@@ -227,7 +119,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [ensureJobCardOfflineAccess]); // Include ensureJobCardOfflineAccess in dependencies
+  }, []); // Remove isOnline dependency to avoid initialization issues
 
   // Store the function in a ref for stable access
   loadJobCardsRef.current = loadJobCards;
@@ -266,18 +158,8 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
           cached = cached.map(jc => jc.id === card.id ? { ...jc, synced: true } : jc);
           localStorage.setItem('manufacturing_jobcards', JSON.stringify(cached));
         } catch (error) {
-          // Handle authentication errors gracefully
-          const isAuthError = error.message?.includes('401') || 
-                              error.message?.includes('Unauthorized') ||
-                              error.message?.includes('No authentication token');
-          
-          if (isAuthError) {
-            console.warn(`⚠️ JobCards: Authentication error syncing job card ${card.id} - will retry when authenticated`);
-            // Keep as unsynced - will retry when user authenticates
-          } else {
-            console.error(`❌ Failed to sync job card ${card.id}:`, error);
-            // Keep as unsynced for next attempt
-          }
+          console.error(`❌ Failed to sync job card ${card.id}:`, error);
+          // Keep as unsynced for next attempt
         }
       }
       
@@ -445,58 +327,15 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     loadStockData();
   }, [isOnline]);
 
-  // Load vehicles - with offline support
-  useEffect(() => {
-    const loadVehicles = async () => {
-      try {
-        // First, load from cache for instant UI
-        const cached = JSON.parse(localStorage.getItem('manufacturing_vehicles') || '[]');
-        if (cached.length > 0) {
-          setVehicles(cached);
-        }
-
-        // Then try to sync from API if online
-        if (isOnline && window.DatabaseAPI?.getVehicles) {
-          try {
-            const response = await window.DatabaseAPI.getVehicles();
-            const vehiclesData = response?.data?.vehicles || response?.data || [];
-            if (Array.isArray(vehiclesData) && vehiclesData.length > 0) {
-              setVehicles(vehiclesData);
-              localStorage.setItem('manufacturing_vehicles', JSON.stringify(vehiclesData));
-            }
-          } catch (error) {
-            console.warn('Failed to load vehicles from API, using cache:', error);
-            if (cached.length > 0) setVehicles(cached);
-          }
-        }
-      } catch (error) {
-        console.warn('Failed to load vehicles:', error);
-        const cached = JSON.parse(localStorage.getItem('manufacturing_vehicles') || '[]');
-        if (cached.length > 0) setVehicles(cached);
-      }
-    };
-    loadVehicles();
-  }, [isOnline]);
-
   // Initial load of job cards - run only once on mount
-  // This ensures cached data is available immediately for offline access
   useEffect(() => {
     const initLoad = async () => {
-      // Immediately load from cache for instant offline access
-      const cached = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
-      if (cached.length > 0) {
-        const enhancedCards = cached.map(card => ensureJobCardOfflineAccess(card));
-        setJobCards(enhancedCards);
-        setIsLoading(false);
-      }
-      
-      // Then load from API if available
       await loadJobCardsRef.current?.();
       // NOTE: Don't sync pending cards on mount - they're already on the server
       // syncPendingJobCards should only be called when coming back online
     };
     initLoad();
-  }, [ensureJobCardOfflineAccess]); // Include ensureJobCardOfflineAccess to ensure it's available
+  }, []); // Empty dependency array - only run on mount
 
   // Auto-populate agent name from current user
   useEffect(() => {
@@ -533,77 +372,47 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   // Initialize form for editing
   useEffect(() => {
     if (editingJobCard) {
-      // Ensure job card data is accessible offline
-      const enhancedJobCard = ensureJobCardOfflineAccess(editingJobCard);
-      
       setFormData({
-        agentName: enhancedJobCard.agentName || '',
-        otherTechnicians: enhancedJobCard.otherTechnicians || [],
-        clientId: enhancedJobCard.clientId || '',
-        clientName: enhancedJobCard.clientName || '',
-        siteId: enhancedJobCard.siteId || '',
-        siteName: enhancedJobCard.siteName || '',
-        location: enhancedJobCard.location || '',
-        locationLatitude: enhancedJobCard.locationLatitude || '',
-        locationLongitude: enhancedJobCard.locationLongitude || '',
-        vehicleId: enhancedJobCard.vehicleId || '',
-        vehicleUsed: enhancedJobCard.vehicleUsed || '',
-        timeOfDeparture: enhancedJobCard.timeOfDeparture ? enhancedJobCard.timeOfDeparture.substring(0, 16) : '',
-        timeOfArrival: enhancedJobCard.timeOfArrival ? enhancedJobCard.timeOfArrival.substring(0, 16) : '',
-        departureFromSite: enhancedJobCard.departureFromSite ? enhancedJobCard.departureFromSite.substring(0, 16) : '',
-        arrivalBackAtOffice: enhancedJobCard.arrivalBackAtOffice ? enhancedJobCard.arrivalBackAtOffice.substring(0, 16) : '',
-        kmReadingBefore: enhancedJobCard.kmReadingBefore || '',
-        kmReadingAfter: enhancedJobCard.kmReadingAfter || '',
-        reasonForVisit: enhancedJobCard.reasonForVisit || '',
-        diagnosis: enhancedJobCard.diagnosis || '',
-        actionsTaken: enhancedJobCard.actionsTaken || '',
-        stockUsed: enhancedJobCard.stockUsed || [],
-        materialsBought: enhancedJobCard.materialsBought || [],
-        otherComments: enhancedJobCard.otherComments || '',
-        photos: enhancedJobCard.photos || [],
-        documents: enhancedJobCard.documents || [],
-        status: enhancedJobCard.status || 'draft'
+        agentName: editingJobCard.agentName || '',
+        otherTechnicians: editingJobCard.otherTechnicians || [],
+        clientId: editingJobCard.clientId || '',
+        clientName: editingJobCard.clientName || '',
+        siteId: editingJobCard.siteId || '',
+        siteName: editingJobCard.siteName || '',
+        location: editingJobCard.location || '',
+        timeOfDeparture: editingJobCard.timeOfDeparture ? editingJobCard.timeOfDeparture.substring(0, 16) : '',
+        timeOfArrival: editingJobCard.timeOfArrival ? editingJobCard.timeOfArrival.substring(0, 16) : '',
+        vehicleUsed: editingJobCard.vehicleUsed || '',
+        kmReadingBefore: editingJobCard.kmReadingBefore || '',
+        kmReadingAfter: editingJobCard.kmReadingAfter || '',
+        reasonForVisit: editingJobCard.reasonForVisit || '',
+        diagnosis: editingJobCard.diagnosis || '',
+        actionsTaken: editingJobCard.actionsTaken || '',
+        stockUsed: editingJobCard.stockUsed || [],
+        materialsBought: editingJobCard.materialsBought || [],
+        otherComments: editingJobCard.otherComments || '',
+        photos: editingJobCard.photos || [],
+        status: editingJobCard.status || 'draft'
       });
+      setSelectedPhotos(editingJobCard.photos || []);
       
-      // Set photos - ensure they're in the right format for display
-      const normalizedPhotos = (enhancedJobCard.photos || []).map((photo, idx) => {
-        if (typeof photo === 'string') {
-          return { name: `Photo ${idx + 1}`, url: photo, size: 0 };
-        }
-        return {
-          name: photo.name || `Photo ${idx + 1}`,
-          url: photo.url || photo,
-          size: photo.size || 0
-        };
-      });
-      setSelectedPhotos(normalizedPhotos);
-      
-      // Normalize documents - handle both old format (strings/dataUrls) and new format (objects)
-      const normalizedDocuments = (enhancedJobCard.documents || []).map((doc, idx) => {
-        if (typeof doc === 'string') {
-          // Old format: just a data URL string
-          return {
-            id: `doc_${Date.now()}_${idx}`,
-            name: `Document ${idx + 1}`,
-            url: doc,
-            size: 0,
-            type: 'application/octet-stream',
-            uploadedAt: enhancedJobCard.updatedAt || enhancedJobCard.createdAt || new Date().toISOString()
-          };
-        }
-        // New format: object with all fields
-        return {
-          id: doc.id || `doc_${Date.now()}_${idx}`,
-          name: doc.name || `Document ${idx + 1}`,
-          url: doc.url || doc,
-          size: doc.size || 0,
-          type: doc.type || 'application/octet-stream',
-          uploadedAt: doc.uploadedAt || enhancedJobCard.updatedAt || enhancedJobCard.createdAt || new Date().toISOString()
-        };
-      });
-      setSelectedDocuments(normalizedDocuments);
+      // Restore location data if available
+      if (editingJobCard.locationCoordinates) {
+        setLocationData(editingJobCard.locationCoordinates);
+      } else if (editingJobCard.location) {
+        // If only text location, set it as manual
+        setLocationData({
+          latitude: null,
+          longitude: null,
+          address: editingJobCard.location,
+          fullAddress: null,
+          isManual: true
+        });
+      } else {
+        setLocationData(null);
+      }
     }
-  }, [editingJobCard, ensureJobCardOfflineAccess]);
+  }, [editingJobCard]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -650,35 +459,6 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     const newPhotos = selectedPhotos.filter((_, i) => i !== index);
     setSelectedPhotos(newPhotos);
     setFormData(prev => ({ ...prev, photos: newPhotos.map(p => typeof p === 'string' ? p : p.url) }));
-  };
-
-  const handleDocumentUpload = (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length > 0) {
-      files.forEach(file => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const dataUrl = reader.result;
-          const document = {
-            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-            name: file.name,
-            url: dataUrl,
-            size: file.size,
-            type: file.type,
-            uploadedAt: new Date().toISOString()
-          };
-          setSelectedDocuments(prev => [...prev, document]);
-          setFormData(prev => ({ ...prev, documents: [...prev.documents, document] }));
-        };
-        reader.readAsDataURL(file);
-      });
-    }
-  };
-
-  const handleRemoveDocument = (id) => {
-    const newDocuments = selectedDocuments.filter(doc => doc.id !== id);
-    setSelectedDocuments(newDocuments);
-    setFormData(prev => ({ ...prev, documents: newDocuments }));
   };
 
   // Stock usage handlers
@@ -763,9 +543,15 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       const kmAfter = parseFloat(formData.kmReadingAfter) || 0;
       jobCardData.travelKilometers = Math.max(0, kmAfter - kmBefore);
 
-      // Calculate total time in minutes
-      const totalMinutes = calculateTotalTime();
-      jobCardData.totalTimeMinutes = totalMinutes;
+      // Add location coordinates if available
+      if (locationData) {
+        jobCardData.locationCoordinates = {
+          latitude: locationData.latitude,
+          longitude: locationData.longitude,
+          address: locationData.address,
+          isManual: locationData.isManual || false
+        };
+      }
 
       // Calculate total cost for materials bought
       jobCardData.totalMaterialsCost = (formData.materialsBought || []).reduce((sum, item) => sum + (item.cost || 0), 0);
@@ -943,16 +729,13 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       }
 
       // Save to localStorage first (offline support)
-      // Ensure all data is properly formatted for offline access
-      const enhancedJobCardData = ensureJobCardOfflineAccess(jobCardData);
-      
       let updatedJobCards;
       const isNewCard = !editingJobCard;
       const wasSynced = editingJobCard?.synced !== false;
       
       // Mark new cards as unsynced, and track if it's an edit
       const cardDataWithSyncFlag = { 
-        ...enhancedJobCardData, 
+        ...jobCardData, 
         synced: false,
         _wasEdit: !!editingJobCard  // Internal flag to track if this was an edit
       };
@@ -989,17 +772,8 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             }
           }
         } catch (error) {
-          // Handle authentication errors gracefully
-          const isAuthError = error.message?.includes('401') || 
-                              error.message?.includes('Unauthorized') ||
-                              error.message?.includes('No authentication token');
-          
-          if (isAuthError) {
-            console.warn('⚠️ JobCards: Authentication error - job card saved offline, will sync when authenticated');
-          } else {
-            console.warn('⚠️ Failed to sync job card to API, saved offline:', error.message);
-          }
-          // Card is already marked as unsynced, will be synced when back online or authenticated
+          console.warn('⚠️ Failed to sync job card to API, saved offline:', error.message);
+          // Card is already marked as unsynced, will be synced when back online
         }
       } else {
         console.log('📴 Offline mode: Job card saved locally, will sync when online');
@@ -1019,81 +793,16 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     if (!confirm('Are you sure you want to delete this job card?')) return;
 
     try {
-      // Close detail view if the deleted job card is being viewed
-      if (viewingJobCard && viewingJobCard.id === id) {
-        setViewingJobCard(null);
-      }
-      // Close edit form if the deleted job card is being edited
-      if (editingJobCard && editingJobCard.id === id) {
-        setEditingJobCard(null);
-        setShowAddPage(false);
-      }
-
       // First, try to delete from API if online
       if (isOnline && window.DatabaseAPI?.deleteJobCard) {
         try {
           console.log('🗑️ Deleting job card from database:', id);
-          
-          // DELETE FROM API FIRST - wait for confirmation
           await window.DatabaseAPI.deleteJobCard(id);
           console.log('✅ Job card deleted from database successfully');
-          
-          // Clear API cache to ensure fresh data on next load
-          if (window.DatabaseAPI && window.DatabaseAPI._responseCache) {
-            window.DatabaseAPI._responseCache.delete('GET:/jobcards');
-            window.DatabaseAPI._responseCache.delete(`GET:/jobcards/${id}`);
-            console.log('🗑️ Cleared job cards cache in DatabaseAPI');
-          }
-          
-          // NOW remove from local state and localStorage after successful API delete
-          const updatedJobCards = jobCards.filter(jc => jc.id !== id);
-          setJobCards(updatedJobCards);
-          localStorage.setItem('manufacturing_jobcards', JSON.stringify(updatedJobCards));
-          console.log('✅ Job card removed from local state after successful API delete');
-          
-          // Reload from API to ensure sync and get fresh data
-          // Use a delay to ensure server has processed the delete
-          setTimeout(async () => {
-            if (loadJobCardsRef.current) {
-              console.log('🔄 Reloading job cards from API after delete to ensure sync...');
-              try {
-                // Clear localStorage BEFORE reloading to prevent stale data
-                localStorage.removeItem('manufacturing_jobcards');
-                console.log('🗑️ Cleared localStorage before reload');
-                
-                await loadJobCardsRef.current(true); // Force refresh, bypass cache
-                console.log('✅ Job cards reloaded from API after delete');
-              } catch (syncError) {
-                console.warn('⚠️ Failed to reload after delete:', syncError);
-                // Don't show error to user - item already deleted from UI
-              }
-            }
-          }, 500); // Increased delay to ensure server processes delete
-          
-          alert('Job card deleted successfully!');
-          return; // Exit early after successful API delete
         } catch (error) {
-          // Handle authentication errors gracefully
-          const isAuthError = error.message?.includes('401') || 
-                              error.message?.includes('Unauthorized') ||
-                              error.message?.includes('No authentication token');
-          
-          if (isAuthError) {
-            console.warn('⚠️ JobCards: Authentication error during delete - please log in and try again');
-            // Restore the item since delete failed
-            if (loadJobCardsRef.current) {
-              await loadJobCardsRef.current();
-            }
-            alert('Authentication required. Please log in and try again.');
-          } else {
-            console.error('❌ Failed to delete from API:', error);
-            // Restore the item since delete failed
-            if (loadJobCardsRef.current) {
-              await loadJobCardsRef.current();
-            }
-            const errorMessage = error.message || 'Unknown error';
-            alert(`Failed to delete job card from server: ${errorMessage}. Please check your connection and try again.`);
-          }
+          console.error('❌ Failed to delete from API:', error);
+          const errorMessage = error.message || 'Unknown error';
+          alert(`Failed to delete job card from server: ${errorMessage}. Please check your connection and try again.`);
           return; // Don't proceed with local deletion if API fails
         }
       } else if (isOnline && !window.DatabaseAPI?.deleteJobCard) {
@@ -1102,13 +811,15 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
         return;
       } else {
         console.log('📴 Offline mode: Deleting job card locally only');
-        // Remove from local state/localStorage if offline
-        const updatedJobCards = jobCards.filter(jc => jc.id !== id);
-        setJobCards(updatedJobCards);
-        localStorage.setItem('manufacturing_jobcards', JSON.stringify(updatedJobCards));
-        console.log('✅ Job card removed from local state and localStorage (offline)');
-        alert('Job card deleted successfully! (Changes will sync when online)');
       }
+
+      // Only remove from local state/localStorage after successful API deletion (or if offline)
+      const updatedJobCards = jobCards.filter(jc => jc.id !== id);
+      setJobCards(updatedJobCards);
+      localStorage.setItem('manufacturing_jobcards', JSON.stringify(updatedJobCards));
+      console.log('✅ Job card removed from local state');
+
+      alert('Job card deleted successfully!');
     } catch (error) {
       console.error('❌ Error deleting job card:', error);
       alert(`Failed to delete job card: ${error.message || 'Unknown error'}`);
@@ -1134,14 +845,9 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       siteId: '',
       siteName: '',
       location: '',
-      locationLatitude: '',
-      locationLongitude: '',
-      vehicleId: '',
-      vehicleUsed: '',
       timeOfDeparture: '',
       timeOfArrival: '',
-      departureFromSite: '',
-      arrivalBackAtOffice: '',
+      vehicleUsed: '',
       kmReadingBefore: '',
       kmReadingAfter: '',
       reasonForVisit: '',
@@ -1151,334 +857,13 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       materialsBought: [],
       otherComments: '',
       photos: [],
-      documents: [],
       status: 'draft'
     });
     setSelectedPhotos([]);
-    setSelectedDocuments([]);
     setTechnicianInput('');
     setNewStockItem({ sku: '', quantity: 0, locationId: '' });
     setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
-    // Clear map marker
-    if (locationMarker) {
-      locationMarker.remove();
-      setLocationMarker(null);
-    }
-  };
-
-  // Calculate total time in minutes
-  const calculateTotalTime = () => {
-    const departure = formData.timeOfDeparture ? new Date(formData.timeOfDeparture) : null;
-    const arrivalBack = formData.arrivalBackAtOffice ? new Date(formData.arrivalBackAtOffice) : null;
-    
-    if (departure && arrivalBack && arrivalBack > departure) {
-      const diffMs = arrivalBack - departure;
-      const diffMinutes = Math.round(diffMs / (1000 * 60));
-      return diffMinutes;
-    }
-    return 0;
-  };
-
-  // Initialize map for location selection (only when showAddPage becomes true)
-  useEffect(() => {
-    if (!showAddPage || !locationMapRef.current) {
-      // Clean up when hiding the form
-      if (mapInstance) {
-        mapInstance.remove();
-        setMapInstance(null);
-      }
-      if (locationMarker) {
-        locationMarker.remove();
-        setLocationMarker(null);
-      }
-      return;
-    }
-
-    // Wait for Leaflet to be available
-    if (typeof L === 'undefined') {
-      const checkLeaflet = setInterval(() => {
-        if (typeof L !== 'undefined') {
-          clearInterval(checkLeaflet);
-          initializeLocationMap();
-        }
-      }, 100);
-      return () => clearInterval(checkLeaflet);
-    }
-
-    initializeLocationMap();
-
-    function initializeLocationMap() {
-      // Clean up existing map
-      if (mapInstance) {
-        mapInstance.remove();
-      }
-
-      // Default center (South Africa - approximate center)
-      const defaultLat = formData.locationLatitude ? parseFloat(formData.locationLatitude) : -26.2041;
-      const defaultLng = formData.locationLongitude ? parseFloat(formData.locationLongitude) : 28.0473;
-      const defaultZoom = (formData.locationLatitude && formData.locationLongitude) ? 15 : 6;
-
-      // Create map
-      const map = L.map(locationMapRef.current).setView([defaultLat, defaultLng], defaultZoom);
-      setMapInstance(map);
-
-      // Add OpenStreetMap tiles
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 19
-      }).addTo(map);
-
-      // Add existing marker if coordinates exist
-      if (formData.locationLatitude && formData.locationLongitude) {
-        const lat = parseFloat(formData.locationLatitude);
-        const lng = parseFloat(formData.locationLongitude);
-        const marker = L.marker([lat, lng], { draggable: true })
-          .addTo(map)
-          .bindPopup('Location Pin<br>Drag to adjust');
-        setLocationMarker(marker);
-
-        // Update coordinates when marker is dragged
-        marker.on('dragend', function() {
-          const pos = marker.getLatLng();
-          setFormData(prev => ({
-            ...prev,
-            locationLatitude: pos.lat.toString(),
-            locationLongitude: pos.lng.toString()
-          }));
-        });
-      }
-
-      // Add click handler to place/update marker
-      let currentMarkerRef = null;
-      map.on('click', function(e) {
-        const { lat, lng } = e.latlng;
-
-        // Remove existing marker
-        if (currentMarkerRef) {
-          currentMarkerRef.remove();
-        }
-
-        // Create new marker
-        const marker = L.marker([lat, lng], { draggable: true })
-          .addTo(map)
-          .bindPopup('Location Pin<br>Drag to adjust')
-          .openPopup();
-        currentMarkerRef = marker;
-        setLocationMarker(marker);
-
-        // Update form data
-        setFormData(prev => ({
-          ...prev,
-          locationLatitude: lat.toString(),
-          locationLongitude: lng.toString()
-        }));
-
-        // Update coordinates when marker is dragged
-        marker.on('dragend', function() {
-          const pos = marker.getLatLng();
-          setFormData(prev => ({
-            ...prev,
-            locationLatitude: pos.lat.toString(),
-            locationLongitude: pos.lng.toString()
-          }));
-        });
-      });
-    }
-
-    // Cleanup function
-    return () => {
-      if (mapInstance) {
-        mapInstance.remove();
-        setMapInstance(null);
-      }
-      if (locationMarker) {
-        locationMarker.remove();
-        setLocationMarker(null);
-      }
-    };
-  }, [showAddPage]); // Only depend on showAddPage
-
-  // Update marker position when coordinates change externally (e.g., from GPS or editing existing card)
-  useEffect(() => {
-    if (!mapInstance || !showAddPage || !locationMarker) return;
-
-    const lat = formData.locationLatitude ? parseFloat(formData.locationLatitude) : null;
-    const lng = formData.locationLongitude ? parseFloat(formData.locationLongitude) : null;
-
-    if (lat && lng) {
-      // Only update if marker position is different (to avoid loops)
-      try {
-        const currentPos = locationMarker.getLatLng();
-        if (Math.abs(currentPos.lat - lat) > 0.0001 || Math.abs(currentPos.lng - lng) > 0.0001) {
-          locationMarker.setLatLng([lat, lng]);
-          mapInstance.setView([lat, lng], 15);
-          locationMarker.openPopup();
-        }
-      } catch (e) {
-        // Marker might be removed, ignore
-        console.warn('Marker update failed:', e);
-      }
-    }
-  }, [formData.locationLatitude, formData.locationLongitude, mapInstance, showAddPage, locationMarker]);
-
-  // Get current GPS location
-  const handleGetCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      if (window.showNotification) {
-        window.showNotification('Geolocation is not supported by your browser', 'error');
-      } else {
-        alert('Geolocation is not supported by your browser');
-      }
-      return;
-    }
-
-    setIsGettingLocation(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        
-        // Update form data
-        setFormData(prev => ({
-          ...prev,
-          locationLatitude: latitude.toString(),
-          locationLongitude: longitude.toString()
-        }));
-
-        // Update map if it exists
-        if (mapInstance) {
-          mapInstance.setView([latitude, longitude], 15);
-
-          // Remove existing marker
-          if (locationMarker) {
-            locationMarker.remove();
-          }
-
-          // Create new marker at current location
-          const marker = L.marker([latitude, longitude], { draggable: true })
-            .addTo(mapInstance)
-            .bindPopup('Current Location<br>Drag to adjust')
-            .openPopup();
-          setLocationMarker(marker);
-
-          // Update coordinates when marker is dragged
-          marker.on('dragend', function() {
-            const pos = marker.getLatLng();
-            setFormData(prev => ({
-              ...prev,
-              locationLatitude: pos.lat.toString(),
-              locationLongitude: pos.lng.toString()
-            }));
-          });
-        }
-
-        setIsGettingLocation(false);
-        if (window.showNotification) {
-          window.showNotification('Location detected successfully!', 'success');
-        }
-      },
-      (error) => {
-        setIsGettingLocation(false);
-        let errorMessage = 'Failed to get location';
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            errorMessage = 'Location access denied. Please enable location permissions.';
-            break;
-          case error.POSITION_UNAVAILABLE:
-            errorMessage = 'Location information unavailable.';
-            break;
-          case error.TIMEOUT:
-            errorMessage = 'Location request timed out.';
-            break;
-        }
-        if (window.showNotification) {
-          window.showNotification(errorMessage, 'error');
-        } else {
-          alert(errorMessage);
-        }
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
-      }
-    );
-  };
-
-  // Vehicle management handlers
-  const handleSaveVehicle = async () => {
-    try {
-      if (!vehicleFormData.name || !vehicleFormData.reg) {
-        if (window.showNotification) {
-          window.showNotification('Vehicle name and registration number are required', 'error');
-        } else {
-          alert('Vehicle name and registration number are required');
-        }
-        return;
-      }
-
-      if (editingVehicle && window.DatabaseAPI?.updateVehicle) {
-        await window.DatabaseAPI.updateVehicle(editingVehicle.id, vehicleFormData);
-        if (window.showNotification) {
-          window.showNotification('Vehicle updated successfully!', 'success');
-        }
-      } else if (window.DatabaseAPI?.createVehicle) {
-        await window.DatabaseAPI.createVehicle(vehicleFormData);
-        if (window.showNotification) {
-          window.showNotification('Vehicle created successfully!', 'success');
-        }
-      }
-
-      // Reload vehicles
-      if (isOnline && window.DatabaseAPI?.getVehicles) {
-        const response = await window.DatabaseAPI.getVehicles();
-        const vehiclesData = response?.data?.vehicles || response?.data || [];
-        if (Array.isArray(vehiclesData)) {
-          setVehicles(vehiclesData);
-          localStorage.setItem('manufacturing_vehicles', JSON.stringify(vehiclesData));
-        }
-      }
-
-      setShowVehicleModal(false);
-      setEditingVehicle(null);
-      setVehicleFormData({ name: '', model: '', type: '', reg: '', assetNumber: '', notes: '', status: 'active' });
-    } catch (error) {
-      console.error('Error saving vehicle:', error);
-      if (window.showNotification) {
-        window.showNotification(`Failed to save vehicle: ${error.message}`, 'error');
-      } else {
-        alert(`Failed to save vehicle: ${error.message}`);
-      }
-    }
-  };
-
-  const handleDeleteVehicle = async (vehicleId) => {
-    if (!confirm('Are you sure you want to delete this vehicle?')) return;
-
-    try {
-      if (window.DatabaseAPI?.deleteVehicle) {
-        await window.DatabaseAPI.deleteVehicle(vehicleId);
-        if (window.showNotification) {
-          window.showNotification('Vehicle deleted successfully!', 'success');
-        }
-
-        // Reload vehicles
-        if (isOnline && window.DatabaseAPI?.getVehicles) {
-          const response = await window.DatabaseAPI.getVehicles();
-          const vehiclesData = response?.data?.vehicles || response?.data || [];
-          if (Array.isArray(vehiclesData)) {
-            setVehicles(vehiclesData);
-            localStorage.setItem('manufacturing_vehicles', JSON.stringify(vehiclesData));
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error deleting vehicle:', error);
-      if (window.showNotification) {
-        window.showNotification(`Failed to delete vehicle: ${error.message}`, 'error');
-      } else {
-        alert(`Failed to delete vehicle: ${error.message}`);
-      }
-    }
+    setLocationData(null);
   };
 
   const openAddPage = () => {
@@ -1488,366 +873,12 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   };
 
   const openEditPage = (jobCard) => {
-    // Ensure all job card data is available offline
-    // Load full job card data from cache if needed
-    const cached = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
-    const fullJobCard = cached.find(jc => jc.id === jobCard.id) || jobCard;
-    
-    // Ensure photos and documents are accessible offline
-    // If photos/documents are URLs, convert them to data URLs if needed for offline access
-    const enhancedJobCard = {
-      ...fullJobCard,
-      // Ensure photos array exists and is properly formatted
-      photos: Array.isArray(fullJobCard.photos) ? fullJobCard.photos : [],
-      // Ensure documents array exists and is properly formatted
-      documents: Array.isArray(fullJobCard.documents) ? fullJobCard.documents : []
-    };
-    
-    setEditingJobCard(enhancedJobCard);
+    setEditingJobCard(jobCard);
     setShowAddPage(true);
-  };
-
-  const openViewPage = (jobCard) => {
-    // Ensure all job card data is available offline
-    // Load full job card data from cache if needed
-    const cached = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
-    const fullJobCard = cached.find(jc => jc.id === jobCard.id) || jobCard;
-    
-    // Ensure photos and documents are accessible offline
-    const enhancedJobCard = ensureJobCardOfflineAccess(fullJobCard);
-    
-    setViewingJobCard(enhancedJobCard);
   };
 
   // Filter technicians/users - show only active users
   const availableTechnicians = users.filter(u => u.status !== 'inactive' && u.status !== 'suspended');
-
-  // Detail view modal
-  if (viewingJobCard) {
-    const card = viewingJobCard;
-    const travelKm = card.kmReadingBefore && card.kmReadingAfter
-      ? parseFloat(card.kmReadingAfter) - parseFloat(card.kmReadingBefore)
-      : 0;
-
-    return (
-      <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
-          <div>
-            <h2 className="text-lg sm:text-xl font-bold text-gray-900">
-              Job Card Details
-            </h2>
-            <p className="text-sm text-gray-500 mt-1">
-              {card.jobCardNumber || `Job Card ${card.id.slice(-6)}`}
-              {!isOnline && <span className="ml-2 text-orange-600">⚠️ Offline</span>}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                setViewingJobCard(null);
-                openEditPage(card);
-              }}
-              className="w-full sm:w-auto px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              <i className="fas fa-edit mr-2"></i>Edit
-            </button>
-            <button
-              onClick={() => setViewingJobCard(null)}
-              className="w-full sm:w-auto px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              <i className="fas fa-arrow-left mr-2"></i>Back to List
-            </button>
-          </div>
-        </div>
-
-        <div className="space-y-6">
-          {/* Status Badge */}
-          <div className="flex items-center gap-2">
-            <span className={`px-3 py-1 rounded text-sm font-medium ${
-              card.status === 'completed' ? 'bg-green-100 text-green-700' :
-              card.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
-              'bg-gray-100 text-gray-700'
-            }`}>
-              {card.status || 'draft'}
-            </span>
-          </div>
-
-          {/* Basic Information */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-0.5">Agent Name</label>
-              <p className="text-sm text-gray-900">{card.agentName || 'N/A'}</p>
-            </div>
-            {card.otherTechnicians && card.otherTechnicians.length > 0 && (
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-0.5">Other Technicians</label>
-                <p className="text-sm text-gray-900">{card.otherTechnicians.join(', ')}</p>
-              </div>
-            )}
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-0.5">Client</label>
-              <p className="text-sm text-gray-900">{card.clientName || 'N/A'}</p>
-            </div>
-            {card.siteName && (
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-0.5">Site</label>
-                <p className="text-sm text-gray-900">{card.siteName}</p>
-              </div>
-            )}
-            {card.location && (
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-0.5">Location</label>
-                <p className="text-sm text-gray-900">{card.location}</p>
-              </div>
-            )}
-            {card.vehicleUsed && (
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-0.5">Vehicle</label>
-                <p className="text-sm text-gray-900">{card.vehicleUsed}</p>
-              </div>
-            )}
-          </div>
-
-          {/* Time Tracking */}
-          {(card.timeOfDeparture || card.timeOfArrival || card.departureFromSite || card.arrivalBackAtOffice) && (
-            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-              <h3 className="text-sm font-semibold text-gray-900 mb-3">Time Tracking</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {card.timeOfDeparture && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-0.5">Departure from Office</label>
-                    <p className="text-sm text-gray-900">{new Date(card.timeOfDeparture).toLocaleString('en-ZA')}</p>
-                  </div>
-                )}
-                {card.timeOfArrival && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-0.5">Arrival at Site</label>
-                    <p className="text-sm text-gray-900">{new Date(card.timeOfArrival).toLocaleString('en-ZA')}</p>
-                  </div>
-                )}
-                {card.departureFromSite && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-0.5">Departure from Site</label>
-                    <p className="text-sm text-gray-900">{new Date(card.departureFromSite).toLocaleString('en-ZA')}</p>
-                  </div>
-                )}
-                {card.arrivalBackAtOffice && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-0.5">Arrival back at Office</label>
-                    <p className="text-sm text-gray-900">{new Date(card.arrivalBackAtOffice).toLocaleString('en-ZA')}</p>
-                  </div>
-                )}
-                {card.totalTimeMinutes > 0 && (
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs font-medium text-gray-500 mb-0.5">Total Time</label>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {Math.floor(card.totalTimeMinutes / 60)}h {card.totalTimeMinutes % 60}m
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Kilometer Readings */}
-          {(card.kmReadingBefore || card.kmReadingAfter) && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {card.kmReadingBefore && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-0.5">KM Reading Before</label>
-                  <p className="text-sm text-gray-900">{card.kmReadingBefore}</p>
-                </div>
-              )}
-              {card.kmReadingAfter && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-0.5">KM Reading After</label>
-                  <p className="text-sm text-gray-900">{card.kmReadingAfter}</p>
-                </div>
-              )}
-              {travelKm > 0 && (
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-medium text-gray-500 mb-0.5">Travel Distance</label>
-                  <p className="text-sm font-semibold text-gray-900">{travelKm.toFixed(1)} km</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Reason for Visit */}
-          {card.reasonForVisit && (
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Reason for Visit</label>
-              <p className="text-sm text-gray-900 whitespace-pre-wrap">{card.reasonForVisit}</p>
-            </div>
-          )}
-
-          {/* Diagnosis */}
-          {card.diagnosis && (
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Diagnosis</label>
-              <p className="text-sm text-gray-900 whitespace-pre-wrap">{card.diagnosis}</p>
-            </div>
-          )}
-
-          {/* Actions Taken */}
-          {card.actionsTaken && (
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Actions Taken</label>
-              <p className="text-sm text-gray-900 whitespace-pre-wrap">{card.actionsTaken}</p>
-            </div>
-          )}
-
-          {/* Stock Used */}
-          {card.stockUsed && card.stockUsed.length > 0 && (
-            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-              <h3 className="text-sm font-semibold text-gray-900 mb-3">Stock Used</h3>
-              <div className="space-y-2">
-                {card.stockUsed.map((item, idx) => (
-                  <div key={idx} className="bg-white border border-gray-200 rounded-lg p-3">
-                    <p className="text-sm font-medium text-gray-900">{item.itemName || item.sku}</p>
-                    <p className="text-xs text-gray-600">
-                      {item.locationName && `${item.locationName} • `}
-                      Quantity: {item.quantity} • SKU: {item.sku}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Materials Bought */}
-          {card.materialsBought && card.materialsBought.length > 0 && (
-            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-              <h3 className="text-sm font-semibold text-gray-900 mb-3">Materials Bought</h3>
-              <div className="space-y-2">
-                {card.materialsBought.map((item, idx) => (
-                  <div key={idx} className="bg-white border border-gray-200 rounded-lg p-3">
-                    <p className="text-sm font-medium text-gray-900">{item.itemName}</p>
-                    {item.description && (
-                      <p className="text-xs text-gray-600 mt-1">{item.description}</p>
-                    )}
-                    {item.reason && (
-                      <p className="text-xs text-gray-500 mt-1">Reason: {item.reason}</p>
-                    )}
-                    <p className="text-sm font-semibold text-gray-900 mt-2">R {item.cost?.toFixed(2) || '0.00'}</p>
-                  </div>
-                ))}
-                <div className="border-t border-gray-300 pt-2 mt-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-semibold text-gray-900">Total Cost:</span>
-                    <span className="text-lg font-bold text-blue-600">
-                      R {card.materialsBought.reduce((sum, item) => sum + (item.cost || 0), 0).toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Other Comments */}
-          {card.otherComments && (
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Other Comments</label>
-              <p className="text-sm text-gray-900 whitespace-pre-wrap">{card.otherComments}</p>
-            </div>
-          )}
-
-          {/* Photos */}
-          {card.photos && card.photos.length > 0 && (
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-2">Photos</label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {card.photos.map((photo, idx) => {
-                  const photoUrl = typeof photo === 'string' ? photo : photo.url;
-                  return (
-                    <div key={idx} className="relative group">
-                      <img
-                        src={photoUrl}
-                        alt={`Photo ${idx + 1}`}
-                        className="w-full h-32 object-cover rounded-lg cursor-pointer"
-                        onClick={() => {
-                          // Open photo in new window/modal for full size
-                          const newWindow = window.open();
-                          if (newWindow) {
-                            newWindow.document.write(`<img src="${photoUrl}" style="max-width:100%;height:auto;" />`);
-                          }
-                        }}
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                          const errorDiv = document.createElement('div');
-                          errorDiv.className = 'w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center';
-                          errorDiv.innerHTML = '<i class="fas fa-image text-gray-400"></i>';
-                          e.target.parentNode.appendChild(errorDiv);
-                        }}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Documents */}
-          {card.documents && card.documents.length > 0 && (
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-2">Documents</label>
-              <div className="space-y-2">
-                {card.documents.map((doc, idx) => {
-                  const docObj = typeof doc === 'string' 
-                    ? { id: `doc_${idx}`, name: `Document ${idx + 1}`, url: doc }
-                    : doc;
-                  return (
-                    <div key={docObj.id || idx} className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg p-3">
-                      <div className="flex items-center gap-3 flex-1">
-                        <div className="flex-shrink-0">
-                          {docObj.type?.includes('pdf') ? (
-                            <i className="fas fa-file-pdf text-red-600 text-xl"></i>
-                          ) : docObj.type?.includes('word') || docObj.type?.includes('document') ? (
-                            <i className="fas fa-file-word text-blue-600 text-xl"></i>
-                          ) : docObj.type?.includes('excel') || docObj.type?.includes('spreadsheet') ? (
-                            <i className="fas fa-file-excel text-green-600 text-xl"></i>
-                          ) : (
-                            <i className="fas fa-file text-gray-400 text-xl"></i>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">{docObj.name || `Document ${idx + 1}`}</p>
-                          {docObj.size > 0 && (
-                            <p className="text-xs text-gray-500">
-                              {(docObj.size / 1024).toFixed(2)} KB
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      {docObj.url && (
-                        <a
-                          href={docObj.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-1 text-sm text-blue-600 hover:text-blue-800"
-                          title="View document"
-                        >
-                          <i className="fas fa-external-link-alt"></i>
-                        </a>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Metadata */}
-          <div className="border-t border-gray-200 pt-4 text-xs text-gray-500">
-            <p>Created: {card.createdAt ? new Date(card.createdAt).toLocaleString('en-ZA') : 'N/A'}</p>
-            {card.updatedAt && card.updatedAt !== card.createdAt && (
-              <p>Last Updated: {new Date(card.updatedAt).toLocaleString('en-ZA')}</p>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   if (showAddPage) {
     const travelKm = formData.kmReadingBefore && formData.kmReadingAfter
@@ -1855,10 +886,10 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       : 0;
 
     return (
-      <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-lg sm:text-xl font-bold text-gray-900">
+            <h2 className="text-xl font-bold text-gray-900">
               {editingJobCard ? 'Edit Job Card' : 'Add New Job Card'}
             </h2>
             <p className="text-sm text-gray-500 mt-1">
@@ -1871,7 +902,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
               setEditingJobCard(null);
               resetForm();
             }}
-            className="w-full sm:w-auto px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+            className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
           >
             <i className="fas fa-arrow-left mr-2"></i>Back to List
           </button>
@@ -1947,7 +978,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
           </div>
 
           {/* Client and Site */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Client *
@@ -1988,195 +1019,71 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             </div>
           </div>
 
-          {/* Location with Map */}
+          {/* Location */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Location
             </label>
-            
-            {/* GPS Detection Button */}
-            <div className="mb-2">
-              <button
-                type="button"
-                onClick={handleGetCurrentLocation}
-                disabled={isGettingLocation}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium flex items-center gap-2"
-              >
-                <i className={`fas ${isGettingLocation ? 'fa-spinner fa-spin' : 'fa-map-marker-alt'}`}></i>
-                {isGettingLocation ? 'Detecting Location...' : 'Detect Current Location (GPS)'}
-              </button>
-              {(formData.locationLatitude && formData.locationLongitude) && (
-                <span className="ml-3 text-xs text-gray-600">
-                  <i className="fas fa-check-circle text-green-600 mr-1"></i>
-                  Coordinates: {parseFloat(formData.locationLatitude).toFixed(6)}, {parseFloat(formData.locationLongitude).toFixed(6)}
-                </span>
-              )}
-            </div>
-
-            {/* Interactive Map */}
-            <div className="mb-3 relative" style={{ zIndex: 0 }}>
-              <div 
-                ref={locationMapRef}
-                className="w-full h-48 sm:h-64 rounded-lg border border-gray-300 overflow-hidden relative"
-                style={{ minHeight: '192px', zIndex: 0 }}
-              ></div>
-              <p className="text-xs text-gray-500 mt-1">
-                <i className="fas fa-info-circle mr-1"></i>
-                Click on the map to place a location pin, or use GPS detection above
-              </p>
-            </div>
-
-            {/* Location Text Input */}
-            <input
-              type="text"
-              name="location"
-              value={formData.location}
-              onChange={handleChange}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Specific location details (e.g., building name, floor, room number)"
-            />
-          </div>
-
-          {/* Vehicle Selection */}
-          <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-            <div className="flex items-center justify-between mb-3">
-              <label className="block text-sm font-semibold text-gray-900">
-                Vehicle Used
-              </label>
-              {user?.role === 'admin' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingVehicle(null);
-                    setVehicleFormData({ name: '', model: '', type: '', reg: '', assetNumber: '', notes: '', status: 'active' });
-                    setShowVehicleModal(true);
-                  }}
-                  className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
-                >
-                  <i className="fas fa-plus mr-1"></i>Add Vehicle
-                </button>
-              )}
-            </div>
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <select
-                  name="vehicleId"
-                  value={formData.vehicleId}
-                  onChange={(e) => {
-                    const selectedVehicle = vehicles.find(v => v.id === e.target.value);
-                    setFormData(prev => ({
-                      ...prev,
-                      vehicleId: e.target.value,
-                      vehicleUsed: selectedVehicle ? `${selectedVehicle.name} (${selectedVehicle.reg})` : ''
-                    }));
-                  }}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">Select vehicle or enter manually</option>
-                  {vehicles.map(vehicle => (
-                    <option key={vehicle.id} value={vehicle.id}>
-                      {vehicle.name} - {vehicle.reg} {vehicle.model ? `(${vehicle.model})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <input
-                  type="text"
-                  name="vehicleUsed"
-                  value={formData.vehicleUsed}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Or enter vehicle manually (e.g., AB12 CD 3456)"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Time Tracking Section */}
-          <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4">Time Tracking</h3>
-            
-            {/* To Site */}
-            <div className="mb-4 pb-4 border-b border-gray-200">
-              <h4 className="text-xs font-medium text-gray-600 mb-3 uppercase">To Site</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Departure from Office *
-                  </label>
-                  <input
-                    type="datetime-local"
-                    name="timeOfDeparture"
-                    value={formData.timeOfDeparture}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Arrival at Site *
-                  </label>
-                  <input
-                    type="datetime-local"
-                    name="timeOfArrival"
-                    value={formData.timeOfArrival}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* From Site */}
-            <div className="mb-4 pb-4 border-b border-gray-200">
-              <h4 className="text-xs font-medium text-gray-600 mb-3 uppercase">From Site</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Departure from Site *
-                  </label>
-                  <input
-                    type="datetime-local"
-                    name="departureFromSite"
-                    value={formData.departureFromSite}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Arrival back at Office *
-                  </label>
-                  <input
-                    type="datetime-local"
-                    name="arrivalBackAtOffice"
-                    value={formData.arrivalBackAtOffice}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Total Time Display */}
-            {calculateTotalTime() > 0 && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-blue-900">
-                    <i className="fas fa-clock mr-2"></i>
-                    Total Time:
-                  </span>
-                  <span className="text-lg font-bold text-blue-700">
-                    {Math.floor(calculateTotalTime() / 60)}h {calculateTotalTime() % 60}m
-                  </span>
-                </div>
-              </div>
+            {window.LocationPicker ? (
+              <LocationPicker 
+                onLocationSelect={handleLocationSelect}
+                initialLocation={formData.location}
+              />
+            ) : (
+              <input
+                type="text"
+                name="location"
+                value={formData.location}
+                onChange={handleChange}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Specific location details"
+              />
             )}
           </div>
 
-          {/* Kilometer Readings */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Time of Departure and Arrival */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Time of Departure
+              </label>
+              <input
+                type="datetime-local"
+                name="timeOfDeparture"
+                value={formData.timeOfDeparture}
+                onChange={handleChange}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Time of Arrival
+              </label>
+              <input
+                type="datetime-local"
+                name="timeOfArrival"
+                value={formData.timeOfArrival}
+                onChange={handleChange}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+
+          {/* Vehicle and Kilometer Readings */}
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Vehicle Used
+              </label>
+              <input
+                type="text"
+                name="vehicleUsed"
+                value={formData.vehicleUsed}
+                onChange={handleChange}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="e.g., AB12 CD 3456"
+              />
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 KM Reading Before
@@ -2266,8 +1173,8 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             <h3 className="text-sm font-semibold text-gray-900 mb-3">Stock Used</h3>
             
             {/* Add Stock Item Form */}
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 mb-3">
-              <div className="col-span-1 sm:col-span-4">
+            <div className="grid grid-cols-12 gap-2 mb-3">
+              <div className="col-span-4">
                 <select
                   value={newStockItem.sku}
                   onChange={(e) => setNewStockItem({ ...newStockItem, sku: e.target.value })}
@@ -2281,7 +1188,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
                   ))}
                 </select>
               </div>
-              <div className="col-span-1 sm:col-span-4">
+              <div className="col-span-4">
                 <select
                   value={newStockItem.locationId}
                   onChange={(e) => setNewStockItem({ ...newStockItem, locationId: e.target.value })}
@@ -2295,7 +1202,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
                   ))}
                 </select>
               </div>
-              <div className="col-span-1 sm:col-span-2">
+              <div className="col-span-2">
                 <input
                   type="number"
                   step="0.01"
@@ -2306,7 +1213,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
-              <div className="col-span-1 sm:col-span-2">
+              <div className="col-span-2">
                 <button
                   type="button"
                   onClick={handleAddStockItem}
@@ -2348,7 +1255,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             
             {/* Add Material Item Form */}
             <div className="space-y-2 mb-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <input
                   type="text"
                   value={newMaterialItem.itemName}
@@ -2471,21 +1378,13 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
               </label>
             </div>
             {selectedPhotos.length > 0 && (
-              <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="mt-3 grid grid-cols-4 gap-2">
                 {selectedPhotos.map((photo, idx) => (
                   <div key={idx} className="relative group">
                     <img
                       src={typeof photo === 'string' ? photo : photo.url}
                       alt={`Photo ${idx + 1}`}
                       className="w-full h-24 object-cover rounded-lg"
-                      onError={(e) => {
-                        // Handle image load errors gracefully (e.g., corrupted data URL)
-                        e.target.style.display = 'none';
-                        const errorDiv = document.createElement('div');
-                        errorDiv.className = 'w-full h-24 bg-gray-100 rounded-lg flex items-center justify-center';
-                        errorDiv.innerHTML = '<i class="fas fa-image text-gray-400"></i>';
-                        e.target.parentNode.appendChild(errorDiv);
-                      }}
                     />
                     <button
                       type="button"
@@ -2494,90 +1393,6 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
                     >
                       <i className="fas fa-times text-xs"></i>
                     </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Document Upload */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Documents
-            </label>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-              <input
-                type="file"
-                id="documentUpload"
-                onChange={handleDocumentUpload}
-                className="hidden"
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
-                multiple
-              />
-              <label
-                htmlFor="documentUpload"
-                className="cursor-pointer"
-              >
-                <i className="fas fa-file-upload text-3xl text-gray-400 mb-2"></i>
-                <p className="text-sm text-gray-600">
-                  Click to upload documents or drag and drop
-                </p>
-                <p className="text-xs text-gray-500">
-                  PDF, Word, Excel, Text files (Max 10MB each)
-                </p>
-              </label>
-            </div>
-            {selectedDocuments.length > 0 && (
-              <div className="mt-3 space-y-2">
-                {selectedDocuments.map((doc) => (
-                  <div key={doc.id} className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg p-3">
-                    <div className="flex items-center gap-3 flex-1">
-                      <div className="flex-shrink-0">
-                        {doc.type?.includes('pdf') ? (
-                          <i className="fas fa-file-pdf text-red-600 text-xl"></i>
-                        ) : doc.type?.includes('word') || doc.type?.includes('document') ? (
-                          <i className="fas fa-file-word text-blue-600 text-xl"></i>
-                        ) : doc.type?.includes('excel') || doc.type?.includes('spreadsheet') ? (
-                          <i className="fas fa-file-excel text-green-600 text-xl"></i>
-                        ) : doc.type?.includes('text') || doc.type?.includes('csv') ? (
-                          <i className="fas fa-file-alt text-gray-600 text-xl"></i>
-                        ) : (
-                          <i className="fas fa-file text-gray-400 text-xl"></i>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{doc.name}</p>
-                        <p className="text-xs text-gray-500">
-                          {(doc.size / 1024).toFixed(2)} KB
-                          {doc.uploadedAt && (
-                            <span className="ml-2">
-                              • {new Date(doc.uploadedAt).toLocaleDateString()}
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {doc.url && (
-                        <a
-                          href={doc.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-2 py-1 text-xs text-blue-600 hover:text-blue-800"
-                          title="View document"
-                        >
-                          <i className="fas fa-eye"></i>
-                        </a>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveDocument(doc.id)}
-                        className="px-2 py-1 text-xs text-red-600 hover:text-red-800"
-                        title="Remove document"
-                      >
-                        <i className="fas fa-times"></i>
-                      </button>
-                    </div>
                   </div>
                 ))}
               </div>
@@ -2602,7 +1417,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
           </div>
 
           {/* Actions */}
-          <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-200">
+          <div className="flex gap-3 pt-4 border-t border-gray-200">
             <button
               type="button"
               onClick={() => {
@@ -2610,159 +1425,18 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
                 setEditingJobCard(null);
                 resetForm();
               }}
-              className="w-full sm:flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="w-full sm:flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
               {editingJobCard ? 'Update Job Card' : 'Create Job Card'}
             </button>
           </div>
         </form>
-
-        {/* Vehicle Management Modal */}
-        {showVehicleModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000]">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  {editingVehicle ? 'Edit Vehicle' : 'Add New Vehicle'}
-                </h3>
-                <button
-                  onClick={() => {
-                    setShowVehicleModal(false);
-                    setEditingVehicle(null);
-                    setVehicleFormData({ name: '', model: '', type: '', reg: '', assetNumber: '', notes: '', status: 'active' });
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <i className="fas fa-times"></i>
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Vehicle Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={vehicleFormData.name}
-                    onChange={(e) => setVehicleFormData({ ...vehicleFormData, name: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="e.g., Service Van 1"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Model
-                    </label>
-                    <input
-                      type="text"
-                      value={vehicleFormData.model}
-                      onChange={(e) => setVehicleFormData({ ...vehicleFormData, model: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="e.g., Toyota Hilux"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Type
-                    </label>
-                    <input
-                      type="text"
-                      value={vehicleFormData.type}
-                      onChange={(e) => setVehicleFormData({ ...vehicleFormData, type: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="e.g., Van, Truck, Car"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Registration Number *
-                    </label>
-                    <input
-                      type="text"
-                      value={vehicleFormData.reg}
-                      onChange={(e) => setVehicleFormData({ ...vehicleFormData, reg: e.target.value.toUpperCase() })}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="e.g., AB12 CD 3456"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Asset Number
-                    </label>
-                    <input
-                      type="text"
-                      value={vehicleFormData.assetNumber}
-                      onChange={(e) => setVehicleFormData({ ...vehicleFormData, assetNumber: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Asset number"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notes
-                  </label>
-                  <textarea
-                    value={vehicleFormData.notes}
-                    onChange={(e) => setVehicleFormData({ ...vehicleFormData, notes: e.target.value })}
-                    rows={3}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Additional notes about the vehicle"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Status
-                  </label>
-                  <select
-                    value={vehicleFormData.status}
-                    onChange={(e) => setVehicleFormData({ ...vehicleFormData, status: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                    <option value="maintenance">Maintenance</option>
-                  </select>
-                </div>
-
-                <div className="flex gap-3 pt-4 border-t border-gray-200">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowVehicleModal(false);
-                      setEditingVehicle(null);
-                      setVehicleFormData({ name: '', model: '', type: '', reg: '', assetNumber: '', notes: '', status: 'active' });
-                    }}
-                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveVehicle}
-                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                  >
-                    {editingVehicle ? 'Update Vehicle' : 'Create Vehicle'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     );
   }
@@ -2850,13 +1524,6 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
                   </div>
                   <div className="flex gap-2 ml-4">
                     <button
-                      onClick={() => openViewPage(jobCard)}
-                      className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"
-                      title="View Details"
-                    >
-                      <i className="fas fa-eye"></i>
-                    </button>
-                    <button
                       onClick={() => openEditPage(jobCard)}
                       className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"
                       title="Edit"
@@ -2881,9 +1548,6 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   );
 };
 
-// Memoize component to prevent unnecessary re-renders
-const JobCardsMemo = memo(JobCards);
-
 // Make available globally
-window.JobCards = JobCardsMemo;
+window.JobCards = JobCards;
 

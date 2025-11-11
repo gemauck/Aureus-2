@@ -160,6 +160,70 @@
         }
     },
 
+    // Users
+    async getUsers() {
+        const extractUsers = (response) => {
+            if (!response) return [];
+            if (Array.isArray(response?.data?.users)) return response.data.users;
+            if (Array.isArray(response?.data?.data?.users)) return response.data.data.users;
+            if (Array.isArray(response?.users)) return response.users;
+            if (Array.isArray(response?.data)) return response.data;
+            if (Array.isArray(response)) return response;
+            return [];
+        };
+
+        const cacheUsers = (users) => {
+            if (!Array.isArray(users)) return;
+            if (typeof window.storage?.setUsers === 'function') {
+                try {
+                    window.storage.setUsers(users);
+                } catch (cacheError) {
+                    console.warn('⚠️ Failed to cache users to storage:', cacheError.message);
+                }
+            }
+        };
+
+        const sources = [
+            {
+                label: 'DatabaseAPI',
+                fetch: window.DatabaseAPI?.getUsers?.bind(window.DatabaseAPI)
+            },
+            {
+                label: 'API',
+                fetch: window.api?.getUsers?.bind(window.api)
+            }
+        ];
+
+        for (const source of sources) {
+            if (typeof source.fetch !== 'function') continue;
+
+            try {
+                console.log(`🌐 Using ${source.label} for users`);
+                const response = await source.fetch();
+                const users = extractUsers(response);
+                cacheUsers(users);
+                if (Array.isArray(users)) {
+                    return users;
+                }
+            } catch (error) {
+                console.warn(`⚠️ ${source.label} failed for users, continuing:`, error.message);
+            }
+        }
+
+        console.log('💾 Using localStorage for users');
+        return safeStorageCall(window.storage, 'getUsers', []);
+    },
+
+    async setUsers(users) {
+        if (typeof window.storage?.setUsers === 'function') {
+            try {
+                window.storage.setUsers(users);
+            } catch (error) {
+                console.warn('⚠️ Failed to save users to storage:', error.message);
+            }
+        }
+    },
+
     // Clients
     async getClients() {
         // Always try to use API if available, regardless of environment

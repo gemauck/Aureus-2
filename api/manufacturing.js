@@ -2,6 +2,8 @@ import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
 import { ok, created, badRequest, notFound, serverError } from './_lib/response.js'
 import { ensureBOMMigration } from './_lib/ensureBOMMigration.js'
+import { withHttp } from './_lib/withHttp.js'
+import { withLogging } from './_lib/logger.js'
 
 async function handler(req, res) {
   // Ensure BOM migration is applied (non-blocking, safe)
@@ -3045,5 +3047,5 @@ async function handler(req, res) {
   return badRequest(res, 'Invalid manufacturing endpoint')
 }
 
-export default authRequired(handler)
+export default withLogging(withHttp(authRequired(handler)))
 

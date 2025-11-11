@@ -1,9 +1,9 @@
-import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
 import { badRequest, created, ok, serverError } from './_lib/response.js'
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { verifyToken } from './_lib/jwt.js'
 // Note: We'll use sendNotificationEmail from email.js
 
 // Notify admins when feedback is submitted
@@ -190,6 +190,26 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
 
 async function handler(req, res) {
   try {
+    // Allow optional authentication so we can associate feedback with the submitting user
+    if (!req.user) {
+      const authHeader = req.headers['authorization'] || ''
+      if (authHeader.startsWith('Bearer ')) {
+        const token = authHeader.slice(7)
+        try {
+          const payload = verifyToken(token)
+          if (payload && payload.sub) {
+            req.user = {
+              ...payload,
+              id: payload.sub,
+              userId: payload.sub, // backwards compatibility with handlers expecting userId
+            }
+          }
+        } catch (tokenError) {
+          console.warn('⚠️ Optional feedback auth: failed to verify token:', tokenError.message)
+        }
+      }
+    }
+
     // Parse query parameters safely and get path without query string
     const parseQueryParams = (urlString) => {
       const params = {}
