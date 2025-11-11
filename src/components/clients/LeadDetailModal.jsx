@@ -2,16 +2,41 @@
 // FIX: formData initialization order fixed - moved to top to prevent TDZ errors (v2)
 const { useState, useEffect, useRef } = React;
 
-const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProjects, isFullPage = false, initialTab = 'overview', onTabChange, onSave, onPauseSync = null, onEditingChange = null }) => {
-    // Modal owns its state - fetch data when leadId changes
-    const [lead, setLead] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
+const LeadDetailModal = ({
+    leadId,
+    initialLead = null,
+    onClose,
+    onDelete,
+    onConvertToClient,
+    allProjects,
+    isFullPage = false,
+    initialTab = 'overview',
+    onTabChange,
+    onSave,
+    onPauseSync = null,
+    onEditingChange = null
+}) => {
+    // Modal owns its state - start with any provided lead data for instant rendering
+    const [lead, setLead] = useState(() => initialLead || null);
+    const [isLoading, setIsLoading] = useState(() => !initialLead);
     const [isSaving, setIsSaving] = useState(false);
     const [isAutoSaving, setIsAutoSaving] = useState(false);
     const [activeTab, setActiveTab] = useState(initialTab);
     const [hasBeenSaved, setHasBeenSaved] = useState(false); // Track if lead has been saved at least once
     
     // Fetch lead data when leadId changes
+    useEffect(() => {
+        if (initialLead) {
+            setLead(prevLead => {
+                if (!prevLead || prevLead.id !== initialLead.id) {
+                    return initialLead;
+                }
+                return prevLead;
+            });
+            setIsLoading(false);
+        }
+    }, [initialLead]);
+
     useEffect(() => {
         const fetchLead = async () => {
             if (!leadId) {
@@ -20,7 +45,9 @@ const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProj
                 return;
             }
             
-            setIsLoading(true);
+            if (!initialLead) {
+                setIsLoading(true);
+            }
             try {
                 // Use getLead for leads to ensure proper parsing of proposals and other lead-specific fields
                 const response = await window.api.getLead(leadId);
@@ -38,7 +65,7 @@ const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProj
         };
         
         fetchLead();
-    }, [leadId]);
+    }, [leadId, initialLead]);
     
     const normalizeLifecycleStage = (value) => {
         switch ((value || '').toLowerCase()) {

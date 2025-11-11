@@ -4,6 +4,20 @@ import { badRequest, created, ok, serverError, notFound } from './_lib/response.
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 
+function getContactsArray(rawContacts) {
+  if (typeof rawContacts === 'string') {
+    try {
+      const parsedContacts = JSON.parse(rawContacts)
+      return Array.isArray(parsedContacts) ? parsedContacts : []
+    } catch (parseError) {
+      console.warn('⚠️ Invalid contacts JSON, defaulting to empty array:', parseError)
+      return []
+    }
+  }
+
+  return Array.isArray(rawContacts) ? rawContacts : []
+}
+
 async function handler(req, res) {
   try {
     console.log('🔍 Contacts API Debug:', {
@@ -42,9 +56,7 @@ async function handler(req, res) {
         
         if (!client) return notFound(res)
         
-        const contacts = typeof client.contacts === 'string' 
-          ? JSON.parse(client.contacts) 
-          : (Array.isArray(client.contacts) ? client.contacts : [])
+        const contacts = getContactsArray(client.contacts)
         
         console.log('✅ Contacts retrieved for client:', clientId, '- Count:', contacts.length)
         console.log('📤 Returning contacts:', JSON.stringify(contacts, null, 2))
@@ -71,9 +83,7 @@ async function handler(req, res) {
         
         if (!client) return notFound(res)
         
-        const existingContacts = typeof client.contacts === 'string' 
-          ? JSON.parse(client.contacts) 
-          : (Array.isArray(client.contacts) ? client.contacts : [])
+        const existingContacts = getContactsArray(client.contacts)
         
         // Create new contact
         const newContact = {
@@ -121,9 +131,7 @@ async function handler(req, res) {
         
         if (!client) return notFound(res)
         
-        const contacts = typeof client.contacts === 'string' 
-          ? JSON.parse(client.contacts) 
-          : (Array.isArray(client.contacts) ? client.contacts : [])
+        const contacts = getContactsArray(client.contacts)
         
         // Find and update the contact
         const contactIndex = contacts.findIndex(c => c.id === contactId)
@@ -162,9 +170,7 @@ async function handler(req, res) {
         
         if (!client) return notFound(res)
         
-        const contacts = typeof client.contacts === 'string' 
-          ? JSON.parse(client.contacts) 
-          : (Array.isArray(client.contacts) ? client.contacts : [])
+        const contacts = getContactsArray(client.contacts)
         
         // Remove the contact
         const updatedContacts = contacts.filter(c => c.id !== contactId)

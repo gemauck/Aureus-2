@@ -4615,9 +4615,9 @@ const Clients = React.memo(() => {
     // Full-page Lead Detail View
     const LeadDetailView = () => {
         const LeadDetailModalComponent = useEnsureGlobalComponent('LeadDetailModal');
-        // Get the lead from editingLeadId
-        // Ensure leads array exists before trying to find
-        const selectedLead = editingLeadId && Array.isArray(leads) ? leads.find(l => l.id === editingLeadId) : null;
+        // Prefer the ref (updated immediately on click) and fall back to leads state lookup
+        const selectedLead = selectedLeadRef.current ||
+            (editingLeadId && Array.isArray(leads) ? leads.find(l => l.id === editingLeadId) : null);
         
         return (
         <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
@@ -4673,6 +4673,7 @@ const Clients = React.memo(() => {
                     <LeadDetailModalComponent
                         key={editingLeadId || 'new-lead'}
                         leadId={editingLeadId}
+                        initialLead={selectedLead}
                         onSave={handleSaveLead}
                         onClose={handleLeadModalClose}
                         onDelete={handleDeleteLead}
