@@ -1,7 +1,20 @@
 // Get dependencies from window
 const React = window.React;
-const { useState, useEffect, useCallback } = React;
+const { useState, useEffect, useCallback, useMemo } = React;
 const storage = window.storage;
+
+const COLUMN_FILTER_DEFAULTS = {
+    name: '',
+    company: '',
+    type: 'All',
+    status: 'All',
+    stage: 'All',
+    minValue: '',
+    maxValue: '',
+    minAge: '',
+    maxAge: '',
+    expectedClose: 'All'
+};
 
 /**
  * COMPREHENSIVE SALES PIPELINE PLATFORM
@@ -40,6 +53,7 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
     const [draggedOverStage, setDraggedOverStage] = useState(null);
     const [dataLoaded, setDataLoaded] = useState(false); // Track when data is fully loaded from API
     const [fallbackDeal, setFallbackDeal] = useState(null); // { type: 'lead' | 'opportunity', id, data, client }
+    const [columnFilters, setColumnFilters] = useState(() => ({ ...COLUMN_FILTER_DEFAULTS }));
 
     useEffect(() => {
         try {
@@ -47,6 +61,54 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
         } catch (error) {
             console.warn('⚠️ Pipeline: Unable to clear returnToPipeline flag at mount', error);
         }
+    }, []);
+
+    const statusOptions = useMemo(() => {
+        const statuses = new Set();
+
+        leads.forEach((lead) => {
+            if (lead?.status) {
+                statuses.add(normalizeLifecycleStage(lead.status));
+            }
+        });
+
+        clients.forEach((client) => {
+            if (Array.isArray(client?.opportunities)) {
+                client.opportunities.forEach((opp) => {
+                    if (opp?.status) {
+                        statuses.add(normalizeLifecycleStage(opp.status));
+                    }
+                });
+            }
+        });
+
+        return Array.from(statuses).filter(Boolean).sort((a, b) => a.localeCompare(b));
+    }, [clients, leads]);
+
+    const activeColumnFilterCount = useMemo(() => {
+        return Object.keys(columnFilters).reduce((total, key) => {
+            const value = columnFilters[key];
+            const defaultValue = COLUMN_FILTER_DEFAULTS[key];
+
+            if (typeof value === 'string') {
+                const trimmedValue = value.trim();
+                const trimmedDefault = typeof defaultValue === 'string' ? defaultValue.trim() : defaultValue;
+                return trimmedValue !== trimmedDefault && trimmedValue !== '' ? total + 1 : total;
+            }
+
+            return value !== defaultValue ? total + 1 : total;
+        }, 0);
+    }, [columnFilters]);
+
+    const handleColumnFilterChange = useCallback((key, rawValue) => {
+        setColumnFilters((prev) => ({
+            ...prev,
+            [key]: rawValue
+        }));
+    }, []);
+
+    const clearColumnFilters = useCallback(() => {
+        setColumnFilters({ ...COLUMN_FILTER_DEFAULTS });
     }, []);
 
     // AIDA Pipeline Stages
@@ -963,22 +1025,132 @@ function doesOpportunityBelongToClient(opportunity, client) {
             });
         }
 
-        // Sorting
-        items.sort((a, b) => {
-            const aStar = a.isStarred ? 1 : 0;
-            const bStar = b.isStarred ? 1 : 0;
-            if (aStar !== bStar) {
-                return bStar - aStar;
+        // Column filters
+        if (columnFilters.name && columnFilters.name.trim()) {
+            const needle = columnFilters.name.trim().toLowerCase();
+            items = items.filter((item) => item.name?.toLowerCase().includes(needle));
+        }
+
+        if (columnFilters.company && columnFilters.company.trim()) {
+            const needle = columnFilters.company.trim().toLowerCase();
+            items = items.filter((item) => {
+                const companyName = item.type === 'lead'
+                    ? (item.company || item.name || '')
+                    : (item.clientName || '');
+                return companyName.toLowerCase().includes(needle);
+            });
+        }
+
+        if (columnFilters.type !== 'All') {
+            items = items.filter((item) => item.type === columnFilters.type);
+        }
+
+        if (columnFilters.status !== 'All') {
+            items = items.filter((item) => normalizeLifecycleStage(item.status) === columnFilters.status);
+        }
+
+        if (columnFilters.stage !== 'All') {
+            const stageNeedle = columnFilters.stage.toLowerCase();
+            items = items.filter((item) => (item.stage || '').toLowerCase() === stageNeedle);
+        }
+
+        if (columnFilters.minValue && columnFilters.minValue !== '') {
+            const minValue = Number(columnFilters.minValue);
+            if (!Number.isNaN(minValue)) {
+                items = items.filter((item) => item.value >= minValue);
             }
+        }
+
+        if (columnFilters.maxValue && columnFilters.maxValue !== '') {
+            const maxValue = Number(columnFilters.maxValue);
+            if (!Number.isNaN(maxValue)) {
+                items = items.filter((item) => item.value <= maxValue);
+            }
+        }
+
+        if (columnFilters.minAge && columnFilters.minAge !== '') {
+            const minAge = Number(columnFilters.minAge);
+            if (!Number.isNaN(minAge)) {
+                items = items.filter((item) => getDealAge(item.createdDate) >= minAge);
+            }
+        }
+
+        if (columnFilters.maxAge && columnFilters.maxAge !== '') {
+            const maxAge = Number(columnFilters.maxAge);
+            if (!Number.isNaN(maxAge)) {
+                items = items.filter((item) => getDealAge(item.createdDate) <= maxAge);
+            }
+        }
+
+        if (columnFilters.expectedClose === 'scheduled') {
+            items = items.filter((item) => Boolean(item.expectedCloseDate));
+        } else if (columnFilters.expectedClose === 'not-scheduled') {
+            items = items.filter((item) => !item.expectedCloseDate);
+        }
+
+        const compareWithDirection = (value) => (value === 'asc' ? 1 : -1);
+
+        const getListComparator = () => {
+            const directionMultiplier = compareWithDirection(listSortDirection);
+            switch (listSortColumn) {
+                case 'name':
+                    return (a, b) => directionMultiplier * a.name.localeCompare(b.name);
+                case 'company':
+                    return (a, b) => {
+                        const companyA = (a.type === 'lead' ? a.company || a.name : a.clientName) || '';
+                        const companyB = (b.type === 'lead' ? b.company || b.name : b.clientName) || '';
+                        return directionMultiplier * companyA.localeCompare(companyB);
+                    };
+                case 'type':
+                    return (a, b) => directionMultiplier * a.type.localeCompare(b.type);
+                case 'status':
+                    return (a, b) => directionMultiplier * normalizeLifecycleStage(a.status).localeCompare(normalizeLifecycleStage(b.status));
+                case 'stage':
+                    return (a, b) => directionMultiplier * (a.stage || '').localeCompare(b.stage || '');
+                case 'value':
+                    return directionMultiplier * (a.value - b.value);
+                case 'age':
+                    return directionMultiplier * (getDealAge(a.createdDate) - getDealAge(b.createdDate));
+                case 'expectedClose':
+                    return directionMultiplier * (
+                        (a.expectedCloseDate ? new Date(a.expectedCloseDate).getTime() : Number.POSITIVE_INFINITY) -
+                        (b.expectedCloseDate ? new Date(b.expectedCloseDate).getTime() : Number.POSITIVE_INFINITY)
+                    );
+                default:
+                    return () => 0;
+            }
+        };
+
+        const getDefaultComparator = () => {
             switch (sortBy) {
-                case 'value-desc': return b.value - a.value;
-                case 'value-asc': return a.value - b.value;
-                case 'date-desc': return new Date(b.createdDate) - new Date(a.createdDate);
-                case 'date-asc': return new Date(a.createdDate) - new Date(b.createdDate);
-                case 'name-asc': return a.name.localeCompare(b.name);
-                case 'name-desc': return b.name.localeCompare(a.name);
-                default: return 0;
+                case 'value-desc':
+                    return (a, b) => b.value - a.value;
+                case 'value-asc':
+                    return (a, b) => a.value - b.value;
+                case 'date-desc':
+                    return (a, b) => new Date(b.createdDate) - new Date(a.createdDate);
+                case 'date-asc':
+                    return (a, b) => new Date(a.createdDate) - new Date(b.createdDate);
+                case 'name-asc':
+                    return (a, b) => a.name.localeCompare(b.name);
+                case 'name-desc':
+                    return (a, b) => b.name.localeCompare(a.name);
+                default:
+                    return () => 0;
             }
+        };
+
+        const comparator =
+            viewMode === 'list' && listSortColumn
+                ? getListComparator()
+                : getDefaultComparator();
+
+        items.sort((a, b) => {
+            const starDiff = (b.isStarred ? 1 : 0) - (a.isStarred ? 1 : 0);
+            if (starDiff !== 0) {
+                return starDiff;
+            }
+            return comparator(a, b);
         });
 
         return items;
@@ -1922,6 +2094,19 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     </div>
                 </div>
 
+                {activeColumnFilterCount > 0 && (
+                    <div className="flex items-center justify-between px-4 py-2 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-700">
+                        <span>{activeColumnFilterCount} column filter{activeColumnFilterCount > 1 ? 's' : ''} active</span>
+                        <button
+                            type="button"
+                            onClick={clearColumnFilters}
+                            className="text-xs font-semibold hover:text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 rounded"
+                        >
+                            Clear column filters
+                        </button>
+                    </div>
+                )}
+
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200">
                     <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200">
@@ -1935,6 +2120,110 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Age</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expected Close</th>
+                                </tr>
+                                <tr className="bg-white border-t border-gray-200">
+                                    <th className="px-4 py-2">
+                                        <input
+                                            type="text"
+                                            value={columnFilters.name}
+                                            onChange={(e) => handleColumnFilterChange('name', e.target.value)}
+                                            placeholder="Filter name"
+                                            className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                        />
+                                    </th>
+                                    <th className="px-4 py-2">
+                                        <input
+                                            type="text"
+                                            value={columnFilters.company}
+                                            onChange={(e) => handleColumnFilterChange('company', e.target.value)}
+                                            placeholder="Filter company"
+                                            className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                        />
+                                    </th>
+                                    <th className="px-4 py-2">
+                                        <select
+                                            value={columnFilters.type}
+                                            onChange={(e) => handleColumnFilterChange('type', e.target.value)}
+                                            className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                        >
+                                            <option value="All">All types</option>
+                                            <option value="lead">Leads</option>
+                                            <option value="opportunity">Opportunities</option>
+                                        </select>
+                                    </th>
+                                    <th className="px-4 py-2">
+                                        <select
+                                            value={columnFilters.status}
+                                            onChange={(e) => handleColumnFilterChange('status', e.target.value)}
+                                            className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                        >
+                                            <option value="All">All stages</option>
+                                            {statusOptions.map((status) => (
+                                                <option key={status} value={status}>{status}</option>
+                                            ))}
+                                        </select>
+                                    </th>
+                                    <th className="px-4 py-2">
+                                        <select
+                                            value={columnFilters.stage}
+                                            onChange={(e) => handleColumnFilterChange('stage', e.target.value)}
+                                            className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                        >
+                                            <option value="All">All AIDA stages</option>
+                                            {pipelineStages.map((stage) => (
+                                                <option key={stage.id} value={stage.name}>{stage.name}</option>
+                                            ))}
+                                        </select>
+                                    </th>
+                                    <th className="px-4 py-2">
+                                        <div className="flex items-center gap-1">
+                                            <input
+                                                type="number"
+                                                value={columnFilters.minValue}
+                                                onChange={(e) => handleColumnFilterChange('minValue', e.target.value)}
+                                                placeholder="Min"
+                                                className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                            />
+                                            <input
+                                                type="number"
+                                                value={columnFilters.maxValue}
+                                                onChange={(e) => handleColumnFilterChange('maxValue', e.target.value)}
+                                                placeholder="Max"
+                                                className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                            />
+                                        </div>
+                                    </th>
+                                    <th className="px-4 py-2">
+                                        <div className="flex items-center gap-1">
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={columnFilters.minAge}
+                                                onChange={(e) => handleColumnFilterChange('minAge', e.target.value)}
+                                                placeholder="Min"
+                                                className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                            />
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                value={columnFilters.maxAge}
+                                                onChange={(e) => handleColumnFilterChange('maxAge', e.target.value)}
+                                                placeholder="Max"
+                                                className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                            />
+                                        </div>
+                                    </th>
+                                    <th className="px-4 py-2">
+                                        <select
+                                            value={columnFilters.expectedClose}
+                                            onChange={(e) => handleColumnFilterChange('expectedClose', e.target.value)}
+                                            className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                        >
+                                            <option value="All">All</option>
+                                            <option value="scheduled">Has date</option>
+                                            <option value="not-scheduled">Not set</option>
+                                        </select>
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
