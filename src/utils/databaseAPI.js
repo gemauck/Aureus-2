@@ -1359,6 +1359,60 @@ const DatabaseAPI = {
         return response;
     },
 
+    // PURCHASE ORDERS OPERATIONS
+    async getPurchaseOrders() {
+        console.log('📡 Fetching purchase orders from database...');
+        const raw = await this.makeRequest('/manufacturing/purchase-orders');
+        const normalized = {
+            data: {
+                purchaseOrders: Array.isArray(raw?.data?.purchaseOrders)
+                    ? raw.data.purchaseOrders
+                    : Array.isArray(raw?.purchaseOrders)
+                        ? raw.purchaseOrders
+                        : Array.isArray(raw?.data)
+                            ? raw.data
+                            : []
+            }
+        };
+        console.log('✅ Purchase orders fetched from database:', normalized.data.purchaseOrders.length);
+        return normalized;
+    },
+
+    async getPurchaseOrder(id) {
+        console.log(`📡 Fetching purchase order ${id} from database...`);
+        const response = await this.makeRequest(`/manufacturing/purchase-orders/${id}`);
+        return response;
+    },
+
+    async createPurchaseOrder(purchaseOrderData) {
+        console.log('📡 Creating purchase order in database...');
+        const response = await this.makeRequest('/manufacturing/purchase-orders', {
+            method: 'POST',
+            body: JSON.stringify(purchaseOrderData)
+        });
+        console.log('✅ Purchase order created in database');
+        return response;
+    },
+
+    async updatePurchaseOrder(id, purchaseOrderData) {
+        console.log(`📡 Updating purchase order ${id} in database...`);
+        const response = await this.makeRequest(`/manufacturing/purchase-orders/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(purchaseOrderData)
+        });
+        console.log('✅ Purchase order updated in database');
+        return response;
+    },
+
+    async deletePurchaseOrder(id) {
+        console.log(`📡 Deleting purchase order ${id} from database...`);
+        const response = await this.makeRequest(`/manufacturing/purchase-orders/${id}`, {
+            method: 'DELETE'
+        });
+        console.log('✅ Purchase order deleted from database');
+        return response;
+    },
+
     // JOB CARDS OPERATIONS
     async getJobCards() {
         console.log('📡 Fetching job cards from database...');

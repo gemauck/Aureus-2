@@ -1,5 +1,5 @@
 // Get dependencies from window
-const { useState, useEffect, useMemo } = React;
+const { useState, useEffect, useMemo, useCallback } = React;
 
 const ADMIN_ROLES = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'];
 const ADMIN_PERMISSION_KEYS = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'];
@@ -187,6 +187,40 @@ const ManagementMeetingNotes = () => {
     const [showCommentModal, setShowCommentModal] = useState(false);
     const [editingActionItem, setEditingActionItem] = useState(null);
     const [commentContext, setCommentContext] = useState(null); // {type: 'monthly'|'department'|'action', id: string}
+    
+    const reloadMonthlyNotes = useCallback(async (preferredMonthKey = null) => {
+        try {
+            const response = await window.DatabaseAPI.getMeetingNotes();
+            const notes =
+                response?.data?.monthlyNotes ||
+                response?.monthlyNotes ||
+                [];
+
+            setMonthlyNotesList(notes);
+
+            if (!notes.length) {
+                setSelectedMonth(null);
+                setCurrentMonthlyNotes(null);
+                setSelectedWeek(null);
+                return;
+            }
+
+            const nextMonthKey =
+                preferredMonthKey && notes.some((note) => note?.monthKey === preferredMonthKey)
+                    ? preferredMonthKey
+                    : notes[0].monthKey;
+
+            setSelectedMonth(nextMonthKey);
+            const nextMonth = notes.find((note) => note?.monthKey === nextMonthKey) || null;
+            setCurrentMonthlyNotes(nextMonth);
+            setSelectedWeek(null);
+        } catch (error) {
+            console.error('Error reloading monthly notes:', error);
+            if (typeof alert === 'function') {
+                alert('Failed to refresh monthly meeting notes.');
+            }
+        }
+    }, []);
     
     // Initialize selected month to current month
     useEffect(() => {
@@ -527,6 +561,81 @@ const ManagementMeetingNotes = () => {
         }
     };
 
+    const handleDeleteMonth = async () => {
+        if (!currentMonthlyNotes) return;
+        if (!confirm('Are you sure you want to delete this month and all associated weekly notes, action items, comments, and allocations? This cannot be undone.')) {
+            return;
+        }
+
+        try {
+            setLoading(true);
+            await window.DatabaseAPI.deleteMonthlyNotes({ id: currentMonthlyNotes.id });
+            await reloadMonthlyNotes();
+        } catch (error) {
+            console.error('Error deleting monthly notes:', error);
+            if (typeof alert === 'function') {
+                alert('Failed to delete monthly meeting notes.');
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeleteAllMonths = async () => {
+        if (!confirm('This will delete ALL meeting notes (months, weeks, action items, comments, and allocations). Are you absolutely sure?')) {
+            return;
+        }
+
+        try {
+            setLoading(true);
+            await window.DatabaseAPI.purgeMeetingNotes();
+            await reloadMonthlyNotes();
+        } catch (error) {
+            console.error('Error purging meeting notes:', error);
+            if (typeof alert === 'function') {
+                alert('Failed to delete all meeting notes.');
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeleteWeek = async (week) => {
+        if (!week?.id) return;
+        if (!confirm('Delete this week and all associated department notes, action items, and comments? This cannot be undone.')) {
+            return;
+        }
+
+        try {
+            setLoading(true);
+            await window.DatabaseAPI.deleteWeeklyNotes(week.id);
+
+            const monthResponse = await window.DatabaseAPI.getMeetingNotes(selectedMonth);
+            const updatedMonth = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes || null;
+
+            if (updatedMonth) {
+                setCurrentMonthlyNotes(updatedMonth);
+                setMonthlyNotesList((prev) => {
+                    if (!Array.isArray(prev)) return prev;
+                    return prev.map((note) => (note?.id === updatedMonth.id ? updatedMonth : note));
+                });
+            } else {
+                await reloadMonthlyNotes();
+            }
+
+            if (selectedWeek === week.weekKey) {
+                setSelectedWeek(null);
+            }
+        } catch (error) {
+            console.error('Error deleting weekly notes:', error);
+            if (typeof alert === 'function') {
+                alert('Failed to delete weekly notes.');
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
         if (!currentMonthlyNotes) {
             setMonthlyGoalsByDept(createEmptyMonthlyGoalsMap());
@@ -854,6 +963,24 @@ const ManagementMeetingNotes = () => {
                             Allocate Users
                         </button>
                     )}
+                    {currentMonthlyNotes && (
+                        <button
+                            onClick={handleDeleteMonth}
+                            className="px-3 py-1.5 text-xs bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+                        >
+                            <i className="fas fa-trash mr-1"></i>
+                            Delete Month
+                        </button>
+                    )}
+                    {monthlyNotesList.length > 0 && (
+                        <button
+                            onClick={handleDeleteAllMonths}
+                            className="px-3 py-1.5 text-xs bg-red-700 text-white rounded-lg hover:bg-red-800 transition"
+                        >
+                            <i className="fas fa-exclamation-triangle mr-1"></i>
+                            Delete All Months
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -1010,18 +1137,27 @@ const ManagementMeetingNotes = () => {
                                     <i className="fas fa-calendar-week mr-2 text-primary-600"></i>
                                     Week: {formatWeek(week.weekKey, week.weekStart)}
                                 </h3>
-                                <button
-                                    onClick={() => {
-                                        setSelectedWeek(week.weekKey === selectedWeek ? null : week.weekKey);
-                                    }}
-                                    className={`text-xs ${isDark ? 'text-primary-400 hover:text-primary-300' : 'text-primary-600 hover:text-primary-700'}`}
-                                >
-                                    {selectedWeek === week.weekKey ? (
-                                        <><i className="fas fa-chevron-up mr-1"></i> Collapse</>
-                                    ) : (
-                                        <><i className="fas fa-chevron-down mr-1"></i> Expand</>
-                                    )}
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => {
+                                            setSelectedWeek(week.weekKey === selectedWeek ? null : week.weekKey);
+                                        }}
+                                        className={`text-xs ${isDark ? 'text-primary-400 hover:text-primary-300' : 'text-primary-600 hover:text-primary-700'}`}
+                                    >
+                                        {selectedWeek === week.weekKey ? (
+                                            <><i className="fas fa-chevron-up mr-1"></i> Collapse</>
+                                        ) : (
+                                            <><i className="fas fa-chevron-down mr-1"></i> Expand</>
+                                        )}
+                                    </button>
+                                    <button
+                                        onClick={() => handleDeleteWeek(week)}
+                                        className={`text-xs flex items-center gap-1 px-2 py-1 rounded ${isDark ? 'bg-red-900 text-red-200 hover:bg-red-800' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
+                                    >
+                                        <i className="fas fa-trash"></i>
+                                        Delete Week
+                                    </button>
+                                </div>
                             </div>
 
                             {selectedWeek === week.weekKey && (

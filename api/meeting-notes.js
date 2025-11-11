@@ -393,6 +393,74 @@ async function handler(req, res) {
     }
   }
 
+  // Delete ALL meeting notes (purge)
+  if (req.method === 'DELETE' && req.query.action === 'purge') {
+    try {
+      const { confirm } = req.query
+      if (confirm !== 'true') {
+        return badRequest(res, 'confirm=true is required to purge meeting notes')
+      }
+
+      const existingCount = await prisma.monthlyMeetingNotes.count()
+      if (existingCount === 0) {
+        return ok(res, { deleted: 0, message: 'No meeting notes to delete' })
+      }
+
+      const deleted = await prisma.monthlyMeetingNotes.deleteMany()
+      return ok(res, { deleted: deleted.count, message: 'All meeting notes deleted' })
+    } catch (error) {
+      console.error('Error purging meeting notes:', error)
+      return serverError(res, 'Failed to purge meeting notes')
+    }
+  }
+
+  // Delete monthly meeting notes
+  if (req.method === 'DELETE' && !req.query.action) {
+    try {
+      const { id, monthKey } = req.query
+      if (!id && !monthKey) {
+        return badRequest(res, 'id or monthKey is required')
+      }
+
+      const whereClause = id ? { id } : { monthKey }
+
+      const deleted = await prisma.monthlyMeetingNotes.delete({
+        where: whereClause
+      })
+
+      return ok(res, { deleted: true, monthlyNotes: deleted })
+    } catch (error) {
+      if (error.code === 'P2025') {
+        return ok(res, { deleted: false, message: 'Monthly meeting notes not found' })
+      }
+      console.error('Error deleting monthly meeting notes:', error)
+      return serverError(res, 'Failed to delete meeting notes')
+    }
+  }
+
+  // Delete weekly meeting notes
+  if (req.method === 'DELETE' && req.query.action === 'weekly') {
+    try {
+      const { id, weeklyNotesId } = req.query
+      const targetId = weeklyNotesId || id
+      if (!targetId) {
+        return badRequest(res, 'weeklyNotesId (or id) is required')
+      }
+
+      const deleted = await prisma.weeklyMeetingNotes.delete({
+        where: { id: targetId }
+      })
+
+      return ok(res, { deleted: true, weeklyNotes: deleted })
+    } catch (error) {
+      if (error.code === 'P2025') {
+        return ok(res, { deleted: false, message: 'Weekly meeting notes not found' })
+      }
+      console.error('Error deleting weekly meeting notes:', error)
+      return serverError(res, 'Failed to delete weekly meeting notes')
+    }
+  }
+
   // Create weekly meeting notes
   if (req.method === 'POST' && req.query.action === 'weekly') {
     try {
