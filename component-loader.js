@@ -220,6 +220,14 @@
                 applyDynamicCacheBust(componentCacheVersions[path] || 'service-maintenance-ui-v20251111');
             }
 
+            if (path.includes('components/projects/ProjectDetail') || path.includes('components/projects/Projects.jsx')) {
+                applyDynamicCacheBust('projects-workspace-v20251111');
+            }
+
+            if (path.includes('components/manufacturing/JobCards.jsx')) {
+                applyDynamicCacheBust('jobcards-mobile-toggle-v20251111');
+            }
+
             if (!dynamicCacheBust && cacheBustTag) {
                 currentScriptSrc = buildScriptSrc(cacheBustTag);
             }
