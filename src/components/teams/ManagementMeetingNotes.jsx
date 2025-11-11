@@ -50,96 +50,6 @@ const DEPARTMENTS = [
     { id: 'business-development', name: 'Business Development', icon: 'fa-rocket', color: 'pink' }
 ];
 
-const DEFAULT_GOAL_ENTRY = '- [ ] ';
-
-const createEmptyMonthlyGoalsMap = () => {
-    const template = {};
-    DEPARTMENTS.forEach((dept) => {
-        template[dept.id] = DEFAULT_GOAL_ENTRY;
-    });
-    return template;
-};
-
-const parseMonthlyGoalsString = (rawGoals) => {
-    if (!rawGoals || typeof rawGoals !== 'string') {
-        return createEmptyMonthlyGoalsMap();
-    }
-
-    const goalsMap = createEmptyMonthlyGoalsMap();
-    const lines = rawGoals.split('\n');
-    let currentDepartmentId = null;
-    let matchedDepartmentCount = 0;
-    const legacyBuffer = [];
-
-    lines.forEach((line) => {
-        const trimmed = line.trim();
-
-        const matchedDepartment = DEPARTMENTS.find((dept) =>
-            trimmed.toLowerCase().startsWith(`${dept.name.toLowerCase()} goals`)
-        );
-
-        if (matchedDepartment) {
-            currentDepartmentId = matchedDepartment.id;
-            matchedDepartmentCount += 1;
-            goalsMap[currentDepartmentId] = '';
-            return;
-        }
-
-        if (!trimmed && currentDepartmentId) {
-            goalsMap[currentDepartmentId] = goalsMap[currentDepartmentId]
-                ? `${goalsMap[currentDepartmentId]}\n`
-                : '';
-            return;
-        }
-
-        if (currentDepartmentId) {
-            goalsMap[currentDepartmentId] = goalsMap[currentDepartmentId]
-                ? `${goalsMap[currentDepartmentId]}\n${line}`
-                : line;
-            return;
-        }
-
-        if (trimmed) {
-            legacyBuffer.push(line);
-        }
-    });
-
-    if (legacyBuffer.length > 0) {
-        const fallbackDepartmentId = 'management';
-        const existingValue = goalsMap[fallbackDepartmentId] || '';
-        const bufferContent = legacyBuffer.join('\n');
-        goalsMap[fallbackDepartmentId] =
-            existingValue && existingValue !== DEFAULT_GOAL_ENTRY
-                ? `${existingValue}\n${bufferContent}`
-                : bufferContent;
-        matchedDepartmentCount += 1;
-    }
-
-    if (matchedDepartmentCount === 0) {
-        const legacyContent = rawGoals.trim();
-        if (legacyContent) {
-            goalsMap.management = legacyContent;
-        }
-    }
-
-    DEPARTMENTS.forEach((dept) => {
-        const value = goalsMap[dept.id];
-        if (!value || value.trim() === '') {
-            goalsMap[dept.id] = DEFAULT_GOAL_ENTRY;
-        }
-    });
-
-    return goalsMap;
-};
-
-const formatMonthlyGoalsString = (goalsMap) => {
-    return DEPARTMENTS.map((dept) => {
-        const rawValue = goalsMap?.[dept.id];
-        const value = rawValue && rawValue.trim() !== '' ? rawValue : DEFAULT_GOAL_ENTRY;
-        return `${dept.name} Goals:\n${value}`;
-    }).join('\n\n');
-};
-
 const ManagementMeetingNotes = () => {
     // Get theme state
     let themeResult = { isDark: false };
@@ -179,8 +89,6 @@ const ManagementMeetingNotes = () => {
     const [users, setUsers] = useState([]);
     const [isReady, setIsReady] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [monthlyGoalsByDept, setMonthlyGoalsByDept] = useState(createEmptyMonthlyGoalsMap);
-    
     // Modal states
     const [showAllocationModal, setShowAllocationModal] = useState(false);
     const [showActionItemModal, setShowActionItemModal] = useState(false);
@@ -221,7 +129,41 @@ const ManagementMeetingNotes = () => {
             }
         }
     }, []);
-    
+
+    const updateDepartmentNotesLocal = useCallback(
+        (departmentNotesId, field, value, monthlyId) => {
+            const applyUpdate = (note) => {
+                if (!note) {
+                    return note;
+                }
+
+                const weeklyNotes = Array.isArray(note.weeklyNotes)
+                    ? note.weeklyNotes.map((week) => ({
+                          ...week,
+                          departmentNotes: Array.isArray(week.departmentNotes)
+                              ? week.departmentNotes.map((deptNote) =>
+                                    deptNote?.id === departmentNotesId ? { ...deptNote, [field]: value } : deptNote
+                                )
+                              : week.departmentNotes
+                      }))
+                    : note.weeklyNotes;
+                return { ...note, weeklyNotes };
+            };
+
+            setCurrentMonthlyNotes((prev) => (prev ? applyUpdate(prev) : prev));
+
+            if (monthlyId) {
+                setMonthlyNotesList((prev) => {
+                    if (!Array.isArray(prev)) {
+                        return prev;
+                    }
+                    return prev.map((note) => (note?.id === monthlyId ? applyUpdate(note) : note));
+                });
+            }
+        },
+        []
+    );
+
     // Initialize selected month to current month
     useEffect(() => {
         const now = new Date();
@@ -620,7 +562,7 @@ const ManagementMeetingNotes = () => {
                     return prev.map((note) => (note?.id === updatedMonth.id ? updatedMonth : note));
                 });
             } else {
-                await reloadMonthlyNotes();
+                await reloadMonthlyNotes(selectedMonth);
             }
 
             if (selectedWeek === week.weekKey) {
@@ -633,32 +575,6 @@ const ManagementMeetingNotes = () => {
             }
         } finally {
             setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        if (!currentMonthlyNotes) {
-            setMonthlyGoalsByDept(createEmptyMonthlyGoalsMap());
-            return;
-        }
-        setMonthlyGoalsByDept(parseMonthlyGoalsString(currentMonthlyNotes.monthlyGoals));
-    }, [currentMonthlyNotes?.id, currentMonthlyNotes?.monthlyGoals]);
-
-    // Update monthly goals
-    const handleUpdateMonthlyGoals = async (goalsMap) => {
-        if (!currentMonthlyNotes) return;
-        
-        try {
-            const formattedGoals = formatMonthlyGoalsString(goalsMap);
-            const response = await window.DatabaseAPI.updateMonthlyNotes(currentMonthlyNotes.id, { monthlyGoals: formattedGoals });
-            const updated = response.data?.monthlyNotes;
-            if (updated) {
-                setCurrentMonthlyNotes(updated);
-                setMonthlyNotesList(prev => prev.map(n => n.id === updated.id ? updated : n));
-                setMonthlyGoalsByDept(parseMonthlyGoalsString(updated.monthlyGoals));
-            }
-        } catch (error) {
-            console.error('Error updating monthly goals:', error);
         }
     };
 
@@ -737,17 +653,23 @@ const ManagementMeetingNotes = () => {
 
     // Update department notes
     const handleUpdateDepartmentNotes = async (departmentNotesId, field, value) => {
+        if (!departmentNotesId) {
+            return;
+        }
+
+        const monthlyId = currentMonthlyNotes?.id || null;
+        updateDepartmentNotesLocal(departmentNotesId, field, value, monthlyId);
+
         try {
-            const updateData = { [field]: value };
-            const response = await window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, updateData);
-            const updated = response.data?.departmentNotes;
-            if (updated) {
-                // Reload current month's notes
-                const monthResponse = await window.DatabaseAPI.getMeetingNotes(selectedMonth);
-                setCurrentMonthlyNotes(monthResponse.data?.monthlyNotes);
-            }
+            await window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value });
         } catch (error) {
             console.error('Error updating department notes:', error);
+            if (typeof alert === 'function') {
+                alert('Failed to update department notes.');
+            }
+            if (selectedMonth) {
+                await reloadMonthlyNotes(selectedMonth);
+            }
         }
     };
 
@@ -998,62 +920,6 @@ const ManagementMeetingNotes = () => {
                             <i className="fas fa-plus mr-1"></i>
                             Add Week
                         </button>
-                    </div>
-                </div>
-            )}
-
-            {/* Monthly Goals Section */}
-            {selectedMonth && currentMonthlyNotes && (
-                <div className={`rounded-lg border p-4 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                    <div className="flex items-center justify-between mb-3">
-                        <h3 className={`text-sm font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
-                            <i className="fas fa-bullseye mr-2 text-primary-600"></i>
-                            Monthly Goals by Department
-                        </h3>
-                        <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
-                            Updates save automatically
-                        </p>
-                    </div>
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                        {DEPARTMENTS.map((dept) => {
-                            const goalValue = monthlyGoalsByDept?.[dept.id] ?? DEFAULT_GOAL_ENTRY;
-                            const allocations = currentMonthlyNotes.userAllocations?.filter((a) => a.departmentId === dept.id) || [];
-                            const allocationLabel = allocations.length > 0
-                                ? `Owners: ${allocations.map((a) => a.user?.name || 'Unknown').join(', ')}`
-                                : 'No owners allocated';
-
-                            return (
-                                <div
-                                    key={dept.id}
-                                    className={`rounded-lg border p-3 ${isDark ? 'bg-slate-900/40 border-slate-700' : 'bg-gray-50 border-gray-200'}`}
-                                >
-                                    <div className="flex items-center justify-between mb-2">
-                                        <div className="flex items-center gap-2">
-                                            <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${isDark ? 'bg-slate-700 text-slate-100' : 'bg-white text-gray-700'} shadow-sm`}>
-                                                <i className={`fas ${dept.icon}`}></i>
-                                            </span>
-                                            <div>
-                                                <p className={`text-sm font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{dept.name}</p>
-                                                <p className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>{allocationLabel}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <textarea
-                                        value={goalValue}
-                                        onChange={(e) => {
-                                            const value = e.target.value;
-                                            setMonthlyGoalsByDept((prev) => {
-                                                const next = { ...(prev || createEmptyMonthlyGoalsMap()), [dept.id]: value };
-                                                handleUpdateMonthlyGoals(next);
-                                                return next;
-                                            });
-                                        }}
-                                        placeholder={`Enter ${dept.name.toLowerCase()} goals for this month...`}
-                                        className={`w-full min-h-[100px] p-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder-slate-500' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'}`}
-                                    />
-                                </div>
-                            );
-                        })}
                     </div>
                 </div>
             )}
