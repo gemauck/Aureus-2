@@ -180,7 +180,7 @@ function initializeProjectDetail() {
     
     console.log('✅ ProjectDetail: Starting component initialization...');
     
-    const { useState, useEffect, useRef } = window.React;
+    const { useState, useEffect, useRef, useCallback } = window.React;
     const storage = window.storage;
     const ListModal = window.ListModal;
     const ProjectModal = window.ProjectModal;
@@ -232,6 +232,7 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
     
     // Ref to prevent duplicate saves when manually adding document collection process
     const skipNextSaveRef = useRef(false);
+    const saveTimeoutRef = useRef(null);
     
     // Document process dropdown
     const [showDocumentProcessDropdown, setShowDocumentProcessDropdown] = useState(false);
@@ -293,6 +294,64 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
         loadUsers();
     }, []);
     
+    const persistProjectData = useCallback(async ({
+        nextTasks = tasks,
+        nextTaskLists = taskLists,
+        nextCustomFieldDefinitions = customFieldDefinitions,
+        nextDocuments = documents,
+        nextHasDocumentCollectionProcess = hasDocumentCollectionProcess
+    } = {}) => {
+        try {
+            console.log('💾 ProjectDetail: Saving project data changes...');
+            console.log('  - Project ID:', project.id);
+            console.log('  - Tasks count:', nextTasks.length);
+            console.log('  - Task lists count:', nextTaskLists.length);
+            
+            const updatePayload = {
+                taskLists: JSON.stringify(nextTaskLists),
+                tasksList: JSON.stringify(nextTasks),  // Note: backend uses 'tasksList' not 'tasks'
+                customFieldDefinitions: JSON.stringify(nextCustomFieldDefinitions),
+                documents: JSON.stringify(nextDocuments),
+                hasDocumentCollectionProcess: nextHasDocumentCollectionProcess,
+                documentSections: JSON.stringify(project.documentSections || [])
+            };
+            
+            console.log('📡 Sending update to database:', updatePayload);
+            
+            const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
+            console.log('✅ Database save successful:', apiResponse);
+            
+            if (window.dataService && typeof window.dataService.getProjects === 'function') {
+                const savedProjects = await window.dataService.getProjects();
+                if (savedProjects) {
+                    const updatedProjects = savedProjects.map(p => 
+                        p.id === project.id ? { 
+                            ...p, 
+                            tasks: nextTasks, 
+                            taskLists: nextTaskLists, 
+                            customFieldDefinitions: nextCustomFieldDefinitions, 
+                            documents: nextDocuments, 
+                            hasDocumentCollectionProcess: nextHasDocumentCollectionProcess,
+                            documentSections: p.documentSections || project.documentSections || []
+                        } : p
+                    );
+                    if (window.dataService && typeof window.dataService.setProjects === 'function') {
+                        try {
+                            await window.dataService.setProjects(updatedProjects);
+                            console.log('✅ localStorage updated for consistency');
+                        } catch (saveError) {
+                            console.warn('Failed to save projects to dataService:', saveError);
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('❌ Error saving project data:', error);
+            alert('Failed to save project changes: ' + error.message);
+            throw error;
+        }
+    }, [project.id, project.documentSections, tasks, taskLists, customFieldDefinitions, documents, hasDocumentCollectionProcess]);
+    
     // Save back to project whenever they change
     useEffect(() => {
         // Skip save if this was triggered by manual document collection process addition
@@ -302,68 +361,21 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
             return;
         }
         
-        const saveProjectData = async () => {
-            try {
-                console.log('💾 ProjectDetail: Saving project data changes...');
-                console.log('  - Project ID:', project.id);
-                console.log('  - Tasks count:', tasks.length);
-                console.log('  - Task lists count:', taskLists.length);
-                
-                // Prepare the update payload with JSON stringified fields
-                const updatePayload = {
-                    taskLists: JSON.stringify(taskLists),
-                    tasksList: JSON.stringify(tasks),  // Note: backend uses 'tasksList' not 'tasks'
-                    customFieldDefinitions: JSON.stringify(customFieldDefinitions),
-                    documents: JSON.stringify(documents),
-                    hasDocumentCollectionProcess: hasDocumentCollectionProcess,
-                    documentSections: JSON.stringify(project.documentSections || [])
-                };
-                
-                console.log('📡 Sending update to database:', updatePayload);
-                
-                // Save to database first (server-first approach)
-                const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
-                console.log('✅ Database save successful:', apiResponse);
-                
-                // Then update localStorage for consistency
-                if (window.dataService && typeof window.dataService.getProjects === 'function') {
-                    const savedProjects = await window.dataService.getProjects();
-                    if (savedProjects) {
-                        const updatedProjects = savedProjects.map(p => 
-                            p.id === project.id ? { 
-                                ...p, 
-                                tasks, 
-                                taskLists, 
-                                customFieldDefinitions, 
-                                documents, 
-                                hasDocumentCollectionProcess,
-                                documentSections: p.documentSections || project.documentSections || []
-                            } : p
-                        );
-                        if (window.dataService && typeof window.dataService.setProjects === 'function') {
-                            try {
-                                await window.dataService.setProjects(updatedProjects);
-                                console.log('✅ localStorage updated for consistency');
-                            } catch (saveError) {
-                                console.warn('Failed to save projects to dataService:', saveError);
-                            }
-                        }
-                    }
-                }
-            } catch (error) {
-                console.error('❌ Error saving project data:', error);
-                // Show user-friendly error
-                alert('Failed to save project changes: ' + error.message);
-            }
-        };
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+        }
         
-        // Only save if we have actual changes (not on initial render)
-        const timeoutId = setTimeout(() => {
-            saveProjectData();
+        saveTimeoutRef.current = setTimeout(() => {
+            persistProjectData().catch(() => {});
         }, 1500); // Increased debounce to 1.5 seconds to avoid excessive API calls
         
-        return () => clearTimeout(timeoutId);
-    }, [tasks, taskLists, customFieldDefinitions, documents, hasDocumentCollectionProcess]); // Removed project.id from dependencies
+        return () => {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
+            }
+        };
+    }, [tasks, taskLists, customFieldDefinitions, documents, hasDocumentCollectionProcess, persistProjectData]);
 
     // Get document status color
     const getDocumentStatusColor = (status) => {
@@ -715,10 +727,46 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
     };
 
     // Comment handling function
-    const handleAddComment = (taskId, commentText, isSubtask, parentId) => {
-        // Get current user info
-        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
-        
+    const handleAddComment = async (taskId, commentText, isSubtask, parentId) => {
+        if (!commentText || !commentText.trim()) {
+            return;
+        }
+
+        const currentUser = (window.storage?.getUserInfo && window.storage.getUserInfo()) || { name: 'System', email: 'system', id: 'system' };
+
+        // Parse mentions from comment text (@username format)
+        const mentionRegex = /@([\w]+(?:\s+[\w]+)*)/g;
+        const mentionTexts = [];
+        let match;
+        while ((match = mentionRegex.exec(commentText)) !== null) {
+            const mentionValue = match[1]?.trim();
+            if (mentionValue) {
+                mentionTexts.push(mentionValue);
+            }
+        }
+
+        const mentionedUsers = [];
+        mentionTexts.forEach(mentionText => {
+            const mentionLower = mentionText.toLowerCase();
+            const matchedUser = users.find(user => {
+                const name = (user.name || '').toLowerCase();
+                const email = (user.email || '').toLowerCase();
+                return name === mentionLower ||
+                    email === mentionLower ||
+                    name.startsWith(mentionLower + ' ') ||
+                    name.includes(' ' + mentionLower + ' ') ||
+                    name.endsWith(' ' + mentionLower) ||
+                    name.split(' ').some(part => part === mentionLower);
+            });
+            if (matchedUser && matchedUser.id && !mentionedUsers.some(m => m.id === matchedUser.id)) {
+                mentionedUsers.push({
+                    id: matchedUser.id,
+                    name: matchedUser.name,
+                    email: matchedUser.email
+                });
+            }
+        });
+
         const newComment = {
             id: Date.now(),
             text: commentText,
@@ -726,29 +774,183 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
             authorEmail: currentUser.email,
             authorId: currentUser.id,
             timestamp: new Date().toISOString(),
-            date: new Date().toLocaleString()
+            date: new Date().toLocaleString(),
+            mentions: mentionedUsers
         };
 
-        if (isSubtask) {
-            setTasks(tasks.map(t => {
-                if (t.id === parentId) {
-                    return {
-                        ...t,
-                        subtasks: (t.subtasks || []).map(st =>
-                            st.id === taskId 
-                                ? { ...st, comments: [...(st.comments || []), newComment] }
-                                : st
-                        )
-                    };
+        const findTaskById = () => {
+            if (isSubtask) {
+                const parentTask = tasks.find(t => t.id === parentId);
+                return parentTask?.subtasks?.find(st => st.id === taskId) || null;
+            }
+            return tasks.find(t => t.id === taskId) || null;
+        };
+
+        const originalTask = findTaskById();
+        if (!originalTask) {
+            console.warn('⚠️ handleAddComment: Task not found for comment addition', { taskId, isSubtask, parentId });
+            return;
+        }
+
+        const existingSubscribers = Array.isArray(originalTask.subscribers)
+            ? originalTask.subscribers.filter(Boolean)
+            : [];
+        const newSubscribers = Array.from(new Set([
+            ...existingSubscribers,
+            currentUser.id,
+            ...mentionedUsers.map(u => u.id).filter(Boolean)
+        ])).filter(Boolean);
+
+        let updatedTargetTask = null;
+        const updatedTasks = tasks.map(task => {
+            if (isSubtask) {
+                if (task.id !== parentId) {
+                    return task;
                 }
-                return t;
-            }));
-        } else {
-            setTasks(tasks.map(t =>
-                t.id === taskId 
-                    ? { ...t, comments: [...(t.comments || []), newComment] }
-                    : t
-            ));
+                const updatedSubtasks = (task.subtasks || []).map(subtask => {
+                    if (subtask.id !== taskId) {
+                        return subtask;
+                    }
+                    updatedTargetTask = {
+                        ...subtask,
+                        comments: [...(subtask.comments || []), newComment],
+                        subscribers: newSubscribers
+                    };
+                    return updatedTargetTask;
+                });
+                return {
+                    ...task,
+                    subtasks: updatedSubtasks
+                };
+            }
+
+            if (task.id !== taskId) {
+                return task;
+            }
+
+            updatedTargetTask = {
+                ...task,
+                comments: [...(task.comments || []), newComment],
+                subscribers: newSubscribers
+            };
+            return updatedTargetTask;
+        });
+
+        if (!updatedTargetTask) {
+            console.warn('⚠️ handleAddComment: Updated task not resolved after mapping', { taskId, isSubtask, parentId });
+            return;
+        }
+
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+
+        skipNextSaveRef.current = true;
+        setTasks(updatedTasks);
+
+        try {
+            await persistProjectData({ nextTasks: updatedTasks });
+        } catch (error) {
+            console.error('❌ Failed to persist project data after adding comment:', error);
+        } finally {
+            setTimeout(() => {
+                skipNextSaveRef.current = false;
+            }, 500);
+        }
+
+        const projectLink = project ? `/projects/${project.id}` : '/projects';
+        const taskTitle = updatedTargetTask.title || originalTask.title || 'Task';
+        const projectName = project?.name || 'Project';
+
+        try {
+            if (window.MentionHelper && mentionedUsers.length > 0) {
+                await window.MentionHelper.processMentions(
+                    commentText,
+                    `Task: ${taskTitle}`,
+                    projectLink,
+                    currentUser.name,
+                    users,
+                    {
+                        projectId: project?.id,
+                        projectName,
+                        taskId: updatedTargetTask.id || taskId,
+                        taskTitle
+                    }
+                );
+            }
+        } catch (mentionError) {
+            console.error('❌ Failed to process mentions:', mentionError);
+        }
+
+        const findUserMatch = (value) => {
+            if (!value) return null;
+            const lowered = String(value).toLowerCase();
+            return users.find(user =>
+                user.id === value ||
+                (user.email || '').toLowerCase() === lowered ||
+                (user.name || '').toLowerCase() === lowered
+            ) || null;
+        };
+
+        const assigneeUser = findUserMatch(
+            updatedTargetTask.assigneeId ||
+            updatedTargetTask.assignee ||
+            originalTask.assigneeId ||
+            originalTask.assignee
+        );
+
+        const sendNotification = async (userId, contextLabel) => {
+            if (!userId || !window.DatabaseAPI || typeof window.DatabaseAPI.makeRequest !== 'function') {
+                return;
+            }
+            await window.DatabaseAPI.makeRequest('/notifications', {
+                method: 'POST',
+                body: JSON.stringify({
+                    userId,
+                    type: 'comment',
+                    title: `New comment on task: ${taskTitle}`,
+                    message: `${currentUser.name} commented on "${taskTitle}" in project "${projectName}": "${commentText.substring(0, 100)}${commentText.length > 100 ? '...' : ''}"`,
+                    link: projectLink,
+                    metadata: {
+                        taskId: updatedTargetTask.id || taskId,
+                        taskTitle,
+                        projectId: project?.id,
+                        projectName,
+                        commentAuthor: currentUser.name,
+                        commentText,
+                        context: contextLabel
+                    }
+                })
+            });
+        };
+
+        try {
+            if (assigneeUser && assigneeUser.id && assigneeUser.id !== currentUser.id && !mentionedUsers.some(m => m.id === assigneeUser.id)) {
+                await sendNotification(assigneeUser.id, 'assignee');
+                console.log(`✅ Comment notification sent to assignee ${assigneeUser.name}`);
+            }
+        } catch (assigneeError) {
+            console.error('❌ Failed to send comment notification to assignee:', assigneeError);
+        }
+
+        const mentionedIds = mentionedUsers.map(u => u.id).filter(Boolean);
+        const subscribersToNotify = newSubscribers
+            .filter(Boolean)
+            .filter(subId => subId !== currentUser.id)
+            .filter(subId => !mentionedIds.includes(subId))
+            .filter(subId => !(assigneeUser && assigneeUser.id === subId));
+
+        for (const subscriberId of subscribersToNotify) {
+            const subscriber = users.find(u => u.id === subscriberId);
+            if (subscriber) {
+                try {
+                    await sendNotification(subscriber.id, 'subscriber');
+                    console.log(`✅ Comment notification sent to subscriber ${subscriber.name}`);
+                } catch (subscriberError) {
+                    console.error(`❌ Failed to send comment notification to subscriber ${subscriber.name}:`, subscriberError);
+                }
+            }
         }
     };
 
