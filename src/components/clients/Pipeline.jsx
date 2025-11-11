@@ -1980,28 +1980,44 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                 {item.name}
                             </p>
                             <p className="text-xs text-gray-500 truncate">
-                                {item.clientName || item.company || 'Untitled deal'}
+                                {item.clientName || item.company || item.industry || item.itemType || 'Untitled deal'}
                             </p>
                         </div>
                     </div>
                     <span
-                        className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${
-                            item.type === 'lead' ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-600'
+                        className={`px-2 py-0.5 text-xs font-semibold rounded-full ${
+                            item.type === 'lead' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
                         }`}
                     >
-                        {item.type === 'lead' ? 'Lead' : 'Opportunity'}
+                        {item.type === 'lead' ? 'LEAD' : 'OPP'}
                     </span>
                 </div>
 
                 <div className="flex items-center justify-between text-sm text-gray-700">
-                    <span className="font-semibold text-gray-900">{formatCurrency(item.value)}</span>
-                    <span className="text-xs uppercase tracking-wide text-gray-400">
+                    <span className="font-bold text-gray-900">{formatCurrency(item.value)}</span>
+                    <span
+                        className={`px-2 py-0.5 text-xs font-medium rounded-full ${getLifecycleBadgeColor(item.status || 'Potential')}`}
+                    >
                         {item.status || 'Potential'}
                     </span>
                 </div>
 
-                <div className="text-xs text-gray-400">
-                    {age}d in stage
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span className={`px-2 py-0.5 rounded-full font-medium ${getAgeBadgeColor(age)}`}>
+                        {age}d
+                    </span>
+                    {item.expectedCloseDate ? (
+                        <span className="flex items-center gap-1 whitespace-nowrap">
+                            <i className="fas fa-calendar-alt text-gray-400 text-xs"></i>
+                            {new Date(item.expectedCloseDate).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}
+                        </span>
+                    ) : (
+                        <span className="text-gray-400 italic">No close date</span>
+                    )}
+                </div>
+
+                <div className="text-xs text-gray-500 truncate">
+                    {item.industry || item.source || 'No industry specified'}
                 </div>
             </div>
         );
