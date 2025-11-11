@@ -22,6 +22,92 @@ const safeStorage = {
     }
 };
 
+// Map of critical modal bundles to ensure they can be recovered if the initial script tag failed to load
+const CRITICAL_COMPONENT_SCRIPTS = {
+    ClientDetailModal: './dist/src/components/clients/ClientDetailModal.js?v=permanent-block-1762361500',
+    LeadDetailModal: './dist/src/components/clients/LeadDetailModal.js?v=lead-fix-1736162400',
+    OpportunityDetailModal: './dist/src/components/clients/OpportunityDetailModal.js'
+};
+
+const useEnsureGlobalComponent = (globalName) => {
+    const [component, setComponent] = useState(() => (typeof window !== 'undefined' ? window[globalName] || null : null));
+
+    useEffect(() => {
+        if (typeof window === 'undefined' || typeof document === 'undefined') {
+            return;
+        }
+
+        if (component) {
+            return;
+        }
+
+        let cancelled = false;
+        const updateComponent = () => {
+            if (cancelled) return;
+            const globalComponent = window[globalName];
+            if (globalComponent) {
+                setComponent(globalComponent);
+            }
+        };
+
+        // Already registered?
+        if (window[globalName]) {
+            updateComponent();
+            return;
+        }
+
+        const scriptSrc = CRITICAL_COMPONENT_SCRIPTS[globalName];
+        if (!scriptSrc) {
+            console.warn(`⚠️ No recovery script registered for ${globalName}`);
+            return;
+        }
+
+        const normalisedSrc = scriptSrc.startsWith('/') || scriptSrc.startsWith('http')
+            ? scriptSrc
+            : `/${scriptSrc.replace(/^\.\//, '')}`;
+
+        const existingScript = Array.from(document.getElementsByTagName('script')).find((script) => {
+            if (!script.src) return false;
+            const cleaned = script.src.replace(location.origin, '').split('?')[0];
+            return cleaned === normalisedSrc.split('?')[0] || script.dataset?.componentName === globalName;
+        });
+
+        if (existingScript) {
+            existingScript.dataset.componentName = existingScript.dataset.componentName || globalName;
+            existingScript.addEventListener('load', updateComponent, { once: true });
+            existingScript.addEventListener('error', () => {
+                if (!cancelled) {
+                    console.error(`❌ Failed to load ${globalName} from existing script tag`);
+                }
+            }, { once: true });
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        const script = document.createElement('script');
+        script.async = true;
+        script.dataset.componentName = globalName;
+        script.src = `${normalisedSrc}${normalisedSrc.includes('?') ? '&' : '?'}fallback=${Date.now()}`;
+        script.onload = updateComponent;
+        script.onerror = (error) => {
+            if (!cancelled) {
+                console.error(`❌ Failed to lazy-load ${globalName} from ${script.src}`, error);
+            }
+        };
+
+        document.body.appendChild(script);
+
+        return () => {
+            cancelled = true;
+            script.onload = null;
+            script.onerror = null;
+        };
+    }, [component, globalName]);
+
+    return component;
+};
+
 // Performance optimization: Memoized client data processor
 let clientDataCache = null;
 let clientDataCacheTimestamp = 0;
@@ -4466,6 +4552,7 @@ const Clients = React.memo(() => {
 
     // Full-page Client Detail View
     const ClientDetailView = () => {
+        const ClientDetailModalComponent = useEnsureGlobalComponent('ClientDetailModal');
         // Prioritize selectedClientRef.current (set immediately on click), then try to find in clients array
         const selectedClient = selectedClientRef.current || 
             (editingClientId ? clients.find(c => c.id === editingClientId) : null);
@@ -4496,18 +4583,8 @@ const Clients = React.memo(() => {
 
             {/* Full-page client detail content */}
             <div className="p-6">
-                {(() => {
-                    const Modal = window.ClientDetailModal;
-                    if (!Modal) {
-                        return (
-                            <div className="text-center py-8 text-gray-500">
-                                <i className="fas fa-exclamation-triangle text-3xl mb-2"></i>
-                                <p>ClientDetailModal component is not loaded yet. Please refresh the page.</p>
-                            </div>
-                        );
-                    }
-                    return (
-                        <Modal
+                {ClientDetailModalComponent ? (
+                    <ClientDetailModalComponent
                         key={editingClientId || 'new-client'}
                         client={selectedClient}
                         onSave={handleSaveClient}
@@ -4524,8 +4601,12 @@ const Clients = React.memo(() => {
                             setViewMode('opportunity-detail');
                         }}
                     />
-                    );
-                })()}
+                ) : (
+                    <div className="text-center py-8 text-gray-500">
+                        <i className="fas fa-spinner fa-spin text-3xl mb-2"></i>
+                        <p>Loading client details…</p>
+                    </div>
+                )}
             </div>
         </div>
         );
@@ -4533,6 +4614,7 @@ const Clients = React.memo(() => {
 
     // Full-page Lead Detail View
     const LeadDetailView = () => {
+        const LeadDetailModalComponent = useEnsureGlobalComponent('LeadDetailModal');
         // Get the lead from editingLeadId
         // Ensure leads array exists before trying to find
         const selectedLead = editingLeadId && Array.isArray(leads) ? leads.find(l => l.id === editingLeadId) : null;
@@ -4587,18 +4669,8 @@ const Clients = React.memo(() => {
 
             {/* Full-page lead detail content */}
             <div className="p-6">
-                {(() => {
-                    const Modal = window.LeadDetailModal;
-                    if (!Modal) {
-                        return (
-                            <div className="text-center py-8 text-gray-500">
-                                <i className="fas fa-exclamation-triangle text-3xl mb-2"></i>
-                                <p>LeadDetailModal component is not loaded yet. Please refresh the page.</p>
-                            </div>
-                        );
-                    }
-                    return (
-                        <Modal
+                {LeadDetailModalComponent ? (
+                    <LeadDetailModalComponent
                         key={editingLeadId || 'new-lead'}
                         leadId={editingLeadId}
                         onSave={handleSaveLead}
@@ -4611,8 +4683,12 @@ const Clients = React.memo(() => {
                         onTabChange={setCurrentLeadTab}
                         onPauseSync={handlePauseSync}
                     />
-                    );
-                })()}
+                ) : (
+                    <div className="text-center py-8 text-gray-500">
+                        <i className="fas fa-spinner fa-spin text-3xl mb-2"></i>
+                        <p>Loading lead details…</p>
+                    </div>
+                )}
             </div>
         </div>
         );
@@ -4620,6 +4696,7 @@ const Clients = React.memo(() => {
 
     // Full-page Opportunity Detail View
     const OpportunityDetailView = ({ opportunityId, client, onClose }) => {
+        const OpportunityDetailModalComponent = useEnsureGlobalComponent('OpportunityDetailModal');
         return (
             <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
                 {/* Header with breadcrumb */}
@@ -4645,26 +4722,20 @@ const Clients = React.memo(() => {
 
                 {/* Full-page opportunity detail content */}
                 <div className="p-6">
-                    {(() => {
-                        const Modal = window.OpportunityDetailModal;
-                        if (!Modal) {
-                            return (
-                                <div className="text-center py-8 text-gray-500">
-                                    <i className="fas fa-exclamation-triangle text-3xl mb-2"></i>
-                                    <p>OpportunityDetailModal component is not loaded yet. Please refresh the page.</p>
-                                </div>
-                            );
-                        }
-                        return (
-                            <Modal
-                                key={opportunityId}
-                                opportunityId={opportunityId}
-                                client={client}
-                                onClose={onClose}
-                                isFullPage={true}
-                            />
-                        );
-                    })()}
+                    {OpportunityDetailModalComponent ? (
+                        <OpportunityDetailModalComponent
+                            key={opportunityId}
+                            opportunityId={opportunityId}
+                            client={client}
+                            onClose={onClose}
+                            isFullPage={true}
+                        />
+                    ) : (
+                        <div className="text-center py-8 text-gray-500">
+                            <i className="fas fa-spinner fa-spin text-3xl mb-2"></i>
+                            <p>Loading opportunity details…</p>
+                        </div>
+                    )}
                 </div>
             </div>
         );

@@ -73,12 +73,22 @@ echo "=================================="
 git pull origin main || echo "⚠️  Git pull failed or already up to date"
 
 echo ""
-echo "🔨 Step 4: Generating Prisma Client..."
+echo "📦 Step 4: Installing dependencies..."
+echo "====================================="
+npm install --production=false
+
+echo ""
+echo "🏗️ Step 5: Building application..."
+echo "=================================="
+npm run build
+
+echo ""
+echo "🔨 Step 6: Generating Prisma Client..."
 echo "====================================="
 npx prisma generate
 
 echo ""
-echo "📦 Step 5: Creating database backup..."
+echo "📦 Step 7: Creating database backup..."
 echo "======================================"
 BACKUP_DIR="database-backups"
 mkdir -p "\$BACKUP_DIR"
@@ -94,7 +104,7 @@ else
 fi
 
 echo ""
-echo "🚀 Step 6: Applying database migration..."
+echo "🚀 Step 8: Applying database migration..."
 echo "========================================="
 # Use db push for quick deployment (no migration history needed)
 ./scripts/safe-db-migration.sh npx prisma db push --skip-generate || {
@@ -106,15 +116,15 @@ echo "========================================="
 }
 
 echo ""
-echo "🔍 Step 7: Verifying tables..."
+echo "🔍 Step 9: Verifying tables..."
 echo "==============================="
 # Check if tables exist (basic verification)
 TABLES=\$(psql "\$DATABASE_URL" -t -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name LIKE '%Meeting%';" 2>/dev/null || echo "0")
 echo "Found \$TABLES meeting notes related tables"
 
 echo ""
-echo "🔄 Step 8: Restarting application..."
-echo "===================================="
+echo "🔄 Step 10: Restarting application..."
+echo "====================================="
 if command -v pm2 &> /dev/null; then
     pm2 restart abcotronics-erp || pm2 start server.js --name abcotronics-erp
     echo "✅ Application restarted with PM2"

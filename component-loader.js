@@ -148,6 +148,10 @@
     const offlineCapableComponents = [
         'components/service-maintenance/ServiceAndMaintenance.jsx'
     ];
+
+    const componentCacheVersions = {
+        'components/service-maintenance/ServiceAndMaintenance.jsx': 'service-maintenance-ui-v20251111'
+    };
     
     function loadComponent(path) {
         const isProduction = window.USE_PRODUCTION_BUILD === true;
@@ -156,10 +160,18 @@
         
         // Convert .jsx to .js in production
         const finalPath = isProduction ? fullPath.replace('.jsx', '.js') : fullPath;
-        const resolvedPath = finalPath.replace(/^\.\//, '/');
+
+        let cacheBustTag = componentCacheVersions[path] || null;
+
+        const appendCacheParam = (src, tag) => tag ? `${src}${src.includes('?') ? '&' : '?'}v=${tag}` : src;
+
+        const buildScriptSrc = (tag = cacheBustTag) => appendCacheParam(finalPath, tag);
+
+        let scriptSrc = buildScriptSrc();
+        let resolvedPath = scriptSrc.replace(/^\.\//, '/');
         
         if (isProduction && window.loadScriptWithOfflineFallback && offlineCapableComponents.includes(path)) {
-            const cacheKey = `offline::${path}`;
+            const cacheKey = cacheBustTag ? `offline::${path}?v=${cacheBustTag}` : `offline::${path}`;
             window.loadScriptWithOfflineFallback(resolvedPath, { cacheKey })
                 .catch((error) => {
                     console.warn(`⚠️ Offline loader fallback for ${path}`, error);
@@ -172,40 +184,50 @@
         
         function appendScriptTag() {
             const script = document.createElement('script');
-            let cacheBustTag = null;
+            let dynamicCacheBust = cacheBustTag;
+            let currentScriptSrc = buildScriptSrc(dynamicCacheBust);
             
             const existingScript = document.querySelector(`script[data-component-path="${path}"]`);
             
+            const applyDynamicCacheBust = (tag) => {
+                dynamicCacheBust = tag;
+                currentScriptSrc = buildScriptSrc(dynamicCacheBust);
+            };
+            
             // Add cache-busting for UserManagement to force reload of new permissions
-            let scriptSrc = finalPath;
             if (path.includes('UserManagement')) {
-                scriptSrc += '?v=permissions-v2-' + Date.now();
+                applyDynamicCacheBust('permissions-v2-' + Date.now());
             }
             
             // Force cache-bust for Management Meeting Notes bundle to ensure latest UI is loaded
             if (path.includes('ManagementMeetingNotes') || path.includes('Teams')) {
-                cacheBustTag = 'teams-permissions-v20251111b';
-                scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + cacheBustTag;
+                applyDynamicCacheBust('teams-permissions-v20251111b');
             }
             
             if (path.includes('MainLayout')) {
-                cacheBustTag = 'main-layout-v20251110';
-                scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + cacheBustTag;
+                applyDynamicCacheBust('main-layout-v20251110');
             }
             
             if (path.includes('components/clients/Pipeline.jsx')) {
-                cacheBustTag = 'pipeline-dnd-fix-20251110b';
-                scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + cacheBustTag;
+                applyDynamicCacheBust('pipeline-dnd-fix-20251110b');
             }
 
             if (path.includes('components/clients/Clients.jsx')) {
-                cacheBustTag = 'clients-pipeline-fallback-logs-20251110';
-                scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + cacheBustTag;
+                applyDynamicCacheBust('clients-pipeline-fallback-logs-20251110');
+            }
+
+            if (path.includes('components/service-maintenance/ServiceAndMaintenance.jsx')) {
+                applyDynamicCacheBust(componentCacheVersions[path] || 'service-maintenance-ui-v20251111');
+            }
+
+            if (!dynamicCacheBust && cacheBustTag) {
+                currentScriptSrc = buildScriptSrc(cacheBustTag);
             }
 
             if (existingScript) {
                 const existingVersion = existingScript.getAttribute('data-component-version') || '';
-                if (cacheBustTag && existingVersion === cacheBustTag) {
+                const targetVersion = dynamicCacheBust || cacheBustTag;
+                if (targetVersion && existingVersion === targetVersion) {
                     return;
                 }
                 existingScript.remove();
@@ -213,12 +235,12 @@
 
             if (isProduction) {
                 // Production: Load pre-compiled JavaScript
-                script.src = scriptSrc;
+                script.src = currentScriptSrc;
                 script.defer = true;
             } else {
                 // Development: Load JSX with Babel
                 script.type = 'text/babel';
-                script.src = scriptSrc;
+                script.src = currentScriptSrc;
             }
             
             script.onerror = () => {
@@ -226,8 +248,9 @@
             };
 
             script.dataset.componentPath = path;
-            if (cacheBustTag) {
-                script.dataset.componentVersion = cacheBustTag;
+            const versionToSet = dynamicCacheBust || cacheBustTag;
+            if (versionToSet) {
+                script.dataset.componentVersion = versionToSet;
             }
             
             document.body.appendChild(script);
