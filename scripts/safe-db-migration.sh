@@ -34,6 +34,33 @@ fi
 echo "📊 Database Type: $DB_TYPE"
 echo ""
 
+# Helper to terminate idle PostgreSQL connections when slot limit is reached
+cleanup_postgres_connections() {
+    if [ "$DB_TYPE" != "postgresql" ]; then
+        return 0
+    fi
+
+    if ! command -v psql &> /dev/null; then
+        echo -e "${YELLOW}⚠️  psql not available; skipping automatic connection cleanup${NC}"
+        return 1
+    fi
+
+    local CLEAN_URL="${DATABASE_URL//\"/}"
+    if [ -z "$CLEAN_URL" ]; then
+        echo -e "${YELLOW}⚠️  DATABASE_URL missing; skipping automatic connection cleanup${NC}"
+        return 1
+    fi
+
+    echo "   Attempting to terminate idle PostgreSQL connections..."
+    if psql "$CLEAN_URL" -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid();" >/dev/null; then
+        echo "   ✅ Idle connections terminated (if any)."
+        return 0
+    else
+        echo -e "${YELLOW}⚠️  Unable to terminate connections automatically${NC}"
+        return 1
+    fi
+}
+
 # Create backup directory
 BACKUP_DIR="./database-backups"
 mkdir -p "$BACKUP_DIR"
@@ -162,6 +189,7 @@ while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
     if echo "$ERROR_OUTPUT" | grep -qi "remaining connection slots are reserved for roles with the superuser attribute"; then
         if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
             echo -e "${YELLOW}⚠️  Connection slot limit hit. Retrying in ${SLEEP_SECONDS}s...${NC}"
+            cleanup_postgres_connections || true
             sleep $SLEEP_SECONDS
             ATTEMPT=$((ATTEMPT + 1))
             continue
