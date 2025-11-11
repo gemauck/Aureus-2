@@ -1057,7 +1057,7 @@ model DepartmentNotes {
   id             String             @id @default(cuid())
   weeklyNotesId  String
   weeklyNotes    WeeklyMeetingNotes @relation(fields: [weeklyNotesId], references: [id], onDelete: Cascade)
-  departmentId   String // compliance, finance, technical, data, support, commercial, business-development
+  departmentId   String // management, compliance, finance, technical, data, support, commercial, business-development
   successes      String             @default("") // Last week's successes
   weekToFollow   String             @default("") // This week's plan
   frustrations   String             @default("") // Frustrations/challenges
@@ -1132,7 +1132,7 @@ model MeetingUserAllocation {
   id             String              @id @default(cuid())
   monthlyNotesId String
   monthlyNotes   MonthlyMeetingNotes @relation(fields: [monthlyNotesId], references: [id], onDelete: Cascade)
-  departmentId   String // compliance, finance, technical, data, support, commercial, business-development
+  departmentId   String // management, compliance, finance, technical, data, support, commercial, business-development
   userId         String
   user           User                @relation("MeetingUserAllocations", fields: [userId], references: [id])
   role           String              @default("contributor") // contributor, reviewer, owner

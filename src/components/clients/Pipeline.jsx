@@ -98,6 +98,80 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
         }
     };
 
+const resolveEntityId = (entity) => {
+    if (!entity || typeof entity !== 'object') {
+        return null;
+    }
+
+    const candidateKeys = [
+        'id',
+        'leadId',
+        'clientId',
+        'uuid',
+        '_id',
+        'publicId',
+        'externalId',
+        'recordId',
+        'tempId',
+        'localId',
+        'legacyId'
+    ];
+
+    for (const key of candidateKeys) {
+        const value = entity[key];
+        if (value !== undefined && value !== null && value !== '') {
+            return value;
+        }
+    }
+
+    if (entity.metadata?.id) {
+        return entity.metadata.id;
+    }
+
+    if (Array.isArray(entity.identifiers)) {
+        const identifier = entity.identifiers.find((val) => val !== undefined && val !== null && val !== '');
+        if (identifier) {
+            return identifier;
+        }
+    }
+
+    return null;
+};
+
+const generateFallbackId = (entity, prefix = 'record') => {
+    const safePrefix = prefix || 'record';
+    const rawName = typeof entity?.name === 'string' && entity.name.trim() ? entity.name.trim().toLowerCase() : safePrefix;
+    const sanitizedName = rawName.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '') || safePrefix;
+
+    const timestampSource =
+        entity?.createdAt ||
+        entity?.updatedAt ||
+        entity?.firstContactDate ||
+        entity?.lastContact ||
+        Date.now();
+
+    let timestamp = Date.now();
+    if (typeof timestampSource === 'number' && Number.isFinite(timestampSource)) {
+        timestamp = timestampSource;
+    } else if (typeof timestampSource === 'string') {
+        const parsed = Date.parse(timestampSource);
+        if (!Number.isNaN(parsed)) {
+            timestamp = parsed;
+        }
+    }
+
+    return `${safePrefix}-${sanitizedName}-${timestamp}`;
+};
+
+const normalizeEntityId = (entity, prefix = 'record') => {
+    const existing = resolveEntityId(entity);
+    if (existing !== undefined && existing !== null && existing !== '') {
+        return { id: existing, generated: false };
+    }
+
+    return { id: generateFallbackId(entity, prefix), generated: true };
+};
+
     // Load data from API and localStorage
     useEffect(() => {
         setDataLoaded(false); // Reset data loaded flag when refreshing
@@ -453,6 +527,17 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
     // Get all pipeline items (leads + client opportunities)
     const getPipelineItems = () => {
         const leadItems = leads.map(lead => {
+            const normalized = normalizeEntityId(lead, 'lead');
+            const normalizedId = String(normalized.id);
+
+            if (normalized.generated) {
+                console.warn('⚠️ Pipeline: Lead missing primary identifier, generated fallback ID', {
+                    leadName: lead?.name || '(unnamed lead)',
+                    createdAt: lead?.createdAt,
+                    fallbackId: normalizedId
+                });
+            }
+
             // Map lead stages to AIDA pipeline stages (same normalization as opportunities)
             let mappedStage = lead.stage || 'Awareness';
             const originalStage = mappedStage;
@@ -476,6 +561,8 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
             
             return {
                 ...lead,
+                id: normalizedId,
+                ...(normalized.generated ? { tempId: normalizedId, legacyId: lead.id ?? lead.leadId ?? null } : {}),
                 type: 'lead',
                 itemType: 'New Lead',
                 stage: mappedStage,
@@ -494,10 +581,20 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
             
             if (client.opportunities && Array.isArray(client.opportunities)) {
                 client.opportunities.forEach(opp => {
-                    // Skip if opportunity is missing required fields
-                    if (!opp || !opp.id) {
+                    if (!opp || typeof opp !== 'object') {
                         console.warn(`⚠️ Pipeline: Skipping invalid opportunity for ${client.name}:`, opp);
                         return;
+                    }
+
+                    const normalizedOpportunity = normalizeEntityId(opp, 'opportunity');
+                    const normalizedOpportunityId = String(normalizedOpportunity.id);
+
+                    if (normalizedOpportunity.generated) {
+                        console.warn('⚠️ Pipeline: Opportunity missing primary identifier, generated fallback ID', {
+                            opportunityName: opp?.title || opp?.name || '(untitled opportunity)',
+                            clientName: client.name,
+                            fallbackId: normalizedOpportunityId
+                        });
                     }
                     
                     // Map opportunity stages to AIDA pipeline stages
@@ -517,7 +614,8 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
                     
                     opportunityItems.push({
                         ...opp,
-                        id: opp.id,
+                        id: normalizedOpportunityId,
+                        ...(normalizedOpportunity.generated ? { tempId: normalizedOpportunityId, legacyId: opp.id ?? opp.opportunityId ?? null } : {}),
                         name: opp.title || opp.name || 'Untitled Opportunity', // render Opportunity.title as name
                         type: 'opportunity',
                         itemType: 'Expansion',
@@ -684,10 +782,15 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
     };
 
     const updateLeadStageOptimistically = (leadId, newStage) => {
+        if (leadId === undefined || leadId === null) {
+            return leads;
+        }
+
+        const normalizedLeadId = String(leadId);
         let snapshot = leads;
         setLeads((prevLeads) => {
             const updated = prevLeads.map((lead) =>
-                lead.id === leadId ? { ...lead, stage: newStage } : lead
+                String(lead.id) === normalizedLeadId ? { ...lead, stage: newStage } : lead
             );
             snapshot = updated;
             return updated;
@@ -701,15 +804,21 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
     };
 
     const updateOpportunityStageOptimistically = (clientId, opportunityId, newStage) => {
+        if (clientId === undefined || clientId === null || opportunityId === undefined || opportunityId === null) {
+            return clients;
+        }
+
+        const normalizedClientId = String(clientId);
+        const normalizedOpportunityId = String(opportunityId);
         let snapshot = clients;
         setClients((prevClients) => {
             const updated = prevClients.map((client) => {
-                if (client.id !== clientId) {
+                if (String(client.id) !== normalizedClientId) {
                     return client;
                 }
 
                 const updatedOpportunities = (client.opportunities || []).map((opp) =>
-                    opp.id === opportunityId ? { ...opp, stage: newStage } : opp
+                    String(opp.id) === normalizedOpportunityId ? { ...opp, stage: newStage } : opp
                 );
 
                 return { ...client, opportunities: updatedOpportunities };
@@ -1228,15 +1337,19 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
             if (typeof onOpenLead === 'function') {
                 onOpenLead({ ...payload, origin: 'prop' });
                 handled = true;
-            } else if (typeof window.__openLeadDetailFromPipeline === 'function') {
+            }
+
+            if (!handled && typeof window.__openLeadDetailFromPipeline === 'function') {
                 window.__openLeadDetailFromPipeline({ ...payload, origin: 'prop' });
                 handled = true;
-            } else {
-            setFallbackDeal({
-                type: 'lead',
-                id: item.id,
-                data: item
-            });
+            }
+
+            if (!handled) {
+                setFallbackDeal({
+                    type: 'lead',
+                    id: item.id,
+                    data: item
+                });
             }
 
             window.dispatchEvent(new CustomEvent('openLeadDetailFromPipeline', {
@@ -1244,32 +1357,36 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
             }));
         } else {
             const opportunityPayload = {
-                    opportunityId: item.id,
-                    clientId: item.clientId || item.client?.id,
-                    clientName: item.clientName || item.client?.name || item.name,
-                    opportunity: item
+                opportunityId: item.id,
+                clientId: item.clientId || item.client?.id,
+                clientName: item.clientName || item.client?.name || item.name,
+                opportunity: item
             };
             let handled = false;
 
             if (typeof onOpenOpportunity === 'function') {
                 onOpenOpportunity({ ...opportunityPayload, origin: 'prop' });
                 handled = true;
-            } else if (typeof window.__openOpportunityDetailFromPipeline === 'function') {
+            }
+
+            if (!handled && typeof window.__openOpportunityDetailFromPipeline === 'function') {
                 window.__openOpportunityDetailFromPipeline({ ...opportunityPayload, origin: 'prop' });
                 handled = true;
-            } else {
-            setFallbackDeal({
-                type: 'opportunity',
-                id: item.id,
-                data: item,
-                client: item.client || (item.clientId || item.clientName || item.name
-                    ? {
-                        id: item.clientId || item.id,
-                        name: item.clientName || item.client?.name || item.name
-                    }
-                    : null)
-            });
-                }
+            }
+
+            if (!handled) {
+                setFallbackDeal({
+                    type: 'opportunity',
+                    id: item.id,
+                    data: item,
+                    client: item.client || (item.clientId || item.clientName || item.name
+                        ? {
+                            id: item.clientId || item.id,
+                            name: item.clientName || item.client?.name || item.name
+                        }
+                        : null)
+                });
+            }
 
             window.dispatchEvent(new CustomEvent('openOpportunityDetailFromPipeline', {
                 detail: { ...opportunityPayload, origin: handled ? 'prop' : 'event' }
@@ -1294,12 +1411,20 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
                 onDragEnd={handleDragEnd}
                 onTouchStart={(e) => handleTouchStart(e, item, item.type)}
                 onClick={(e) => {
-                    // Prevent click if we just completed a drag or are currently dragging
-                    if (justDragged || touchDragState || isDragging) {
+                    // Prevent accidental clicks immediately after a drag operation
+                    if (justDragged || touchDragState) {
                         e.preventDefault();
                         e.stopPropagation();
                         return;
                     }
+
+                    // If the browser reported a drag without an actual drop, reset drag state and proceed
+                    if (isDragging) {
+                        setIsDragging(false);
+                        setDraggedItem(null);
+                        setDraggedType(null);
+                    }
+
                     openDealDetail(item);
                 }}
                 className={`bg-white rounded-md border border-gray-200 shadow-sm cursor-move flex flex-col overflow-hidden touch-none ${!isDragging ? 'hover:shadow-md transition' : ''} ${

@@ -136,16 +136,25 @@ const FeedbackWidget = () => {
         }
     }, [open, comments.length]); // Re-scroll when widget opens or comments update
 
+    const normalizeFeedbackResponse = (response) => {
+        if (!response) return [];
+        if (Array.isArray(response)) return response;
+        if (Array.isArray(response?.data)) return response.data;
+        if (Array.isArray(response?.data?.data)) return response.data.data;
+        return [];
+    };
+
     const loadRecentComments = async () => {
         setLoadingComments(true);
         try {
-            const data = await window.api.getFeedback({
+            const response = await window.api.getFeedback({
                 pageUrl: window.location.pathname,
                 includeUser: true
             });
+            const feedbackItems = normalizeFeedbackResponse(response);
             // Get unique sections and their latest comments
             const sectionComments = {};
-            (Array.isArray(data) ? data : []).forEach(comment => {
+            feedbackItems.forEach(comment => {
                 const key = comment.section || 'general';
                 if (!sectionComments[key] || new Date(comment.createdAt) > new Date(sectionComments[key].createdAt)) {
                     sectionComments[key] = comment;

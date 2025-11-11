@@ -89,8 +89,27 @@ The ${companyName} Team`;
 
     // Generate invitation link
     generateInvitationLink(token, baseUrl = null) {
-        const base = baseUrl || window.location.origin;
-        return `${base}/accept-invitation?token=${token}`;
+        const DEFAULT_PRODUCTION_URL = 'https://abcoafrica.co.za';
+        let base = baseUrl;
+
+        if (!base && typeof window !== 'undefined') {
+            const runtimeAppUrl = window.__APP_URL__ || window?.ENV?.APP_URL;
+
+            if (runtimeAppUrl && !String(runtimeAppUrl).includes('localhost')) {
+                base = runtimeAppUrl;
+            } else if (window.location?.origin) {
+                base = window.location.origin.includes('localhost')
+                    ? DEFAULT_PRODUCTION_URL
+                    : window.location.origin;
+            }
+        }
+
+        if (!base) {
+            base = DEFAULT_PRODUCTION_URL;
+        }
+
+        const normalizedBase = String(base).replace(/\/+$/, '');
+        return `${normalizedBase}/accept-invitation?token=${token}`;
     },
 
     // Show WhatsApp sharing modal

@@ -1045,6 +1045,16 @@ const Clients = React.memo(() => {
         const mapDbClient = (c) => {
             const isLead = c.type === 'lead';
             let status = c.status;
+            const normalizedIdentity = normalizeEntityId(c, isLead ? 'lead' : 'client');
+            const normalizedId = String(normalizedIdentity.id);
+
+            if (normalizedIdentity.generated) {
+                console.warn('⚠️ mapDbClient: Entity missing primary identifier, generated fallback', {
+                    type: isLead ? 'lead' : 'client',
+                    name: c?.name || '(unnamed)',
+                    fallbackId: normalizedId
+                });
+            }
 
             const parseArrayField = (value, fieldName) => {
                 if (Array.isArray(value)) {
@@ -1095,7 +1105,7 @@ const Clients = React.memo(() => {
             }
 
             return {
-                id: c.id,
+                id: normalizedId,
                 name: c.name,
                 status,
                 industry: c.industry || 'Other',
@@ -1121,6 +1131,7 @@ const Clients = React.memo(() => {
                     taxExempt: false,
                     notes: ''
                 }),
+                ...(normalizedIdentity.generated ? { tempId: normalizedId, legacyId: c.id ?? c.clientId ?? null } : {}),
                 createdAt: c.createdAt,
                 updatedAt: c.updatedAt
             };
@@ -1480,44 +1491,105 @@ const Clients = React.memo(() => {
             
             // Map database fields to UI expected format with JSON parsing
             const mappedLeads = rawLeads.map(lead => {
-                    
-                    return {
-                        id: lead.id,
-                        name: lead.name || '',
-                        industry: lead.industry || 'Other',
-                        status: lead.status || 'Potential',
-                        stage: lead.stage || 'Awareness',
-                        source: lead.source || 'Website',
-                        value: lead.value || lead.revenue || 0,
-                        probability: lead.probability || 0,
+                const normalized = normalizeEntityId(lead, 'lead');
+                const normalizedId = String(normalized.id);
+
+                if (normalized.generated) {
+                    console.warn('⚠️ loadLeads: Lead missing primary identifier, generated fallback ID', {
+                        leadName: lead?.name || '(unnamed lead)',
+                        createdAt: lead?.createdAt,
+                        fallbackId: normalizedId
+                    });
+                }
+
+                const parseArrayField = (value, fallback = []) => {
+                    if (Array.isArray(value)) {
+                        return value;
+                    }
+
+                    if (typeof value === 'string' && value.trim() !== '') {
+                        try {
+                            const parsed = JSON.parse(value);
+                            return Array.isArray(parsed) ? parsed : fallback;
+                        } catch (_error) {
+                            return fallback;
+                        }
+                    }
+
+                    return fallback;
+                };
+
+                const parseObjectField = (value, fallback = {}) => {
+                    if (value && typeof value === 'object' && !Array.isArray(value)) {
+                        return value;
+                    }
+
+                    if (typeof value === 'string' && value.trim() !== '') {
+                        try {
+                            const parsed = JSON.parse(value);
+                            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                                return parsed;
+                            }
+                        } catch (_error) {
+                            return fallback;
+                        }
+                    }
+
+                    return fallback;
+                };
+
+                const coerceDate = (value) => {
+                    if (!value) {
+                        return null;
+                    }
+
+                    const parsed = new Date(value);
+                    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().split('T')[0];
+                };
+
+                const firstContact = lead.firstContactDate || coerceDate(lead.createdAt) || new Date().toISOString().split('T')[0];
+                const lastContact = lead.lastContact || coerceDate(lead.updatedAt) || new Date().toISOString().split('T')[0];
+
+                return {
+                    id: normalizedId,
+                    ...(normalized.generated ? { tempId: normalizedId, legacyId: lead.id ?? lead.leadId ?? null } : {}),
+                    name: lead.name || '',
+                    industry: lead.industry || 'Other',
+                    status: lead.status || 'Potential',
+                    stage: lead.stage || 'Awareness',
+                    source: lead.source || 'Website',
+                    value: lead.value || lead.revenue || 0,
+                    probability: lead.probability || 0,
                     isStarred: lead.isStarred === true,
-                        firstContactDate: lead.firstContactDate || lead.createdAt ? new Date(lead.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-                        lastContact: lead.lastContact || lead.updatedAt ? new Date(lead.updatedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-                        address: lead.address || '',
-                        website: lead.website || '',
-                        notes: lead.notes || '',
-                        contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
-                        followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
-                        projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
-                        comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
-                        activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
-                        sites: typeof lead.sites === 'string' ? JSON.parse(lead.sites || '[]') : (lead.sites || []),
-                        contracts: typeof lead.contracts === 'string' ? JSON.parse(lead.contracts || '[]') : (lead.contracts || []),
-                        billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {
-                            paymentTerms: 'Net 30',
-                            billingFrequency: 'Monthly',
-                            currency: 'ZAR',
-                            retainerAmount: 0,
-                            taxExempt: false,
-                            notes: ''
-                        }),
-                        proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []),
-                        type: lead.type || 'lead',
-                        ownerId: lead.ownerId || null,
-                        createdAt: lead.createdAt,
-                        updatedAt: lead.updatedAt
-                    };
-                });
+                    firstContactDate: firstContact,
+                    lastContact,
+                    address: lead.address || '',
+                    website: lead.website || '',
+                    notes: lead.notes || '',
+                    contacts: parseArrayField(lead.contacts),
+                    followUps: parseArrayField(lead.followUps),
+                    projectIds: parseArrayField(lead.projectIds),
+                    comments: parseArrayField(lead.comments),
+                    activityLog: parseArrayField(lead.activityLog),
+                    sites: parseArrayField(lead.sites),
+                    contracts: parseArrayField(lead.contracts),
+                    billingTerms: parseObjectField(lead.billingTerms, {
+                        paymentTerms: 'Net 30',
+                        billingFrequency: 'Monthly',
+                        currency: 'ZAR',
+                        retainerAmount: 0,
+                        taxExempt: false,
+                        notes: ''
+                    }),
+                    proposals: parseArrayField(lead.proposals),
+                    services: parseArrayField(lead.services),
+                    tags: Array.isArray(lead.tags) ? lead.tags.map(t => t.tag || t).filter(Boolean) : [],
+                    type: lead.type || 'lead',
+                    ownerId: lead.ownerId || null,
+                    createdAt: lead.createdAt,
+                    updatedAt: lead.updatedAt
+                };
+            });
                 
             setLeads(mappedLeads);
             setLeadsCount(mappedLeads.length); // Update count badge immediately
@@ -2626,7 +2698,10 @@ const Clients = React.memo(() => {
             
             // Update local state only if deletion was successful or already deleted
             if (apiDeleteSuccess) {
-                const updatedLeads = leads.filter(l => l.id !== leadId);
+                const normalizedLeadId = leadId !== undefined && leadId !== null ? String(leadId) : null;
+                const updatedLeads = normalizedLeadId
+                    ? leads.filter(l => String(l.id) !== normalizedLeadId)
+                    : leads;
                 setLeads(updatedLeads);
                 setLeadsCount(updatedLeads.length); // Update count immediately
                 console.log('✅ Lead deleted, new count:', updatedLeads.length);
@@ -2845,12 +2920,48 @@ const Clients = React.memo(() => {
     };
 
     const handleOpenLead = useCallback((lead, options = {}) => {
-        const leadId = options.leadId || lead?.id;
-        if (!leadId) return;
+        const candidateLead = lead ? { ...lead } : null;
+        let leadId = options.leadId ?? resolveEntityId(candidateLead);
+        let usedFallback = false;
+
+        if (!leadId) {
+            const normalized = normalizeEntityId(candidateLead || {}, 'lead');
+            leadId = normalized.id;
+            usedFallback = normalized.generated;
+
+            if (candidateLead) {
+                candidateLead.id = String(leadId);
+                if (normalized.generated) {
+                    candidateLead.tempId = String(leadId);
+                }
+            }
+        }
+
+        if (!leadId) {
+            console.warn('⚠️ handleOpenLead: Unable to open lead without identifier', { lead: candidateLead, options });
+            return;
+        }
+
+        const normalizedId = String(leadId);
+
+        if (candidateLead) {
+            candidateLead.id = normalizedId;
+            if (usedFallback && !candidateLead.tempId) {
+                candidateLead.tempId = normalizedId;
+            }
+        }
+
+        if (usedFallback) {
+            console.warn('⚠️ handleOpenLead: Fallback identifier used for lead', {
+                leadName: candidateLead?.name || '(unknown lead)',
+                fallbackId: normalizedId
+            });
+        }
+
         stopSync();
-        setEditingLeadId(leadId);
+        setEditingLeadId(normalizedId);
         setEditingClientId(null);
-        selectedLeadRef.current = lead || null;
+        selectedLeadRef.current = candidateLead;
         selectedClientRef.current = null;
         isFormOpenRef.current = true;
         if (options.fromPipeline) {
@@ -3070,7 +3181,8 @@ const Clients = React.memo(() => {
             }]
         };
         setClients([...clients, newClient]);
-        setLeads(leads.filter(l => l.id !== lead.id));
+        const normalizedLeadId = lead && lead.id !== undefined && lead.id !== null ? String(lead.id) : null;
+        setLeads(leads.filter(l => (normalizedLeadId ? String(l.id) !== normalizedLeadId : l !== lead)));
         setViewMode('clients');
         selectedLeadRef.current = null; // Clear selected lead ref
         alert('Lead converted to client!');

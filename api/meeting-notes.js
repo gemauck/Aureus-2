@@ -7,10 +7,11 @@ import { withLogging } from './_lib/logger.js'
 
 // Department definitions
 const DEPARTMENTS = [
+  { id: 'management', name: 'Management' },
   { id: 'compliance', name: 'Compliance' },
   { id: 'finance', name: 'Finance' },
   { id: 'technical', name: 'Technical' },
-  { id: 'data', name: 'Data' },
+  { id: 'data', name: 'Data & Analytics' },
   { id: 'support', name: 'Support' },
   { id: 'commercial', name: 'Commercial' },
   { id: 'business-development', name: 'Business Development' }
@@ -28,11 +29,25 @@ function ensureMonthlyGoalsForAllTeams(monthlyGoals) {
     return generateMonthlyGoalsTemplate()
   }
 
+  const departmentHeadingMatcher = (name) => `${name.toLowerCase()} goals`
+  const lowerCaseGoals = rawGoals.toLowerCase()
+  const hasAnyDepartmentHeading = DEPARTMENTS.some((dept) =>
+    lowerCaseGoals.includes(departmentHeadingMatcher(dept.name))
+  )
+
+  if (!hasAnyDepartmentHeading) {
+    return DEPARTMENTS.map((dept, index) => {
+      if (index === 0) {
+        return `${dept.name} Goals:\n${trimmed}`
+      }
+      return `${dept.name} Goals:\n- [ ] `
+    }).join('\n\n')
+  }
+
   let updatedGoals = rawGoals.trimEnd()
-  const lowerCaseGoals = updatedGoals.toLowerCase()
 
   const missingDepartments = DEPARTMENTS.filter(
-    (dept) => !lowerCaseGoals.includes(dept.name.toLowerCase())
+    (dept) => !lowerCaseGoals.includes(departmentHeadingMatcher(dept.name))
   )
 
   if (missingDepartments.length > 0) {
@@ -338,12 +353,21 @@ async function handler(req, res) {
         return badRequest(res, 'id is required')
       }
 
+      const updateData = {}
+      if (monthlyGoals !== undefined) {
+        updateData.monthlyGoals = ensureMonthlyGoalsForAllTeams(monthlyGoals)
+      }
+      if (status !== undefined) {
+        updateData.status = status
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return badRequest(res, 'No fields provided for update')
+      }
+
       const monthlyNotes = await prisma.monthlyMeetingNotes.update({
         where: { id },
-        data: {
-          ...(monthlyGoals !== undefined && { monthlyGoals }),
-          ...(status !== undefined && { status })
-        },
+        data: updateData,
         include: {
           weeklyNotes: {
             include: {

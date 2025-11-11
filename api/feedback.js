@@ -34,6 +34,25 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
     // Filter out admins without email addresses
     const adminsWithEmail = admins.filter(admin => admin.email && admin.email.trim())
 
+    const fallbackRecipientEnv = process.env.FEEDBACK_NOTIFY_EMAILS ||
+                                 process.env.FEEDBACK_NOTIFY_EMAIL ||
+                                 process.env.FEEDBACK_ALERT_EMAILS ||
+                                 process.env.FEEDBACK_ALERT_RECIPIENTS ||
+                                 ''
+    const fallbackRecipientsConfigured = fallbackRecipientEnv
+      .split(',')
+      .map(email => email.trim())
+      .filter(email => email.length > 0)
+
+    const fallbackRecipients = fallbackRecipientsConfigured
+      .filter(email => !adminsWithEmail.some(admin => admin.email?.toLowerCase() === email.toLowerCase()))
+      .map(email => ({
+        email,
+        name: 'Feedback recipient (fallback)',
+        role: 'fallback',
+        status: 'configured'
+      }))
+
     if (adminsWithEmail.length === 0) {
       console.warn('⚠️ No admin users found for feedback notification. Feedback was still saved.')
       console.warn('   Searched for users with role: admin/ADMIN/Admin and status: active')
@@ -41,10 +60,25 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
       if (admins.length > 0) {
         console.warn('   Admin users found but no email addresses:', admins.map(a => ({ email: a.email, role: a.role, status: a.status })))
       }
+    }
+
+    if (fallbackRecipients.length > 0) {
+      console.log('📧 Added fallback recipients from FEEDBACK_NOTIFY_EMAILS:', fallbackRecipients.map(r => r.email).join(', '))
+    } else if (fallbackRecipientsConfigured.length > 0) {
+      console.warn('⚠️ Fallback feedback recipients configured, but all addresses already belong to admin users (no additional recipients added).')
+    }
+
+    const recipients = [...adminsWithEmail, ...fallbackRecipients]
+
+    if (recipients.length === 0) {
+      console.warn('⚠️ No feedback notification recipients available (no admins with email and no fallback recipients). Feedback was still saved.')
+      if (fallbackRecipientsConfigured.length === 0) {
+        console.warn('   Tip: Set FEEDBACK_NOTIFY_EMAILS in environment variables (comma-separated list) to ensure at least one recipient receives feedback notifications.')
+      }
       return
     }
 
-    console.log(`📧 Found ${adminsWithEmail.length} admin(s) to notify:`, adminsWithEmail.map(a => a.email).join(', '))
+    console.log(`📧 Notifying ${recipients.length} recipient(s):`, recipients.map(r => r.email).join(', '))
 
     // Prepare email content
     const userName = submittingUser?.name || submittingUser?.email || 'A user'
@@ -101,32 +135,32 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
     let successCount = 0
     let failureCount = 0
     
-    const emailPromises = adminsWithEmail.map(async (admin) => {
+    const emailPromises = recipients.map(async (recipient) => {
       try {
-        console.log(`📧 Attempting to send feedback email to ${admin.email}...`)
+        console.log(`📧 Attempting to send feedback email to ${recipient.email}...`)
         const result = await sendNotificationEmail(
-          admin.email,
+          recipient.email,
           subject,
           htmlContent
         )
-        console.log(`✅ Feedback email sent successfully to ${admin.email}:`, result.messageId)
+        console.log(`✅ Feedback email sent successfully to ${recipient.email}:`, result.messageId)
         successCount++
-        return { success: true, email: admin.email }
+        return { success: true, email: recipient.email }
       } catch (emailError) {
-        console.error(`❌ Failed to send feedback email to ${admin.email}:`, emailError.message)
+        console.error(`❌ Failed to send feedback email to ${recipient.email}:`, emailError.message)
         console.error('❌ Feedback email error details:', {
           message: emailError.message,
           code: emailError.code,
           command: emailError.command,
           response: emailError.response,
-          to: admin.email,
+          to: recipient.email,
           stack: emailError.stack
         })
         if (emailError.stack) {
           console.error('❌ Feedback email error stack:', emailError.stack)
         }
         failureCount++
-        return { success: false, email: admin.email, error: emailError.message }
+        return { success: false, email: recipient.email, error: emailError.message }
       }
     })
 
@@ -137,6 +171,7 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
     console.log(`   ❌ Failed: ${failureCount}`)
     console.log(`   Total admins found: ${admins.length}`)
     console.log(`   Admins with email: ${adminsWithEmail.length}`)
+    console.log(`   Fallback recipients used: ${fallbackRecipients.length}`)
     
     if (failureCount > 0) {
       console.error(`⚠️ Some feedback emails failed to send. Check email configuration:`)

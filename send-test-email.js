@@ -5,7 +5,15 @@ import { sendNotificationEmail } from './api/_lib/email.js';
 
 async function sendTestEmail() {
     try {
-        console.log('📧 Sending test email to gemauck@gmail.com...\n');
+        if (!process.env.SENDGRID_API_KEY && !process.env.SMTP_PASS) {
+            console.error('❌ No email credentials detected. Set SENDGRID_API_KEY (recommended) or SMTP_* credentials in your .env before running this test.');
+            process.exit(1);
+        }
+
+        const recipient = process.argv[2] || process.env.TEST_EMAIL || 'gemauck@gmail.com';
+        const subject = 'Test Email from SendGrid - Feedback System';
+
+        console.log(`📧 Sending test email to ${recipient}...\n`);
         
         const testContent = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -54,14 +62,14 @@ async function sendTestEmail() {
         `;
         
         const result = await sendNotificationEmail(
-            'gemauck@gmail.com',
-            'Test Email from SendGrid - Feedback System',
+            recipient,
+            subject,
             testContent
         );
         
         console.log('✅ Test email sent successfully!');
         console.log('   Message ID:', result.messageId);
-        console.log('   To: gemauck@gmail.com');
+        console.log('   To:', recipient);
         console.log('   From:', process.env.EMAIL_FROM || 'garethm@abcotronics.co.za');
         console.log('\n📬 Check your inbox (and spam folder) for the email!');
         console.log('📊 Check SendGrid Activity: https://app.sendgrid.com/activity\n');

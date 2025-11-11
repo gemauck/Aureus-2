@@ -38,12 +38,13 @@ const isAdminFromUser = (user) => {
     return normalizedPermissions.some((perm) => ADMIN_PERMISSION_KEYS.includes(perm));
 };
 
-// Department definitions - matching API
+// Department definitions - matching API and Teams configuration
 const DEPARTMENTS = [
+    { id: 'management', name: 'Management', icon: 'fa-user-tie', color: 'blue' },
     { id: 'compliance', name: 'Compliance', icon: 'fa-shield-alt', color: 'red' },
     { id: 'finance', name: 'Finance', icon: 'fa-coins', color: 'yellow' },
     { id: 'technical', name: 'Technical', icon: 'fa-tools', color: 'purple' },
-    { id: 'data', name: 'Data', icon: 'fa-chart-line', color: 'indigo' },
+    { id: 'data', name: 'Data & Analytics', icon: 'fa-chart-line', color: 'indigo' },
     { id: 'support', name: 'Support', icon: 'fa-headset', color: 'green' },
     { id: 'commercial', name: 'Commercial', icon: 'fa-handshake', color: 'orange' },
     { id: 'business-development', name: 'Business Development', icon: 'fa-rocket', color: 'pink' }
@@ -67,15 +68,11 @@ const parseMonthlyGoalsString = (rawGoals) => {
     const goalsMap = createEmptyMonthlyGoalsMap();
     const lines = rawGoals.split('\n');
     let currentDepartmentId = null;
+    let matchedDepartmentCount = 0;
+    const legacyBuffer = [];
 
     lines.forEach((line) => {
         const trimmed = line.trim();
-        if (!trimmed && currentDepartmentId) {
-            goalsMap[currentDepartmentId] = goalsMap[currentDepartmentId]
-                ? `${goalsMap[currentDepartmentId]}\n`
-                : '';
-            return;
-        }
 
         const matchedDepartment = DEPARTMENTS.find((dept) =>
             trimmed.toLowerCase().startsWith(`${dept.name.toLowerCase()} goals`)
@@ -83,7 +80,15 @@ const parseMonthlyGoalsString = (rawGoals) => {
 
         if (matchedDepartment) {
             currentDepartmentId = matchedDepartment.id;
+            matchedDepartmentCount += 1;
             goalsMap[currentDepartmentId] = '';
+            return;
+        }
+
+        if (!trimmed && currentDepartmentId) {
+            goalsMap[currentDepartmentId] = goalsMap[currentDepartmentId]
+                ? `${goalsMap[currentDepartmentId]}\n`
+                : '';
             return;
         }
 
@@ -91,8 +96,31 @@ const parseMonthlyGoalsString = (rawGoals) => {
             goalsMap[currentDepartmentId] = goalsMap[currentDepartmentId]
                 ? `${goalsMap[currentDepartmentId]}\n${line}`
                 : line;
+            return;
+        }
+
+        if (trimmed) {
+            legacyBuffer.push(line);
         }
     });
+
+    if (legacyBuffer.length > 0) {
+        const fallbackDepartmentId = 'management';
+        const existingValue = goalsMap[fallbackDepartmentId] || '';
+        const bufferContent = legacyBuffer.join('\n');
+        goalsMap[fallbackDepartmentId] =
+            existingValue && existingValue !== DEFAULT_GOAL_ENTRY
+                ? `${existingValue}\n${bufferContent}`
+                : bufferContent;
+        matchedDepartmentCount += 1;
+    }
+
+    if (matchedDepartmentCount === 0) {
+        const legacyContent = rawGoals.trim();
+        if (legacyContent) {
+            goalsMap.management = legacyContent;
+        }
+    }
 
     DEPARTMENTS.forEach((dept) => {
         const value = goalsMap[dept.id];

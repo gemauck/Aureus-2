@@ -35,15 +35,24 @@ const SectionCommentWidget = ({ sectionId, sectionName, className = '' }) => {
         }
     }, [isOpen, comments.length]); // Re-scroll when widget opens or comments update
 
+    const normalizeFeedbackResponse = (response) => {
+        if (!response) return [];
+        if (Array.isArray(response)) return response;
+        if (Array.isArray(response?.data)) return response.data;
+        if (Array.isArray(response?.data?.data)) return response.data.data;
+        return [];
+    };
+
     const loadComments = async () => {
         setLoading(true);
         try {
-            const data = await window.api.getFeedback({
+            const response = await window.api.getFeedback({
                 pageUrl: pageUrl,
                 section: section,
                 includeUser: true
             });
-            setComments(Array.isArray(data) ? data : []);
+            const feedbackItems = normalizeFeedbackResponse(response);
+            setComments(feedbackItems);
         } catch (error) {
             console.error('Failed to load comments:', error);
             setComments([]);
