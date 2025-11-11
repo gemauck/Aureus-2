@@ -34,6 +34,12 @@
     max-width: 100% !important;
   }
 
+  body.job-card-public .job-card-public-wrapper,
+  body.job-card-public .job-card-public-wrapper * {
+    font-variant-ligatures: none !important;
+    font-feature-settings: 'liga' 0, 'clig' 0, 'dlig' 0, 'calt' 0 !important;
+  }
+
   body.job-card-public .job-card-public-wrapper {
     display: block !important;
     min-height: 100vh !important;

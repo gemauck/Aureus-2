@@ -495,7 +495,7 @@
     display: block !important;
     width: 100% !important;
     max-width: 100% !important;
-    min-width: 320px !important;
+    min-width: 0 !important;
     height: auto !important;
     min-height: 100vh !important;
     overflow-x: hidden !important;
