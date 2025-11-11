@@ -272,7 +272,7 @@ const MainLayout = () => {
     
     React.useEffect(() => {
         const checkProjects = () => {
-            const ProjectsComponent = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple;
+            const ProjectsComponent = window.ProjectsDatabaseFirst || window.Projects || window.ProjectsSimple;
             if (ProjectsComponent && !projectsComponentReady) {
                 console.log('✅ MainLayout: Projects component became available');
                 setProjectsComponentReady(true);
@@ -291,7 +291,7 @@ const MainLayout = () => {
     }, [projectsComponentReady]);
     
     const Projects = React.useMemo(() => {
-        const ProjectsComponent = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple;
+        const ProjectsComponent = window.ProjectsDatabaseFirst || window.Projects || window.ProjectsSimple;
         if (ProjectsComponent) {
             return ProjectsComponent;
         }
