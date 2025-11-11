@@ -848,7 +848,7 @@ const ManagementMeetingNotes = () => {
             <div className="flex items-center justify-between">
                 <div>
                     <h2 className={`text-lg font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Management Meeting Notes</h2>
-                    <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Monthly goals and weekly department updates</p>
+                    <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Weekly department updates and action tracking</p>
                 </div>
                 <div className="flex gap-2">
                     <select
@@ -1038,7 +1038,6 @@ const ManagementMeetingNotes = () => {
                                         const allocations = currentMonthlyNotes.userAllocations?.filter(
                                             a => a.departmentId === dept.id
                                         ) || [];
-
                                         return (
                                             <div key={dept.id} className={`border rounded-lg p-3 ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
                                                 <div className="flex items-center justify-between mb-3">
@@ -1076,7 +1075,7 @@ const ManagementMeetingNotes = () => {
                                                             Last Week's Successes
                                                         </label>
                                                         <textarea
-                                                            value={deptNote.successes || ''}
+                                                            value={deptNote.successes ?? ''}
                                                             onChange={(e) => handleUpdateDepartmentNotes(deptNote.id, 'successes', e.target.value)}
                                                             placeholder="What went well this week?"
                                                             className={`w-full min-h-[80px] p-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
@@ -1089,7 +1088,7 @@ const ManagementMeetingNotes = () => {
                                                             This Week's Plan
                                                         </label>
                                                         <textarea
-                                                            value={deptNote.weekToFollow || ''}
+                                                            value={deptNote.weekToFollow ?? ''}
                                                             onChange={(e) => handleUpdateDepartmentNotes(deptNote.id, 'weekToFollow', e.target.value)}
                                                             placeholder="What's planned for this week?"
                                                             className={`w-full min-h-[80px] p-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
@@ -1102,7 +1101,7 @@ const ManagementMeetingNotes = () => {
                                                             Frustrations/Challenges
                                                         </label>
                                                         <textarea
-                                                            value={deptNote.frustrations || ''}
+                                                            value={deptNote.frustrations ?? ''}
                                                             onChange={(e) => handleUpdateDepartmentNotes(deptNote.id, 'frustrations', e.target.value)}
                                                             placeholder="What challenges or blockers are we facing?"
                                                             className={`w-full min-h-[80px] p-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}

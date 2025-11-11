@@ -62,6 +62,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   // Load job cards with offline support - defined as a stable function reference
   const loadJobCardsRef = useRef(null);
   const syncPendingJobCardsRef = useRef(null);
+  const jobCardsContainerRef = useRef(null);
   
   const loadJobCards = useCallback(async () => {
     setIsLoading(true);
@@ -780,9 +781,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       }
 
       alert(editingJobCard ? 'Job card updated successfully!' : 'Job card created successfully!');
-      setShowAddPage(false);
-      setEditingJobCard(null);
-      resetForm();
+      closeJobCardModal();
     } catch (error) {
       console.error('Error saving job card:', error);
       alert(`Failed to save job card: ${error.message}`);
@@ -836,7 +835,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     }
   };
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setFormData({
       agentName: user?.name || '',
       otherTechnicians: [],
@@ -864,12 +863,27 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     setNewStockItem({ sku: '', quantity: 0, locationId: '' });
     setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
     setLocationData(null);
-  };
+  }, [user?.name]);
 
-  const openAddPage = () => {
+  const closeJobCardModal = useCallback(() => {
+    setShowAddPage(false);
+    setEditingJobCard(null);
+    resetForm();
+  }, [resetForm]);
+
+  const openNewJobCardModal = useCallback(() => {
     setEditingJobCard(null);
     resetForm();
     setShowAddPage(true);
+    requestAnimationFrame(() => {
+      if (jobCardsContainerRef.current) {
+        jobCardsContainerRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  }, [resetForm]);
+
+  const openAddPage = () => {
+    openNewJobCardModal();
   };
 
   const openEditPage = (jobCard) => {
@@ -880,13 +894,40 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   // Filter technicians/users - show only active users
   const availableTechnicians = users.filter(u => u.status !== 'inactive' && u.status !== 'suspended');
 
+  useEffect(() => {
+    const jobCardsGlobal = window.JobCards;
+    const handleOpenEvent = () => openNewJobCardModal();
+    const handleCloseEvent = () => closeJobCardModal();
+
+    window.addEventListener('jobcards:open', handleOpenEvent);
+    window.addEventListener('jobcards:close', handleCloseEvent);
+
+    if (jobCardsGlobal && typeof jobCardsGlobal === 'function') {
+      jobCardsGlobal.openNewJobCardModal = openNewJobCardModal;
+      jobCardsGlobal.closeJobCardModal = closeJobCardModal;
+    }
+
+    return () => {
+      window.removeEventListener('jobcards:open', handleOpenEvent);
+      window.removeEventListener('jobcards:close', handleCloseEvent);
+      if (jobCardsGlobal && typeof jobCardsGlobal === 'function') {
+        if (jobCardsGlobal.openNewJobCardModal === openNewJobCardModal) {
+          delete jobCardsGlobal.openNewJobCardModal;
+        }
+        if (jobCardsGlobal.closeJobCardModal === closeJobCardModal) {
+          delete jobCardsGlobal.closeJobCardModal;
+        }
+      }
+    };
+  }, [openNewJobCardModal, closeJobCardModal]);
+
   if (showAddPage) {
     const travelKm = formData.kmReadingBefore && formData.kmReadingAfter
       ? parseFloat(formData.kmReadingAfter) - parseFloat(formData.kmReadingBefore)
       : 0;
 
     return (
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <div ref={jobCardsContainerRef} data-jobcards-root className="bg-white rounded-lg border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-xl font-bold text-gray-900">
@@ -898,9 +939,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
           </div>
           <button
             onClick={() => {
-              setShowAddPage(false);
-              setEditingJobCard(null);
-              resetForm();
+              closeJobCardModal();
             }}
             className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
           >
@@ -1421,9 +1460,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             <button
               type="button"
               onClick={() => {
-                setShowAddPage(false);
-                setEditingJobCard(null);
-                resetForm();
+                closeJobCardModal();
               }}
               className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
             >
@@ -1452,7 +1489,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   }
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200">
+    <div ref={jobCardsContainerRef} data-jobcards-root className="bg-white rounded-lg border border-gray-200">
       <div className="p-4 border-b border-gray-200 flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Job Cards</h2>

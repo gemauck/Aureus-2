@@ -17,50 +17,6 @@ const DEPARTMENTS = [
   { id: 'business-development', name: 'Business Development' }
 ]
 
-function generateMonthlyGoalsTemplate() {
-  return DEPARTMENTS.map((dept) => `${dept.name} Goals:\n- [ ] `).join('\n\n')
-}
-
-function ensureMonthlyGoalsForAllTeams(monthlyGoals) {
-  const rawGoals = typeof monthlyGoals === 'string' ? monthlyGoals : ''
-  const trimmed = rawGoals.trim()
-
-  if (!trimmed) {
-    return generateMonthlyGoalsTemplate()
-  }
-
-  const departmentHeadingMatcher = (name) => `${name.toLowerCase()} goals`
-  const lowerCaseGoals = rawGoals.toLowerCase()
-  const hasAnyDepartmentHeading = DEPARTMENTS.some((dept) =>
-    lowerCaseGoals.includes(departmentHeadingMatcher(dept.name))
-  )
-
-  if (!hasAnyDepartmentHeading) {
-    return DEPARTMENTS.map((dept, index) => {
-      if (index === 0) {
-        return `${dept.name} Goals:\n${trimmed}`
-      }
-      return `${dept.name} Goals:\n- [ ] `
-    }).join('\n\n')
-  }
-
-  let updatedGoals = rawGoals.trimEnd()
-
-  const missingDepartments = DEPARTMENTS.filter(
-    (dept) => !lowerCaseGoals.includes(departmentHeadingMatcher(dept.name))
-  )
-
-  if (missingDepartments.length > 0) {
-    const additionalSections = missingDepartments
-      .map((dept) => `${dept.name} Goals:\n- [ ] `)
-      .join('\n\n')
-    const separator = updatedGoals.endsWith('\n') ? '\n' : '\n\n'
-    updatedGoals = `${updatedGoals}${separator}${additionalSections}`
-  }
-
-  return updatedGoals
-}
-
 const ADMIN_ROLES = new Set(['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'])
 const ADMIN_PERMISSION_KEYS = new Set(['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'])
 const FORBIDDEN_MESSAGE = 'Only administrators can access Management meeting notes.'
@@ -308,7 +264,7 @@ async function handler(req, res) {
   // Create monthly meeting notes
   if (req.method === 'POST' && !req.query.action) {
     try {
-      const { monthKey, monthlyGoals } = req.body
+      const { monthKey } = req.body
 
       if (!monthKey) {
         return badRequest(res, 'monthKey is required')
@@ -317,7 +273,6 @@ async function handler(req, res) {
       const monthlyNotes = await prisma.monthlyMeetingNotes.create({
         data: {
           monthKey,
-          monthlyGoals: ensureMonthlyGoalsForAllTeams(monthlyGoals),
           ownerId: req.user?.sub || req.user?.id || null
         },
         include: {
@@ -347,16 +302,13 @@ async function handler(req, res) {
   // Update monthly meeting notes
   if (req.method === 'PUT' && !req.query.action) {
     try {
-      const { id, monthlyGoals, status } = req.body
+      const { id, status } = req.body
 
       if (!id) {
         return badRequest(res, 'id is required')
       }
 
       const updateData = {}
-      if (monthlyGoals !== undefined) {
-        updateData.monthlyGoals = ensureMonthlyGoalsForAllTeams(monthlyGoals)
-      }
       if (status !== undefined) {
         updateData.status = status
       }
@@ -811,7 +763,6 @@ async function handler(req, res) {
       const monthlyNotes = await prisma.monthlyMeetingNotes.create({
         data: {
           monthKey,
-          monthlyGoals: ensureMonthlyGoalsForAllTeams(previousMonthlyNotes?.monthlyGoals),
           ownerId: req.user?.sub || req.user?.id || null
         }
       })

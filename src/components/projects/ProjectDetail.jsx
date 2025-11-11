@@ -180,7 +180,7 @@ function initializeProjectDetail() {
     
     console.log('✅ ProjectDetail: Starting component initialization...');
     
-    const { useState, useEffect, useRef, useCallback } = window.React;
+    const { useState, useEffect, useRef, useCallback, useMemo } = window.React;
     const storage = window.storage;
     const ListModal = window.ListModal;
     const ProjectModal = window.ProjectModal;
@@ -189,6 +189,51 @@ function initializeProjectDetail() {
     const KanbanView = window.KanbanView;
     const CommentsPopup = window.CommentsPopup;
     const DocumentCollectionModal = window.DocumentCollectionModal;
+
+    const parseDocumentSections = (data) => {
+        if (!data) return [];
+        if (Array.isArray(data)) return data;
+
+        if (typeof data !== 'string') {
+            return [];
+        }
+
+        let cleaned = data.trim();
+        if (!cleaned) return [];
+
+        let attempts = 0;
+        const maxAttempts = 10;
+
+        while (attempts < maxAttempts) {
+            try {
+                const parsed = JSON.parse(cleaned);
+                if (Array.isArray(parsed)) {
+                    return parsed;
+                }
+                if (typeof parsed === 'string') {
+                    cleaned = parsed;
+                    attempts++;
+                    continue;
+                }
+                return [];
+            } catch (error) {
+                let nextCleaned = cleaned;
+                if (nextCleaned.startsWith('"') && nextCleaned.endsWith('"')) {
+                    nextCleaned = nextCleaned.slice(1, -1);
+                }
+                nextCleaned = nextCleaned.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+                if (nextCleaned === cleaned) {
+                    break;
+                }
+                cleaned = nextCleaned;
+                attempts++;
+            }
+        }
+
+        return [];
+    };
+
+    const serializeDocumentSections = (data) => JSON.stringify(parseDocumentSections(data));
 
 const ProjectDetail = ({ project, onBack, onDelete }) => {
     console.log('ProjectDetail rendering with project:', project);
@@ -275,6 +320,15 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
     // Initialize documents for Document Collection workflow
     const [documents, setDocuments] = useState(project.documents || []);
     
+    const documentSectionsArray = useMemo(
+        () => parseDocumentSections(project.documentSections),
+        [project.documentSections]
+    );
+    const serializedDocumentSections = useMemo(
+        () => JSON.stringify(documentSectionsArray),
+        [documentSectionsArray]
+    );
+    
     // Users state for project members and DocumentCollectionModal
     const [users, setUsers] = useState([]);
     
@@ -313,7 +367,7 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
                 customFieldDefinitions: JSON.stringify(nextCustomFieldDefinitions),
                 documents: JSON.stringify(nextDocuments),
                 hasDocumentCollectionProcess: nextHasDocumentCollectionProcess,
-                documentSections: JSON.stringify(project.documentSections || [])
+                documentSections: serializedDocumentSections
             };
             
             console.log('📡 Sending update to database:', updatePayload);
@@ -324,17 +378,21 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
             if (window.dataService && typeof window.dataService.getProjects === 'function') {
                 const savedProjects = await window.dataService.getProjects();
                 if (savedProjects) {
-                    const updatedProjects = savedProjects.map(p => 
-                        p.id === project.id ? { 
+                    const updatedProjects = savedProjects.map(p => {
+                        if (p.id !== project.id) return p;
+                        const normalizedSections = Array.isArray(p.documentSections)
+                            ? p.documentSections
+                            : documentSectionsArray;
+                        return { 
                             ...p, 
                             tasks: nextTasks, 
                             taskLists: nextTaskLists, 
                             customFieldDefinitions: nextCustomFieldDefinitions, 
                             documents: nextDocuments, 
                             hasDocumentCollectionProcess: nextHasDocumentCollectionProcess,
-                            documentSections: p.documentSections || project.documentSections || []
-                        } : p
-                    );
+                            documentSections: normalizedSections
+                        };
+                    });
                     if (window.dataService && typeof window.dataService.setProjects === 'function') {
                         try {
                             await window.dataService.setProjects(updatedProjects);
@@ -350,7 +408,7 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
             alert('Failed to save project changes: ' + error.message);
             throw error;
         }
-    }, [project.id, project.documentSections, tasks, taskLists, customFieldDefinitions, documents, hasDocumentCollectionProcess]);
+    }, [project.id, serializedDocumentSections, documentSectionsArray, tasks, taskLists, customFieldDefinitions, documents, hasDocumentCollectionProcess]);
     
     // Save back to project whenever they change
     useEffect(() => {
@@ -1218,7 +1276,7 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
             // Immediately save to database to ensure persistence
             const updatePayload = {
                 hasDocumentCollectionProcess: true,
-                documentSections: JSON.stringify(project.documentSections || [])
+                documentSections: serializedDocumentSections
             };
             
             console.log('💾 Immediately saving document collection process to database...');
@@ -1229,13 +1287,17 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
             if (window.dataService && typeof window.dataService.getProjects === 'function') {
                 const savedProjects = await window.dataService.getProjects();
                 if (savedProjects) {
-                    const updatedProjects = savedProjects.map(p => 
-                        p.id === project.id ? { 
+                    const updatedProjects = savedProjects.map(p => {
+                        if (p.id !== project.id) return p;
+                        const normalizedSections = Array.isArray(p.documentSections)
+                            ? p.documentSections
+                            : documentSectionsArray;
+                        return { 
                             ...p, 
                             hasDocumentCollectionProcess: true,
-                            documentSections: p.documentSections || project.documentSections || []
-                        } : p
-                    );
+                            documentSections: normalizedSections
+                        };
+                    });
                     if (window.dataService && typeof window.dataService.setProjects === 'function') {
                         try {
                             await window.dataService.setProjects(updatedProjects);

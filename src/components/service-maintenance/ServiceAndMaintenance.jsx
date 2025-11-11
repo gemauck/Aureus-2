@@ -176,7 +176,13 @@ const ServiceAndMaintenance = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => window.JobCards?.openNewJobCardModal?.()}
+                  onClick={() => {
+                    if (window.JobCards?.openNewJobCardModal) {
+                      window.JobCards.openNewJobCardModal();
+                    } else {
+                      window.dispatchEvent(new Event('jobcards:open'));
+                    }
+                  }}
                   className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium text-primary-600 bg-primary-50 hover:bg-primary-100 active:bg-primary-200 dark:bg-primary-900/30 dark:hover:bg-primary-900/40 dark:text-primary-200 transition-all"
                 >
                   <i className="fa-solid fa-plus text-xs" />

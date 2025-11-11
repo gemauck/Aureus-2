@@ -85,6 +85,7 @@ const Manufacturing = () => {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [showCategoryInput, setShowCategoryInput] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isExportingInventory, setIsExportingInventory] = useState(false);
   const [clients, setClients] = useState([]);
   const [users, setUsers] = useState([]);
   const [duplicateWarnings, setDuplicateWarnings] = useState([]);
@@ -516,6 +517,141 @@ const Manufacturing = () => {
       setIsRefreshing(false);
     }
   };
+
+  const handleExportInventory = useCallback(() => {
+    if (!Array.isArray(inventory) || inventory.length === 0) {
+      window.alert('No inventory data available to export.');
+      return;
+    }
+
+    setIsExportingInventory(true);
+
+    try {
+      const uniqueKeys = new Set();
+
+      inventory.forEach((item) => {
+        if (item && typeof item === 'object') {
+          Object.keys(item).forEach((key) => uniqueKeys.add(key));
+        }
+      });
+
+      if (uniqueKeys.size === 0) {
+        window.alert('Inventory items do not contain any fields to export.');
+        return;
+      }
+
+      const preferredOrder = [
+        'id',
+        'sku',
+        'name',
+        'category',
+        'type',
+        'status',
+        'description',
+        'unit',
+        'quantity',
+        'allocatedQuantity',
+        'availableQuantity',
+        'reorderPoint',
+        'unitCost',
+        'totalValue',
+        'location',
+        'manufacturerPartNumber',
+        'legacyPartNumber',
+        'supplierPartNumbers',
+        'createdAt',
+        'updatedAt',
+        'notes'
+      ];
+
+      const orderedKeys = [
+        ...preferredOrder.filter((key) => uniqueKeys.has(key)),
+        ...[...uniqueKeys].filter((key) => !preferredOrder.includes(key)).sort()
+      ];
+
+      const formatValueForCell = (value) => {
+        if (value === null || value === undefined) {
+          return '';
+        }
+
+        if (Array.isArray(value)) {
+          return value
+            .map((entry) => {
+              if (entry === null || entry === undefined) {
+                return '';
+              }
+              if (typeof entry === 'object') {
+                try {
+                  return JSON.stringify(entry);
+                } catch (err) {
+                  console.warn('Failed to stringify array entry for export:', err);
+                  return '[Object]';
+                }
+              }
+              return entry;
+            })
+            .join(' | ');
+        }
+
+        if (typeof value === 'object') {
+          try {
+            return JSON.stringify(value);
+          } catch (err) {
+            console.warn('Failed to stringify value for export:', err, value);
+            return '[Object]';
+          }
+        }
+
+        return value;
+      };
+
+      const sanitizeForCell = (value) =>
+        String(formatValueForCell(value))
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\r?\n/g, '&#10;');
+
+      let excelContent = '<html xmlns:x="urn:schemas-microsoft-com:office:excel">';
+      excelContent += '<head><meta charset="UTF-8"><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>';
+      excelContent += '<x:Name>Inventory Export</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet>';
+      excelContent += '</x:ExcelWorksheets></x:ExcelWorkbook></xml></head><body>';
+      excelContent += '<table border="1"><thead><tr>';
+
+      orderedKeys.forEach((key) => {
+        excelContent += `<th>${sanitizeForCell(key)}</th>`;
+      });
+
+      excelContent += '</tr></thead><tbody>';
+
+      inventory.forEach((item) => {
+        excelContent += '<tr>';
+        orderedKeys.forEach((key) => {
+          const cellValue = key in item ? item[key] : '';
+          excelContent += `<td>${sanitizeForCell(cellValue)}</td>`;
+        });
+        excelContent += '</tr>';
+      });
+
+      excelContent += '</tbody></table></body></html>';
+
+      const blob = new Blob([excelContent], { type: 'application/vnd.ms-excel' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const today = new Date().toISOString().split('T')[0];
+      link.download = `manufacturing_inventory_${today}.xls`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to export manufacturing inventory:', error);
+      window.alert('Failed to export inventory. Please try again or check the console for details.');
+    } finally {
+      setIsExportingInventory(false);
+    }
+  }, [inventory]);
 
   const getInitialInventory = () => [];
 
@@ -1149,9 +1285,14 @@ const Manufacturing = () => {
                 <i className={`fas fa-rotate-right text-xs ${isRefreshing ? 'animate-spin' : ''}`}></i>
                 {isRefreshing ? 'Refreshing…' : 'Refresh'}
               </button>
-              <button className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
-                <i className="fas fa-download text-xs"></i>
-                Export
+              <button
+                onClick={handleExportInventory}
+                disabled={isExportingInventory}
+                className={`px-3 py-2 text-sm rounded-lg flex items-center gap-2 border ${isExportingInventory ? 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed' : 'bg-white hover:bg-gray-50 border-gray-300'}`}
+                title="Export the full inventory dataset to Excel"
+              >
+                <i className={`${isExportingInventory ? 'fas fa-spinner animate-spin' : 'fas fa-download'} text-xs`}></i>
+                {isExportingInventory ? 'Exporting...' : 'Export'}
               </button>
               <button
                 onClick={openAddItemModal}

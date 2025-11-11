@@ -35,6 +35,37 @@ const API_CALL_INTERVAL = 10000; // Only call API every 10 seconds max (reduced 
 const FORCE_REFRESH_MIN_INTERVAL = 2000; // Minimum 2 seconds between force refresh calls
 const LIVE_SYNC_THROTTLE = 2000; // Skip LiveDataSync updates if data hasn't changed in 2 seconds
 
+const PIPELINE_STAGES = ['Awareness', 'Interest', 'Desire', 'Action'];
+const PIPELINE_STAGE_ALIASES = {
+    awareness: 'Awareness',
+    interest: 'Interest',
+    desire: 'Desire',
+    action: 'Action',
+    prospect: 'Awareness',
+    new: 'Awareness',
+    qualification: 'Interest',
+    discovery: 'Interest',
+    evaluation: 'Interest',
+    proposal: 'Desire',
+    negotiation: 'Action',
+    contracting: 'Action',
+    closing: 'Action'
+};
+
+function normalizePipelineStage(stage) {
+    if (!stage || typeof stage !== 'string') {
+        return PIPELINE_STAGES[0];
+    }
+
+    const trimmed = stage.trim();
+    if (PIPELINE_STAGES.includes(trimmed)) {
+        return trimmed;
+    }
+
+    const alias = PIPELINE_STAGE_ALIASES[trimmed.toLowerCase()];
+    return alias || PIPELINE_STAGES[0];
+}
+
 function processClientData(rawClients, cacheKey) {
     // Use cached processed data if available and recent
     const now = Date.now();
@@ -293,8 +324,9 @@ const ServicesDropdown = ({ services, selectedServices, onSelectionChange, isDar
 
 const Clients = React.memo(() => {
     const [viewMode, setViewMode] = useState('clients');
-    const [pipelineStatus, setPipelineStatus] = useState(() => (typeof window !== 'undefined' && window.Pipeline ? 'ready' : 'loading'));
-    const [pipelineRenderKey, setPipelineRenderKey] = useState(0);
+    const [isPipelineLoading, setIsPipelineLoading] = useState(false);
+    const [pipelineBoardView, setPipelineBoardView] = useState('list');
+    const [pipelineTypeFilter, setPipelineTypeFilter] = useState('all');
     const [clients, setClients] = useState([]);
     const [leads, setLeads] = useState([]);
     const clientsRef = useRef(clients); // Ref to track current clients for LiveDataSync
@@ -305,7 +337,6 @@ const Clients = React.memo(() => {
     const isFormOpenRef = useRef(false); // Ref to track if any form is open
     const selectedClientRef = useRef(null); // Ref to track selected client
     const selectedLeadRef = useRef(null); // Ref to track selected lead
-    
     // Keep refs in sync with state
     useEffect(() => {
         clientsRef.current = clients;
@@ -319,93 +350,6 @@ const Clients = React.memo(() => {
         viewModeRef.current = viewMode;
     }, [viewMode]);
 
-    useEffect(() => {
-        if (viewMode !== 'pipeline') {
-            return;
-        }
-
-        if (pipelineStatus === 'ready' && window.Pipeline) {
-            return;
-        }
-
-        if (window.Pipeline) {
-            console.log('🟦 renderPipelineView: window.Pipeline already available - marking ready');
-            setPipelineStatus('ready');
-            return;
-        }
-
-        let cancelled = false;
-        let attempts = 0;
-        const maxAttempts = 24;
-
-        if (pipelineStatus !== 'failed') {
-            setPipelineStatus('loading');
-        }
-
-        const interval = setInterval(() => {
-            if (cancelled) {
-                return;
-            }
-
-            if (window.Pipeline) {
-                console.log(`🟦 renderPipelineView: window.Pipeline became available after ${attempts + 1} checks`);
-                setPipelineStatus('ready');
-                setPipelineRenderKey((prev) => prev + 1);
-                clearInterval(interval);
-                return;
-            }
-
-            attempts += 1;
-            if (attempts >= maxAttempts) {
-                console.warn('⚠️ renderPipelineView: window.Pipeline not available after polling - falling back to legacy view');
-                setPipelineStatus('failed');
-                clearInterval(interval);
-            }
-        }, 250);
-
-        return () => {
-            cancelled = true;
-            clearInterval(interval);
-        };
-    }, [viewMode, pipelineStatus]);
-
-    useEffect(() => {
-        if (viewMode !== 'pipeline') {
-            return;
-        }
-
-        const elementsToCheck = ['button', 'a[role="button"]', 'div[role="button"]'];
-
-        const removeLegacyPipelineButtons = () => {
-            try {
-                const candidates = document.querySelectorAll(elementsToCheck.join(','));
-                candidates.forEach((element) => {
-                    const text = element?.textContent?.replace(/\s+/g, ' ').trim().toLowerCase();
-                    if (!text) {
-                        return;
-                    }
-
-                    if (
-                        text.includes('new deal') ||
-                        text.includes('forecast') ||
-                        text === 'refresh'
-                    ) {
-                        // Hide instead of remove to avoid layout shifts if other scripts rely on the node
-                        element.style.display = 'none';
-                        element.setAttribute('data-legacy-pipeline-hidden', 'true');
-                    }
-                });
-            } catch (error) {
-                console.warn('⚠️ Pipeline: Failed to remove legacy buttons', error);
-            }
-        };
-
-        removeLegacyPipelineButtons();
-        const observer = new MutationObserver(() => removeLegacyPipelineButtons());
-        observer.observe(document.body, { childList: true, subtree: true });
-
-        return () => observer.disconnect();
-    }, [viewMode, pipelineRenderKey]);
 
     // Utility function to calculate time since first contact
     const getTimeSinceFirstContact = (firstContactDate) => {
@@ -444,6 +388,165 @@ const Clients = React.memo(() => {
     const [clientsPage, setClientsPage] = useState(1);
     const [leadsPage, setLeadsPage] = useState(1);
     const ITEMS_PER_PAGE = 25;
+    const pipelineStageOrder = useMemo(() => {
+        const order = {};
+        PIPELINE_STAGES.forEach((stage, index) => {
+            order[stage] = index;
+        });
+        return order;
+    }, []);
+    const pipelineItems = useMemo(() => {
+        const leadItems = Array.isArray(leads) ? leads.map((lead) => {
+            const stage = normalizePipelineStage(lead.stage || lead.lifecycleStage || lead.statusStage || '');
+            const value =
+                Number(
+                    lead.estimatedValue ??
+                    lead.potentialValue ??
+                    lead.projectedValue ??
+                    lead.value ??
+                    lead.amount ??
+                    0
+                ) || 0;
+            const updatedAt = new Date(
+                lead.updatedAt ||
+                lead.lastContact ||
+                lead.followUps?.[0]?.date ||
+                lead.createdAt ||
+                Date.now()
+            ).getTime();
+
+            return {
+                id: lead.id ?? lead.leadId ?? lead.uuid ?? `lead-${Math.random().toString(36).slice(2)}`,
+                key: `lead-${lead.id ?? lead.leadId ?? lead.uuid ?? lead.name ?? Date.now()}`,
+                type: 'lead',
+                name: lead.name || lead.title || 'Untitled Lead',
+                stage,
+                value,
+                organization: lead.company || lead.organization || lead.industry || 'Unknown industry',
+                owner: lead.ownerName || lead.owner || '',
+                updatedAt,
+                raw: lead
+            };
+        }) : [];
+
+        const opportunityItems = Array.isArray(clients)
+            ? clients.flatMap((client) => {
+                const opportunities = Array.isArray(client.opportunities) ? client.opportunities : [];
+                return opportunities.map((opp) => {
+                    const stage = normalizePipelineStage(opp.stage);
+                    const value =
+                        Number(
+                            opp.value ??
+                            opp.amount ??
+                            opp.estimatedValue ??
+                            opp.expectedValue ??
+                            0
+                        ) || 0;
+                    const updatedAt = new Date(
+                        opp.updatedAt ||
+                        opp.expectedCloseDate ||
+                        opp.closeDate ||
+                        opp.createdAt ||
+                        client.updatedAt ||
+                        Date.now()
+                    ).getTime();
+
+                    return {
+                        id: opp.id ?? opp.uuid ?? `opportunity-${client.id}-${Math.random().toString(36).slice(2)}`,
+                        key: `opportunity-${opp.id ?? opp.uuid ?? `${client.id}-${opp.title ?? opp.name ?? Date.now()}`}`,
+                        type: 'opportunity',
+                        name: opp.title || opp.name || 'Untitled Opportunity',
+                        stage,
+                        value,
+                        organization: client.name || opp.client?.name || 'Unknown client',
+                        owner: opp.ownerName || opp.owner || client.ownerName || '',
+                        updatedAt,
+                        raw: opp,
+                        clientId: client.id,
+                        clientName: client.name || opp.client?.name || ''
+                    };
+                });
+            })
+            : [];
+
+        return [...leadItems, ...opportunityItems];
+    }, [clients, leads]);
+    useEffect(() => {
+        if (viewMode !== 'pipeline') {
+            return;
+        }
+
+        if (!window.DatabaseAPI?.getOpportunities) {
+            return;
+        }
+
+        const needsOpportunities = Array.isArray(clients) && clients.some((client) => {
+            const opps = Array.isArray(client.opportunities) ? client.opportunities : [];
+            return opps.length === 0;
+        });
+
+        if (!needsOpportunities) {
+            return;
+        }
+
+        let cancelled = false;
+        setIsPipelineLoading(true);
+
+        (async () => {
+            try {
+                const response = await window.DatabaseAPI.getOpportunities();
+                const allOpportunities = response?.data?.opportunities || [];
+                const opportunitiesByClient = {};
+
+                allOpportunities.forEach((opp) => {
+                    const clientId = opp.clientId || opp.client?.id;
+                    if (!clientId) {
+                        return;
+                    }
+
+                    if (!opportunitiesByClient[clientId]) {
+                        opportunitiesByClient[clientId] = [];
+                    }
+                    opportunitiesByClient[clientId].push(opp);
+                });
+
+                if (cancelled) {
+                    return;
+                }
+
+                setClients((previousClients) => {
+                    if (!Array.isArray(previousClients) || previousClients.length === 0) {
+                        return previousClients;
+                    }
+
+                    const updatedClients = previousClients.map((client) => ({
+                        ...client,
+                        opportunities: opportunitiesByClient[client.id] || client.opportunities || []
+                    }));
+                    safeStorage.setClients(updatedClients);
+                    return updatedClients;
+                });
+            } catch (error) {
+                const isServerError = error?.message?.includes('500') || error?.message?.includes('Server error') || error?.message?.includes('Failed to list opportunities');
+                if (!isServerError) {
+                    console.warn('⚠️ Pipeline: Failed to load opportunities in bulk:', error?.message || error);
+                }
+            } finally {
+                if (!cancelled) {
+                    setIsPipelineLoading(false);
+                }
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [viewMode, clients]);
+    useEffect(() => {
+        if (viewMode !== 'pipeline' && isPipelineLoading) {
+            setIsPipelineLoading(false);
+        }
+    }, [viewMode, isPipelineLoading]);
     
     // Get theme with safe fallback - don't check system preference, only localStorage
     let isDark = false;
@@ -3792,49 +3895,415 @@ const Clients = React.memo(() => {
         </div>
     );
 
-    const renderPipelineView = () => {
-        if (pipelineStatus === 'ready' && window.Pipeline) {
-            try {
-                window.__PIPELINE_RENDER_MODE = 'new';
-                console.log('✅ renderPipelineView: Mounting new Pipeline component from window.Pipeline');
-                return React.createElement(window.Pipeline, { 
-                    key: pipelineRenderKey,
-                    onOpenLead: openLeadFromPipeline,
-                    onOpenOpportunity: openOpportunityFromPipeline
-                });
-            } catch (error) {
-                console.error('❌ renderPipelineView: Failed to render new Pipeline component, falling back to legacy view:', error);
-                window.__PIPELINE_RENDER_MODE = 'legacy-error';
-                setTimeout(() => setPipelineStatus('failed'), 0);
+    const PipelineView = React.memo(({
+        items,
+        isDark,
+        boardView,
+        onBoardViewChange,
+        typeFilter,
+        onTypeFilterChange,
+        stages,
+        isLoading,
+        onOpenLead,
+        onOpenOpportunity
+    }) => {
+        const [searchTerm, setSearchTerm] = useState('');
+
+        const stageOrder = useMemo(() => {
+            const order = {};
+            stages.forEach((stage, index) => {
+                order[stage] = index;
+            });
+            return order;
+        }, [stages]);
+
+        const normalizedSearch = searchTerm.trim().toLowerCase();
+
+        const filteredItems = useMemo(() => {
+            if (!Array.isArray(items) || items.length === 0) {
+                return [];
             }
-        }
 
-        if (pipelineStatus === 'loading') {
-            window.__PIPELINE_RENDER_MODE = 'loading';
-            return (
-                <div className={`min-h-[480px] rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-3 ${isDark ? 'border-gray-700 bg-gray-900/40 text-gray-300' : 'border-blue-200 bg-blue-50 text-blue-700'}`}>
-                    <i className={`fas fa-circle-notch fa-spin text-2xl ${isDark ? 'text-blue-300' : 'text-blue-600'}`}></i>
-                    <div className="text-base font-medium">Loading the enhanced Pipeline experience…</div>
-                    <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-blue-500'}`}>This should only take a moment.</div>
+            return items.filter((item) => {
+                if (typeFilter === 'leads' && item.type !== 'lead') {
+                    return false;
+                }
+
+                if (typeFilter === 'opportunities' && item.type !== 'opportunity') {
+                    return false;
+                }
+
+                if (!normalizedSearch) {
+                    return true;
+                }
+
+                const haystack = [
+                    item.name,
+                    item.organization,
+                    item.stage,
+                    item.owner
+                ]
+                    .filter(Boolean)
+                    .map((value) => value.toString().toLowerCase());
+
+                return haystack.some((value) => value.includes(normalizedSearch));
+            });
+        }, [items, typeFilter, normalizedSearch]);
+
+        const sortedItems = useMemo(() => {
+            if (filteredItems.length === 0) {
+                return [];
+            }
+
+            return [...filteredItems].sort((a, b) => {
+                const stageComparison = (stageOrder[a.stage] ?? 0) - (stageOrder[b.stage] ?? 0);
+                if (stageComparison !== 0) {
+                    return stageComparison;
+                }
+
+                if (a.updatedAt && b.updatedAt) {
+                    return b.updatedAt - a.updatedAt;
+                }
+
+                return (a.name || '').toString().localeCompare((b.name || '').toString());
+            });
+        }, [filteredItems, stageOrder]);
+
+        const groupedByStage = useMemo(() => {
+            const groups = {};
+            stages.forEach((stage) => {
+                groups[stage] = [];
+            });
+
+            sortedItems.forEach((item) => {
+                const stage = stages.includes(item.stage) ? item.stage : stages[0];
+                groups[stage].push(item);
+            });
+
+            return groups;
+        }, [sortedItems, stages]);
+
+        const totals = useMemo(() => ({
+            total: filteredItems.length,
+            leads: filteredItems.filter((item) => item.type === 'lead').length,
+            opportunities: filteredItems.filter((item) => item.type === 'opportunity').length,
+            value: filteredItems.reduce((sum, item) => sum + (item.value || 0), 0)
+        }), [filteredItems]);
+
+        const stageSummaries = useMemo(() => (
+            stages.map((stage) => {
+                const stageItems = groupedByStage[stage] || [];
+                const stageValue = stageItems.reduce((sum, item) => sum + (item.value || 0), 0);
+                return {
+                    stage,
+                    count: stageItems.length,
+                    value: stageValue
+                };
+            })
+        ), [groupedByStage, stages]);
+
+        const formatCurrency = (amount) => `R ${(amount || 0).toLocaleString('en-ZA')}`;
+
+        const getStageBadgeClasses = (stage) => {
+            const lightMap = {
+                Awareness: 'bg-gray-100 text-gray-800',
+                Interest: 'bg-blue-100 text-blue-800',
+                Desire: 'bg-yellow-100 text-yellow-800',
+                Action: 'bg-green-100 text-green-800'
+            };
+            const darkMap = {
+                Awareness: 'bg-gray-700 text-gray-200',
+                Interest: 'bg-blue-900 text-blue-200',
+                Desire: 'bg-yellow-900 text-yellow-200',
+                Action: 'bg-green-900 text-green-200'
+            };
+            return (isDark ? darkMap : lightMap)[stage] || (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800');
+        };
+
+        const typeBadgeClasses = (type) => {
+            if (type === 'lead') {
+                return isDark ? 'bg-purple-900 text-purple-200' : 'bg-purple-100 text-purple-700';
+            }
+            return isDark ? 'bg-teal-900 text-teal-200' : 'bg-teal-100 text-teal-700';
+        };
+
+        const handleItemOpen = (item) => {
+            if (!item) {
+                return;
+            }
+
+            if (item.type === 'lead') {
+                onOpenLead?.({
+                    leadId: item.raw?.id,
+                    leadData: item.raw
+                });
+                return;
+            }
+
+            if (item.type === 'opportunity') {
+                onOpenOpportunity?.({
+                    opportunityId: item.raw?.id,
+                    clientId: item.clientId,
+                    clientName: item.clientName,
+                    opportunity: item.raw
+                });
+            }
+        };
+
+        const renderListView = () => (
+            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border shadow-sm`}>
+                <div className="overflow-x-auto">
+                    <table className={`min-w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
+                        <thead className={isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-50 text-gray-500'}>
+                            <tr>
+                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">Name</th>
+                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">Type</th>
+                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">Stage</th>
+                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">Value</th>
+                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">Organisation</th>
+                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">Owner</th>
+                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
+                            {sortedItems.length === 0 ? (
+                                <tr>
+                                    <td colSpan="7" className="px-6 py-16 text-center">
+                                        <div className={`mx-auto w-14 h-14 rounded-full flex items-center justify-center ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-500'}`}>
+                                            <i className="fas fa-stream text-xl"></i>
+                                        </div>
+                                        <p className={`mt-4 text-base font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>No pipeline items to show</p>
+                                        <p className={`mt-2 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Adjust the filters or add new leads and opportunities.</p>
+                                    </td>
+                                </tr>
+                            ) : (
+                                sortedItems.map((item) => (
+                                    <tr
+                                        key={item.key}
+                                        onClick={() => handleItemOpen(item)}
+                                        className={`${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'} cursor-pointer transition`}
+                                    >
+                                        <td className="px-6 py-4">
+                                            <div className="flex flex-col">
+                                                <span className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{item.name}</span>
+                                                <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                    {item.type === 'opportunity' ? item.clientName || 'Opportunity' : 'Lead'}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${typeBadgeClasses(item.type)}`}>
+                                                {item.type === 'lead' ? 'Lead' : 'Opportunity'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${getStageBadgeClasses(item.stage)}`}>
+                                                {item.stage}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                {formatCurrency(item.value)}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>{item.organization}</span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>{item.owner || 'Unassigned'}</span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={isDark ? 'text-gray-400' : 'text-gray-500'}>
+                                                {new Date(item.updatedAt || Date.now()).toLocaleDateString('en-ZA')}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
                 </div>
-            );
-        }
+            </div>
+        );
 
-        if (pipelineStatus !== 'failed' && !window.Pipeline) {
-            window.__PIPELINE_RENDER_MODE = 'loading';
-            return (
-                <div className={`min-h-[480px] rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-3 ${isDark ? 'border-gray-700 bg-gray-900/40 text-gray-300' : 'border-blue-200 bg-blue-50 text-blue-700'}`}>
-                    <i className={`fas fa-hourglass-half text-2xl ${isDark ? 'text-blue-300' : 'text-blue-600'}`}></i>
-                    <div className="text-base font-medium">Preparing the new Pipeline module…</div>
-                    <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-blue-500'}`}>If this message persists, the legacy board will be shown automatically.</div>
+        const renderKanbanView = () => (
+            <div className="flex gap-4 overflow-x-auto pb-4">
+                {stages.map((stage) => {
+                    const stageItems = groupedByStage[stage] || [];
+                    const stageValue = stageItems.reduce((sum, item) => sum + (item.value || 0), 0);
+
+                    return (
+                        <div
+                            key={stage}
+                            className={`flex-1 min-w-[260px] rounded-lg border ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} shadow-sm`}
+                        >
+                            <div className={`px-4 py-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h3 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{stage}</h3>
+                                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                            {stageItems.length} item{stageItems.length === 1 ? '' : 's'}
+                                        </p>
+                                    </div>
+                                    <div className={`text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                                        {formatCurrency(stageValue)}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="p-4 space-y-3">
+                                {stageItems.length === 0 ? (
+                                    <div className={`text-sm italic ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>No items</div>
+                                ) : (
+                                    stageItems.map((item) => (
+                                        <div
+                                            key={item.key}
+                                            onClick={() => handleItemOpen(item)}
+                                            className={`rounded-lg border ${isDark ? 'border-gray-700 bg-gray-800 hover:bg-gray-700' : 'border-gray-200 bg-gray-50 hover:bg-white'} transition shadow-sm cursor-pointer`}
+                                        >
+                                            <div className="p-3 space-y-2">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div>
+                                                        <div className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{item.name}</div>
+                                                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                            {item.organization}
+                                                        </div>
+                                                    </div>
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${typeBadgeClasses(item.type)}`}>
+                                                        {item.type === 'lead' ? 'Lead' : 'Opportunity'}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center justify-between text-xs">
+                                                    <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
+                                                        {formatCurrency(item.value)}
+                                                    </span>
+                                                    <span className={isDark ? 'text-gray-500' : 'text-gray-500'}>
+                                                        {item.owner || 'Unassigned'}
+                                                    </span>
+                                                </div>
+                                                <div className={`text-[11px] ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                                                    Updated {new Date(item.updatedAt || Date.now()).toLocaleDateString('en-ZA')}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        );
+
+        return (
+            <div className="space-y-6">
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border shadow-sm p-4 flex flex-wrap gap-3 items-center justify-between`}>
+                    <div className="flex items-center flex-wrap gap-2">
+                        <div className="inline-flex rounded-lg border overflow-hidden">
+                            <button
+                                type="button"
+                                onClick={() => onBoardViewChange('list')}
+                                className={`px-3 py-1.5 text-sm font-medium ${boardView === 'list' ? 'bg-blue-600 text-white' : isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                            >
+                                <i className="fas fa-list mr-1.5"></i>
+                                List
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => onBoardViewChange('kanban')}
+                                className={`px-3 py-1.5 text-sm font-medium ${boardView === 'kanban' ? 'bg-blue-600 text-white' : isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                            >
+                                <i className="fas fa-columns mr-1.5"></i>
+                                Kanban
+                            </button>
+                        </div>
+                        <div className="inline-flex rounded-lg border overflow-hidden">
+                            <button
+                                type="button"
+                                onClick={() => onTypeFilterChange('all')}
+                                className={`px-3 py-1.5 text-sm font-medium ${typeFilter === 'all' ? (isDark ? 'bg-gray-700 text-gray-100' : 'bg-gray-100 text-gray-900') : isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                            >
+                                All
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => onTypeFilterChange('leads')}
+                                className={`px-3 py-1.5 text-sm font-medium ${typeFilter === 'leads' ? (isDark ? 'bg-gray-700 text-gray-100' : 'bg-gray-100 text-gray-900') : isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                            >
+                                Leads
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => onTypeFilterChange('opportunities')}
+                                className={`px-3 py-1.5 text-sm font-medium ${typeFilter === 'opportunities' ? (isDark ? 'bg-gray-700 text-gray-100' : 'bg-gray-100 text-gray-900') : isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                            >
+                                Opportunities
+                            </button>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <div className="relative">
+                            <input
+                                type="search"
+                                value={searchTerm}
+                                onChange={(event) => setSearchTerm(event.target.value)}
+                                placeholder="Search pipeline..."
+                                className={`pl-9 pr-3 py-2 text-sm rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-gray-200 placeholder-gray-400' : 'bg-gray-50 border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-white'} focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                            />
+                            <i className={`fas fa-search absolute left-3 top-2.5 text-sm ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
+                            {searchTerm && (
+                                <button
+                                    type="button"
+                                    className={`absolute right-3 top-2.5 text-sm ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'}`}
+                                    onClick={() => setSearchTerm('')}
+                                >
+                                    <i className="fas fa-times"></i>
+                                </button>
+                            )}
+                        </div>
+                        {isLoading && (
+                            <div className={`flex items-center gap-2 text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                                <i className="fas fa-circle-notch fa-spin"></i>
+                                Loading
+                            </div>
+                        )}
+                    </div>
                 </div>
-            );
-        }
-
-        console.warn('⚠️ renderPipelineView: Falling back to LegacyPipelineView');
-        window.__PIPELINE_RENDER_MODE = 'legacy-fallback';
-        return <LegacyPipelineView />;
-    };
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border shadow-sm p-4`}>
+                        <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Total Items</div>
+                        <div className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{totals.total}</div>
+                    </div>
+                    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border shadow-sm p-4`}>
+                        <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Leads</div>
+                        <div className={`text-2xl font-bold ${isDark ? 'text-purple-200' : 'text-purple-600'}`}>{totals.leads}</div>
+                    </div>
+                    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border shadow-sm p-4`}>
+                        <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Opportunities</div>
+                        <div className={`text-2xl font-bold ${isDark ? 'text-teal-200' : 'text-teal-600'}`}>{totals.opportunities}</div>
+                    </div>
+                    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border shadow-sm p-4`}>
+                        <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Pipeline Value</div>
+                        <div className={`text-2xl font-bold ${isDark ? 'text-green-200' : 'text-green-600'}`}>{formatCurrency(totals.value)}</div>
+                    </div>
+                </div>
+                <div className="grid gap-3 md:grid-cols-4 sm:grid-cols-2">
+                    {stageSummaries.map((summary) => (
+                        <div
+                            key={summary.stage}
+                            className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border shadow-sm p-4`}
+                        >
+                            <div className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{summary.stage}</div>
+                            <div className={`mt-2 text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{summary.count}</div>
+                            <div className={`mt-1 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                {formatCurrency(summary.value)}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                {boardView === 'kanban' ? renderKanbanView() : renderListView()}
+            </div>
+        );
+    });
 
     // Leads List View
     // Note: Lead status is now hardcoded as 'active' - removed handleLeadStatusChange function
@@ -4319,82 +4788,8 @@ const Clients = React.memo(() => {
                     Leads ({leadsCount})
                 </button>
                 <button
-                    onClick={async () => {
+                    onClick={() => {
                         setViewMode('pipeline');
-                        setPipelineStatus(window.Pipeline ? 'ready' : 'loading');
-
-                        // New standalone Pipeline module handles its own data loading
-                        if (window.Pipeline) {
-                            console.log('ℹ️ Pipeline tab: using standalone Pipeline component; skipping legacy preload');
-                            setPipelineRenderKey((prev) => prev + 1);
-                            return;
-                        }
-                        
-                        // Load opportunities when Pipeline tab is clicked (bulk loading for performance)
-                        if (!window.DatabaseAPI?.getOpportunities || clients.length === 0) {
-                            return;
-                        }
-                        
-                        // Check if clients already have opportunities loaded
-                        const clientsNeedingOpps = clients.filter(c => !c.opportunities || c.opportunities.length === 0);
-                        if (clientsNeedingOpps.length === 0) {
-                            return; // Already loaded
-                        }
-                        
-                        // Wrap in async IIFE to properly handle promise rejections
-                        (async () => {
-                            try {
-                                console.log('📡 Pipeline tab clicked: Loading all opportunities in bulk...');
-                                const oppResponse = await window.DatabaseAPI.getOpportunities();
-                                const allOpportunities = oppResponse?.data?.opportunities || [];
-                                
-                                // Group opportunities by clientId
-                                const opportunitiesByClient = {};
-                                allOpportunities.forEach(opp => {
-                                    const clientId = opp.clientId || opp.client?.id;
-                                    if (clientId) {
-                                        if (!opportunitiesByClient[clientId]) {
-                                            opportunitiesByClient[clientId] = [];
-                                        }
-                                        opportunitiesByClient[clientId].push(opp);
-                                    }
-                                });
-                                
-                                // Attach opportunities to clients - ALWAYS use API opportunities (they have correct stages)
-                                // Don't merge with cached opportunities - they may have stale stage data
-                                const clientsWithOpps = clients.map(client => {
-                                    const apiOpps = opportunitiesByClient[client.id] || [];
-                                    
-                                    // Use API opportunities only - they have the correct, up-to-date stages
-                                    // This prevents stale cached stage data from showing wrong columns
-                                    return {
-                                        ...client,
-                                        opportunities: apiOpps
-                                    };
-                                });
-                                
-                                const totalOpps = clientsWithOpps.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                                console.log(`✅ Pipeline tab: Attached ${totalOpps} opportunities from API (using API stages only - no stale cached data)`);
-                                setClients(clientsWithOpps);
-                                safeStorage.setClients(clientsWithOpps);
-                                // Update ref immediately so LiveDataSync can see the opportunities
-                                clientsRef.current = clientsWithOpps;
-                            } catch (error) {
-                                // Handle error gracefully - don't show error for 500s (server issue)
-                                const isServerError = error?.message?.includes('500') || error?.message?.includes('Server error');
-                                if (!isServerError) {
-                                    console.warn('⚠️ Error loading opportunities:', error.message || error);
-                                } else {
-                                    console.warn('⚠️ Opportunities API temporarily unavailable. Pipeline view will work with existing data.');
-                                }
-                                // Preserve existing opportunities on error
-                                const clientsWithPreservedOpps = clients.map(client => ({
-                                    ...client,
-                                    opportunities: client.opportunities || []
-                                }));
-                                setClients(clientsWithPreservedOpps);
-                            }
-                        })();
                     }}
                     className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'pipeline' 
@@ -4552,7 +4947,20 @@ const Clients = React.memo(() => {
             {/* Content based on view mode */}
             {viewMode === 'clients' && <ClientsListView />}
             {viewMode === 'leads' && <LeadsListView />}
-            {viewMode === 'pipeline' && renderPipelineView()}
+            {viewMode === 'pipeline' && (
+                <PipelineView
+                    items={pipelineItems}
+                    isDark={isDark}
+                    boardView={pipelineBoardView}
+                    onBoardViewChange={setPipelineBoardView}
+                    typeFilter={pipelineTypeFilter}
+                    onTypeFilterChange={setPipelineTypeFilter}
+                    stages={PIPELINE_STAGES}
+                    isLoading={isPipelineLoading}
+                    onOpenLead={openLeadFromPipeline}
+                    onOpenOpportunity={openOpportunityFromPipeline}
+                />
+            )}
             {viewMode === 'news-feed' && (window.ClientNewsFeed ? <window.ClientNewsFeed /> : <div className="text-center py-12 text-gray-500">Loading News Feed...</div>)}
             {viewMode === 'client-detail' && <ClientDetailView />}
             {viewMode === 'lead-detail' && <LeadDetailView />}

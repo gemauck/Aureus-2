@@ -526,6 +526,43 @@ const DatabaseAPI = {
         }
     },
 
+    _shouldFallbackPurchaseOrders(error) {
+        if (!error) return false;
+        const message = (error?.message || '').toLowerCase();
+        return (
+            message.includes('invalid manufacturing endpoint') ||
+            message.includes('invalid method or purchase order action') ||
+            message.includes('not found') ||
+            message.includes('404')
+        );
+    },
+
+    async _callPurchaseOrdersEndpoint(pathSuffix = '', requestOptions = {}) {
+        const suffix = pathSuffix ? `/${pathSuffix.replace(/^\//, '')}` : '';
+        const candidateBases = ['/manufacturing/purchase-orders', '/purchase-orders'];
+        let lastError = null;
+
+        for (let i = 0; i < candidateBases.length; i += 1) {
+            const base = candidateBases[i];
+            const endpoint = `${base}${suffix}`;
+            try {
+                return await this.makeRequest(endpoint, requestOptions);
+            } catch (error) {
+                lastError = error;
+                const shouldFallback = this._shouldFallbackPurchaseOrders(error);
+                if (i === candidateBases.length - 1 || !shouldFallback) {
+                    throw error;
+                }
+                console.warn(
+                    `⚠️ Purchase orders endpoint ${endpoint} unavailable - falling back to alternate route...`,
+                    error?.message || error
+                );
+            }
+        }
+
+        throw lastError || new Error('Unable to reach purchase orders endpoint');
+    },
+
     // CLIENT OPERATIONS
     async getClients() {
         console.log('📡 Fetching clients from database...');
@@ -1362,7 +1399,7 @@ const DatabaseAPI = {
     // PURCHASE ORDERS OPERATIONS
     async getPurchaseOrders() {
         console.log('📡 Fetching purchase orders from database...');
-        const raw = await this.makeRequest('/manufacturing/purchase-orders');
+        const raw = await this._callPurchaseOrdersEndpoint();
         const normalized = {
             data: {
                 purchaseOrders: Array.isArray(raw?.data?.purchaseOrders)
@@ -1380,13 +1417,13 @@ const DatabaseAPI = {
 
     async getPurchaseOrder(id) {
         console.log(`📡 Fetching purchase order ${id} from database...`);
-        const response = await this.makeRequest(`/manufacturing/purchase-orders/${id}`);
+        const response = await this._callPurchaseOrdersEndpoint(id);
         return response;
     },
 
     async createPurchaseOrder(purchaseOrderData) {
         console.log('📡 Creating purchase order in database...');
-        const response = await this.makeRequest('/manufacturing/purchase-orders', {
+        const response = await this._callPurchaseOrdersEndpoint('', {
             method: 'POST',
             body: JSON.stringify(purchaseOrderData)
         });
@@ -1396,7 +1433,7 @@ const DatabaseAPI = {
 
     async updatePurchaseOrder(id, purchaseOrderData) {
         console.log(`📡 Updating purchase order ${id} in database...`);
-        const response = await this.makeRequest(`/manufacturing/purchase-orders/${id}`, {
+        const response = await this._callPurchaseOrdersEndpoint(id, {
             method: 'PATCH',
             body: JSON.stringify(purchaseOrderData)
         });
@@ -1406,7 +1443,7 @@ const DatabaseAPI = {
 
     async deletePurchaseOrder(id) {
         console.log(`📡 Deleting purchase order ${id} from database...`);
-        const response = await this.makeRequest(`/manufacturing/purchase-orders/${id}`, {
+        const response = await this._callPurchaseOrdersEndpoint(id, {
             method: 'DELETE'
         });
         console.log('✅ Purchase order deleted from database');
