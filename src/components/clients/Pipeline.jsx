@@ -54,6 +54,8 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
     const [dataLoaded, setDataLoaded] = useState(false); // Track when data is fully loaded from API
     const [fallbackDeal, setFallbackDeal] = useState(null); // { type: 'lead' | 'opportunity', id, data, client }
     const [columnFilters, setColumnFilters] = useState(() => ({ ...COLUMN_FILTER_DEFAULTS }));
+    const [listSortColumn, setListSortColumn] = useState(null);
+    const [listSortDirection, setListSortDirection] = useState('asc');
 
     useEffect(() => {
         try {
@@ -109,6 +111,18 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
 
     const clearColumnFilters = useCallback(() => {
         setColumnFilters({ ...COLUMN_FILTER_DEFAULTS });
+    }, []);
+
+    const handleListSort = useCallback((column) => {
+        setListSortColumn((prevColumn) => {
+            if (prevColumn === column) {
+                setListSortDirection((prevDirection) => (prevDirection === 'asc' ? 'desc' : 'asc'));
+                return prevColumn;
+            }
+
+            setListSortDirection(column === 'value' || column === 'age' ? 'desc' : 'asc');
+            return column;
+        });
     }, []);
 
     // AIDA Pipeline Stages
