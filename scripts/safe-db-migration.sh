@@ -140,10 +140,37 @@ echo "🚀 Running migration..."
 echo "   Command: $@"
 echo ""
 
-# Execute the command passed to this script
-exec "$@"
+MAX_ATTEMPTS=5
+SLEEP_SECONDS=20
+ATTEMPT=1
+MIGRATION_EXIT_CODE=1
 
-MIGRATION_EXIT_CODE=$?
+while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+    echo "   Attempt $ATTEMPT of $MAX_ATTEMPTS..."
+    ERR_LOG="$(mktemp)"
+
+    if "$@" 2> >(tee "$ERR_LOG" >&2); then
+        MIGRATION_EXIT_CODE=0
+        rm -f "$ERR_LOG"
+        break
+    fi
+
+    MIGRATION_EXIT_CODE=$?
+    ERROR_OUTPUT="$(cat "$ERR_LOG")"
+    rm -f "$ERR_LOG"
+
+    if echo "$ERROR_OUTPUT" | grep -qi "remaining connection slots are reserved for roles with the superuser attribute"; then
+        if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+            echo -e "${YELLOW}⚠️  Connection slot limit hit. Retrying in ${SLEEP_SECONDS}s...${NC}"
+            sleep $SLEEP_SECONDS
+            ATTEMPT=$((ATTEMPT + 1))
+            continue
+        fi
+    fi
+
+    # Any other failure (or max attempts reached)
+    break
+done
 
 if [ $MIGRATION_EXIT_CODE -eq 0 ]; then
     echo ""
