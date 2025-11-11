@@ -1,5 +1,5 @@
 // Database-First Projects Component - No localStorage dependency
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef, useCallback } = React;
 
 const ProjectsDatabaseFirst = () => {
     const [projects, setProjects] = useState([]);
@@ -15,7 +15,112 @@ const ProjectsDatabaseFirst = () => {
     const [showProgressTracker, setShowProgressTracker] = useState(false);
     const [trackerAvailable, setTrackerAvailable] = useState(!!window.ProjectProgressTracker);
     const [waitingForTracker, setWaitingForTracker] = useState(false);
+    const [projectDetailComponent, setProjectDetailComponent] = useState(
+        typeof window !== 'undefined' && typeof window.ProjectDetail === 'function'
+            ? () => window.ProjectDetail
+            : null
+    );
+    const [isProjectDetailLoading, setIsProjectDetailLoading] = useState(false);
+    const projectDetailLoadPromiseRef = useRef(null);
     const { isDark } = window.useTheme();
+    // Monitor availability of ProjectDetail component
+    useEffect(() => {
+        if (projectDetailComponent) {
+            return;
+        }
+
+        if (typeof window !== 'undefined' && typeof window.ProjectDetail === 'function') {
+            setProjectDetailComponent(() => window.ProjectDetail);
+            return;
+        }
+
+        const handleComponentLoaded = (event) => {
+            if (event?.detail?.component === 'ProjectDetail' && typeof window.ProjectDetail === 'function') {
+                setProjectDetailComponent(() => window.ProjectDetail);
+            }
+        };
+
+        window.addEventListener('componentLoaded', handleComponentLoaded);
+
+        let attempts = 0;
+        const maxAttempts = 40;
+        const intervalId = setInterval(() => {
+            attempts += 1;
+            if (typeof window.ProjectDetail === 'function') {
+                setProjectDetailComponent(() => window.ProjectDetail);
+                clearInterval(intervalId);
+            } else if (attempts >= maxAttempts) {
+                clearInterval(intervalId);
+            }
+        }, 100);
+
+        return () => {
+            window.removeEventListener('componentLoaded', handleComponentLoaded);
+            clearInterval(intervalId);
+        };
+    }, [projectDetailComponent]);
+
+    const ensureProjectDetailLoaded = useCallback(async () => {
+        if (typeof window === 'undefined') {
+            return false;
+        }
+
+        if (typeof window.ProjectDetail === 'function') {
+            if (!projectDetailComponent) {
+                setProjectDetailComponent(() => window.ProjectDetail);
+            }
+            return true;
+        }
+
+        if (projectDetailLoadPromiseRef.current) {
+            return projectDetailLoadPromiseRef.current;
+        }
+
+        setIsProjectDetailLoading(true);
+
+        const loadPromise = new Promise((resolve) => {
+            const existingScript = document.querySelector('script[data-project-detail-loader="true"]');
+            if (existingScript) {
+                existingScript.remove();
+            }
+
+            const script = document.createElement('script');
+            script.src = `/dist/src/components/projects/ProjectDetail.js?v=project-detail-on-demand-${Date.now()}`;
+            script.async = true;
+            script.dataset.projectDetailLoader = 'true';
+
+            script.onload = () => {
+                setIsProjectDetailLoading(false);
+                projectDetailLoadPromiseRef.current = null;
+                if (typeof window.ProjectDetail === 'function') {
+                    setProjectDetailComponent(() => window.ProjectDetail);
+                    resolve(true);
+                } else {
+                    console.error('❌ ProjectDetail loader: script executed but component did not register on window.ProjectDetail');
+                    resolve(false);
+                }
+            };
+
+            script.onerror = () => {
+                setIsProjectDetailLoading(false);
+                projectDetailLoadPromiseRef.current = null;
+                console.error('❌ ProjectDetail loader failed: unable to load ProjectDetail.js');
+                resolve(false);
+            };
+
+            document.body.appendChild(script);
+        });
+
+        projectDetailLoadPromiseRef.current = loadPromise;
+        return loadPromise;
+    }, [projectDetailComponent]);
+
+    useEffect(() => {
+        if (selectedProject) {
+            ensureProjectDetailLoaded();
+        }
+    }, [selectedProject, ensureProjectDetailLoaded]);
+
 
     // Monitor availability of the ProjectProgressTracker component
     useEffect(() => {
@@ -751,13 +856,33 @@ const ProjectsDatabaseFirst = () => {
 
             {/* Project Detail Modal */}
             {selectedProject && !showModal && (
-                <ProjectDetail
-                    project={selectedProject}
-                    onSave={handleSaveProject}
-                    onClose={() => setSelectedProject(null)}
-                    onDelete={handleDeleteProject}
-                    allClients={[]} // Will be loaded from database
-                />
+                projectDetailComponent ? (
+                    React.createElement(projectDetailComponent, {
+                        project: selectedProject,
+                        onSave: handleSaveProject,
+                        onClose: () => setSelectedProject(null),
+                        onDelete: handleDeleteProject,
+                        allClients: []
+                    })
+                ) : (
+                    <div
+                        className={`mt-4 rounded-xl border p-6 text-sm ${
+                            isDark ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-blue-50 border-blue-200 text-blue-700'
+                        }`}
+                    >
+                        <div className="flex items-center gap-3">
+                            <i className={`fas fa-spinner fa-spin ${isDark ? 'text-primary-300' : 'text-primary-600'}`}></i>
+                            <div>
+                                <p className="font-semibold">Preparing detailed project view...</p>
+                                <p className="text-xs opacity-80">
+                                    {isProjectDetailLoading
+                                        ? 'Loading ProjectDetail component. This happens the first time you open a project.'
+                                        : 'Waiting for the ProjectDetail component to become available. If this persists, please refresh the page.'}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )
             )}
         </div>
     );
