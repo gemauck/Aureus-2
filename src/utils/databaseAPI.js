@@ -1666,6 +1666,22 @@ const DatabaseAPI = {
         return response;
     },
 
+    async deleteMonthlyNotes({ id = null, monthKey = null } = {}) {
+        console.log('📡 Deleting monthly meeting notes from database...', { id, monthKey });
+        const params = new URLSearchParams();
+        if (id) params.append('id', id);
+        if (monthKey) params.append('monthKey', monthKey);
+        const query = params.toString();
+        if (!query) {
+            throw new Error('id or monthKey is required to delete monthly meeting notes');
+        }
+        const response = await this.makeRequest(`/meeting-notes?${query}`, {
+            method: 'DELETE'
+        });
+        console.log('✅ Monthly meeting notes deleted in database');
+        return response;
+    },
+
     async createWeeklyNotes(monthlyNotesId, weekKey, weekStart, weekEnd = null) {
         console.log('📡 Creating weekly meeting notes in database...');
         try {
@@ -1703,6 +1719,18 @@ const DatabaseAPI = {
             }
             throw error;
         }
+    },
+
+    async deleteWeeklyNotes(weeklyNotesId) {
+        console.log(`📡 Deleting weekly meeting notes ${weeklyNotesId} from database...`);
+        if (!weeklyNotesId) {
+            throw new Error('weeklyNotesId is required to delete weekly meeting notes');
+        }
+        const response = await this.makeRequest(`/meeting-notes?action=weekly&id=${weeklyNotesId}`, {
+            method: 'DELETE'
+        });
+        console.log('✅ Weekly meeting notes deleted in database');
+        return response;
     },
 
     async updateDepartmentNotes(id, data) {
@@ -1798,6 +1826,15 @@ const DatabaseAPI = {
             }
             throw error;
         }
+    },
+
+    async purgeMeetingNotes() {
+        console.log('🧹 Purging all meeting notes from database...');
+        const response = await this.makeRequest('/meeting-notes?action=purge&confirm=true', {
+            method: 'DELETE'
+        });
+        console.log('✅ Meeting notes purge request completed');
+        return response;
     }
 };
 
