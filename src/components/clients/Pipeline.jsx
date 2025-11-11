@@ -1897,7 +1897,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
                     openDealDetail(item);
                 }}
-                className={`bg-white rounded-lg border border-gray-200 shadow-sm cursor-move flex flex-col gap-2 p-3 touch-none ${
+                className={`bg-white rounded-lg border border-gray-200 shadow-sm cursor-move flex flex-col gap-2 p-3 touch-none leading-relaxed ${
                     !isDragging ? 'hover:shadow-md transition' : ''
                 } ${draggedItem?.id === item.id ? 'opacity-50' : ''}`}
                 style={{
@@ -2040,7 +2040,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         </div>
 
                         {/* Cards */}
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                             {stageItems.length === 0 ? (
                                 <div className={`text-center py-8 rounded-lg border-2 border-dashed ${!isDragging ? 'transition' : ''} ${
                                     isDraggedOver ? 'border-primary-400 bg-primary-50' : 'border-gray-300'
@@ -2067,6 +2067,41 @@ function doesOpportunityBelongToClient(opportunity, client) {
         const leadCount = items.filter(item => item.type === 'lead').length;
         const opportunityCount = items.filter(item => item.type !== 'lead').length;
         const totalValue = items.reduce((sum, item) => sum + (Number(item.value) || 0), 0);
+
+        const getAriaSort = (column) => {
+            if (listSortColumn !== column) {
+                return 'none';
+            }
+            return listSortDirection === 'asc' ? 'ascending' : 'descending';
+        };
+
+        const renderSortableHeader = (label, column) => {
+            const isActive = listSortColumn === column;
+            const iconClass = !isActive
+                ? 'fas fa-sort text-gray-300'
+                : listSortDirection === 'asc'
+                    ? 'fas fa-sort-up text-blue-600'
+                    : 'fas fa-sort-down text-blue-600';
+
+            return (
+                <th
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                    aria-sort={getAriaSort(column)}
+                    scope="col"
+                >
+                    <button
+                        type="button"
+                        onClick={() => handleListSort(column)}
+                        className={`inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide transition ${
+                            isActive ? 'text-gray-900' : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                    >
+                        <span>{label}</span>
+                        <i className={`${iconClass} text-[11px]`}></i>
+                    </button>
+                </th>
+            );
+        };
 
         return (
             <div className="space-y-4">
@@ -2112,14 +2147,14 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
                                 <tr>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Company</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stage</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">AIDA Stage</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Age</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expected Close</th>
+                                    {renderSortableHeader('Name', 'name')}
+                                    {renderSortableHeader('Company', 'company')}
+                                    {renderSortableHeader('Type', 'type')}
+                                    {renderSortableHeader('Status', 'status')}
+                                    {renderSortableHeader('AIDA Stage', 'stage')}
+                                    {renderSortableHeader('Value', 'value')}
+                                    {renderSortableHeader('Age', 'age')}
+                                    {renderSortableHeader('Expected Close', 'expectedClose')}
                                 </tr>
                                 <tr className="bg-white border-t border-gray-200">
                                     <th className="px-4 py-2">
@@ -2157,7 +2192,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                             onChange={(e) => handleColumnFilterChange('status', e.target.value)}
                                             className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
                                         >
-                                            <option value="All">All stages</option>
+                                            <option value="All">All statuses</option>
                                             {statusOptions.map((status) => (
                                                 <option key={status} value={status}>{status}</option>
                                             ))}
