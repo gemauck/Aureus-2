@@ -107,6 +107,19 @@
     border-radius: 12px !important;
   }
 
+  body.job-card-public .job-card-public-wrapper form {
+    display: block !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper form > * {
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
   body.job-card-public .mobile-step-scroll {
     -webkit-overflow-scrolling: touch !important;
     scrollbar-width: none !important;

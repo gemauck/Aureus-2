@@ -4086,6 +4086,25 @@ const Clients = React.memo(() => {
         onOpenOpportunity
     }) => {
         const [searchTerm, setSearchTerm] = useState('');
+        const [showLoadingIndicator, setShowLoadingIndicator] = useState(false);
+
+        useEffect(() => {
+            let timeoutId = null;
+
+            if (isLoading) {
+                timeoutId = setTimeout(() => {
+                    setShowLoadingIndicator(true);
+                }, 250);
+            } else {
+                setShowLoadingIndicator(false);
+            }
+
+            return () => {
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                }
+            };
+        }, [isLoading]);
 
         const stageOrder = useMemo(() => {
             const order = {};
@@ -4438,12 +4457,19 @@ const Clients = React.memo(() => {
                                 </button>
                             )}
                         </div>
-                        {isLoading && (
-                            <div className={`flex items-center gap-2 text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                        <div
+                            className={`flex items-center gap-2 text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'} transition-opacity duration-200`}
+                            style={{
+                                visibility: showLoadingIndicator ? 'visible' : 'hidden',
+                                opacity: showLoadingIndicator ? 1 : 0
+                            }}
+                            aria-hidden={!showLoadingIndicator}
+                        >
+                            {showLoadingIndicator && (
                                 <i className="fas fa-circle-notch fa-spin"></i>
-                                Loading
-                            </div>
-                        )}
+                            )}
+                            <span>Loading</span>
+                        </div>
                     </div>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -4981,8 +5007,8 @@ const Clients = React.memo(() => {
                 </button>
             </div>
 
-            {/* Modern Search and Filters */}
-            {viewMode !== 'client-detail' && viewMode !== 'lead-detail' && (
+        {/* Modern Search and Filters */}
+        {viewMode !== 'client-detail' && viewMode !== 'lead-detail' && viewMode !== 'pipeline' && (
                 <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border p-6 shadow-sm`}>
                     <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${viewMode === 'leads' ? 'lg:grid-cols-3' : 'lg:grid-cols-4'}`}>
                         <div className="sm:col-span-2 lg:col-span-1">

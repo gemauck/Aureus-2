@@ -37,6 +37,7 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [touchDragState, setTouchDragState] = useState(null); // { item, type, startY, currentY, targetStage }
     const [justDragged, setJustDragged] = useState(false); // Track if we just completed a drag to prevent accidental clicks
+    const [draggedOverStage, setDraggedOverStage] = useState(null);
     const [dataLoaded, setDataLoaded] = useState(false); // Track when data is fully loaded from API
     const [fallbackDeal, setFallbackDeal] = useState(null); // { type: 'lead' | 'opportunity', id, data, client }
 
@@ -1033,11 +1034,25 @@ function doesOpportunityBelongToClient(opportunity, client) {
         setIsDragging(true);
     };
 
-    const handleDragOver = (e) => {
+    const handleDragOver = (e, stageName = null) => {
         e.preventDefault();
+        if (stageName) {
+            setDraggedOverStage(stageName);
+        }
         if (e?.dataTransfer) {
             e.dataTransfer.dropEffect = draggedItem ? 'move' : 'none';
         }
+    };
+
+    const handleDragEnter = (e, stageName) => {
+        e.preventDefault();
+        if (stageName) {
+            setDraggedOverStage(stageName);
+        }
+    };
+
+    const handleDragLeave = (stageName) => {
+        setDraggedOverStage((prev) => (prev === stageName ? null : prev));
     };
 
     const updateLeadStageOptimistically = (leadId, newStage) => {
@@ -1169,6 +1184,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
             setDraggedItem(null);
             setDraggedType(null);
             setIsDragging(false);
+            setDraggedOverStage(null);
             return;
         }
 
@@ -1236,13 +1252,13 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 if (refreshDelay > 0) {
                     setTimeout(() => {
                         if (typeof storage?.setClients === 'function') {
-                        storage.setClients([]);
+                            storage.setClients([]);
                         }
                         setRefreshKey((k) => k + 1);
                     }, refreshDelay);
                 }
-                    }
-                } catch (error) {
+            }
+        } catch (error) {
             console.error('❌ Pipeline: Failed to persist stage change:', error);
             if (currentDraggedType === 'lead') {
                 updateLeadStageOptimistically(currentDraggedItem.id, originalStage);
@@ -1255,9 +1271,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
             }
             alert('Failed to save stage change. Please try again.');
         } finally {
-        setDraggedItem(null);
-        setDraggedType(null);
-        setIsDragging(false);
+            setDraggedItem(null);
+            setDraggedType(null);
+            setIsDragging(false);
+            setDraggedOverStage(null);
             setTouchDragState(null);
             setJustDragged(true);
             setTimeout(() => setJustDragged(false), 300);
@@ -1268,6 +1285,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
         setDraggedItem(null);
         setDraggedType(null);
         setIsDragging(false);
+        setDraggedOverStage(null);
     };
 
     // Mobile touch drag handlers - use document-level listeners for better mobile support
@@ -1317,6 +1335,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
             dragState.currentY = moveTouch.clientY;
             dragState.currentX = moveTouch.clientX;
             dragState.targetStage = targetStage;
+            setDraggedOverStage(targetStage || null);
             
             setTouchDragState({ ...dragState });
             
@@ -1487,6 +1506,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
             setDraggedItem(null);
             setDraggedType(null);
             setIsDragging(false);
+            setDraggedOverStage(null);
             
             // Prevent click event from firing if we dragged
             if (deltaX > minDragDistance || deltaY > minDragDistance) {
@@ -1804,16 +1824,20 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         }
                     });
                 const stageValue = stageItems.reduce((sum, item) => sum + item.value, 0);
-                const isDraggedOver = draggedItem && draggedItem.stage !== stage.name;
+                const isStageHighlighted =
+                    draggedOverStage === stage.name ||
+                    (touchDragState && touchDragState.targetStage === stage.name);
                 
                 return (
                     <div 
                         key={stage.id} 
                         data-pipeline-stage={stage.name}
                         className={`flex-1 min-w-[240px] bg-gray-50 rounded-lg p-3 ${!isDragging ? 'transition-all' : ''} ${
-                            isDraggedOver || (touchDragState && touchDragState.targetStage === stage.name) ? 'ring-2 ring-blue-500 bg-blue-50' : ''
+                            isStageHighlighted ? 'ring-2 ring-blue-500 bg-blue-50' : ''
                         }`}
-                        onDragOver={handleDragOver}
+                        onDragEnter={(e) => handleDragEnter(e, stage.name)}
+                        onDragOver={(e) => handleDragOver(e, stage.name)}
+                        onDragLeave={() => handleDragLeave(stage.name)}
                         onDrop={(e) => handleDrop(e, stage.name)}
                     >
                         {/* Stage Header */}
