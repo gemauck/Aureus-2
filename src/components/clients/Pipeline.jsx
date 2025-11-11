@@ -114,7 +114,11 @@ const resolveEntityId = (entity) => {
         'recordId',
         'tempId',
         'localId',
-        'legacyId'
+        'legacyId',
+        'opportunityId',
+        'opportunity_id',
+        'dealId',
+        'deal_id'
     ];
 
     for (const key of candidateKeys) {
@@ -172,6 +176,179 @@ const normalizeEntityId = (entity, prefix = 'record') => {
     return { id: generateFallbackId(entity, prefix), generated: true };
 };
 
+const getComparableId = (value) => {
+    if (value === undefined || value === null) {
+        return null;
+    }
+    return String(value);
+};
+
+function normalizeStageToAida(rawStage) {
+    const fallbackStage = 'Awareness';
+    if (rawStage === undefined || rawStage === null) {
+        return fallbackStage;
+    }
+
+    const normalized = String(rawStage).trim();
+    if (!normalized) {
+        return fallbackStage;
+    }
+
+    const lower = normalized.toLowerCase();
+    if (lower === 'prospect' || lower === 'new') {
+        return fallbackStage;
+    }
+
+    const matchingStage = pipelineStages.find(
+        (stage) => stage.name.toLowerCase() === lower || stage.id === lower
+    );
+
+    if (matchingStage) {
+        return matchingStage.name;
+    }
+
+    return fallbackStage;
+}
+
+function ensureDateString(value) {
+    if (!value) {
+        return new Date().toISOString();
+    }
+
+    if (value instanceof Date && Number.isFinite(value.getTime())) {
+        return value.toISOString();
+    }
+
+    const parsed = Date.parse(value);
+    if (Number.isNaN(parsed)) {
+        return new Date().toISOString();
+    }
+
+    return new Date(parsed).toISOString();
+}
+
+function normalizeClientForState(client) {
+    if (!client || typeof client !== 'object') {
+        return null;
+    }
+
+    const baseClient = { ...client };
+    const { id, generated } = normalizeEntityId(baseClient, 'client');
+
+    return {
+        ...baseClient,
+        id,
+        ...(generated ? { tempId: id, legacyId: client.id ?? client.clientId ?? null } : {})
+    };
+}
+
+function normalizeLeadForState(lead) {
+    if (!lead || typeof lead !== 'object') {
+        return null;
+    }
+
+    const name =
+        (typeof lead.name === 'string' && lead.name.trim()) ||
+        lead.fullName ||
+        lead.company ||
+        lead.contactName ||
+        'Unnamed Lead';
+
+    const baseLead = {
+        ...lead,
+        name,
+        stage: normalizeStageToAida(lead.stage),
+        createdAt: ensureDateString(lead.createdAt || lead.createdDate || lead.firstContactDate),
+        createdDate: ensureDateString(lead.createdDate || lead.createdAt || lead.firstContactDate)
+    };
+
+    const { id, generated } = normalizeEntityId(baseLead, 'lead');
+
+    return {
+        ...baseLead,
+        id,
+        ...(generated ? { tempId: id, legacyId: lead.id ?? lead.leadId ?? null } : {})
+    };
+}
+
+function normalizeOpportunityForState(opportunity, clientIdFallback = null) {
+    if (!opportunity || typeof opportunity !== 'object') {
+        return null;
+    }
+
+    const opportunityName =
+        (typeof opportunity.title === 'string' && opportunity.title.trim()) ||
+        (typeof opportunity.name === 'string' && opportunity.name.trim()) ||
+        opportunity.dealName ||
+        opportunity.opportunityName ||
+        'Untitled Opportunity';
+
+    const baseOpportunity = {
+        ...opportunity,
+        title: opportunityName,
+        name: opportunityName,
+        stage: normalizeStageToAida(opportunity.stage),
+        value: Number(opportunity.value) || 0,
+        clientId:
+            opportunity.clientId ??
+            opportunity.client?.id ??
+            clientIdFallback ??
+            opportunity.accountId ??
+            null,
+        createdAt: ensureDateString(opportunity.createdAt || opportunity.createdDate),
+        createdDate: ensureDateString(opportunity.createdDate || opportunity.createdAt)
+    };
+
+    const { id, generated } = normalizeEntityId(baseOpportunity, 'opportunity');
+
+    return {
+        ...baseOpportunity,
+        id,
+        ...(generated
+            ? {
+                  tempId: id,
+                  legacyId:
+                      opportunity.id ??
+                      opportunity.opportunityId ??
+                      opportunity.externalId ??
+                      opportunity.recordId ??
+                      null
+              }
+            : {})
+    };
+}
+
+function doesOpportunityBelongToClient(opportunity, client) {
+    if (!opportunity || !client) {
+        return false;
+    }
+
+    const opportunityClientId =
+        getComparableId(opportunity.clientId) ||
+        getComparableId(opportunity.client?.id) ||
+        getComparableId(opportunity.client?.clientId) ||
+        getComparableId(opportunity.clientUuid) ||
+        getComparableId(opportunity.accountId);
+
+    if (!opportunityClientId) {
+        return false;
+    }
+
+    const clientIdentifiers = [
+        getComparableId(client.id),
+        getComparableId(client.clientId),
+        getComparableId(client.legacyId),
+        getComparableId(client.uuid),
+        getComparableId(client.tempId)
+    ].filter(Boolean);
+
+    if (clientIdentifiers.length === 0) {
+        return false;
+    }
+
+    return clientIdentifiers.includes(opportunityClientId);
+}
+
     // Load data from API and localStorage
     useEffect(() => {
         setDataLoaded(false); // Reset data loaded flag when refreshing
@@ -183,24 +360,41 @@ const normalizeEntityId = (entity, prefix = 'record') => {
         // Show cached clients and leads immediately while API loads
         // BUT: Don't show cached opportunities - they may have stale stage data
         // We'll wait for API to load opportunities with correct stages
-        const savedClients = storage.getClients() || [];
-        const savedLeads = storage.getLeads() || [];
-        
-        if (savedClients.length > 0) {
+        const savedClientsRaw = typeof storage?.getClients === 'function' ? storage.getClients() : [];
+        const normalizedSavedClients = (savedClientsRaw || [])
+            .map(normalizeClientForState)
+            .filter(Boolean)
+            .map((client) => ({
+                ...client,
+                opportunities: Array.isArray(client.opportunities)
+                    ? client.opportunities
+                          .map((opp) => normalizeOpportunityForState(opp, client.id))
+                          .filter(Boolean)
+                    : []
+            }));
+
+        const savedLeadsRaw = typeof storage?.getLeads === 'function' ? storage.getLeads() : [];
+        const normalizedSavedLeads = (savedLeadsRaw || [])
+            .map(normalizeLeadForState)
+            .filter(Boolean);
+
+        if (normalizedSavedClients.length > 0) {
             // Load clients but WITHOUT opportunities - opportunities will come from API with correct stages
-            const clientsWithoutOpportunities = savedClients.map(client => ({
+            const clientsWithoutOpportunities = normalizedSavedClients.map((client) => ({
                 ...client,
                 // Clear opportunities - they'll be loaded from API with correct stages
                 opportunities: []
             }));
-            
+
             setClients(clientsWithoutOpportunities);
-            console.log(`⚡ Pipeline: Loaded cached clients IMMEDIATELY: ${clientsWithoutOpportunities.length} clients (opportunities will load from API with correct stages)`);
+            console.log(
+                `⚡ Pipeline: Loaded cached clients IMMEDIATELY: ${clientsWithoutOpportunities.length} clients (opportunities will load from API with correct stages)`
+            );
         }
-        
-        if (savedLeads.length > 0) {
-            setLeads(savedLeads);
-            console.log('⚡ Pipeline: Loaded cached leads immediately:', savedLeads.length, 'leads');
+
+        if (normalizedSavedLeads.length > 0) {
+            setLeads(normalizedSavedLeads);
+            console.log('⚡ Pipeline: Loaded cached leads immediately:', normalizedSavedLeads.length, 'leads');
         }
     }, []);
 
@@ -348,180 +542,267 @@ const normalizeEntityId = (entity, prefix = 'record') => {
     }, [viewMode, clients, leads, dataLoaded]);
 
     const loadData = async () => {
-        // Don't set loading state immediately - show cached data first
-        // Keep cached opportunities visible while API loads
-        const cachedClients = storage.getClients() || [];
-        const cachedOpportunities = cachedClients
-            .flatMap(c => (c.opportunities || []).map(opp => ({ ...opp, clientId: c.id })))
-            .filter(opp => opp.clientId); // Only keep opportunities with valid clientId
-        
-        // Show cached clients immediately (but without opportunities - they may have stale stages)
-        // Opportunities will be loaded from API with correct stages
-        if (cachedClients.length > 0) {
-            const clientsWithoutOpps = cachedClients.map(client => ({
+        const cachedClientsRaw =
+            typeof storage?.getClients === 'function' ? storage.getClients() : [];
+        const normalizedCachedClients = (cachedClientsRaw || [])
+            .map(normalizeClientForState)
+            .filter(Boolean)
+            .map((client) => ({
                 ...client,
-                opportunities: [] // Don't show cached opportunities - wait for API with correct stages
+                opportunities: Array.isArray(client.opportunities)
+                    ? client.opportunities
+                          .map((opp) => normalizeOpportunityForState(opp, client.id))
+                          .filter(Boolean)
+                    : []
             }));
+
+        const cachedOpportunityMap = new Map();
+        normalizedCachedClients.forEach((client) => {
+            const clientIdKey =
+                getComparableId(client.id) ||
+                getComparableId(client.clientId) ||
+                getComparableId(client.legacyId);
+
+            if (!clientIdKey) {
+                return;
+            }
+
+            const normalizedOpps = (client.opportunities || []).map((opp) => ({
+                ...opp,
+                clientId: opp.clientId ?? client.id
+            }));
+
+            if (!cachedOpportunityMap.has(clientIdKey)) {
+                cachedOpportunityMap.set(clientIdKey, normalizedOpps);
+            } else {
+                cachedOpportunityMap.set(clientIdKey, [
+                    ...cachedOpportunityMap.get(clientIdKey),
+                    ...normalizedOpps
+                ]);
+            }
+        });
+
+        let cachedOpportunities = [];
+        cachedOpportunityMap.forEach((list) => {
+            if (Array.isArray(list) && list.length > 0) {
+                cachedOpportunities = cachedOpportunities.concat(list);
+            }
+        });
+
+        const cachedLeadsRaw =
+            typeof storage?.getLeads === 'function' ? storage.getLeads() : [];
+        const normalizedCachedLeads = (cachedLeadsRaw || [])
+            .map(normalizeLeadForState)
+            .filter(Boolean);
+
+        if (normalizedCachedClients.length > 0) {
+            const clientsWithoutOpps = normalizedCachedClients.map((client) => ({
+                ...client,
+                opportunities: []
+            }));
+
             setClients(clientsWithoutOpps);
-            console.log(`⚡ Pipeline: Showing ${clientsWithoutOpps.length} cached clients (opportunities loading from API with correct stages)`);
+            console.log(
+                `⚡ Pipeline: Showing ${clientsWithoutOpps.length} cached clients (opportunities loading from API with correct stages)`
+            );
         }
-        
+
+        if (normalizedCachedLeads.length > 0) {
+            setLeads(normalizedCachedLeads);
+            console.log('⚡ Pipeline: Loaded cached leads immediately:', normalizedCachedLeads.length, 'leads');
+        }
+
         try {
-            // Try to load from API if authenticated (but don't block on cached data)
-            const token = storage.getToken();
+            const token = typeof storage?.getToken === 'function' ? storage.getToken() : null;
+
             if (token && window.DatabaseAPI) {
-                // Only set loading if we have no cached data
-                if (cachedClients.length === 0) {
+                if (normalizedCachedClients.length === 0) {
                     setIsLoading(true);
                 } else {
                     console.log('⚡ Pipeline: Using cached data, refreshing from API in background...');
                 }
-                
+
                 console.log('🔄 Pipeline: Refreshing data from API...');
-                
-                // Load clients, leads, and opportunities in parallel for fastest load
-                const [clientsResponse, leadsResponse, opportunitiesResponse] = await Promise.allSettled([
-                    window.DatabaseAPI.getClients(),
-                    window.DatabaseAPI.getLeads(),
-                    window.DatabaseAPI?.getOpportunities?.() || window.api?.getOpportunities?.() || Promise.resolve({ data: { opportunities: [] } })
-                ]);
-                
-                // Process clients
+
+                const [clientsResponse, leadsResponse, opportunitiesResponse] =
+                    await Promise.allSettled([
+                        window.DatabaseAPI.getClients(),
+                        window.DatabaseAPI.getLeads(),
+                        window.DatabaseAPI?.getOpportunities?.() ||
+                            window.api?.getOpportunities?.() ||
+                            Promise.resolve({ data: { opportunities: [] } })
+                    ]);
+
                 let apiClients = [];
-                if (clientsResponse.status === 'fulfilled' && clientsResponse.value?.data?.clients) {
-                    apiClients = clientsResponse.value.data.clients;
+                if (clientsResponse.status === 'fulfilled') {
+                    const clientPayload =
+                        clientsResponse.value?.data?.clients ||
+                        clientsResponse.value?.clients ||
+                        [];
+                    apiClients = (clientPayload || [])
+                        .map(normalizeClientForState)
+                        .filter(Boolean);
                     console.log('✅ Pipeline: Loaded clients from API:', apiClients.length);
                 }
-                
-                // Process leads
+
                 let apiLeads = [];
-                if (leadsResponse.status === 'fulfilled' && leadsResponse.value?.data?.leads) {
-                    apiLeads = leadsResponse.value.data.leads;
+                if (leadsResponse.status === 'fulfilled') {
+                    const leadPayload =
+                        leadsResponse.value?.data?.leads ||
+                        leadsResponse.value?.leads ||
+                        [];
+                    apiLeads = (leadPayload || [])
+                        .map(normalizeLeadForState)
+                        .filter(Boolean);
                     console.log('✅ Pipeline: Loaded leads from API:', apiLeads.length);
                 }
-                
-                // Process opportunities (already loaded in parallel above)
+
                 let allOpportunities = [];
                 if (opportunitiesResponse.status === 'fulfilled' && opportunitiesResponse.value) {
-                    const oppData = opportunitiesResponse.value?.data?.opportunities || 
-                                  opportunitiesResponse.value?.opportunities || 
-                                  [];
-                    
-                    // Validate and normalize opportunities
-                    allOpportunities = oppData.map(opp => ({
-                        ...opp,
-                        title: opp.title || 'Untitled Opportunity',
-                        stage: opp.stage || 'Awareness',
-                        value: opp.value || 0,
-                        clientId: opp.clientId || opp.client?.id,
-                        createdAt: opp.createdAt || opp.createdDate || new Date().toISOString()
-                    }));
-                    
-                    console.log(`✅ Pipeline: Loaded ${allOpportunities.length} opportunities from parallel fetch`);
+                    const oppPayload =
+                        opportunitiesResponse.value?.data?.opportunities ||
+                        opportunitiesResponse.value?.opportunities ||
+                        [];
+
+                    allOpportunities = (oppPayload || [])
+                        .map((opp) => normalizeOpportunityForState(opp))
+                        .filter(Boolean);
+
+                    console.log(
+                        `✅ Pipeline: Loaded ${allOpportunities.length} opportunities from parallel fetch`
+                    );
                 } else {
-                    console.warn('⚠️ Pipeline: Failed to load opportunities from API, using cached opportunities');
-                    // Use cached opportunities if API fails
+                    console.warn(
+                        '⚠️ Pipeline: Failed to load opportunities from API, using cached opportunities'
+                    );
                     allOpportunities = cachedOpportunities;
                 }
-                
-                // Attach opportunities to their respective clients
-                // ALWAYS prioritize API opportunities - they have the latest stage data
-                const clientsWithOpportunities = apiClients.map(client => {
-                    // Get API opportunities for this client (these have the correct, up-to-date stages)
-                    let clientOpportunities = allOpportunities.filter(opp => opp.clientId === client.id);
-                    
-                    if (clientOpportunities.length > 0) {
-                        console.log(`   📊 ${client.name}: ${clientOpportunities.length} opportunities from API (using API stages)`);
-                    } else {
-                        // Only use cached opportunities if API explicitly returned empty (not if API call failed)
-                        // This ensures we don't show stale stage data
-                        if (opportunitiesResponse.status === 'fulfilled') {
-                            // API succeeded but returned no opportunities for this client - that's correct
-                            console.log(`   ✅ ${client.name}: No opportunities from API (client has none)`);
-                        } else {
-                            // API call failed - fallback to cached (but log warning)
-                            const cachedClient = cachedClients.find(c => c.id === client.id);
-                            if (cachedClient?.opportunities?.length > 0) {
-                                clientOpportunities = cachedClient.opportunities.map(opp => ({
-                                    ...opp,
-                                    clientId: client.id
-                                }));
-                                console.log(`   ⚠️ ${client.name}: Using ${clientOpportunities.length} cached opportunities (API failed - stages may be stale)`);
+
+                const clientsWithOpportunities = apiClients.map((client) => {
+                    const clientIdKey =
+                        getComparableId(client.id) ||
+                        getComparableId(client.clientId) ||
+                        getComparableId(client.legacyId);
+
+                    const clientOpportunities = allOpportunities
+                        .filter((opp) => {
+                            if (doesOpportunityBelongToClient(opp, client)) {
+                                return true;
                             }
-                        }
+
+                            if (!clientIdKey) {
+                                return false;
+                            }
+
+                            const oppClientId = getComparableId(opp.clientId);
+                            return oppClientId ? oppClientId === clientIdKey : false;
+                        })
+                        .map((opp) => normalizeOpportunityForState(opp, client.id))
+                        .filter(Boolean);
+
+                    if (clientOpportunities.length > 0) {
+                        console.log(
+                            `   📊 ${client.name}: ${clientOpportunities.length} opportunities from API (normalized stages)`
+                        );
+                    } else if (opportunitiesResponse.status === 'fulfilled') {
+                        console.log(`   ✅ ${client.name}: No opportunities from API (client has none)`);
                     }
-                    
+
                     return {
                         ...client,
                         opportunities: clientOpportunities
                     };
                 });
-                
-                // Only preserve cached opportunities if API call completely failed
-                // This prevents stale stage data from being shown
+
+                let finalClients = clientsWithOpportunities;
+
                 if (opportunitiesResponse.status !== 'fulfilled' && cachedOpportunities.length > 0) {
-                    console.log(`⚠️ Pipeline: API opportunities failed, using cached data (stages may be stale)`);
-                    cachedOpportunities.forEach(cachedOpp => {
-                        const client = clientsWithOpportunities.find(c => c.id === cachedOpp.clientId);
-                        if (client) {
-                            // Only add if not already present (avoid duplicates)
-                            const exists = client.opportunities.find(o => o.id === cachedOpp.id);
-                            if (!exists) {
-                                client.opportunities.push(cachedOpp);
-                            }
+                    console.log(
+                        `⚠️ Pipeline: API opportunities failed, using cached data (stages may be stale)`
+                    );
+
+                    finalClients = clientsWithOpportunities.map((client) => {
+                        const clientIdKey =
+                            getComparableId(client.id) ||
+                            getComparableId(client.clientId) ||
+                            getComparableId(client.legacyId);
+
+                        if (!clientIdKey || !cachedOpportunityMap.has(clientIdKey)) {
+                            return client;
                         }
+
+                        const cachedForClient = cachedOpportunityMap.get(clientIdKey) || [];
+                        if (cachedForClient.length === 0) {
+                            return client;
+                        }
+
+                        const existingIds = new Set(
+                            (client.opportunities || []).map((opp) => getComparableId(opp.id))
+                        );
+
+                        const mergedOpportunities = [
+                            ...(client.opportunities || []),
+                            ...cachedForClient.filter((opp) => {
+                                const oppId = getComparableId(opp.id);
+                                return oppId && !existingIds.has(oppId);
+                            })
+                        ];
+
+                        return {
+                            ...client,
+                            opportunities: mergedOpportunities
+                        };
                     });
                 } else if (opportunitiesResponse.status === 'fulfilled') {
-                    // API succeeded - clear any stale cached opportunities that aren't in API response
-                    console.log(`✅ Pipeline: API opportunities loaded successfully - using API stages only`);
+                    console.log('✅ Pipeline: API opportunities loaded successfully - using API stages only');
                 }
-                
-                const totalOpportunities = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                console.log(`✅ Pipeline: Total opportunities loaded: ${totalOpportunities} across ${clientsWithOpportunities.length} clients`);
-                
-                // Update state with fresh API data (seamlessly replaces cached data)
-                setClients(clientsWithOpportunities);
+
+                const totalOpportunities = finalClients.reduce(
+                    (sum, c) => sum + (Array.isArray(c.opportunities) ? c.opportunities.length : 0),
+                    0
+                );
+
+                console.log(
+                    `✅ Pipeline: Total opportunities loaded: ${totalOpportunities} across ${finalClients.length} clients`
+                );
+
+                setClients(finalClients);
                 setLeads(apiLeads);
-                
-                // Update localStorage for both clients and leads (cache for instant load next time)
-                storage.setClients(clientsWithOpportunities);
-                if (apiLeads.length > 0 || storage.getLeads()) {
-                    // Save leads to cache even if empty array (to avoid showing stale data)
+
+                if (typeof storage?.setClients === 'function') {
+                    storage.setClients(finalClients);
+                }
+
+                if (typeof storage?.setLeads === 'function') {
                     storage.setLeads(apiLeads);
                 }
-                
+
                 console.log('✅ Pipeline: API data refreshed and cached with opportunities');
                 setIsLoading(false);
-                setDataLoaded(true); // Mark data as fully loaded
+                setDataLoaded(true);
                 return;
             }
         } catch (error) {
             console.warn('⚠️ Pipeline: API loading failed, using cached data:', error);
         }
-        
-        // If API failed but we have cached data, keep using it (already set in useEffect)
-        // Only update if we have no cached data at all
-        const savedClients = storage.getClients() || [];
-        const savedLeads = storage.getLeads() || [];
-        
-        if (savedClients.length > 0 || savedLeads.length > 0) {
-            // We already set cached data in useEffect, just refresh from localStorage
-            const clientsWithOpportunities = savedClients.map(client => ({
-                ...client,
-                opportunities: client.opportunities || []
-            }));
-            setClients(clientsWithOpportunities);
-            setLeads(savedLeads);
-            console.log('✅ Pipeline: Using cached data - Clients:', clientsWithOpportunities.length, 'Leads:', savedLeads.length);
+
+        if (normalizedCachedClients.length > 0 || normalizedCachedLeads.length > 0) {
+            setClients(normalizedCachedClients);
+            setLeads(normalizedCachedLeads);
+            console.log(
+                '✅ Pipeline: Using cached data - Clients:',
+                normalizedCachedClients.length,
+                'Leads:',
+                normalizedCachedLeads.length
+            );
         } else {
-            // No cached data at all - empty state
             setClients([]);
             setLeads([]);
             console.log('📭 Pipeline: No cached data available');
         }
-        
+
         setIsLoading(false);
-        setDataLoaded(true); // Mark data as loaded even if from cache
+        setDataLoaded(true);
     };
 
     // Get all pipeline items (leads + client opportunities)
@@ -538,24 +819,10 @@ const normalizeEntityId = (entity, prefix = 'record') => {
                 });
             }
 
-            // Map lead stages to AIDA pipeline stages (same normalization as opportunities)
-            let mappedStage = lead.stage || 'Awareness';
-            const originalStage = mappedStage;
+            const originalStage = lead.stage;
+            const mappedStage = normalizeStageToAida(originalStage);
             
-            // Normalize stage value - trim whitespace and handle variations
-            if (mappedStage) {
-                mappedStage = mappedStage.trim();
-            }
-            
-            // Convert common stage values to AIDA stages
-            if (mappedStage === 'prospect' || mappedStage === 'new') {
-                mappedStage = 'Awareness';
-            } else if (!['Awareness', 'Interest', 'Desire', 'Action'].includes(mappedStage)) {
-                // If stage doesn't match AIDA stages, default to Awareness
-                mappedStage = 'Awareness';
-            }
-            
-            if (originalStage !== mappedStage) {
+            if (originalStage && originalStage !== mappedStage) {
                 console.log(`🔄 Pipeline: Mapped lead stage "${originalStage}" → "${mappedStage}" for ${lead.name || lead.id}`);
             }
             
@@ -597,18 +864,10 @@ const normalizeEntityId = (entity, prefix = 'record') => {
                         });
                     }
                     
-                    // Map opportunity stages to AIDA pipeline stages
-                    let mappedStage = opp.stage || 'Awareness';
-                    const originalStage = mappedStage;
-                    // Convert common stage values to AIDA stages
-                    if (mappedStage === 'prospect' || mappedStage === 'new') {
-                        mappedStage = 'Awareness';
-                    } else if (!['Awareness', 'Interest', 'Desire', 'Action'].includes(mappedStage)) {
-                        // If stage doesn't match AIDA stages, default to Awareness
-                        mappedStage = 'Awareness';
-                    }
+                    const originalStage = opp.stage;
+                    const mappedStage = normalizeStageToAida(originalStage);
                     
-                    if (originalStage !== mappedStage) {
+                    if (originalStage && originalStage !== mappedStage) {
                         console.log(`🔄 Pipeline: Mapped opportunity stage "${originalStage}" → "${mappedStage}" for ${opp.title || opp.id}`);
                     }
                     
@@ -1331,7 +1590,13 @@ const normalizeEntityId = (entity, prefix = 'record') => {
         }
 
         if (item.type === 'lead') {
-            const payload = { leadId: item.id, leadData: item };
+            const resolvedLeadId = item.legacyId || item.id;
+            if (!resolvedLeadId) {
+                console.warn('⚠️ Pipeline: Unable to open lead without identifier', item);
+                return;
+            }
+
+            const payload = { leadId: resolvedLeadId, leadData: { ...item, id: resolvedLeadId } };
             let handled = false;
 
             if (typeof onOpenLead === 'function') {
@@ -1347,7 +1612,7 @@ const normalizeEntityId = (entity, prefix = 'record') => {
             if (!handled) {
                 setFallbackDeal({
                     type: 'lead',
-                    id: item.id,
+                    id: resolvedLeadId,
                     data: item
                 });
             }
@@ -1356,11 +1621,17 @@ const normalizeEntityId = (entity, prefix = 'record') => {
                 detail: { ...payload, origin: handled ? 'prop' : 'event' }
             }));
         } else {
+            const resolvedOpportunityId = item.legacyId || item.id;
+            if (!resolvedOpportunityId) {
+                console.warn('⚠️ Pipeline: Unable to open opportunity without identifier', item);
+                return;
+            }
+
             const opportunityPayload = {
-                opportunityId: item.id,
+                opportunityId: resolvedOpportunityId,
                 clientId: item.clientId || item.client?.id,
                 clientName: item.clientName || item.client?.name || item.name,
-                opportunity: item
+                opportunity: { ...item, id: resolvedOpportunityId }
             };
             let handled = false;
 
@@ -1377,7 +1648,7 @@ const normalizeEntityId = (entity, prefix = 'record') => {
             if (!handled) {
                 setFallbackDeal({
                     type: 'opportunity',
-                    id: item.id,
+                    id: resolvedOpportunityId,
                     data: item,
                     client: item.client || (item.clientId || item.clientName || item.name
                         ? {
