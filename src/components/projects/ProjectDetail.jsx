@@ -182,11 +182,6 @@ function initializeProjectDetail() {
     
     const { useState, useEffect, useRef, useCallback, useMemo } = window.React;
     const storage = window.storage;
-    const [listModalComponent, setListModalComponent] = useState(
-        typeof window.ListModal === 'function' ? window.ListModal : null
-    );
-    const [isListModalLoading, setIsListModalLoading] = useState(false);
-    const listModalLoadPromiseRef = useRef(null);
     const ProjectModal = window.ProjectModal;
     const CustomFieldModal = window.CustomFieldModal;
     const TaskDetailModal = window.TaskDetailModal;
@@ -239,8 +234,13 @@ function initializeProjectDetail() {
 
     const serializeDocumentSections = (data) => JSON.stringify(parseDocumentSections(data));
 
-const ProjectDetail = ({ project, onBack, onDelete }) => {
-    console.log('ProjectDetail rendering with project:', project);
+    const ProjectDetail = ({ project, onBack, onDelete }) => {
+        console.log('ProjectDetail rendering with project:', project);
+        const [listModalComponent, setListModalComponent] = useState(
+            () => (typeof window.ListModal === 'function' ? window.ListModal : null)
+        );
+        const [isListModalLoading, setIsListModalLoading] = useState(false);
+        const listModalLoadPromiseRef = useRef(null);
     
     // Check if required components are loaded
     const requiredComponents = {

@@ -1051,7 +1051,16 @@ function doesOpportunityBelongToClient(opportunity, client) {
         }
     };
 
-    const handleDragLeave = (stageName) => {
+    const handleDragLeave = (e, stageName) => {
+        if (!stageName) {
+            return;
+        }
+        if (e?.currentTarget) {
+            const relatedTarget = e.relatedTarget;
+            if (relatedTarget && e.currentTarget.contains(relatedTarget)) {
+                return;
+            }
+        }
         setDraggedOverStage((prev) => (prev === stageName ? null : prev));
     };
 
@@ -1696,20 +1705,18 @@ function doesOpportunityBelongToClient(opportunity, client) {
         const age = getDealAge(item.createdDate);
 
         return (
-            <div 
+            <div
                 draggable
                 onDragStart={(e) => handleDragStart(e, item, item.type)}
                 onDragEnd={handleDragEnd}
                 onTouchStart={(e) => handleTouchStart(e, item, item.type)}
                 onClick={(e) => {
-                    // Prevent accidental clicks immediately after a drag operation
                     if (justDragged || touchDragState) {
                         e.preventDefault();
                         e.stopPropagation();
                         return;
                     }
 
-                    // If the browser reported a drag without an actual drop, reset drag state and proceed
                     if (isDragging) {
                         setIsDragging(false);
                         setDraggedItem(null);
@@ -1718,27 +1725,21 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
                     openDealDetail(item);
                 }}
-                className={`bg-white rounded-md border border-gray-200 shadow-sm cursor-move flex flex-col overflow-hidden touch-none ${!isDragging ? 'hover:shadow-md transition' : ''} ${
-                    draggedItem?.id === item.id ? 'opacity-50' : ''
-                }`}
+                className={`bg-white rounded-lg border border-gray-200 shadow-sm cursor-move flex flex-col gap-2 p-3 touch-none ${
+                    !isDragging ? 'hover:shadow-md transition' : ''
+                } ${draggedItem?.id === item.id ? 'opacity-50' : ''}`}
                 style={{
-                    height: '75px',
-                    minHeight: '75px',
-                    maxHeight: '75px',
-                    padding: '4px',
-                    boxSizing: 'border-box',
                     WebkitTouchCallout: 'none',
                     WebkitUserSelect: 'none',
                     userSelect: 'none'
                 }}
             >
-                {/* Header with Badge - Fixed height */}
-                <div className="flex items-center justify-between gap-0.5 mb-0.5" style={{ height: '16px', minHeight: '16px', maxHeight: '16px' }}>
-                    <div className="flex items-center gap-1 flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2 min-w-0">
                         <button
                             type="button"
                             aria-label={item.isStarred ? 'Unstar deal' : 'Star deal'}
-                            className="shrink-0 p-0.5 rounded hover:bg-yellow-50 transition"
+                            className="shrink-0 p-1 rounded hover:bg-yellow-50 transition"
                             onClick={(e) => handleToggleStar(e, item)}
                             onMouseDown={(e) => {
                                 e.stopPropagation();
@@ -1749,53 +1750,51 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                 e.preventDefault();
                             }}
                         >
-                            <i className={`${item.isStarred ? 'fas text-yellow-500' : 'far text-gray-300'} fa-star text-[10px]`}></i>
+                            <i className={`${item.isStarred ? 'fas text-yellow-500' : 'far text-gray-300'} fa-star text-xs`}></i>
                         </button>
-                        <div className="font-medium text-[10px] text-gray-900 line-clamp-1 leading-tight truncate">
-                            {item.name}
+                        <div className="min-w-0">
+                            <p className="font-semibold text-sm text-gray-900 truncate">
+                                {item.name}
+                            </p>
+                            <p className="text-xs text-gray-500 truncate">
+                                {item.clientName || item.company || item.industry || item.itemType || 'Untitled deal'}
+                            </p>
                         </div>
                     </div>
-                    <span className={`px-1 py-0.5 text-[8px] rounded font-medium shrink-0 leading-none whitespace-nowrap ${
-                        item.type === 'lead' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
-                    }`}>
+                    <span
+                        className={`px-2 py-0.5 text-xs font-semibold rounded-full ${
+                            item.type === 'lead' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
+                        }`}
+                    >
                         {item.type === 'lead' ? 'LEAD' : 'OPP'}
                     </span>
                 </div>
 
-                {/* Value - Fixed height */}
-                <div className="flex items-center mb-0.5" style={{ height: '14px', minHeight: '14px', maxHeight: '14px' }}>
-                    <span className="text-[10px] font-bold text-gray-900 leading-tight">
-                        R {item.value.toLocaleString('en-ZA')}
+                <div className="flex items-center justify-between text-sm text-gray-700">
+                    <span className="font-bold text-gray-900">{formatCurrency(item.value)}</span>
+                    <span
+                        className={`px-2 py-0.5 text-xs font-medium rounded-full ${getLifecycleBadgeColor(item.status || 'Potential')}`}
+                    >
+                        {item.status || 'Potential'}
                     </span>
                 </div>
 
-                {/* Age Badge and Industry - Fixed height */}
-                <div className="flex items-center justify-between mb-0.5" style={{ height: '12px', minHeight: '12px', maxHeight: '12px' }}>
-                    <span className={`px-0.5 py-0.5 rounded font-medium leading-none ${getAgeBadgeColor(age)}`}>
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span className={`px-2 py-0.5 rounded-full font-medium ${getAgeBadgeColor(age)}`}>
                         {age}d
                     </span>
-                    {item.status ? (
-                        <span className={`px-1 py-0.5 text-[8px] rounded font-medium leading-none ml-auto ${getLifecycleBadgeColor(item.status)}`}>
-                            {item.status}
+                    {item.expectedCloseDate ? (
+                        <span className="flex items-center gap-1 whitespace-nowrap">
+                            <i className="fas fa-calendar-alt text-gray-400 text-xs"></i>
+                            {new Date(item.expectedCloseDate).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}
                         </span>
                     ) : (
-                        <span className="text-gray-400 text-[7px] leading-none ml-auto"> </span>
+                        <span className="text-gray-400 italic">No close date</span>
                     )}
                 </div>
 
-                {/* Industry */}
-                <div className="text-gray-500 text-[7px] truncate leading-none mb-0.5">
-                    {item.industry || '\u00A0'}
-                </div>
-
-                {/* Expected Close Date or Spacer - Fixed height to fill remaining space */}
-                <div className="flex items-end" style={{ height: '23px', minHeight: '23px', maxHeight: '23px', marginTop: 'auto' }}>
-                    {item.expectedCloseDate ? (
-                        <div className="text-[8px] text-gray-600 leading-none">
-                            <i className="fas fa-calendar-alt mr-0.5 text-[7px]"></i>
-                            {new Date(item.expectedCloseDate).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}
-                        </div>
-                    ) : <div></div>}
+                <div className="text-xs text-gray-500 truncate">
+                    {item.industry || item.source || 'No industry specified'}
                 </div>
             </div>
         );
@@ -1837,7 +1836,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         }`}
                         onDragEnter={(e) => handleDragEnter(e, stage.name)}
                         onDragOver={(e) => handleDragOver(e, stage.name)}
-                        onDragLeave={() => handleDragLeave(stage.name)}
+                        onDragLeave={(e) => handleDragLeave(e, stage.name)}
                         onDrop={(e) => handleDrop(e, stage.name)}
                     >
                         {/* Stage Header */}
