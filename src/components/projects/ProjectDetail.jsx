@@ -184,9 +184,7 @@ function initializeProjectDetail() {
     const storage = window.storage;
     const ProjectModal = window.ProjectModal;
     const CustomFieldModal = window.CustomFieldModal;
-    const TaskDetailModal = window.TaskDetailModal;
     const KanbanView = window.KanbanView;
-    const CommentsPopup = window.CommentsPopup;
     const DocumentCollectionModal = window.DocumentCollectionModal;
 
     const parseDocumentSections = (data) => {
@@ -236,11 +234,34 @@ function initializeProjectDetail() {
 
     const ProjectDetail = ({ project, onBack, onDelete }) => {
         console.log('ProjectDetail rendering with project:', project);
+        const ReactHooks = window.React;
+        if (!ReactHooks || typeof ReactHooks.useState !== 'function') {
+            console.error('❌ ProjectDetail: React hooks unavailable at render time', ReactHooks);
+            if (window.React && typeof window.React.createElement === 'function') {
+                return window.React.createElement(
+                    'div',
+                    { className: 'p-4 text-sm text-red-600' },
+                    'Project detail is still loading...'
+                );
+            }
+            return null;
+        }
+        const { useState, useEffect, useRef, useCallback, useMemo } = ReactHooks;
         const [listModalComponent, setListModalComponent] = useState(
             () => (typeof window.ListModal === 'function' ? window.ListModal : null)
         );
+        const [taskDetailModalComponent, setTaskDetailModalComponent] = useState(
+            () => (typeof window.TaskDetailModal === 'function' ? window.TaskDetailModal : null)
+        );
         const [isListModalLoading, setIsListModalLoading] = useState(false);
+        const [isTaskDetailModalLoading, setIsTaskDetailModalLoading] = useState(false);
+        const [commentsPopupComponent, setCommentsPopupComponent] = useState(
+            () => (typeof window.CommentsPopup === 'function' ? window.CommentsPopup : null)
+        );
+        const [isCommentsPopupLoading, setIsCommentsPopupLoading] = useState(false);
         const listModalLoadPromiseRef = useRef(null);
+        const taskDetailModalLoadPromiseRef = useRef(null);
+        const commentsPopupLoadPromiseRef = useRef(null);
     
     // Check if required components are loaded
     const requiredComponents = {
@@ -339,6 +360,78 @@ function initializeProjectDetail() {
         };
     }, [listModalComponent]);
 
+    useEffect(() => {
+        if (taskDetailModalComponent) {
+            return;
+        }
+
+        if (typeof window.TaskDetailModal === 'function') {
+            setTaskDetailModalComponent(() => window.TaskDetailModal);
+            return;
+        }
+
+        const handleComponentLoaded = (event) => {
+            if (event?.detail?.component === 'TaskDetailModal' && typeof window.TaskDetailModal === 'function') {
+                setTaskDetailModalComponent(() => window.TaskDetailModal);
+            }
+        };
+
+        let attempts = 0;
+        const maxAttempts = 50;
+        const intervalId = setInterval(() => {
+            attempts++;
+            if (typeof window.TaskDetailModal === 'function') {
+                setTaskDetailModalComponent(() => window.TaskDetailModal);
+                clearInterval(intervalId);
+            } else if (attempts >= maxAttempts) {
+                clearInterval(intervalId);
+            }
+        }, 100);
+
+        window.addEventListener('componentLoaded', handleComponentLoaded);
+
+        return () => {
+            clearInterval(intervalId);
+            window.removeEventListener('componentLoaded', handleComponentLoaded);
+        };
+    }, [taskDetailModalComponent]);
+
+    useEffect(() => {
+        if (commentsPopupComponent) {
+            return;
+        }
+
+        if (typeof window.CommentsPopup === 'function') {
+            setCommentsPopupComponent(() => window.CommentsPopup);
+            return;
+        }
+
+        const handleComponentLoaded = (event) => {
+            if (event?.detail?.component === 'CommentsPopup' && typeof window.CommentsPopup === 'function') {
+                setCommentsPopupComponent(() => window.CommentsPopup);
+            }
+        };
+
+        let attempts = 0;
+        const maxAttempts = 50;
+        const intervalId = setInterval(() => {
+            attempts++;
+            if (typeof window.CommentsPopup === 'function') {
+                setCommentsPopupComponent(() => window.CommentsPopup);
+                clearInterval(intervalId);
+            } else if (attempts >= maxAttempts) {
+                clearInterval(intervalId);
+            }
+        }, 100);
+
+        window.addEventListener('componentLoaded', handleComponentLoaded);
+
+        return () => {
+            clearInterval(intervalId);
+            window.removeEventListener('componentLoaded', handleComponentLoaded);
+        };
+    }, [commentsPopupComponent]);
+
     const ensureListModalLoaded = useCallback(async () => {
         if (typeof window.ListModal === 'function') {
             if (!listModalComponent) {
@@ -388,6 +481,98 @@ function initializeProjectDetail() {
         listModalLoadPromiseRef.current = loadPromise;
         return loadPromise;
     }, [listModalComponent]);
+
+    const ensureTaskDetailModalLoaded = useCallback(async () => {
+        if (typeof window.TaskDetailModal === 'function') {
+            if (!taskDetailModalComponent) {
+                setTaskDetailModalComponent(() => window.TaskDetailModal);
+            }
+            return true;
+        }
+
+        if (taskDetailModalLoadPromiseRef.current) {
+            return taskDetailModalLoadPromiseRef.current;
+        }
+
+        setIsTaskDetailModalLoading(true);
+
+        const loadPromise = new Promise((resolve) => {
+            const script = document.createElement('script');
+            script.src = `/dist/src/components/projects/TaskDetailModal.js?v=task-detail-modal-fallback-${Date.now()}`;
+            script.async = true;
+            script.dataset.taskDetailModalLoader = 'true';
+
+            script.onload = () => {
+                setIsTaskDetailModalLoading(false);
+                taskDetailModalLoadPromiseRef.current = null;
+                if (typeof window.TaskDetailModal === 'function') {
+                    setTaskDetailModalComponent(() => window.TaskDetailModal);
+                    resolve(true);
+                } else {
+                    console.warn('⚠️ TaskDetailModal script loaded but component not registered');
+                    resolve(false);
+                }
+            };
+
+            script.onerror = (error) => {
+                console.error('❌ Failed to load TaskDetailModal:', error);
+                setIsTaskDetailModalLoading(false);
+                taskDetailModalLoadPromiseRef.current = null;
+                resolve(false);
+            };
+
+            document.body.appendChild(script);
+        });
+
+        taskDetailModalLoadPromiseRef.current = loadPromise;
+        return loadPromise;
+    }, [taskDetailModalComponent]);
+
+    const ensureCommentsPopupLoaded = useCallback(async () => {
+        if (typeof window.CommentsPopup === 'function') {
+            if (!commentsPopupComponent) {
+                setCommentsPopupComponent(() => window.CommentsPopup);
+            }
+            return true;
+        }
+
+        if (commentsPopupLoadPromiseRef.current) {
+            return commentsPopupLoadPromiseRef.current;
+        }
+
+        setIsCommentsPopupLoading(true);
+
+        const loadPromise = new Promise((resolve) => {
+            const script = document.createElement('script');
+            script.src = `/dist/src/components/projects/CommentsPopup.js?v=comments-popup-fallback-${Date.now()}`;
+            script.async = true;
+            script.dataset.commentsPopupLoader = 'true';
+
+            script.onload = () => {
+                setIsCommentsPopupLoading(false);
+                commentsPopupLoadPromiseRef.current = null;
+                if (typeof window.CommentsPopup === 'function') {
+                    setCommentsPopupComponent(() => window.CommentsPopup);
+                    resolve(true);
+                } else {
+                    console.warn('⚠️ CommentsPopup script loaded but component not registered');
+                    resolve(false);
+                }
+            };
+
+            script.onerror = (error) => {
+                console.error('❌ Failed to load CommentsPopup:', error);
+                setIsCommentsPopupLoading(false);
+                commentsPopupLoadPromiseRef.current = null;
+                resolve(false);
+            };
+
+            document.body.appendChild(script);
+        });
+
+        commentsPopupLoadPromiseRef.current = loadPromise;
+        return loadPromise;
+    }, [commentsPopupComponent]);
 
     // Initialize taskLists with project-specific data
     const [taskLists, setTaskLists] = useState(
@@ -1355,7 +1540,7 @@ function initializeProjectDetail() {
         return ordered;
     }, [statusOptions]);
 
-    const openTaskComments = useCallback((event, task, { parentTask = null, isSubtask = false } = {}) => {
+    const openTaskComments = useCallback(async (event, task, { parentTask = null, isSubtask = false } = {}) => {
         event.stopPropagation();
         const rect = event.currentTarget.getBoundingClientRect();
         const scrollX = window.scrollX ?? window.pageXOffset ?? 0;
@@ -1363,17 +1548,27 @@ function initializeProjectDetail() {
         const commentWidth = 320;
         const left = Math.min(rect.left + scrollX, (scrollX + window.innerWidth) - commentWidth - 16);
 
+        const position = {
+            top: rect.bottom + scrollY + 8,
+            left: Math.max(16, left)
+        };
+
+        const ready = await ensureCommentsPopupLoaded();
+        if (!ready) {
+            console.warn('⚠️ CommentsPopup component is not available yet.');
+            alert('Comments workspace is still loading. Please try again in a moment.');
+            setCommentsPopup(null);
+            return;
+        }
+
         setCommentsPopup({
             taskId: task.id,
             task,
             isSubtask,
             parentId: parentTask ? parentTask.id : null,
-            position: {
-                top: rect.bottom + scrollY + 8,
-                left: Math.max(16, left)
-            }
+            position
         });
-    }, [setCommentsPopup]);
+    }, [ensureCommentsPopupLoaded]);
 
     // List Management
     const handleAddList = useCallback(async () => {
@@ -1437,7 +1632,12 @@ function initializeProjectDetail() {
     };
 
     // Task Management - Unified for both creating and editing
-    const handleAddTask = (listId, statusName = null) => {
+    const handleAddTask = useCallback(async (listId, statusName = null) => {
+        const ready = await ensureTaskDetailModalLoaded();
+        if (!ready) {
+            alert('Task workspace is still loading. Please try again in a moment.');
+            return;
+        }
         const newTask = { listId };
         if (statusName) {
             newTask.status = statusName;
@@ -1447,21 +1647,31 @@ function initializeProjectDetail() {
         setViewingTaskParent(null);
         setCreatingTaskForList(listId);
         setShowTaskDetailModal(true);
-    };
+    }, [ensureTaskDetailModalLoaded]);
 
-    const handleAddSubtask = (parentTask) => {
+    const handleAddSubtask = useCallback(async (parentTask) => {
+        const ready = await ensureTaskDetailModalLoaded();
+        if (!ready) {
+            alert('Task workspace is still loading. Please try again in a moment.');
+            return;
+        }
         setViewingTask({ listId: parentTask.listId });
         setViewingTaskParent(parentTask);
         setCreatingTaskForList(null);
         setShowTaskDetailModal(true);
-    };
+    }, [ensureTaskDetailModalLoaded]);
 
-    const handleViewTaskDetail = (task, parentTask = null) => {
+    const handleViewTaskDetail = useCallback(async (task, parentTask = null) => {
+        const ready = await ensureTaskDetailModalLoaded();
+        if (!ready) {
+            alert('Task workspace is still loading. Please try again in a moment.');
+            return;
+        }
         setViewingTask(task);
         setViewingTaskParent(parentTask);
         setCreatingTaskForList(null);
         setShowTaskDetailModal(true);
-    };
+    }, [ensureTaskDetailModalLoaded]);
 
     const handleUpdateTaskFromDetail = async (updatedTaskData) => {
         const isNewTask = !updatedTaskData.id || (!tasks.find(t => t.id === updatedTaskData.id) && 
@@ -2133,6 +2343,9 @@ function initializeProjectDetail() {
         );
     };
 
+    const TaskDetailModalComponent = taskDetailModalComponent || (typeof window.TaskDetailModal === 'function' ? window.TaskDetailModal : null);
+    const CommentsPopupComponent = commentsPopupComponent || (typeof window.CommentsPopup === 'function' ? window.CommentsPopup : null);
+
     return (
         <div className="space-y-4">
             {/* Header */}
@@ -2510,8 +2723,8 @@ function initializeProjectDetail() {
             )}
 
             {/* Comments Popup */}
-            {commentsPopup && (
-                <CommentsPopup
+            {commentsPopup && CommentsPopupComponent && (
+                <CommentsPopupComponent
                     task={commentsPopup.task}
                     isSubtask={commentsPopup.isSubtask}
                     parentId={commentsPopup.parentId}
@@ -2519,6 +2732,30 @@ function initializeProjectDetail() {
                     onClose={() => setCommentsPopup(null)}
                     position={commentsPopup.position}
                 />
+            )}
+
+            {commentsPopup && !CommentsPopupComponent && (
+                <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-[120] p-4">
+                    <div className="bg-white rounded-lg p-4 w-full max-w-sm text-center shadow-lg space-y-2">
+                        <p className="text-sm text-gray-700 font-medium">
+                            {isCommentsPopupLoading
+                                ? 'Loading comments workspace...'
+                                : 'Preparing comments workspace. Please wait...'}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                            This screen opens once the CommentsPopup component finishes loading.
+                        </p>
+                        <div className="mt-4">
+                            <button
+                                type="button"
+                                onClick={() => setCommentsPopup(null)}
+                                className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
                 </>
             )}
@@ -2615,8 +2852,8 @@ function initializeProjectDetail() {
                 />
             )}
 
-            {showTaskDetailModal && (
-                <TaskDetailModal
+            {showTaskDetailModal && TaskDetailModalComponent && (
+                <TaskDetailModalComponent
                     task={viewingTask}
                     parentTask={viewingTaskParent}
                     customFieldDefinitions={customFieldDefinitions}
@@ -2635,6 +2872,36 @@ function initializeProjectDetail() {
                         setCreatingTaskWithStatus(null);
                     }}
                 />
+            )}
+
+            {showTaskDetailModal && !TaskDetailModalComponent && (
+                <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-[100] p-4">
+                    <div className="bg-white rounded-lg p-4 w-full max-w-sm text-center shadow-lg space-y-2">
+                        <p className="text-sm text-gray-700 font-medium">
+                            {isTaskDetailModalLoading
+                                ? 'Loading task workspace...'
+                                : 'Preparing task workspace. Please wait...'}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                            This screen opens once TaskDetailModal finishes loading.
+                        </p>
+                        <div className="mt-4">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowTaskDetailModal(false);
+                                    setViewingTask(null);
+                                    setViewingTaskParent(null);
+                                    setCreatingTaskForList(null);
+                                    setCreatingTaskWithStatus(null);
+                                }}
+                                className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {showDocumentModal && (

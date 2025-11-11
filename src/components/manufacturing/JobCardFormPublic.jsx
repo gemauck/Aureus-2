@@ -34,7 +34,7 @@ const STEP_META = {
 
 const StepBadge = ({ index, stepId, active, complete, onClick, className = '' }) => {
   const meta = STEP_META[stepId] || {};
-  const baseClasses = 'group flex items-center sm:flex-col sm:items-center justify-between sm:justify-center gap-3 sm:gap-2 rounded-xl px-3 py-3 sm:px-4 sm:py-4 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-600 min-w-[220px] sm:min-w-0 snap-start';
+  const baseClasses = 'group flex items-center sm:flex-col sm:items-center justify-between sm:justify-center gap-3 sm:gap-2 rounded-xl px-3 py-3 sm:px-4 sm:py-4 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-600 min-w-[160px] sm:min-w-0 snap-start';
   const stateClass = active
     ? 'bg-white/95 text-blue-700 shadow-lg shadow-blue-500/25'
     : complete

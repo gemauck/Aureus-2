@@ -27,7 +27,7 @@ const CRITICAL_COMPONENT_SCRIPTS = {
     ClientDetailModal: './dist/src/components/clients/ClientDetailModal.js?v=permanent-block-1762361500',
     LeadDetailModal: './dist/src/components/clients/LeadDetailModal.js?v=lead-fix-1736162400',
     OpportunityDetailModal: './dist/src/components/clients/OpportunityDetailModal.js',
-    Pipeline: './dist/src/components/clients/Pipeline.js?v=pipeline-list-view-20251110'
+    Pipeline: './dist/src/components/clients/Pipeline.js?v=pipeline-list-view-20251111-hotfix'
 };
 
 const useEnsureGlobalComponent = (globalName) => {

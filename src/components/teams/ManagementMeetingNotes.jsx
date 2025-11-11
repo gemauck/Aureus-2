@@ -50,6 +50,85 @@ const DEPARTMENTS = [
     { id: 'business-development', name: 'Business Development', icon: 'fa-rocket', color: 'pink' }
 ];
 
+const padTwo = (value) => String(value).padStart(2, '0');
+
+const isValidDate = (date) => date instanceof Date && !Number.isNaN(date.getTime());
+
+const parseDateInput = (value) => {
+    if (!value && value !== 0) return null;
+    if (value instanceof Date) {
+        return isValidDate(value) ? new Date(value.getTime()) : null;
+    }
+
+    const trimmed = String(value).trim();
+    if (!trimmed) return null;
+
+    const sanitized = trimmed.replace(/\//g, '-');
+    const isoMatch = sanitized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (isoMatch) {
+        const [, year, month, day] = isoMatch;
+        const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+        return isValidDate(parsed) ? parsed : null;
+    }
+
+    const parsed = new Date(trimmed);
+    return isValidDate(parsed) ? parsed : null;
+};
+
+const getMonthKeyFromDate = (date) => {
+    if (!isValidDate(date)) return null;
+    return `${date.getFullYear()}-${padTwo(date.getMonth() + 1)}`;
+};
+
+const normalizeMonthKeyInput = (value) => {
+    if (!value && value !== 0) return null;
+    if (value instanceof Date) {
+        return getMonthKeyFromDate(value);
+    }
+
+    const trimmed = String(value).trim();
+    if (!trimmed) return null;
+
+    const sanitized = trimmed.replace(/\//g, '-');
+    const hyphenMatch = sanitized.match(/^(\d{4})-(\d{1,2})$/);
+    if (hyphenMatch) {
+        const [, year, month] = hyphenMatch;
+        const monthNumber = Number(month);
+        if (monthNumber >= 1 && monthNumber <= 12) {
+            return `${year}-${padTwo(monthNumber)}`;
+        }
+    }
+
+    const compactMatch = sanitized.match(/^(\d{4})(\d{2})$/);
+    if (compactMatch) {
+        const [, year, month] = compactMatch;
+        const monthNumber = Number(month);
+        if (monthNumber >= 1 && monthNumber <= 12) {
+            return `${year}-${padTwo(monthNumber)}`;
+        }
+    }
+
+    const parsed = parseDateInput(trimmed);
+    return parsed ? getMonthKeyFromDate(parsed) : null;
+};
+
+const deriveWeekDetails = (value) => {
+    const baseDate = value ? parseDateInput(value) : null;
+    if (!baseDate) return null;
+
+    const weekStart = new Date(baseDate);
+    weekStart.setHours(0, 0, 0, 0);
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay()); // Sunday
+
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+
+    const weekKey = `${weekStart.getFullYear()}-${padTwo(weekStart.getMonth() + 1)}-${padTwo(weekStart.getDate())}`;
+    const monthKey = getMonthKeyFromDate(weekStart);
+
+    return { weekStart, weekEnd, weekKey, monthKey };
+};
+
 const ManagementMeetingNotes = () => {
     // Get theme state
     let themeResult = { isDark: false };
@@ -89,6 +168,8 @@ const ManagementMeetingNotes = () => {
     const [users, setUsers] = useState([]);
     const [isReady, setIsReady] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [newMonthKey, setNewMonthKey] = useState('');
+    const [newWeekStartInput, setNewWeekStartInput] = useState('');
     // Modal states
     const [showAllocationModal, setShowAllocationModal] = useState(false);
     const [showActionItemModal, setShowActionItemModal] = useState(false);
@@ -317,15 +398,25 @@ const ManagementMeetingNotes = () => {
     }, [allActionItems]);
 
     // Create monthly meeting notes
-    const handleCreateMonth = async () => {
-        let monthKey = selectedMonth;
+    const handleCreateMonth = async (customMonthValue = null) => {
+        const monthKey =
+            normalizeMonthKeyInput(
+                customMonthValue ?? newMonthKey ?? selectedMonth ?? new Date()
+            );
+
         if (!monthKey) {
-            const now = new Date();
-            monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            if (typeof alert === 'function') {
+                alert('Please provide a valid month in YYYY-MM format.');
+            }
+            return null;
+        }
+
+        const triggeredByInput = Boolean((customMonthValue ?? newMonthKey) && (customMonthValue ?? newMonthKey).toString().trim());
+
+        if (!selectedMonth || selectedMonth !== monthKey) {
             setSelectedMonth(monthKey);
         }
 
-        // If we already have notes for this month, surface them instead of calling the API
         const existingNotes =
             currentMonthlyNotes?.monthKey === monthKey
                 ? currentMonthlyNotes
@@ -333,17 +424,18 @@ const ManagementMeetingNotes = () => {
 
         if (existingNotes) {
             setCurrentMonthlyNotes(existingNotes);
-            setSelectedMonth(monthKey);
-            if (typeof alert === 'function') {
+            setSelectedWeek(null);
+            setNewMonthKey('');
+            if (triggeredByInput && typeof alert === 'function') {
                 alert('Monthly notes already exist for this month. Loaded the existing plan instead.');
             }
-            return;
+            return existingNotes;
         }
 
         try {
             setLoading(true);
             const response = await window.DatabaseAPI.createMonthlyNotes(monthKey, '');
-            const newNotes = response.data?.monthlyNotes;
+            const newNotes = response.data?.monthlyNotes || response.monthlyNotes;
             if (newNotes) {
                 setCurrentMonthlyNotes(newNotes);
                 setMonthlyNotesList(prev => {
@@ -361,6 +453,9 @@ const ManagementMeetingNotes = () => {
                     return list;
                 });
                 setSelectedMonth(newNotes.monthKey || monthKey);
+                setSelectedWeek(null);
+                setNewMonthKey('');
+                return newNotes;
             }
         } catch (error) {
             console.error('Error creating monthly notes:', error);
@@ -368,7 +463,7 @@ const ManagementMeetingNotes = () => {
             if (errorMessage.includes('already exist')) {
                 try {
                     const monthResponse = await window.DatabaseAPI.getMeetingNotes(monthKey);
-                    const duplicateNotes = monthResponse?.data?.monthlyNotes;
+                    const duplicateNotes = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes;
                     if (duplicateNotes) {
                         setCurrentMonthlyNotes(duplicateNotes);
                         setMonthlyNotesList(prev => {
@@ -386,10 +481,14 @@ const ManagementMeetingNotes = () => {
                             return list;
                         });
                         setSelectedMonth(duplicateNotes.monthKey || monthKey);
-                        if (typeof alert === 'function') {
+                        setSelectedWeek(null);
+                        setNewMonthKey('');
+                        if (triggeredByInput && typeof alert === 'function') {
                             alert('Monthly notes already exist for this month. Loaded the existing plan instead.');
                         }
-                    } else if (typeof alert === 'function') {
+                        return duplicateNotes;
+                    }
+                    if (typeof alert === 'function') {
                         alert('Monthly notes already exist for this month.');
                     }
                 } catch (loadError) {
@@ -404,6 +503,8 @@ const ManagementMeetingNotes = () => {
         } finally {
             setLoading(false);
         }
+
+        return null;
     };
 
     // Generate new monthly plan (copy from previous month)
@@ -579,61 +680,115 @@ const ManagementMeetingNotes = () => {
     };
 
     // Create weekly notes
-    const handleCreateWeek = async () => {
-        if (!currentMonthlyNotes) {
-            await handleCreateMonth();
-            return;
-        }
-        
-        const now = new Date();
-        const weekStart = new Date(now);
-        weekStart.setDate(now.getDate() - now.getDay()); // Sunday
-        weekStart.setHours(0, 0, 0, 0);
-        
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekStart.getDate() + 6);
-        
-        const weekKey = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
-        
-        const existingWeek = currentMonthlyNotes?.weeklyNotes?.find(week => week?.weekKey === weekKey);
-        if (existingWeek) {
-            setSelectedWeek(weekKey);
+    const handleCreateWeek = async (customWeekValue = null) => {
+        const weekInputValue = customWeekValue ?? newWeekStartInput;
+        let weekDetails = deriveWeekDetails(weekInputValue);
+
+        if (weekInputValue && !weekDetails) {
             if (typeof alert === 'function') {
+                alert('Please provide a valid week start date in YYYY-MM-DD format.');
+            }
+            return null;
+        }
+
+        if (!weekDetails) {
+            weekDetails = deriveWeekDetails(new Date());
+        }
+
+        if (!weekDetails) {
+            if (typeof alert === 'function') {
+                alert('Unable to determine the week to create.');
+            }
+            return null;
+        }
+
+        const triggeredByInput = Boolean(weekInputValue && typeof weekInputValue === 'string' && weekInputValue.trim());
+
+        let targetMonth =
+            currentMonthlyNotes?.monthKey === weekDetails.monthKey
+                ? currentMonthlyNotes
+                : monthlyNotesList.find(note => note?.monthKey === weekDetails.monthKey) || null;
+
+        if (!targetMonth) {
+            const createdMonth = await handleCreateMonth(weekDetails.monthKey);
+            if (!createdMonth) {
+                return null;
+            }
+            targetMonth = createdMonth;
+        }
+
+        if (!targetMonth?.weeklyNotes) {
+            try {
+                const monthResponse = await window.DatabaseAPI.getMeetingNotes(targetMonth.monthKey || weekDetails.monthKey);
+                const refreshedMonth = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes || null;
+                if (refreshedMonth) {
+                    targetMonth = refreshedMonth;
+                    setCurrentMonthlyNotes(refreshedMonth);
+                    setMonthlyNotesList(prev => {
+                        const list = Array.isArray(prev) ? [...prev] : [];
+                        const existingIndex = list.findIndex(note => {
+                            if (!note) return false;
+                            return (note.id && refreshedMonth.id && note.id === refreshedMonth.id) ||
+                                   (note.monthKey && refreshedMonth.monthKey && note.monthKey === refreshedMonth.monthKey);
+                        });
+                        if (existingIndex >= 0) {
+                            list[existingIndex] = refreshedMonth;
+                            return list;
+                        }
+                        list.push(refreshedMonth);
+                        return list;
+                    });
+                    setSelectedMonth(refreshedMonth.monthKey);
+                }
+            } catch (monthLoadError) {
+                console.error('Error refreshing monthly notes before creating week:', monthLoadError);
+            }
+        }
+
+        const existingWeek = targetMonth?.weeklyNotes?.find(week => week?.weekKey === weekDetails.weekKey);
+        if (existingWeek) {
+            setSelectedMonth(targetMonth.monthKey || weekDetails.monthKey);
+            setSelectedWeek(weekDetails.weekKey);
+            setNewWeekStartInput('');
+            if (triggeredByInput && typeof alert === 'function') {
                 alert('Weekly notes already exist for this week. Loaded the existing notes instead.');
             }
-            return;
+            return existingWeek;
         }
 
         try {
             setLoading(true);
-            const response = await window.DatabaseAPI.createWeeklyNotes(
-                currentMonthlyNotes.id,
-                weekKey,
-                weekStart.toISOString(),
-                weekEnd.toISOString()
-            );
-            const newWeek = response.data?.weeklyNotes;
-            if (newWeek) {
-                // Reload current month's notes
-                const monthResponse = await window.DatabaseAPI.getMeetingNotes(selectedMonth);
-                setCurrentMonthlyNotes(monthResponse.data?.monthlyNotes);
+            const monthId = targetMonth?.id;
+            if (!monthId) {
+                if (typeof alert === 'function') {
+                    alert('Unable to locate monthly notes for the selected week.');
+                }
+                return null;
             }
+
+            await window.DatabaseAPI.createWeeklyNotes(
+                monthId,
+                weekDetails.weekKey,
+                weekDetails.weekStart.toISOString(),
+                weekDetails.weekEnd.toISOString()
+            );
+
+            await reloadMonthlyNotes(weekDetails.monthKey);
+            setSelectedWeek(weekDetails.weekKey);
+            setNewWeekStartInput('');
+            return weekDetails.weekKey;
         } catch (error) {
             console.error('Error creating weekly notes:', error);
             const errorMessage = (error?.message || '').toLowerCase();
-            
+
             if (errorMessage.includes('already exist')) {
                 console.info('Weekly notes already exist for the selected week, reloading current month data.');
                 try {
-                    const monthResponse = await window.DatabaseAPI.getMeetingNotes(selectedMonth);
-                    const monthNotes = monthResponse?.data?.monthlyNotes;
-                    if (monthNotes) {
-                        setCurrentMonthlyNotes(monthNotes);
-                        if (typeof alert === 'function') {
-                            alert('Weekly notes already exist for this week. Loaded the existing notes instead.');
-                        }
-                    } else if (typeof alert === 'function') {
-                        alert('Weekly notes already exist for this week.');
+                    await reloadMonthlyNotes(weekDetails.monthKey);
+                    setSelectedWeek(weekDetails.weekKey);
+                    setNewWeekStartInput('');
+                    if (triggeredByInput && typeof alert === 'function') {
+                        alert('Weekly notes already exist for this week. Loaded the existing notes instead.');
                     }
                 } catch (loadError) {
                     console.error('Failed to reload monthly notes after duplicate weekly warning:', loadError);
@@ -641,14 +796,14 @@ const ManagementMeetingNotes = () => {
                         alert('Weekly notes already exist for this week, but we could not load them automatically. Please refresh and try again.');
                     }
                 }
-            } else {
-                if (typeof alert === 'function') {
-                    alert('Failed to create weekly notes');
-                }
+            } else if (typeof alert === 'function') {
+                alert('Failed to create weekly notes');
             }
         } finally {
             setLoading(false);
         }
+
+        return null;
     };
 
     // Update department notes
@@ -850,7 +1005,7 @@ const ManagementMeetingNotes = () => {
                     <h2 className={`text-lg font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Management Meeting Notes</h2>
                     <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Weekly department updates and action tracking</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2">
                     <select
                         value={selectedMonth || ''}
                         onChange={(e) => setSelectedMonth(e.target.value)}
@@ -861,13 +1016,29 @@ const ManagementMeetingNotes = () => {
                             <option key={month} value={month}>{formatMonth(month)}</option>
                         ))}
                     </select>
-                    <button
-                        onClick={handleCreateMonth}
-                        className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
-                    >
-                        <i className="fas fa-plus mr-1"></i>
-                        New Month
-                    </button>
+                    <div className="flex items-center gap-1">
+                        <input
+                            value={newMonthKey}
+                            onChange={(e) => setNewMonthKey(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleCreateMonth(e.currentTarget.value);
+                                }
+                            }}
+                            placeholder="YYYY-MM"
+                            aria-label="Create month key"
+                            title="Enter a month (YYYY-MM) to create meeting notes ahead of time"
+                            className={`w-28 px-3 py-1.5 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'}`}
+                        />
+                        <button
+                            onClick={() => handleCreateMonth()}
+                            className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
+                        >
+                            <i className="fas fa-plus mr-1"></i>
+                            Create Month
+                        </button>
+                    </div>
                     <button
                         onClick={handleGenerateMonth}
                         className="px-3 py-1.5 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
@@ -909,17 +1080,33 @@ const ManagementMeetingNotes = () => {
             {/* Month Selection Info */}
             {selectedMonth && currentMonthlyNotes && (
                 <div className={`rounded-lg border p-3 ${isDark ? 'bg-blue-900/30 border-blue-700' : 'bg-blue-50 border-blue-200'}`}>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
                         <h3 className={`text-sm font-semibold ${isDark ? 'text-blue-100' : 'text-blue-900'}`}>
                             {formatMonth(selectedMonth)}
                         </h3>
-                        <button
-                            onClick={handleCreateWeek}
-                            className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                        >
-                            <i className="fas fa-plus mr-1"></i>
-                            Add Week
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <input
+                                value={newWeekStartInput}
+                                onChange={(e) => setNewWeekStartInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        handleCreateWeek(e.currentTarget.value);
+                                    }
+                                }}
+                                placeholder="YYYY-MM-DD"
+                                aria-label="Week start date"
+                                title="Enter a week start date (YYYY-MM-DD) to create notes ahead of time"
+                                className={`w-32 px-3 py-1.5 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'}`}
+                            />
+                            <button
+                                onClick={() => handleCreateWeek()}
+                                className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                            >
+                                <i className="fas fa-plus mr-1"></i>
+                                Add Week
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

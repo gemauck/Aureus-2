@@ -1,7 +1,71 @@
 // Get dependencies from window
 const React = window.React;
 const { useState, useEffect, useCallback, useMemo } = React;
-const storage = window.storage;
+
+const getWindowStorage = () => {
+    if (typeof window === 'undefined') {
+        return null;
+    }
+    return window.storage || null;
+};
+
+const storage = {
+    getClients: () => {
+        const store = getWindowStorage();
+        if (store && typeof store.getClients === 'function') {
+            try {
+                return store.getClients();
+            } catch (error) {
+                console.warn('⚠️ Pipeline: Failed to read clients from storage', error);
+            }
+        }
+        return [];
+    },
+    setClients: (data) => {
+        const store = getWindowStorage();
+        if (store && typeof store.setClients === 'function') {
+            try {
+                return store.setClients(data);
+            } catch (error) {
+                console.warn('⚠️ Pipeline: Failed to persist clients to storage', error);
+            }
+        }
+        return null;
+    },
+    getLeads: () => {
+        const store = getWindowStorage();
+        if (store && typeof store.getLeads === 'function') {
+            try {
+                return store.getLeads();
+            } catch (error) {
+                console.warn('⚠️ Pipeline: Failed to read leads from storage', error);
+            }
+        }
+        return [];
+    },
+    setLeads: (data) => {
+        const store = getWindowStorage();
+        if (store && typeof store.setLeads === 'function') {
+            try {
+                return store.setLeads(data);
+            } catch (error) {
+                console.warn('⚠️ Pipeline: Failed to persist leads to storage', error);
+            }
+        }
+        return null;
+    },
+    getToken: () => {
+        const store = getWindowStorage();
+        if (store && typeof store.getToken === 'function') {
+            try {
+                return store.getToken();
+            } catch (error) {
+                console.warn('⚠️ Pipeline: Failed to read token from storage', error);
+            }
+        }
+        return null;
+    }
+};
 
 const COLUMN_FILTER_DEFAULTS = {
     name: '',
@@ -14,6 +78,20 @@ const COLUMN_FILTER_DEFAULTS = {
     minAge: '',
     maxAge: '',
     expectedClose: 'All'
+};
+
+const normalizeLifecycleStageValue = (value) => {
+    switch ((value || '').toLowerCase()) {
+        case 'active':
+            return 'Active';
+        case 'proposal':
+            return 'Proposal';
+        case 'disinterested':
+            return 'Disinterested';
+        case 'potential':
+        default:
+            return 'Potential';
+    }
 };
 
 /**
@@ -64,6 +142,8 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
             console.warn('⚠️ Pipeline: Unable to clear returnToPipeline flag at mount', error);
         }
     }, []);
+
+    const normalizeLifecycleStage = useCallback(normalizeLifecycleStageValue, []);
 
     const statusOptions = useMemo(() => {
         const statuses = new Set();
@@ -160,20 +240,6 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
             avgDuration: '7 days'
         }
     ];
-
-    const normalizeLifecycleStage = (value) => {
-        switch ((value || '').toLowerCase()) {
-            case 'active':
-                return 'Active';
-            case 'proposal':
-                return 'Proposal';
-            case 'disinterested':
-                return 'Disinterested';
-            case 'potential':
-            default:
-                return 'Potential';
-        }
-    };
 
 const resolveEntityId = (entity) => {
     if (!entity || typeof entity !== 'object') {
@@ -1122,14 +1188,20 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 case 'stage':
                     return (a, b) => directionMultiplier * (a.stage || '').localeCompare(b.stage || '');
                 case 'value':
-                    return directionMultiplier * (a.value - b.value);
+                    return (a, b) =>
+                        directionMultiplier *
+                        ((Number(a?.value ?? 0) || 0) - (Number(b?.value ?? 0) || 0));
                 case 'age':
-                    return directionMultiplier * (getDealAge(a.createdDate) - getDealAge(b.createdDate));
+                    return (a, b) =>
+                        directionMultiplier *
+                        (getDealAge(a?.createdDate) - getDealAge(b?.createdDate));
                 case 'expectedClose':
-                    return directionMultiplier * (
-                        (a.expectedCloseDate ? new Date(a.expectedCloseDate).getTime() : Number.POSITIVE_INFINITY) -
-                        (b.expectedCloseDate ? new Date(b.expectedCloseDate).getTime() : Number.POSITIVE_INFINITY)
-                    );
+                    return (a, b) =>
+                        directionMultiplier *
+                        (
+                            (a?.expectedCloseDate ? new Date(a.expectedCloseDate).getTime() : Number.POSITIVE_INFINITY) -
+                            (b?.expectedCloseDate ? new Date(b.expectedCloseDate).getTime() : Number.POSITIVE_INFINITY)
+                        );
                 default:
                     return () => 0;
             }

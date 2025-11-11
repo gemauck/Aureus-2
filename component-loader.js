@@ -221,7 +221,7 @@
             }
 
             if (path.includes('components/projects/ProjectDetail') || path.includes('components/projects/Projects.jsx')) {
-                applyDynamicCacheBust('projects-workspace-v20251111');
+                applyDynamicCacheBust('projects-workspace-v20251111c');
             }
 
             if (path.includes('components/manufacturing/JobCards.jsx')) {

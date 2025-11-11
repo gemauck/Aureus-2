@@ -568,6 +568,43 @@ const ProjectsDatabaseFirst = () => {
             </div>
         );
     }
+    if (selectedProject && !showModal) {
+        if (projectDetailComponent) {
+            const ProjectDetailView = projectDetailComponent;
+            return (
+                <div className="space-y-6">
+                    <ProjectDetailView
+                        project={selectedProject}
+                        onBack={() => setSelectedProject(null)}
+                        onDelete={(projectId) => handleDeleteProject(projectId)}
+                    />
+                </div>
+            );
+        }
+
+        return (
+            <div
+                className={`space-y-4 ${isDark ? 'bg-gray-800 border-gray-700 text-gray-200' : 'bg-white border-gray-200 text-gray-700'} border rounded-xl p-6`}
+            >
+                <div className="flex items-center justify-between gap-3">
+                    <button
+                        onClick={() => setSelectedProject(null)}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                        <i className="fas fa-arrow-left text-xs"></i>
+                        Back to projects
+                    </button>
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                        <i className="fas fa-spinner fa-spin text-primary-500"></i>
+                        Preparing project detail...
+                    </div>
+                </div>
+                <p className="text-sm opacity-80">
+                    Loading the detailed project view. This may take a moment the first time you open it.
+                </p>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -854,36 +891,7 @@ const ProjectsDatabaseFirst = () => {
                 />
             )}
 
-            {/* Project Detail Modal */}
-            {selectedProject && !showModal && (
-                projectDetailComponent ? (
-                    React.createElement(projectDetailComponent, {
-                        project: selectedProject,
-                        onSave: handleSaveProject,
-                        onClose: () => setSelectedProject(null),
-                        onDelete: handleDeleteProject,
-                        allClients: []
-                    })
-                ) : (
-                    <div
-                        className={`mt-4 rounded-xl border p-6 text-sm ${
-                            isDark ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-blue-50 border-blue-200 text-blue-700'
-                        }`}
-                    >
-                        <div className="flex items-center gap-3">
-                            <i className={`fas fa-spinner fa-spin ${isDark ? 'text-primary-300' : 'text-primary-600'}`}></i>
-                            <div>
-                                <p className="font-semibold">Preparing detailed project view...</p>
-                                <p className="text-xs opacity-80">
-                                    {isProjectDetailLoading
-                                        ? 'Loading ProjectDetail component. This happens the first time you open a project.'
-                                        : 'Waiting for the ProjectDetail component to become available. If this persists, please refresh the page.'}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                )
-            )}
+            {/* Project detail rendering handled by early return above */}
         </div>
     );
 };
