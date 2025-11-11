@@ -464,6 +464,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             alert('Geolocation is not supported by this browser.');
         }
     };
+
+    const handleSiteMapLocationSelect = (coords) => {
+        if (!coords || typeof coords.latitude !== 'number' || typeof coords.longitude !== 'number') {
+            return;
+        }
+
+        const lat = coords.latitude.toFixed(6);
+        const lng = coords.longitude.toFixed(6);
+
+        setNewSite(prev => ({
+            ...prev,
+            latitude: lat,
+            longitude: lng,
+            gpsCoordinates: `${lat}, ${lng}`
+        }));
+    };
     
     // Tag management state
     const [clientTags, setClientTags] = useState([]);
@@ -3038,7 +3054,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                             }
                                                         }}
                                                         className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                                                        title="Open in map to set location"
+                                                        title="Open in OpenStreetMap"
                                                     >
                                                         <i className="fas fa-map"></i>
                                                     </button>
@@ -3069,22 +3085,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         placeholder="Longitude (-180 to 180)"
                                                     />
                                                 </div>
-                                                <div className="mt-2 text-xs text-gray-500">
-                                                    💡 <strong>Tip:</strong> Use the map button to open OpenStreetMap and click on the exact location to get precise coordinates
-                                                </div>
                                             </div>
                                             
-                                            {/* Map Preview */}
-                                            {newSite.latitude && newSite.longitude && (
-                                                <div className="col-span-2">
-                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Location Preview</label>
-                                                    <window.MapComponent 
-                                                        latitude={newSite.latitude}
-                                                        longitude={newSite.longitude}
-                                                        siteName={newSite.name || 'Site Location'}
-                                                    />
+                                            {/* Map Selection */}
+                                            <div className="col-span-2">
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Location Map</label>
+                                                <window.MapComponent
+                                                    latitude={newSite.latitude}
+                                                    longitude={newSite.longitude}
+                                                    siteName={newSite.name || 'Site Location'}
+                                                    allowSelection={true}
+                                                    onLocationSelect={handleSiteMapLocationSelect}
+                                                />
+                                                <div className="mt-2 text-xs text-gray-500">
+                                                    💡 <strong>Tip:</strong> Click anywhere on the map to drop a pin and automatically fill in the GPS fields, or use the buttons above to pull your current location or open OpenStreetMap.
                                                 </div>
-                                            )}
+                                            </div>
                                             <div>
                                                 <label className="block text-xs font-medium text-gray-700 mb-1">Phone</label>
                                                 <input

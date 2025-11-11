@@ -26,7 +26,8 @@ const safeStorage = {
 const CRITICAL_COMPONENT_SCRIPTS = {
     ClientDetailModal: './dist/src/components/clients/ClientDetailModal.js?v=permanent-block-1762361500',
     LeadDetailModal: './dist/src/components/clients/LeadDetailModal.js?v=lead-fix-1736162400',
-    OpportunityDetailModal: './dist/src/components/clients/OpportunityDetailModal.js'
+    OpportunityDetailModal: './dist/src/components/clients/OpportunityDetailModal.js',
+    Pipeline: './dist/src/components/clients/Pipeline.js?v=pipeline-list-view-20251110'
 };
 
 const useEnsureGlobalComponent = (globalName) => {
@@ -303,6 +304,64 @@ function normalizeEntityId(entity, prefix = 'record') {
     return { id: generateFallbackId(entity, prefix), generated: true };
 }
 
+function buildOpportunitySignature(opp) {
+    if (!opp || typeof opp !== 'object') {
+        return 'null';
+    }
+
+    const { id } = normalizeEntityId(opp, 'opportunity');
+    const stage = normalizePipelineStage(opp.stage || '');
+    const value = Number(
+        opp.value ??
+        opp.amount ??
+        opp.estimatedValue ??
+        opp.expectedValue ??
+        0
+    ) || 0;
+    const updatedAt =
+        opp.updatedAt ||
+        opp.expectedCloseDate ||
+        opp.closeDate ||
+        opp.createdAt ||
+        '';
+
+    return `${id}|${stage}|${value}|${updatedAt}`;
+}
+
+function haveOpportunitiesChanged(existingOpps, newOpps) {
+    if (!Array.isArray(existingOpps) && !Array.isArray(newOpps)) {
+        return false;
+    }
+
+    if (!Array.isArray(existingOpps) || !Array.isArray(newOpps)) {
+        return true;
+    }
+
+    if (existingOpps.length !== newOpps.length) {
+        return true;
+    }
+
+    const existingSignatures = existingOpps.map(buildOpportunitySignature).sort();
+    const newSignatures = newOpps.map(buildOpportunitySignature).sort();
+
+    for (let i = 0; i < existingSignatures.length; i += 1) {
+        if (existingSignatures[i] !== newSignatures[i]) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function buildOpportunitiesSignature(opportunities) {
+    if (!Array.isArray(opportunities) || opportunities.length === 0) {
+        return 'empty';
+    }
+
+    const signatures = opportunities.map(buildOpportunitySignature).sort();
+    return signatures.join('||');
+}
+
 // Services Dropdown Component with checkboxes
 const ServicesDropdown = ({ services, selectedServices, onSelectionChange, isDark }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -411,8 +470,11 @@ const ServicesDropdown = ({ services, selectedServices, onSelectionChange, isDar
 const Clients = React.memo(() => {
     const [viewMode, setViewMode] = useState('clients');
     const [isPipelineLoading, setIsPipelineLoading] = useState(false);
+    const isLoadingOpportunitiesRef = useRef(false); // Prevent concurrent opportunity loads
     const [pipelineBoardView, setPipelineBoardView] = useState('list');
     const [pipelineTypeFilter, setPipelineTypeFilter] = useState('all');
+    const PipelineComponent = useEnsureGlobalComponent('Pipeline');
+    const isNewPipelineAvailable = Boolean(PipelineComponent);
     const [clients, setClients] = useState([]);
     const [leads, setLeads] = useState([]);
     const clientsRef = useRef(clients); // Ref to track current clients for LiveDataSync
@@ -423,6 +485,7 @@ const Clients = React.memo(() => {
     const isFormOpenRef = useRef(false); // Ref to track if any form is open
     const selectedClientRef = useRef(null); // Ref to track selected client
     const selectedLeadRef = useRef(null); // Ref to track selected lead
+    const pipelineOpportunitiesLoadedRef = useRef(new Map());
     // Keep refs in sync with state
     useEffect(() => {
         clientsRef.current = clients;
@@ -557,8 +620,13 @@ const Clients = React.memo(() => {
 
         return [...leadItems, ...opportunityItems];
     }, [clients, leads]);
+    // FIXED: Load opportunities only once when entering pipeline view, NOT on every client change
     useEffect(() => {
+        // Only run when entering pipeline view, not on every render
         if (viewMode !== 'pipeline') {
+            if (isPipelineLoading) {
+                setIsPipelineLoading(false);
+            }
             return;
         }
 
@@ -566,16 +634,25 @@ const Clients = React.memo(() => {
             return;
         }
 
-        const needsOpportunities = Array.isArray(clients) && clients.some((client) => {
-            const opps = Array.isArray(client.opportunities) ? client.opportunities : [];
-            return opps.length === 0;
-        });
+        if (!Array.isArray(clients) || clients.length === 0) {
+            return;
+        }
 
-        if (!needsOpportunities) {
+        // CRITICAL: Prevent concurrent calls
+        if (isLoadingOpportunitiesRef.current) {
+            console.log('⚡ Opportunity load already in progress, skipping');
+            return;
+        }
+
+        // Check if we already have opportunities loaded
+        const hasOpportunities = clients.some(c => c.opportunities && c.opportunities.length > 0);
+        if (hasOpportunities && pipelineOpportunitiesLoadedRef.current.size > 0) {
+            console.log('⚡ Opportunities already loaded, skipping');
             return;
         }
 
         let cancelled = false;
+        isLoadingOpportunitiesRef.current = true;
         setIsPipelineLoading(true);
 
         (async () => {
@@ -600,25 +677,35 @@ const Clients = React.memo(() => {
                     return;
                 }
 
-                setClients((previousClients) => {
-                    if (!Array.isArray(previousClients) || previousClients.length === 0) {
-                        return previousClients;
+                // Update clients with opportunities WITHOUT triggering re-render loop
+                const updatedClients = clients.map((client) => {
+                    if (!client?.id) {
+                        return client;
                     }
 
-                    const updatedClients = previousClients.map((client) => ({
+                    const apiOpps = opportunitiesByClient[client.id] || [];
+                    const signature = buildOpportunitiesSignature(apiOpps);
+                    pipelineOpportunitiesLoadedRef.current.set(client.id, { signature });
+
+                    return {
                         ...client,
-                        opportunities: opportunitiesByClient[client.id] || client.opportunities || []
-                    }));
-                    safeStorage.setClients(updatedClients);
-                    return updatedClients;
+                        opportunities: apiOpps
+                    };
                 });
+
+                setClients(updatedClients);
+                safeStorage.setClients(updatedClients);
             } catch (error) {
-                const isServerError = error?.message?.includes('500') || error?.message?.includes('Server error') || error?.message?.includes('Failed to list opportunities');
+                const isServerError =
+                    error?.message?.includes('500') ||
+                    error?.message?.includes('Server error') ||
+                    error?.message?.includes('Failed to list opportunities');
                 if (!isServerError) {
                     console.warn('⚠️ Pipeline: Failed to load opportunities in bulk:', error?.message || error);
                 }
             } finally {
                 if (!cancelled) {
+                    isLoadingOpportunitiesRef.current = false;
                     setIsPipelineLoading(false);
                 }
             }
@@ -626,8 +713,9 @@ const Clients = React.memo(() => {
 
         return () => {
             cancelled = true;
+            isLoadingOpportunitiesRef.current = false;
         };
-    }, [viewMode, clients]);
+    }, [viewMode]); // CRITICAL: Only depend on viewMode, NOT clients
     useEffect(() => {
         if (viewMode !== 'pipeline' && isPipelineLoading) {
             setIsPipelineLoading(false);
@@ -699,7 +787,7 @@ const Clients = React.memo(() => {
         };
     }, [viewMode]);
     
-    // Removed expensive state tracking logging
+    // Render tracking removed to prevent console spam
     
     // Function to load clients (can be called to refresh) - MOVED BEFORE useEffects
     const loadClients = async (forceRefresh = false) => {
@@ -718,6 +806,7 @@ const Clients = React.memo(() => {
                 if (window.ClientCache?.clearCache) {
                     window.ClientCache.clearCache();
                 }
+                pipelineOpportunitiesLoadedRef.current.clear();
             }
             
             // IMMEDIATELY show cached data without waiting for API (unless force refresh)
@@ -784,6 +873,7 @@ const Clients = React.memo(() => {
                     setClients([]);
                     safeStorage.setClients([]);
                 }
+                pipelineOpportunitiesLoadedRef.current.clear();
                 return;
             }
             
@@ -1439,6 +1529,43 @@ const Clients = React.memo(() => {
                     // CRITICAL: Use viewModeRef.current to get the current viewMode (not stale closure value)
                     const currentViewMode = viewModeRef.current;
                     if (currentViewMode === 'pipeline' && window.DatabaseAPI?.getOpportunities) {
+                        const clientsNeedingOpps = [];
+                        processed.forEach((client) => {
+                            if (!client?.id) {
+                                return;
+                            }
+                            const existingOpps = opportunitiesByClientId[client.id] || [];
+                            const signature = buildOpportunitiesSignature(existingOpps);
+                            const cacheEntry = pipelineOpportunitiesLoadedRef.current.get(client.id);
+
+                            if (!cacheEntry || cacheEntry.signature !== signature) {
+                                clientsNeedingOpps.push(client);
+                            }
+                        });
+
+                        if (clientsNeedingOpps.length === 0) {
+                            const clientsWithPreservedOpps = processed.map((client) => {
+                                const existingOpps = opportunitiesByClientId[client.id] || [];
+                                const signature = buildOpportunitiesSignature(existingOpps);
+                                if (client?.id) {
+                                    pipelineOpportunitiesLoadedRef.current.set(client.id, { signature });
+                                }
+                                return {
+                                    ...client,
+                                    opportunities: existingOpps
+                                };
+                            });
+                            const totalPreservedOpps = clientsWithPreservedOpps.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                            if (totalPreservedOpps > 0) {
+                                console.log(`📌 LiveDataSync: Preserved ${totalPreservedOpps} opportunities (pipeline, no fetch needed)`);
+                            }
+                            setClients(clientsWithPreservedOpps);
+                            safeStorage.setClients(clientsWithPreservedOpps);
+                            lastLiveDataClientsHash = dataHash;
+                            lastLiveDataSyncTime = now;
+                            return;
+                        }
+
                         try {
                             const oppResponse = await window.DatabaseAPI.getOpportunities();
                             const allOpportunities = oppResponse?.data?.opportunities || [];
@@ -1454,12 +1581,34 @@ const Clients = React.memo(() => {
                             });
                             // Merge: use new opportunities if available, otherwise preserve existing ones
                             // CRITICAL: Always preserve existing opportunities even if API returns empty/fewer
-                            const clientsWithOpportunities = processed.map(client => ({
-                                ...client,
-                                opportunities: newOpportunitiesByClient[client.id]?.length > 0 
-                                    ? newOpportunitiesByClient[client.id] 
-                                    : (opportunitiesByClientId[client.id] || [])
-                            }));
+                            let hasChanges = false;
+                            const clientsWithOpportunities = processed.map((client) => {
+                                if (!client?.id) {
+                                    return {
+                                        ...client,
+                                        opportunities: opportunitiesByClientId[client.id] || []
+                                    };
+                                }
+
+                                const apiOpps = newOpportunitiesByClient[client.id] || [];
+                                const existingOpps = opportunitiesByClientId[client.id] || [];
+                                const effectiveOpps = apiOpps.length > 0 ? apiOpps : existingOpps;
+                                const signature = buildOpportunitiesSignature(effectiveOpps);
+                                pipelineOpportunitiesLoadedRef.current.set(client.id, { signature });
+
+                                if (!haveOpportunitiesChanged(existingOpps, effectiveOpps)) {
+                                    return {
+                                        ...client,
+                                        opportunities: existingOpps
+                                    };
+                                }
+
+                                hasChanges = true;
+                                return {
+                                    ...client,
+                                    opportunities: effectiveOpps
+                                };
+                            });
                             const totalOpps = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
                             console.log(`✅ LiveDataSync: Loaded ${totalOpps} opportunities for ${clientsWithOpportunities.length} clients (bulk, viewMode: ${currentViewMode})`);
                             setClients(clientsWithOpportunities);
@@ -1477,6 +1626,11 @@ const Clients = React.memo(() => {
                             }));
                             setClients(clientsWithPreservedOpps);
                             safeStorage.setClients(clientsWithPreservedOpps);
+                            clientsNeedingOpps.forEach((client) => {
+                                if (client?.id) {
+                                    pipelineOpportunitiesLoadedRef.current.delete(client.id);
+                                }
+                            });
                         }
                     } else {
                         // Not in pipeline mode - preserve opportunities from current state
@@ -1871,79 +2025,17 @@ const Clients = React.memo(() => {
     //     };
     // }, []);
     
-    // Load opportunities when switching to pipeline view (bulk loading for performance)
-    useEffect(() => {
-        if (viewMode !== 'pipeline') return;
-        
-        const loadOpportunitiesForClients = async () => {
-            if (clients.length === 0 || !window.DatabaseAPI?.getOpportunities) return;
-            
-            // Check if any clients are missing opportunities
-            const clientsNeedingOpps = clients.filter(c => !c.opportunities || c.opportunities.length === 0);
-            if (clientsNeedingOpps.length === 0) return;
-            
-            try {
-                console.log('📡 Pipeline view: Loading all opportunities in bulk...');
-                const oppResponse = await window.DatabaseAPI.getOpportunities();
-                const allOpportunities = oppResponse?.data?.opportunities || [];
-                
-                // Group opportunities by clientId
-                const opportunitiesByClient = {};
-                allOpportunities.forEach(opp => {
-                    const clientId = opp.clientId || opp.client?.id;
-                    if (clientId) {
-                        if (!opportunitiesByClient[clientId]) {
-                            opportunitiesByClient[clientId] = [];
-                        }
-                        opportunitiesByClient[clientId].push(opp);
-                    }
-                });
-                
-                // Attach opportunities to clients - ALWAYS use API opportunities (they have correct stages)
-                // Don't merge with cached opportunities - they may have stale stage data
-                const clientsWithOpportunities = clients.map(client => {
-                    const apiOpps = opportunitiesByClient[client.id] || [];
-                    
-                    // Use API opportunities only - they have the correct, up-to-date stages
-                    // This prevents stale cached stage data from showing wrong columns
-                    return {
-                        ...client,
-                        opportunities: apiOpps
-                    };
-                });
-                
-                const totalOpps = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                console.log(`✅ Pipeline view: Attached ${totalOpps} opportunities from API (using API stages only - no stale cached data)`);
-                setClients(clientsWithOpportunities);
-                safeStorage.setClients(clientsWithOpportunities);
-                // Update ref immediately so LiveDataSync can see the opportunities
-                clientsRef.current = clientsWithOpportunities;
-            } catch (error) {
-                // Handle error gracefully - don't show error for 500s (server issue)
-                const isServerError = error?.message?.includes('500') || error?.message?.includes('Server error') || error?.message?.includes('Failed to list opportunities');
-                if (!isServerError) {
-                    console.warn('⚠️ Pipeline: Failed to load opportunities in bulk:', error.message || error);
-                } else {
-                    console.warn('⚠️ Pipeline: Opportunities API temporarily unavailable. Using existing data.');
-                }
-                // Keep existing opportunities on error - preserve what we have
-                const clientsWithPreservedOpps = clients.map(client => ({
-                    ...client,
-                    opportunities: client.opportunities || []
-                }));
-                setClients(clientsWithPreservedOpps);
-                safeStorage.setClients(clientsWithPreservedOpps);
-            }
-        };
-        
-        // Debounce to prevent constant re-runs
-        const timer = setTimeout(() => loadOpportunitiesForClients(), 300);
-        return () => clearTimeout(timer);
-    }, [viewMode]); // Only depend on viewMode, not clients.length
+    // REMOVED: Duplicate opportunity loading - now handled by the effect above
     
     // Save data
     useEffect(() => {
         safeStorage.setClients(clients);
+    }, [clients]);
+
+    useEffect(() => {
+        if (!Array.isArray(clients) || clients.length === 0) {
+            pipelineOpportunitiesLoadedRef.current.clear();
+        }
     }, [clients]);
     
     // Leads are now database-only, no localStorage sync needed
@@ -3113,8 +3205,8 @@ const Clients = React.memo(() => {
     const paginatedLeads = sortedLeads.slice(leadsStartIndex, leadsEndIndex);
     const totalLeadsPages = Math.ceil(sortedLeads.length / ITEMS_PER_PAGE);
 
-    // Debug pagination
-    console.log(`📄 PAGINATION DEBUG: ${sortedClients.length} clients, showing ${paginatedClients.length} on page ${clientsPage} of ${totalClientsPages}`);
+    // Debug pagination - commented to reduce spam
+    // console.log(`📄 PAGINATION DEBUG: ${sortedClients.length} clients, showing ${paginatedClients.length} on page ${clientsPage} of ${totalClientsPages}`);
 
     // Extract all unique services from clients and leads for filter dropdown
     const allServices = useMemo(() => {
@@ -4742,7 +4834,7 @@ const Clients = React.memo(() => {
         );
     };
 
-    console.log('🎨 Clients component rendering...', { clientsLength: clients.length, leadsLength: leads.length });
+    // Removed render logging to reduce console spam during infinite loops
 
     return (
         <div className="space-y-6">
@@ -5020,18 +5112,25 @@ const Clients = React.memo(() => {
             {viewMode === 'clients' && <ClientsListView />}
             {viewMode === 'leads' && <LeadsListView />}
             {viewMode === 'pipeline' && (
-                <PipelineView
-                    items={pipelineItems}
-                    isDark={isDark}
-                    boardView={pipelineBoardView}
-                    onBoardViewChange={setPipelineBoardView}
-                    typeFilter={pipelineTypeFilter}
-                    onTypeFilterChange={setPipelineTypeFilter}
-                    stages={PIPELINE_STAGES}
-                    isLoading={isPipelineLoading}
-                    onOpenLead={openLeadFromPipeline}
-                    onOpenOpportunity={openOpportunityFromPipeline}
-                />
+                isNewPipelineAvailable ? (
+                    <PipelineComponent
+                        onOpenLead={openLeadFromPipeline}
+                        onOpenOpportunity={openOpportunityFromPipeline}
+                    />
+                ) : (
+                    <PipelineView
+                        items={pipelineItems}
+                        isDark={isDark}
+                        boardView={pipelineBoardView}
+                        onBoardViewChange={setPipelineBoardView}
+                        typeFilter={pipelineTypeFilter}
+                        onTypeFilterChange={setPipelineTypeFilter}
+                        stages={PIPELINE_STAGES}
+                        isLoading={isPipelineLoading}
+                        onOpenLead={openLeadFromPipeline}
+                        onOpenOpportunity={openOpportunityFromPipeline}
+                    />
+                )
             )}
             {viewMode === 'news-feed' && (window.ClientNewsFeed ? <window.ClientNewsFeed /> : <div className="text-center py-12 text-gray-500">Loading News Feed...</div>)}
             {viewMode === 'client-detail' && <ClientDetailView />}

@@ -92,9 +92,6 @@
     <!-- Public Job Card Mobile Overrides -->
     <link rel="stylesheet" href="job-card-public-mobile.css?v=20251110-jobcard-mobile">
     
-    <!-- Mobile Table Converter - Converts tables to cards on mobile -->
-    <script src="./src/utils/mobileTableConverter.js"></script>
-    
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -473,51 +470,11 @@
         };
     </script>
     
-    <!-- Debug Utility -->
-    <script defer src="./src/utils/debug.js"></script>
+    <!-- Core bundle: critical modules -->
+    <script defer src="./dist/core-bundle.js?v=core-20251111"></script>
 
-    <!-- Map Component -->
-    <script defer src="./dist/src/components/maps/MapComponent.js"></script>
-    
-    
-    <!-- Theme Provider -->
-    <script defer src="./dist/src/components/theme/ThemeProvider.js"></script>
-    
-    <!-- 🚀 DATA CONTEXT - LOAD-ONCE ARCHITECTURE -->
-    <script defer src="./dist/src/components/common/DataContext.js"></script>
-    
-    <!-- Critical path: minimal runtime + auth + data context -->
-    <script defer src="./dist/src/utils/api.js?v=999"></script>
-    <script defer src="./dist/src/utils/localStorage.js"></script>
-    <script defer src="./dist/src/utils/dataService.js"></script>
-    
-    <!-- Critical utilities that must load BEFORE components -->
-    <script src="./dist/src/utils/authStorage.js"></script>
-    <!-- Permissions system - Load early so PERMISSION_CATEGORIES is available -->
-    <script src="./dist/src/utils/permissions.js?v=permissions-v8-docs-leave"></script>
     <script>
-        // Verify critical dependencies loaded
-        if (!window.storage) {
-            console.error('❌ CRITICAL: window.storage not available after authStorage.js loaded');
-        } else {
-            console.log('✅ window.storage available:', Object.keys(window.storage));
-        }
-        // Verify permissions loaded
-        if (!window.PERMISSION_CATEGORIES) {
-            console.warn('⚠️ PERMISSION_CATEGORIES not loaded - permissions modal may not work correctly');
-        } else {
-            console.log('✅ PERMISSION_CATEGORIES loaded:', Object.keys(window.PERMISSION_CATEGORIES).length, 'categories');
-        }
-    </script>
-    
-    <!-- Persistence Hook and Common Components -->
-    <script defer src="./dist/src/hooks/usePersistence.js"></script>
-    <script defer src="./dist/src/components/common/SyncStatus.js"></script>
-    <!-- Database API - use source version with latest auth fixes -->
-    <script defer src="./src/utils/databaseAPI.js?v=1007"></script>
-    <script>
-        // Runtime shim: ensure DatabaseAPI.getProject exists for components relying on it
-        (function() {
+        window.addEventListener('corebundle:ready', () => {
             try {
                 if (window.DatabaseAPI && typeof window.DatabaseAPI.getProject !== 'function') {
                     window.DatabaseAPI.getProject = async function(id) {
@@ -538,7 +495,6 @@
                             throw new Error(`HTTP ${res.status}: ${res.statusText}`);
                         }
                         const data = await res.json();
-                        // Normalize to { data: { project: ... } }
                         return data?.data ? data : { data: { project: data.project || data.data || data } };
                     };
                     console.log('🧩 Shimmed DatabaseAPI.getProject at runtime');
@@ -546,30 +502,21 @@
             } catch (err) {
                 console.warn('DatabaseAPI.getProject shim failed:', err);
             }
-        })();
+        });
     </script>
-    <script defer src="./dist/src/utils/cache-manager.js"></script>
-    <script defer src="./dist/src/utils/liveDataSync.js"></script>
-    <script defer src="./dist/src/utils/auditLogger.js"></script>
-    <!-- Component Dependency Checker - Validates component loading -->
-    <script defer src="./dist/src/utils/componentDependencyChecker.js"></script>
-    
-    
-    <script src="./dist/src/components/auth/AuthProvider.js"></script>
+
     <script>
-        // Verify AuthProvider loaded
-        if (!window.AuthProvider || !window.useAuth) {
-            console.error('❌ CRITICAL: AuthProvider not available after loading');
-        } else {
-            console.log('✅ AuthProvider loaded successfully');
-        }
+        window.addEventListener('corebundle:ready', () => {
+            if (!window.AuthProvider || !window.useAuth) {
+                console.error('❌ CRITICAL: AuthProvider not available after core bundle');
+            } else {
+                console.log('✅ AuthProvider loaded successfully');
+            }
+        });
     </script>
-    <script src="./dist/src/components/auth/LoginPage.js?v=1761971000"></script>
-    <script src="./dist/src/components/auth/AcceptInvitation.js"></script>
-    <script src="./dist/src/components/auth/PasswordChangeModal.js"></script>
-    <!-- Runtime shim: ensure api.login uses /auth/login in case older build calls /login -->
+
     <script>
-        (function() {
+        window.addEventListener('corebundle:ready', () => {
             function patchApiLogin() {
                 try {
                     if (!window.api || window.__apiLoginPatched) return;
@@ -577,10 +524,8 @@
                     if (typeof originalLogin !== 'function') return;
                     window.api.login = async function(email, password) {
                         try {
-                            // Try existing implementation first
                             return await originalLogin(email, password);
                         } catch (err) {
-                            // Fallback to /auth/login if server returns HTML/502/etc
                             try {
                                 const res = await fetch(window.location.origin + '/api/auth/login', {
                                     method: 'POST',
@@ -590,17 +535,12 @@
                                 });
                                 const text = await res.text();
                                 const data = text ? JSON.parse(text) : {};
-                                
-                                // Check if response is actually successful
                                 if (!res.ok) {
-                                    // If it's an error response, throw it
                                     const errorMessage = data?.error?.message || data?.message || `Request failed with status ${res.status}`;
                                     const error = new Error(errorMessage);
                                     error.status = res.status;
                                     throw error;
                                 }
-                                
-                                // Only proceed if we got a token
                                 if (data?.accessToken) {
                                     window.storage?.setToken?.(data.accessToken);
                                 } else if (data?.data?.accessToken) {
@@ -608,10 +548,9 @@
                                 } else {
                                     throw new Error('No access token received from login');
                                 }
-                                
                                 return data;
                             } catch (fallbackErr) {
-                                throw fallbackErr; // rethrow fallback error (or original if fallback failed)
+                                throw fallbackErr;
                             }
                         }
                     };
@@ -621,215 +560,138 @@
             }
             patchApiLogin();
             window.addEventListener('load', patchApiLogin, { once: true });
-        })();
+        });
     </script>
-    <!-- Load simple components FIRST for immediate loading -->
-    <script defer src="./dist/src/components/common/ErrorBoundary.js"></script>
-    <!-- Load Calendar early (after React loads) so it's available when DashboardSimple renders -->
-    <script defer src="./dist/src/components/dashboard/Calendar.js?v=calendar-early-load-1762245300"></script>
-    <script defer src="./dist/src/components/dashboard/DashboardSimple.js"></script>
-    <script defer src="./dist/src/components/dashboard/DashboardFallback.js"></script>
-    <!-- Heavier dashboard variants moved to lazy load -->
-    
-    <!-- Keep tiny fallbacks; move heavy modules to lazy -->
-    <script defer src="./dist/src/components/common/LoadingState.js"></script>
-    <script defer src="./dist/src/components/common/QuickFallback.js"></script>
-    
-    <!-- Notification System Components - Load early for global access -->
-    <!-- Mention Helper - use source version for latest fixes -->
-    <script defer src="./src/utils/mentionHelper.js?v=2025-11-03-v3"></script>
-    <script defer src="./dist/src/components/common/CommentInputWithMentions.js"></script>
-    <script defer src="./dist/src/components/common/NotificationCenter.js"></script>
-    <script defer src="./dist/src/components/common/GlobalSearch.js"></script>
-    
-    <!-- 🚀 ENABLE LOAD-ONCE ARCHITECTURE -->
-    <script>
-        // Toggle between old and new architecture
-        // Set to false to revert to old behavior instantly
-        window.USE_LOAD_ONCE_ARCHITECTURE = true;
-        
-    </script>
-    
-    <!-- Manufacturing - MOVED to lazy loading (heavy components) -->
-    <!-- Public Job Card Form - Accessible without login (keep this for public access) -->
-    <script defer src="./dist/src/components/manufacturing/JobCardFormPublic.js"></script>
-    
-    <!-- Clients - Load early since it's a main menu item and critical (not lazy) -->
-    <script defer src="./dist/src/components/clients/ClientDetailModal.js?v=permanent-block-1762361500"></script>
-    <script defer src="./dist/src/components/clients/LeadDetailModal.js?v=lead-fix-1736162400"></script>
-    <script defer src="./dist/src/components/clients/OpportunityDetailModal.js"></script>
-    <script defer src="./dist/src/components/clients/Clients.js"></script>
-    <script defer src="./dist/src/components/clients/Pipeline.js?v=pipeline-list-view-20251110"></script>
-    <script defer src="./dist/src/components/clients/PipelineIntegration.js?v=pipeline-integration-retry-20251110"></script>
-    
-    <!-- Heavier components moved to lazy loader for faster first paint -->
-    
-    <!-- Projects components moved to lazy -->
-    
-    <!-- Time tracking moved to lazy -->
-    
-    <!-- Teams moved to lazy -->
-    
-    <!-- Users moved to lazy -->
-    
-    <!-- Manufacturing moved to lazy -->
-    
-    <!-- Tools - MOVED to lazy loading (heavy components) -->
-    
-    <!-- Reports moved to lazy -->
-    
-    <script defer src="./dist/src/components/settings/NotificationSettings.js"></script>
-    
-    <!-- Leave Platform - Load before MainLayout -->
-    <script defer src="./dist/src/components/leave-platform/LeavePlatform.js"></script>
-    
-    <!-- Keep only what we need to render Auth + Dashboard + Layout initially -->
-    <script defer src="./dist/src/components/layout/MainLayout.js?v=main-layout-v20251110"></script>
-    
-    <!-- Projects - MOVED to lazy loading (heavy components) -->
-    
-    <!-- Optional integrations moved to lazy -->
-    
+
     <!-- Lazy Load Non-Critical Components -->
     <script defer src="./lazy-load-components.js?v=20251110-task-quick-add"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>
-        // Mobile detection utility - more restrictive to avoid desktop interference
-        window.isMobile = () => {
-            return window.innerWidth <= 640 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        };
-        
-        // Responsive component wrapper (needs React, but React is loaded by now)
-        window.ResponsiveComponent = ({ mobileComponent, desktopComponent, children }) => {
-            if (!window.React || !window.React.useState) return children;
-            const [isMobile, setIsMobile] = window.React.useState(window.isMobile());
+        window.addEventListener('corebundle:ready', () => {
+            // Mobile detection utility - more restrictive to avoid desktop interference
+            window.isMobile = () => {
+                return window.innerWidth <= 640 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            };
             
-            window.React.useEffect(() => {
-                const handleResize = () => {
-                    setIsMobile(window.isMobile());
-                };
+            // Responsive component wrapper (needs React, but React is loaded by now)
+            window.ResponsiveComponent = ({ mobileComponent, desktopComponent, children }) => {
+                if (!window.React || !window.React.useState) return children;
+                const [isMobile, setIsMobile] = window.React.useState(window.isMobile());
                 
-                window.addEventListener('resize', handleResize);
-                return () => window.removeEventListener('resize', handleResize);
-            }, []);
-            
-            if (isMobile && mobileComponent) {
-                return window.React.createElement(mobileComponent, children?.props || {});
-            } else if (desktopComponent) {
-                return window.React.createElement(desktopComponent, children?.props || {});
-            }
-            
-            return children;
-        };
-        
-        // Set up components for immediate loading
-        // Use original components with full functionality
-        // Temporarily prioritize DashboardSimple to avoid cached DashboardLive errors
-        window.Dashboard = window.DashboardSimple || window.DashboardFallback || window.DashboardDatabaseFirst || window.DashboardLive || window.DashboardFallback;
-        
-        // 🚀 FORCE USE ONLY Clients.jsx (has Pipeline opportunity fixes)
-        // Wait for Clients to load before checking (deferred check)
-        setTimeout(() => {
-            const clientsKeys = Object.keys(window).filter(k => k.startsWith('Clients'));
-            if (window.Clients) {
-                console.log('✅ Using window.Clients (Pipeline fixes enabled)');
-            } else {
-                // Only log debug info, not warning (components may still be loading)
-                const clientsScripts = Array.from(document.querySelectorAll('script[src*="Clients"]'));
-                const loading = clientsScripts.some(s => !s.complete);
-                if (loading) {
-                    // Still loading, check again later
-                    setTimeout(() => {
-                        if (window.Clients) {
-                            console.log('✅ window.Clients loaded after delay');
-                        }
-                    }, 2000);
+                window.React.useEffect(() => {
+                    const handleResize = () => {
+                        setIsMobile(window.isMobile());
+                    };
+                    
+                    window.addEventListener('resize', handleResize);
+                    return () => window.removeEventListener('resize', handleResize);
+                }, []);
+                
+                if (isMobile && mobileComponent) {
+                    return window.React.createElement(mobileComponent, children?.props || {});
+                } else if (desktopComponent) {
+                    return window.React.createElement(desktopComponent, children?.props || {});
                 }
-            }
-        }, 3000); // Check after lazy loading has started
-        // Use the main Projects component (has latest fixes) with fallback
-        window.Projects = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple;
-        // Use main Teams component, fallback to TeamsSimple only if main fails
-        window.Teams = window.Teams || window.TeamsSimple;
-        window.TimeTracking = window.TimeTracking || window.TimeTrackingDatabaseFirst;
-        window.Invoicing = window.InvoicingDatabaseFirst || window.QuickInvoicing;
-        // Ensure Manufacturing is available - check after lazy loading
-        setTimeout(() => {
-            if (!window.Manufacturing) {
-                // Check if scripts are still loading (not an error yet)
-                const scripts = Array.from(document.querySelectorAll('script[src*="Manufacturing"]'));
-                const stillLoading = scripts.some(s => !s.complete || s.readyState === 'loading');
-                if (stillLoading) {
-                    // Still loading, check again later
-                    setTimeout(() => {
-                        if (window.Manufacturing) {
-                            console.log('✅ Manufacturing component loaded after delay');
-                        } else {
-                            // Only warn if scripts finished AND component still not registered after 5 more seconds
-                            const scriptsAfterDelay = Array.from(document.querySelectorAll('script[src*="Manufacturing"]'));
-                            const stillLoadingAfterDelay = scriptsAfterDelay.some(s => !s.complete || s.readyState === 'loading');
-                            if (!stillLoadingAfterDelay && scriptsAfterDelay.length > 0) {
-                                console.warn('⚠️ Manufacturing not loaded after delay - check for errors');
+                
+                return children;
+            };
+            
+            // Set up components for immediate loading
+            // Use original components with full functionality
+            // Temporarily prioritize DashboardSimple to avoid cached DashboardLive errors
+            window.Dashboard = window.DashboardSimple || window.DashboardFallback || window.DashboardDatabaseFirst || window.DashboardLive || window.DashboardFallback;
+            
+            // 🚀 FORCE USE ONLY Clients.jsx (has Pipeline opportunity fixes)
+            // Wait for Clients to load before checking (deferred check)
+            setTimeout(() => {
+                if (window.Clients) {
+                    console.log('✅ Using window.Clients (Pipeline fixes enabled)');
+                } else {
+                    const clientsScripts = Array.from(document.querySelectorAll('script[src*="Clients"]'));
+                    const loading = clientsScripts.some(s => !s.complete);
+                    if (loading) {
+                        setTimeout(() => {
+                            if (window.Clients) {
+                                console.log('✅ window.Clients loaded after delay');
                             }
-                        }
-                    }, 2000);
-                } else if (scripts.length > 0) {
-                    // Scripts finished but component not registered - might be an error
-                    // But give it a bit more time since component registration can happen asynchronously
-                    setTimeout(() => {
-                        if (!window.Manufacturing) {
-                            console.warn('⚠️ Manufacturing scripts loaded but component not registered - check for JS errors');
-                        }
-                    }, 1000);
-                }
-                // If no scripts found, component might be lazy-loaded later, so don't warn
-            } else {
-                console.log('✅ Manufacturing component available:', typeof window.Manufacturing);
-            }
-        }, 3000); // Check after lazy loading has started
-        
-        // Only show error after a longer delay if still not loaded
-        setTimeout(() => {
-            if (!window.Manufacturing) {
-                const scripts = Array.from(document.querySelectorAll('script[src*="Manufacturing"]'));
-                const errorInScript = scripts.some(s => {
-                    try {
-                        return s.onerror !== null;
-                    } catch (e) {
-                        return false;
-                    }
-                });
-                if (errorInScript || scripts.length === 0) {
-                    console.error('❌ Manufacturing component failed to load after 10 seconds');
-                    console.error('❌ Check browser console for JavaScript errors in Manufacturing.jsx');
-                }
-            }
-        }, 10000);
-        // Late bind Clients if it registers after this script
-        (function() {
-            function bindClients() {
-                if (!window.Clients) {
-                    // Prioritize main Clients component over cached variants
-                    window.Clients = window.Clients || window.ClientsDatabaseFirst || window.ClientsSimple || window.ClientsCached;
-                    if (window.Clients) {
-                        console.log('✅ Bound window.Clients dynamically');
+                        }, 2000);
                     }
                 }
-            }
-            bindClients();
-            // Retry briefly to catch late component registration  
-            let tries = 0;
-            const t = setInterval(() => {
-                if (window.Clients || ++tries > 10) return clearInterval(t);
+            }, 3000); // Check after lazy loading has started
+            // Use the main Projects component (has latest fixes) with fallback
+            window.Projects = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple;
+            // Use main Teams component, fallback to TeamsSimple only if main fails
+            window.Teams = window.Teams || window.TeamsSimple;
+            window.TimeTracking = window.TimeTracking || window.TimeTrackingDatabaseFirst;
+            window.Invoicing = window.InvoicingDatabaseFirst || window.QuickInvoicing;
+            // Ensure Manufacturing is available - check after lazy loading
+            setTimeout(() => {
+                if (!window.Manufacturing) {
+                    const scripts = Array.from(document.querySelectorAll('script[src*="Manufacturing"]'));
+                    const stillLoading = scripts.some(s => !s.complete || s.readyState === 'loading');
+                    if (stillLoading) {
+                        setTimeout(() => {
+                            if (window.Manufacturing) {
+                                console.log('✅ Manufacturing component loaded after delay');
+                            } else {
+                                const scriptsAfterDelay = Array.from(document.querySelectorAll('script[src*="Manufacturing"]'));
+                                const stillLoadingAfterDelay = scriptsAfterDelay.some(s => !s.complete || s.readyState === 'loading');
+                                if (!stillLoadingAfterDelay && scriptsAfterDelay.length > 0) {
+                                    console.warn('⚠️ Manufacturing not loaded after delay - check for errors');
+                                }
+                            }
+                        }, 2000);
+                    } else if (scripts.length > 0) {
+                        setTimeout(() => {
+                            if (!window.Manufacturing) {
+                                console.warn('⚠️ Manufacturing scripts loaded but component not registered - check for JS errors');
+                            }
+                        }, 1000);
+                    }
+                } else {
+                    console.log('✅ Manufacturing component available:', typeof window.Manufacturing);
+                }
+            }, 3000); // Check after lazy loading has started
+            
+            // Only show error after a longer delay if still not loaded
+            setTimeout(() => {
+                if (!window.Manufacturing) {
+                    const scripts = Array.from(document.querySelectorAll('script[src*="Manufacturing"]'));
+                    const errorInScript = scripts.some(s => {
+                        try {
+                            return s.onerror !== null;
+                        } catch (e) {
+                            return false;
+                        }
+                    });
+                    if (errorInScript || scripts.length === 0) {
+                        console.error('❌ Manufacturing component failed to load after 10 seconds');
+                        console.error('❌ Check browser console for JavaScript errors in Manufacturing.jsx');
+                    }
+                }
+            }, 10000);
+            // Late bind Clients if it registers after this script
+            (function() {
+                function bindClients() {
+                    if (!window.Clients) {
+                        window.Clients = window.Clients || window.ClientsDatabaseFirst || window.ClientsSimple || window.ClientsCached;
+                        if (window.Clients) {
+                            console.log('✅ Bound window.Clients dynamically');
+                        }
+                    }
+                }
                 bindClients();
-            }, 300);
-        })();
+                let tries = 0;
+                const t = setInterval(() => {
+                    if (window.Clients || ++tries > 10) return clearInterval(t);
+                    bindClients();
+                }, 300);
+            })();
+        });
     </script>
     
-    <!-- App Entry Point - Load AFTER setup -->
-    <link rel="preload" href="./dist/src/App.js?v=app-loading-fix-1762245300" as="script">
-    <script defer src="./dist/src/App.js?v=app-loading-fix-1762245300"></script>
+    <!-- App Entry Point - App component is registered by core bundle -->
     <script>
         // Verify App loaded with retry mechanism (handles network delays)
         let appCheckAttempts = 0;

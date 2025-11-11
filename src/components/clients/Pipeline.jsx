@@ -2248,3 +2248,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
 };
 
 window.Pipeline = Pipeline;
+
+try {
+    window.dispatchEvent(new Event('pipeline:component-ready'));
+} catch (error) {
+    console.warn('⚠️ Pipeline: Unable to dispatch component-ready event', error);
+}

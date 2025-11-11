@@ -60,16 +60,18 @@
     };
 
     // Make available globally
-    window.debug = debug;
+    if (typeof window !== 'undefined') {
+        window.debug = debug;
+        // Export environment variables to window for backwards compatibility
+        window.isProduction = isProduction;
+        window.isDevelopment = isDevelopment;
+        window.isLocalhost = isLocalhost;
+    }
     
-    // Export environment variables to window for backwards compatibility
-    window.isProduction = isProduction;
-    window.isDevelopment = isDevelopment;
-    window.isLocalhost = isLocalhost;
+    // Export for CommonJS consumers (e.g., Node-based tests)
+    const globalModule = typeof globalThis !== 'undefined' ? globalThis.module : undefined;
+    if (globalModule && typeof globalModule.exports !== 'undefined') {
+        globalModule.exports = debug;
+    }
 })();
-
-// Export for module use
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = debug;
-}
 

@@ -247,13 +247,14 @@ const MentionHelper = {
     }
 };
 
-// Make available globally
-if (typeof window !== 'undefined') {
-    window.MentionHelper = MentionHelper;
-}
-
-// Export for Node.js environments
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = MentionHelper;
-}
+// Make available globally and for CommonJS consumers
+(function() {
+    if (typeof window !== 'undefined') {
+        window.MentionHelper = MentionHelper;
+    }
+    const globalModule = typeof globalThis !== 'undefined' ? globalThis.module : undefined;
+    if (globalModule && typeof globalModule.exports !== 'undefined') {
+        globalModule.exports = MentionHelper;
+    }
+})();
 

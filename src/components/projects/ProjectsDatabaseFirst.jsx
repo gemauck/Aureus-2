@@ -12,7 +12,68 @@ const ProjectsDatabaseFirst = () => {
     const [refreshKey, setRefreshKey] = useState(0);
     const [selectedProjects, setSelectedProjects] = useState([]);
     const [showBulkActions, setShowBulkActions] = useState(false);
+    const [showProgressTracker, setShowProgressTracker] = useState(false);
+    const [trackerAvailable, setTrackerAvailable] = useState(!!window.ProjectProgressTracker);
+    const [waitingForTracker, setWaitingForTracker] = useState(false);
     const { isDark } = window.useTheme();
+
+    // Monitor availability of the ProjectProgressTracker component
+    useEffect(() => {
+        const checkTracker = () => {
+            if (window.ProjectProgressTracker) {
+                setTrackerAvailable(true);
+                return true;
+            }
+            return false;
+        };
+
+        // Initial check
+        checkTracker();
+
+        const interval = setInterval(() => {
+            if (checkTracker()) {
+                clearInterval(interval);
+            }
+        }, 200);
+
+        const handleComponentLoaded = (event) => {
+            if (event?.detail?.component === 'ProjectProgressTracker') {
+                setTrackerAvailable(true);
+            }
+        };
+
+        window.addEventListener('componentLoaded', handleComponentLoaded);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('componentLoaded', handleComponentLoaded);
+        };
+    }, []);
+
+    // When user opens the tracker and it's not yet available, patiently wait for it
+    useEffect(() => {
+        if (!showProgressTracker || trackerAvailable || waitingForTracker) {
+            return;
+        }
+
+        setWaitingForTracker(true);
+        let attempts = 0;
+        const maxAttempts = 40; // 4 seconds
+
+        const interval = setInterval(() => {
+            attempts += 1;
+            if (window.ProjectProgressTracker) {
+                setTrackerAvailable(true);
+                setWaitingForTracker(false);
+                clearInterval(interval);
+            } else if (attempts >= maxAttempts) {
+                setWaitingForTracker(false);
+                clearInterval(interval);
+            }
+        }, 100);
+
+        return () => clearInterval(interval);
+    }, [showProgressTracker, trackerAvailable, waitingForTracker]);
 
     // Load projects from database
     const loadProjects = async () => {
@@ -311,6 +372,87 @@ const ProjectsDatabaseFirst = () => {
         return () => clearInterval(interval);
     }, []);
 
+    if (showProgressTracker) {
+        const TrackerComponent = window.ProjectProgressTracker;
+        const renderTracker = () => {
+            if (TrackerComponent && typeof TrackerComponent === 'function') {
+                return <TrackerComponent onBack={() => setShowProgressTracker(false)} />;
+            }
+
+            // React.memo components can be used directly as JSX as well
+            if (TrackerComponent && typeof TrackerComponent === 'object') {
+                return <TrackerComponent onBack={() => setShowProgressTracker(false)} />;
+            }
+
+            if (waitingForTracker) {
+                return (
+                    <div className={`${isDark ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-blue-50 border-blue-200 text-blue-700'} border rounded-xl p-6`}>
+                        <div className="flex items-center space-x-3">
+                            <i className="fas fa-spinner fa-spin"></i>
+                            <span>Loading Project Progress Tracker...</span>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-red-50 border-red-200 text-red-700'} border rounded-xl p-6`}>
+                    <div className="space-y-3">
+                        <div className="flex items-center space-x-3">
+                            <i className="fas fa-exclamation-triangle"></i>
+                            <div>
+                                <p className="font-semibold text-sm">Project Progress Tracker component is not available.</p>
+                                <p className="text-xs opacity-80">Please refresh the page or contact support if the issue persists.</p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={() => {
+                                setWaitingForTracker(true);
+                                setTrackerAvailable(!!window.ProjectProgressTracker);
+                                setTimeout(() => setWaitingForTracker(false), 2000);
+                            }}
+                            className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
+                        >
+                            <i className="fas fa-sync-alt mr-2"></i>
+                            Retry Loading
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        return (
+            <div className="space-y-6">
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl p-6`}>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                            <button
+                                onClick={() => setShowProgressTracker(false)}
+                                className={`px-3 py-2 rounded-lg font-medium transition-colors text-sm ${isDark ? 'bg-gray-700 text-gray-200 hover:bg-gray-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                            >
+                                <i className="fas fa-arrow-left mr-2"></i>
+                                Back to Projects
+                            </button>
+                            <div>
+                                <h2 className={`text-xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                    Project Progress Tracker
+                                </h2>
+                                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                    Track monthly progress across active projects
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center space-x-2 text-xs">
+                            <span className={`${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Projects loaded:</span>
+                            <span className={`${isDark ? 'text-gray-200' : 'text-gray-900'} font-semibold`}>{projects.length}</span>
+                        </div>
+                    </div>
+                </div>
+                {renderTracker()}
+            </div>
+        );
+    }
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center h-64">
@@ -367,6 +509,16 @@ const ProjectsDatabaseFirst = () => {
                         >
                             <i className="fas fa-check-square mr-1"></i>
                             Bulk Actions
+                        </button>
+                        <button
+                            onClick={() => setShowProgressTracker(true)}
+                            className="flex items-center space-x-2 px-4 py-2 border border-primary-600 text-primary-600 rounded-lg text-sm font-medium hover:bg-primary-50 transition-all duration-200"
+                        >
+                            <i className="fas fa-chart-line text-xs"></i>
+                            <span>Progress Tracker</span>
+                            {!trackerAvailable && (
+                                <span className="ml-1 text-[10px] uppercase tracking-wide text-primary-400">Beta</span>
+                            )}
                         </button>
                         <button 
                             onClick={() => {

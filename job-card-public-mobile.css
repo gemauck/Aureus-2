@@ -107,6 +107,16 @@
     border-radius: 12px !important;
   }
 
+  body.job-card-public .mobile-step-scroll {
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    scroll-snap-type: x mandatory !important;
+  }
+
+  body.job-card-public .mobile-step-scroll::-webkit-scrollbar {
+    display: none !important;
+  }
+
   body.job-card-public canvas {
     max-width: 100% !important;
   }

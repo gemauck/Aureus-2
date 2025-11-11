@@ -182,7 +182,11 @@ function initializeProjectDetail() {
     
     const { useState, useEffect, useRef, useCallback, useMemo } = window.React;
     const storage = window.storage;
-    const ListModal = window.ListModal;
+    const [listModalComponent, setListModalComponent] = useState(
+        typeof window.ListModal === 'function' ? window.ListModal : null
+    );
+    const [isListModalLoading, setIsListModalLoading] = useState(false);
+    const listModalLoadPromiseRef = useRef(null);
     const ProjectModal = window.ProjectModal;
     const CustomFieldModal = window.CustomFieldModal;
     const TaskDetailModal = window.TaskDetailModal;
@@ -298,6 +302,93 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
     // Comments popup state
     const [commentsPopup, setCommentsPopup] = useState(null); // {taskId, task, isSubtask, parentId, position}
     
+    // Listen for ListModal being registered after initial render
+    useEffect(() => {
+        if (listModalComponent) {
+            return;
+        }
+
+        if (typeof window.ListModal === 'function') {
+            setListModalComponent(() => window.ListModal);
+            return;
+        }
+
+        const handleComponentLoaded = (event) => {
+            if (event?.detail?.component === 'ListModal' && typeof window.ListModal === 'function') {
+                setListModalComponent(() => window.ListModal);
+            }
+        };
+
+        let attempts = 0;
+        const maxAttempts = 50;
+        const intervalId = setInterval(() => {
+            attempts++;
+            if (typeof window.ListModal === 'function') {
+                setListModalComponent(() => window.ListModal);
+                clearInterval(intervalId);
+            } else if (attempts >= maxAttempts) {
+                clearInterval(intervalId);
+            }
+        }, 100);
+
+        window.addEventListener('componentLoaded', handleComponentLoaded);
+
+        return () => {
+            clearInterval(intervalId);
+            window.removeEventListener('componentLoaded', handleComponentLoaded);
+        };
+    }, [listModalComponent]);
+
+    const ensureListModalLoaded = useCallback(async () => {
+        if (typeof window.ListModal === 'function') {
+            if (!listModalComponent) {
+                setListModalComponent(() => window.ListModal);
+            }
+            return true;
+        }
+
+        if (listModalLoadPromiseRef.current) {
+            return listModalLoadPromiseRef.current;
+        }
+
+        setIsListModalLoading(true);
+
+        const loadPromise = new Promise((resolve) => {
+            const script = document.createElement('script');
+            script.src = `/dist/src/components/projects/ListModal.js?v=list-modal-on-demand-${Date.now()}`;
+            script.async = true;
+            script.dataset.listModalLoader = 'true';
+
+            script.onload = () => {
+                setIsListModalLoading(false);
+                listModalLoadPromiseRef.current = null;
+                if (typeof window.ListModal === 'function') {
+                    setListModalComponent(() => window.ListModal);
+                    resolve(true);
+                } else {
+                    const message = 'The list editor loaded but did not register correctly. Please refresh the page and try again.';
+                    console.error(message);
+                    alert(message);
+                    resolve(false);
+                }
+            };
+
+            script.onerror = () => {
+                setIsListModalLoading(false);
+                listModalLoadPromiseRef.current = null;
+                const message = 'Failed to load the list editor. Please check your connection and refresh the page.';
+                console.error(message);
+                alert(message);
+                resolve(false);
+            };
+
+            document.body.appendChild(script);
+        });
+
+        listModalLoadPromiseRef.current = loadPromise;
+        return loadPromise;
+    }, [listModalComponent]);
+
     // Initialize taskLists with project-specific data
     const [taskLists, setTaskLists] = useState(
         project.taskLists || [
@@ -1285,15 +1376,23 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
     }, [setCommentsPopup]);
 
     // List Management
-    const handleAddList = () => {
+    const handleAddList = useCallback(async () => {
+        const ready = await ensureListModalLoaded();
+        if (!ready) {
+            return;
+        }
         setEditingList(null);
         setShowListModal(true);
-    };
+    }, [ensureListModalLoaded]);
 
-    const handleEditList = (list) => {
+    const handleEditList = useCallback(async (list) => {
+        const ready = await ensureListModalLoaded();
+        if (!ready) {
+            return;
+        }
         setEditingList(list);
         setShowListModal(true);
-    };
+    }, [ensureListModalLoaded]);
 
     const handleSaveList = (listData) => {
         if (editingList) {
@@ -2427,15 +2526,40 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
             {activeSection === 'documentCollection' && <DocumentCollectionProcessSection />}
 
             {/* Modals */}
-            {showListModal && (
-                <ListModal
-                    list={editingList}
-                    onSave={handleSaveList}
-                    onClose={() => {
+            {showListModal && listModalComponent && window.React && window.React.createElement(
+                listModalComponent,
+                {
+                    list: editingList,
+                    onSave: handleSaveList,
+                    onClose: () => {
                         setShowListModal(false);
                         setEditingList(null);
-                    }}
-                />
+                    }
+                }
+            )}
+
+            {showListModal && !listModalComponent && (
+                <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg p-4 w-full max-w-sm text-center">
+                        <p className="text-sm text-gray-700">
+                            {isListModalLoading
+                                ? 'Loading list editor...'
+                                : 'Preparing list editor. Please wait...'}
+                        </p>
+                        <div className="mt-4">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setShowListModal(false);
+                                    setEditingList(null);
+                                }}
+                                className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {showCustomFieldModal && (

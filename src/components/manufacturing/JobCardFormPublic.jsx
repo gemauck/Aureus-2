@@ -32,9 +32,9 @@ const STEP_META = {
   }
 };
 
-const StepBadge = ({ index, stepId, active, complete, onClick }) => {
+const StepBadge = ({ index, stepId, active, complete, onClick, className = '' }) => {
   const meta = STEP_META[stepId] || {};
-  const baseClasses = 'group flex items-center sm:flex-col sm:items-center justify-between sm:justify-center gap-3 sm:gap-2 rounded-xl px-3 py-3 sm:px-4 sm:py-4 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-600';
+  const baseClasses = 'group flex items-center sm:flex-col sm:items-center justify-between sm:justify-center gap-3 sm:gap-2 rounded-xl px-3 py-3 sm:px-4 sm:py-4 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-600 min-w-[220px] sm:min-w-0 snap-start';
   const stateClass = active
     ? 'bg-white/95 text-blue-700 shadow-lg shadow-blue-500/25'
     : complete
@@ -45,7 +45,7 @@ const StepBadge = ({ index, stepId, active, complete, onClick }) => {
     <button
       type="button"
       onClick={onClick}
-      className={`${baseClasses} ${stateClass}`}
+      className={`${baseClasses} ${stateClass} ${className}`}
       aria-current={active ? 'step' : undefined}
     >
       <div
@@ -1151,6 +1151,7 @@ const JobCardFormPublic = () => {
                 <input
                   type="number"
                   step="0.1"
+                  inputMode="decimal"
                   name="kmReadingBefore"
                   value={formData.kmReadingBefore}
                   onChange={handleChange}
@@ -1166,6 +1167,7 @@ const JobCardFormPublic = () => {
                 <input
                   type="number"
                   step="0.1"
+                  inputMode="decimal"
                   name="kmReadingAfter"
                   value={formData.kmReadingAfter}
                   onChange={handleChange}
@@ -1291,6 +1293,7 @@ const JobCardFormPublic = () => {
                   type="number"
                   step="0.01"
                   min="0"
+                  inputMode="decimal"
                   value={newStockItem.quantity || ''}
                   onChange={(e) => setNewStockItem({ ...newStockItem, quantity: parseFloat(e.target.value) || 0 })}
                   placeholder="Qty"
@@ -1361,6 +1364,7 @@ const JobCardFormPublic = () => {
                   type="number"
                   step="0.01"
                   min="0"
+                  inputMode="decimal"
                   value={newMaterialItem.cost || ''}
                   onChange={(e) => setNewMaterialItem({ ...newMaterialItem, cost: parseFloat(e.target.value) || 0 })}
                   placeholder="Cost (R) *"
@@ -1684,9 +1688,9 @@ const JobCardFormPublic = () => {
                   checklists, and customer sign-off included.
                 </p>
               </div>
-              <div className="flex flex-col items-stretch gap-2 sm:items-end">
+              <div className="flex flex-col sm:flex-row sm:items-end items-stretch gap-2 sm:gap-3 w-full sm:w-auto">
                 <span
-                  className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${
+                  className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold justify-center sm:justify-end ${
                     isOnline ? 'bg-white/15 text-white' : 'bg-amber-200/90 text-amber-900'
                   }`}
                 >
@@ -1697,11 +1701,11 @@ const JobCardFormPublic = () => {
                   ></span>
                   {isOnline ? 'Online • Auto-sync enabled' : 'Offline mode • Saving locally'}
                 </span>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                   <button
                     type="button"
                     onClick={handleShareLink}
-                    className="inline-flex items-center justify-center gap-2 rounded-full bg-white/15 px-4 py-2 text-xs font-semibold tracking-wide hover:bg-white/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white focus-visible:ring-offset-transparent transition"
+                    className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-full bg-white/15 px-4 py-2 text-xs font-semibold tracking-wide hover:bg-white/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white focus-visible:ring-offset-transparent transition"
                   >
                     <i className="fa-regular fa-share-from-square text-sm"></i>
                     {shareStatus}
@@ -1709,7 +1713,7 @@ const JobCardFormPublic = () => {
                   <button
                     type="button"
                     onClick={handleOpenClassicView}
-                    className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-semibold text-blue-700 shadow hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:ring-offset-2 focus-visible:ring-offset-blue-600 transition"
+                    className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-semibold text-blue-700 shadow hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:ring-offset-2 focus-visible:ring-offset-blue-600 transition"
                   >
                     <i className="fa-solid fa-desktop text-sm"></i>
                     Open classic view
@@ -1717,17 +1721,35 @@ const JobCardFormPublic = () => {
                 </div>
               </div>
             </div>
-            <div className="mt-6 grid grid-cols-1 sm:grid-cols-5 gap-2 sm:gap-3">
-              {STEP_IDS.map((stepId, idx) => (
-                <StepBadge
-                  key={stepId}
-                  index={idx}
-                  stepId={stepId}
-                  active={idx === currentStep}
-                  complete={idx < currentStep}
-                  onClick={() => goToStep(idx)}
-                />
-              ))}
+            <div className="mt-6">
+              <div
+                className="mobile-step-scroll flex sm:hidden gap-3 overflow-x-auto pb-2 -mx-5 px-5 snap-x snap-mandatory"
+                aria-label="Wizard steps"
+              >
+                {STEP_IDS.map((stepId, idx) => (
+                  <StepBadge
+                    key={`mobile-${stepId}`}
+                    index={idx}
+                    stepId={stepId}
+                    active={idx === currentStep}
+                    complete={idx < currentStep}
+                    onClick={() => goToStep(idx)}
+                    className="flex-shrink-0"
+                  />
+                ))}
+              </div>
+              <div className="hidden sm:grid sm:grid-cols-5 gap-2 sm:gap-3">
+                {STEP_IDS.map((stepId, idx) => (
+                  <StepBadge
+                    key={stepId}
+                    index={idx}
+                    stepId={stepId}
+                    active={idx === currentStep}
+                    complete={idx < currentStep}
+                    onClick={() => goToStep(idx)}
+                  />
+                ))}
+              </div>
             </div>
             <div className="mt-6 space-y-2">
               <div className="flex items-center justify-between text-xs font-medium text-white/70">
