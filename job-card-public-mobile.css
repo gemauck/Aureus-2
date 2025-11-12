@@ -4,18 +4,18 @@
    ========================================================================== */
 
 @media (max-width: 1024px) {
-  /* Zoom out - set viewport scale */
+  /* Zoom out using font-size instead of transform (transform breaks interactions) */
   html.job-card-public {
-    zoom: 0.85 !important; /* Zoom out 15% */
+    font-size: 85% !important; /* Zoom out 15% using font-size */
     -webkit-text-size-adjust: 85% !important;
   }
 
   body.job-card-public {
-    zoom: 0.85 !important;
-    transform: scale(0.85) !important;
-    transform-origin: top left !important;
-    width: 117.65% !important; /* Compensate for scale */
-    height: 117.65% !important;
+    font-size: 85% !important;
+    transform: none !important; /* Remove transform - it breaks interactions */
+    zoom: 1 !important; /* Reset zoom */
+    width: 100% !important;
+    height: 100% !important;
   }
 
   /* Basic mobile layout - no layering */
@@ -28,10 +28,24 @@
     transform: none !important; /* Remove transforms that create layers */
   }
 
-  /* Remove all z-index layering */
+  /* Remove all z-index layering - but allow buttons and inputs to work */
   body.job-card-public .job-card-public-wrapper * {
     z-index: auto !important;
-    position: relative !important; /* Default positioning */
+  }
+
+  /* Ensure interactive elements work */
+  body.job-card-public .job-card-public-wrapper button,
+  body.job-card-public .job-card-public-wrapper input,
+  body.job-card-public .job-card-public-wrapper select,
+  body.job-card-public .job-card-public-wrapper textarea {
+    position: relative !important;
+    z-index: auto !important;
+    pointer-events: auto !important;
+    transform: none !important;
+    width: auto !important;
+    height: auto !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
   }
 
   /* Header - no layering */
@@ -58,17 +72,24 @@
     transform: none !important;
   }
 
-  /* Form inputs - reasonable size */
+  /* Form inputs - reasonable size and functional */
   body.job-card-public .job-card-public-wrapper input,
   body.job-card-public .job-card-public-wrapper select,
   body.job-card-public .job-card-public-wrapper textarea {
-    font-size: 16px !important;
+    font-size: 16px !important; /* Prevents iOS zoom */
     min-height: 42px !important;
+    height: 42px !important;
     padding: 0.625rem 0.875rem !important;
     width: 100% !important;
+    max-width: 100% !important;
     box-sizing: border-box !important;
     position: relative !important;
     z-index: auto !important;
+    pointer-events: auto !important;
+    transform: none !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
 
   /* Proper spacing */
@@ -84,16 +105,20 @@
     margin-top: 0.5rem !important;
   }
 
-  /* Remove all fixed/absolute positioning that creates layers */
-  body.job-card-public .job-card-public-wrapper .fixed,
-  body.job-card-public .job-card-public-wrapper [class*="fixed"] {
+  /* Ensure buttons are functional */
+  body.job-card-public .job-card-public-wrapper button {
     position: relative !important;
-  }
-
-  /* Remove all transforms that create stacking contexts */
-  body.job-card-public .job-card-public-wrapper [style*="transform"],
-  body.job-card-public .job-card-public-wrapper [class*="transform"] {
+    z-index: auto !important;
+    pointer-events: auto !important;
     transform: none !important;
+    min-width: 44px !important; /* Touch target */
+    min-height: 44px !important;
+    width: auto !important;
+    height: auto !important;
+    display: inline-flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    cursor: pointer !important;
   }
 
   /* Cards and sections - no layering */
