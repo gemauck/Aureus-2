@@ -1,21 +1,61 @@
 /* ==========================================================================
-   Job Card Public - Mobile Optimized (FRESH START)
-   Simple, clean mobile styles
+   Job Card Public - Mobile Optimized (ZOOM OUT, NO LAYERING)
+   Simple, clean mobile styles with proper zoom and no overlapping
    ========================================================================== */
 
 @media (max-width: 1024px) {
-  /* Basic mobile layout */
+  /* Zoom out - set viewport scale */
+  html.job-card-public {
+    zoom: 0.85 !important; /* Zoom out 15% */
+    -webkit-text-size-adjust: 85% !important;
+  }
+
+  body.job-card-public {
+    zoom: 0.85 !important;
+    transform: scale(0.85) !important;
+    transform-origin: top left !important;
+    width: 117.65% !important; /* Compensate for scale */
+    height: 117.65% !important;
+  }
+
+  /* Basic mobile layout - no layering */
   body.job-card-public .job-card-public-wrapper {
     width: 100% !important;
     min-height: 100vh !important;
     min-height: -webkit-fill-available !important;
+    position: relative !important; /* Remove fixed/absolute positioning */
+    z-index: auto !important; /* Remove z-index layering */
+    transform: none !important; /* Remove transforms that create layers */
   }
 
-  /* Ensure form is visible */
+  /* Remove all z-index layering */
+  body.job-card-public .job-card-public-wrapper * {
+    z-index: auto !important;
+    position: relative !important; /* Default positioning */
+  }
+
+  /* Header - no layering */
+  body.job-card-public .job-card-public-wrapper > header {
+    position: relative !important;
+    z-index: auto !important;
+    transform: none !important;
+  }
+
+  /* Main content - no layering */
+  body.job-card-public .job-card-public-wrapper > div.flex-1 {
+    position: relative !important;
+    z-index: auto !important;
+    transform: none !important;
+  }
+
+  /* Ensure form is visible - no layering */
   body.job-card-public .job-card-public-wrapper .job-card-scrollable-content {
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
+    position: relative !important;
+    z-index: auto !important;
+    transform: none !important;
   }
 
   /* Form inputs - reasonable size */
@@ -27,17 +67,42 @@
     padding: 0.625rem 0.875rem !important;
     width: 100% !important;
     box-sizing: border-box !important;
+    position: relative !important;
+    z-index: auto !important;
   }
 
   /* Proper spacing */
   body.job-card-public .job-card-public-wrapper label {
     display: block !important;
     margin-bottom: 0.5rem !important;
+    position: relative !important;
+    z-index: auto !important;
   }
 
   body.job-card-public .job-card-public-wrapper input,
   body.job-card-public .job-card-public-wrapper select {
     margin-top: 0.5rem !important;
+  }
+
+  /* Remove all fixed/absolute positioning that creates layers */
+  body.job-card-public .job-card-public-wrapper .fixed,
+  body.job-card-public .job-card-public-wrapper [class*="fixed"] {
+    position: relative !important;
+  }
+
+  /* Remove all transforms that create stacking contexts */
+  body.job-card-public .job-card-public-wrapper [style*="transform"],
+  body.job-card-public .job-card-public-wrapper [class*="transform"] {
+    transform: none !important;
+  }
+
+  /* Cards and sections - no layering */
+  body.job-card-public .job-card-public-wrapper .bg-white,
+  body.job-card-public .job-card-public-wrapper .rounded-lg,
+  body.job-card-public .job-card-public-wrapper section {
+    position: relative !important;
+    z-index: auto !important;
+    transform: none !important;
   }
 }
 
