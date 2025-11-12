@@ -116,9 +116,9 @@
     margin-bottom: 0 !important;
   }
 
-  /* Add padding to scrollable content to account for fixed footer - reduced for smaller footer */
+  /* Add padding to scrollable content to account for fixed footer - increased to prevent overlap */
   body.job-card-public .job-card-public-wrapper .job-card-scrollable-content > div {
-    padding-bottom: 60px !important;
+    padding-bottom: 120px !important;
   }
 
   /* Make footer more compact on mobile */
@@ -149,7 +149,7 @@
     width: auto !important;
     flex: 0 0 auto !important;
     min-width: 70px !important;
-    max-width: none !important;
+    max-width: 120px !important;
   }
 
   /* Force buttons container to not stack */
