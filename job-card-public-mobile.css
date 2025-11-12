@@ -113,20 +113,26 @@
     opacity: 1 !important;
     height: auto !important;
     padding-bottom: 0 !important;
+    margin-bottom: 0 !important;
+  }
+
+  /* Add padding to scrollable content to account for fixed footer */
+  body.job-card-public .job-card-public-wrapper .job-card-scrollable-content > div {
+    padding-bottom: 80px !important;
   }
 
   /* Fixed Footer - ensure it's at bottom and always visible */
   body.job-card-public .job-card-public-wrapper > footer,
   body.job-card-public .job-card-public-wrapper > div.flex-1 > footer {
     flex-shrink: 0 !important;
-    position: relative !important;
-    width: 100% !important;
-    max-width: 100% !important;
+    position: fixed !important;
+    bottom: 0 !important;
     left: 0 !important;
     right: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
     transform: none !important;
     margin: 0 !important;
-    margin-top: auto !important;
     padding: 0 !important;
     z-index: 50 !important;
     background-color: #ffffff !important;
