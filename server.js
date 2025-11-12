@@ -809,6 +809,28 @@ app.all('/api/public/users', async (req, res, next) => {
   }
 })
 
+app.all('/api/public/inventory', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'public', 'inventory.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Public inventory API error:', e)
+    return next(e)
+  }
+})
+
+app.all('/api/public/locations', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'public', 'locations.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Public locations API error:', e)
+    return next(e)
+  }
+})
+
 // Explicit mapping for user operations with ID (GET, PUT, DELETE /api/users/[id])
 // IMPORTANT: This must come BEFORE /api/users route so Express matches it first
 app.all('/api/users/:id', async (req, res, next) => {

@@ -640,55 +640,73 @@ const JobCardFormPublic = () => {
   useEffect(() => {
     const loadStockData = async () => {
       try {
+        console.log('📡 JobCardFormPublic: Loading inventory...');
+        
+        // Always load from cache first
         const cachedInventory = JSON.parse(localStorage.getItem('manufacturing_inventory') || '[]');
+        console.log(`📋 JobCardFormPublic: Found ${cachedInventory.length} inventory items in cache`);
+        
         if (cachedInventory.length > 0) {
+          console.log('✅ JobCardFormPublic: Setting inventory from cache');
           setInventory(cachedInventory);
         }
 
-        const token = window.storage?.getToken?.();
-        const isLoggedIn = !!token;
-        
-        if (isOnline && (isLoggedIn || window.DatabaseAPI?.getInventory)) {
+        // Try to load from public API endpoint (no auth required)
+        if (isOnline) {
           try {
-            const response = await window.DatabaseAPI.getInventory();
-            if (response?.data?.inventory || Array.isArray(response?.data)) {
-              const inventoryItems = response.data.inventory || response.data || [];
-              if (Array.isArray(inventoryItems) && inventoryItems.length > 0) {
+            console.log('📡 JobCardFormPublic: Attempting to load inventory from public API...');
+            const response = await fetch('/api/public/inventory', {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              const inventoryItems = data?.data?.inventory || data?.inventory || [];
+              
+              console.log(`✅ JobCardFormPublic: Loaded ${inventoryItems.length} inventory items from public API`);
+              if (inventoryItems.length > 0) {
                 setInventory(inventoryItems);
                 localStorage.setItem('manufacturing_inventory', JSON.stringify(inventoryItems));
               }
-            }
-          } catch (error) {
-            console.warn('⚠️ JobCardFormPublic: Failed to load inventory from API, using cache:', error.message);
-            try {
-              if (token) {
-                const response = await fetch('/api/manufacturing/inventory', {
-                  method: 'GET',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
+            } else {
+              console.warn('⚠️ JobCardFormPublic: Public inventory API returned error:', response.status);
+              // Try authenticated API as fallback
+              const token = window.storage?.getToken?.();
+              if (token && window.DatabaseAPI?.getInventory) {
+                try {
+                  const response = await window.DatabaseAPI.getInventory();
+                  if (response?.data?.inventory || Array.isArray(response?.data)) {
+                    const inventoryItems = response.data.inventory || response.data || [];
+                    if (inventoryItems.length > 0) {
+                      console.log(`✅ JobCardFormPublic: Loaded ${inventoryItems.length} inventory items from authenticated API`);
+                      setInventory(inventoryItems);
+                      localStorage.setItem('manufacturing_inventory', JSON.stringify(inventoryItems));
+                    }
                   }
-                });
-                if (response.ok) {
-                  const data = await response.json();
-                  const inventoryItems = data?.data?.inventory || data?.data || [];
-                  if (Array.isArray(inventoryItems) && inventoryItems.length > 0) {
-                    setInventory(inventoryItems);
-                    localStorage.setItem('manufacturing_inventory', JSON.stringify(inventoryItems));
-                  }
+                } catch (authError) {
+                  console.warn('⚠️ JobCardFormPublic: Authenticated inventory API also failed:', authError.message);
                 }
               }
-            } catch (fallbackError) {
-              console.warn('⚠️ JobCardFormPublic: Fallback fetch also failed:', fallbackError.message);
             }
+          } catch (error) {
+            console.warn('⚠️ JobCardFormPublic: Failed to load inventory from public API:', error.message);
           }
         }
         
+        console.log('📡 JobCardFormPublic: Loading locations...');
+        
+        // Always load from cache first
         const cachedLocations1 = JSON.parse(localStorage.getItem('stock_locations') || '[]');
         const cachedLocations2 = JSON.parse(localStorage.getItem('manufacturing_locations') || '[]');
         const cachedLocations = cachedLocations1.length > 0 ? cachedLocations1 : cachedLocations2;
         
+        console.log(`📋 JobCardFormPublic: Found ${cachedLocations.length} locations in cache`);
+        
         if (cachedLocations.length > 0) {
+          console.log('✅ JobCardFormPublic: Setting locations from cache');
           setStockLocations(cachedLocations);
         } else {
           const defaultLocations = [
@@ -699,39 +717,50 @@ const JobCardFormPublic = () => {
           localStorage.setItem('stock_locations', JSON.stringify(defaultLocations));
         }
         
-        if (isOnline && (isLoggedIn || window.DatabaseAPI?.getStockLocations)) {
+        // Try to load from public API endpoint (no auth required)
+        if (isOnline) {
           try {
-            const response = await window.DatabaseAPI.getStockLocations();
-            if (response?.data?.locations || Array.isArray(response?.data)) {
-              const locations = response.data.locations || response.data || [];
-              if (Array.isArray(locations) && locations.length > 0) {
+            console.log('📡 JobCardFormPublic: Attempting to load locations from public API...');
+            const response = await fetch('/api/public/locations', {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              const locations = data?.data?.locations || data?.locations || [];
+              
+              console.log(`✅ JobCardFormPublic: Loaded ${locations.length} locations from public API`);
+              if (locations.length > 0) {
                 setStockLocations(locations);
                 localStorage.setItem('stock_locations', JSON.stringify(locations));
+                localStorage.setItem('manufacturing_locations', JSON.stringify(locations));
+              }
+            } else {
+              console.warn('⚠️ JobCardFormPublic: Public locations API returned error:', response.status);
+              // Try authenticated API as fallback
+              const token = window.storage?.getToken?.();
+              if (token && window.DatabaseAPI?.getStockLocations) {
+                try {
+                  const response = await window.DatabaseAPI.getStockLocations();
+                  if (response?.data?.locations || Array.isArray(response?.data)) {
+                    const locations = response.data.locations || response.data || [];
+                    if (locations.length > 0) {
+                      console.log(`✅ JobCardFormPublic: Loaded ${locations.length} locations from authenticated API`);
+                      setStockLocations(locations);
+                      localStorage.setItem('stock_locations', JSON.stringify(locations));
+                      localStorage.setItem('manufacturing_locations', JSON.stringify(locations));
+                    }
+                  }
+                } catch (authError) {
+                  console.warn('⚠️ JobCardFormPublic: Authenticated locations API also failed:', authError.message);
+                }
               }
             }
           } catch (error) {
-            console.warn('⚠️ JobCardFormPublic: Failed to load locations from API, using cache:', error.message);
-            try {
-              if (token) {
-                const response = await fetch('/api/manufacturing/locations', {
-                  method: 'GET',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                  }
-                });
-                if (response.ok) {
-                  const data = await response.json();
-                  const locations = data?.data?.locations || data?.data || [];
-                  if (Array.isArray(locations) && locations.length > 0) {
-                    setStockLocations(locations);
-                    localStorage.setItem('stock_locations', JSON.stringify(locations));
-                  }
-                }
-              }
-            } catch (fallbackError) {
-              console.warn('⚠️ JobCardFormPublic: Fallback fetch also failed:', error.message);
-            }
+            console.warn('⚠️ JobCardFormPublic: Failed to load locations from public API:', error.message);
           }
         }
       } catch (error) {
