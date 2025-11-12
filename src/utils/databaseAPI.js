@@ -731,6 +731,9 @@ const DatabaseAPI = {
             body: JSON.stringify(projectData)
         });
         console.log('✅ Project updated in database');
+        // Invalidate project caches so subsequent loads pull fresh data
+        this._responseCache.delete('GET:/projects');
+        this._responseCache.delete(`GET:/projects/${id}`);
         return response;
     },
 

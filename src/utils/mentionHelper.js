@@ -2,25 +2,51 @@
 // Version: 2025-11-03-v2 (with enhanced token refresh debugging)
 const MentionHelper = {
     /**
+     * Normalize identifiers for matching (names, usernames, emails)
+     * Removes whitespace and non-alphanumeric characters, lowercases result.
+     * @param {string} value
+     * @returns {string}
+     */
+    normalizeIdentifier(value) {
+        if (!value) return '';
+        return value
+            .toString()
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, '');
+    },
+
+    /**
+     * Shared mention regex allowing spaces, dots, hyphens and underscores within names.
+     * Example matches: @john, @John Doe, @john.doe, @john-doe
+     */
+    get mentionRegex() {
+        return /@([A-Za-z0-9._-]+(?:\s+[A-Za-z0-9._-]+)*)/g;
+    },
+
+    /**
      * Parse @mentions from text content
      * @param {string} text - The text content to parse
-     * @returns {Array} Array of {username, startIndex, endIndex}
+     * @returns {Array} Array of { username, normalized, startIndex, endIndex }
      */
     parseMentions(text) {
         if (!text) return [];
-        
-        const mentionRegex = /@(\w+)/g;
+
+        const mentionRegex = this.mentionRegex;
         const mentions = [];
         let match;
-        
+
         while ((match = mentionRegex.exec(text)) !== null) {
+            const rawUsername = match[1]?.trim();
+            if (!rawUsername) continue;
+
             mentions.push({
-                username: match[1],
+                username: rawUsername,
+                normalized: this.normalizeIdentifier(rawUsername),
                 startIndex: match.index,
                 endIndex: match.index + match[0].length
             });
         }
-        
+
         return mentions;
     },
     
@@ -32,12 +58,13 @@ const MentionHelper = {
      */
     highlightMentions(text, isDark = false) {
         if (!text) return text;
-        
-        const mentionRegex = /@(\w+)/g;
+
+        const mentionRegex = this.mentionRegex;
         const mentionColor = isDark ? '#60a5fa' : '#3b82f6';
-        
+
         return text.replace(mentionRegex, (match, username) => {
-            return `<span style="color: ${mentionColor}; font-weight: 600;">@${username}</span>`;
+            const safeUsername = username.trim();
+            return `<span style="color: ${mentionColor}; font-weight: 600;">@${safeUsername}</span>`;
         });
     },
     
@@ -48,20 +75,33 @@ const MentionHelper = {
      */
     hasMentions(text) {
         if (!text) return false;
-        return /@\w+/.test(text);
+        return this.mentionRegex.test(text);
     },
     
     /**
      * Get unique usernames from text
      * @param {string} text - The text content
-     * @returns {Array} Array of unique usernames
+     * @returns {Array} Array of unique mention objects { raw, normalized }
      */
     getMentionedUsernames(text) {
         if (!text) return [];
-        
+
         const mentions = this.parseMentions(text);
-        const usernames = mentions.map(m => m.username.toLowerCase());
-        return [...new Set(usernames)]; // Return unique usernames
+        const seen = new Set();
+        const uniqueMentions = [];
+
+        for (const mention of mentions) {
+            const key = mention.normalized;
+            if (!key) continue;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            uniqueMentions.push({
+                raw: mention.username,
+                normalized: key
+            });
+        }
+
+        return uniqueMentions;
     },
     
     /**
@@ -158,43 +198,56 @@ const MentionHelper = {
         if (!this.hasMentions(commentText)) {
             return [];
         }
-        
-        const mentionedUsernames = this.getMentionedUsernames(commentText);
+
+        const mentionedEntries = this.getMentionedUsernames(commentText);
+        if (!mentionedEntries || mentionedEntries.length === 0) {
+            return [];
+        }
+
         const notificationPromises = [];
-        
+
         // Match usernames to actual users
-        for (const username of mentionedUsernames) {
+        for (const mentionEntry of mentionedEntries) {
+            const normalizedMention = typeof mentionEntry === 'string'
+                ? this.normalizeIdentifier(mentionEntry)
+                : mentionEntry.normalized;
+            const rawMention = typeof mentionEntry === 'string'
+                ? mentionEntry
+                : mentionEntry.raw;
+
             const matchedUser = allUsers.find(user => {
                 // Match by name (case-insensitive, partial match)
-                const userNameLower = (user.name || '').toLowerCase().replace(/\s+/g, '');
-                const usernameLower = username.toLowerCase();
-                
+                const userNameLower = this.normalizeIdentifier(user.name || '');
+                const usernameLower = normalizedMention;
+
                 // Try exact match first
                 if (userNameLower === usernameLower) {
                     return true;
                 }
-                
+
                 // Try partial match (e.g., "john" matches "John Doe")
                 if (userNameLower.includes(usernameLower) || usernameLower.includes(userNameLower)) {
                     return true;
                 }
-                
+
                 // Try email match
-                const emailUsername = (user.email || '').split('@')[0].toLowerCase();
+                const emailUsername = this.normalizeIdentifier(
+                    (user.email || '').split('@')[0]
+                );
                 if (emailUsername === usernameLower) {
                     return true;
                 }
-                
+
                 return false;
             });
-            
+
             if (matchedUser) {
                 // Don't notify if the user mentioned themselves
                 if (matchedUser.id === window.storage?.getUserInfo?.()?.id) {
                     console.log(`⚠️ Skipping self-mention for ${matchedUser.name}`);
                     continue;
                 }
-                
+
                 notificationPromises.push(
                     this.createMentionNotification(
                         matchedUser.id,
@@ -206,10 +259,10 @@ const MentionHelper = {
                     )
                 );
             } else {
-                console.log(`⚠️ No user found matching mention: @${username}`);
+                console.log(`⚠️ No user found matching mention: @${rawMention}`);
             }
         }
-        
+
         return await Promise.all(notificationPromises);
     },
     

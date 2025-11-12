@@ -1363,6 +1363,8 @@ const ManagementMeetingNotes = () => {
                                 const identifier = rawId || `week-${index}`;
                                 const isPrimary = identifier === selectedWeek;
                                 const isNext = identifier === nextActiveWeekId;
+                                const departmentNotes = Array.isArray(week?.departmentNotes) ? week.departmentNotes : [];
+                                const hasDepartmentNotes = departmentNotes.length > 0;
                                 const isActive = isPrimary || isNext;
                                 const summary = getWeekSummaryStats(week);
 
@@ -1440,179 +1442,175 @@ const ManagementMeetingNotes = () => {
                                                 </div>
                                             </div>
 
-                                            {isActive ? (
-                                                <div className="space-y-4 flex-1 overflow-y-auto">
-                                    {DEPARTMENTS.map((dept) => {
-                                        const deptNote = week.departmentNotes?.find(
+                                            <div className="space-y-4 flex-1 overflow-y-auto">
+                                                {hasDepartmentNotes ? (
+                                                    DEPARTMENTS.map((dept) => {
+                                                        const deptNote = week.departmentNotes?.find(
                                                             (dn) => dn.departmentId === dept.id
-                                        );
+                                                        );
 
-                                        if (!deptNote) return null;
+                                                        if (!deptNote) return null;
 
-                                        const allocations = currentMonthlyNotes.userAllocations?.filter(
+                                                        const allocations = currentMonthlyNotes.userAllocations?.filter(
                                                             (a) => a.departmentId === dept.id
-                                        ) || [];
-                                        return (
-                                            <div key={dept.id} className={`border rounded-lg p-3 ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
-                                                <div className="flex items-center justify-between mb-3">
-                                                    <h4 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? `text-${dept.color}-300` : `text-${dept.color}-700`}`}>
-                                                        <i className={`fas ${dept.icon} ${isDark ? `text-${dept.color}-400` : `text-${dept.color}-600`}`}></i>
-                                                    {dept.name}
-                                                </h4>
-                                                    <div className="flex gap-2">
-                                                        {allocations.length > 0 && (
-                                                            <div className="flex gap-1">
+                                                        ) || [];
+                                                        return (
+                                                            <div key={dept.id} className={`border rounded-lg p-3 ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
+                                                                <div className="flex items-center justify-between mb-3">
+                                                                    <h4 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? `text-${dept.color}-300` : `text-${dept.color}-700`}`}>
+                                                                        <i className={`fas ${dept.icon} ${isDark ? `text-${dept.color}-400` : `text-${dept.color}-600`}`}></i>
+                                                                        {dept.name}
+                                                                    </h4>
+                                                                    <div className="flex gap-2">
+                                                                        {allocations.length > 0 && (
+                                                                            <div className="flex gap-1">
                                                                                 {allocations.map((allocation) => (
-                                                                    <span key={allocation.id} className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-gray-100 text-gray-700'}`}>
-                                                                        {getUserName(allocation.userId)}
-                                                                    </span>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                        <button
-                                                            onClick={() => {
-                                                                setSelectedDepartment(dept.id);
-                                                                setShowAllocationModal(true);
-                                                            }}
-                                                            className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                                                            title="Allocate users"
-                                                        >
-                                                            <i className="fas fa-user-plus"></i>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                                
-                                                <div className="space-y-3">
-                                                    {/* Successes */}
-                                                    <div>
-                                                        <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
-                                                            Last Week's Successes
-                                                        </label>
-                                                        <textarea
-                                                            value={deptNote.successes ?? ''}
-                                                            onChange={(e) => handleUpdateDepartmentNotes(deptNote.id, 'successes', e.target.value)}
-                                                            placeholder="What went well this week?"
-                                                            className={`w-full min-h-[80px] p-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
-                                                        />
-                                                    </div>
+                                                                                    <span key={allocation.id} className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-gray-100 text-gray-700'}`}>
+                                                                                        {getUserName(allocation.userId)}
+                                                                                    </span>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setSelectedDepartment(dept.id);
+                                                                                setShowAllocationModal(true);
+                                                                            }}
+                                                                            className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                                            title="Allocate users"
+                                                                        >
+                                                                            <i className="fas fa-user-plus"></i>
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
 
-                                                    {/* Week to Follow */}
-                                                    <div>
-                                                        <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
-                                                            This Week's Plan
-                                                        </label>
-                                                        <textarea
-                                                            value={deptNote.weekToFollow ?? ''}
-                                                            onChange={(e) => handleUpdateDepartmentNotes(deptNote.id, 'weekToFollow', e.target.value)}
-                                                            placeholder="What's planned for this week?"
-                                                            className={`w-full min-h-[80px] p-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
-                                                        />
-                                                    </div>
+                                                                <div className="space-y-3">
+                                                                    {/* Successes */}
+                                                                    <div>
+                                                                        <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                                                            Last Week's Successes
+                                                                        </label>
+                                                                        <textarea
+                                                                            value={deptNote.successes ?? ''}
+                                                                            onChange={(e) => handleUpdateDepartmentNotes(deptNote.id, 'successes', e.target.value)}
+                                                                            placeholder="What went well this week?"
+                                                                            className={`w-full min-h-[80px] p-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                                                        />
+                                                                    </div>
 
-                                                    {/* Frustrations */}
-                                                    <div>
-                                                        <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
-                                                            Frustrations/Challenges
-                                                        </label>
-                                                        <textarea
-                                                            value={deptNote.frustrations ?? ''}
-                                                            onChange={(e) => handleUpdateDepartmentNotes(deptNote.id, 'frustrations', e.target.value)}
-                                                            placeholder="What challenges or blockers are we facing?"
-                                                            className={`w-full min-h-[80px] p-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
-                                                        />
-                                                    </div>
+                                                                    {/* Week to Follow */}
+                                                                    <div>
+                                                                        <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                                                            This Week's Plan
+                                                                        </label>
+                                                                        <textarea
+                                                                            value={deptNote.weekToFollow ?? ''}
+                                                                            onChange={(e) => handleUpdateDepartmentNotes(deptNote.id, 'weekToFollow', e.target.value)}
+                                                                            placeholder="What's planned for this week?"
+                                                                            className={`w-full min-h-[80px] p-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                                                        />
+                                                                    </div>
 
-                                                    {/* Action Items */}
-                                                    {deptNote.actionItems && deptNote.actionItems.length > 0 && (
-                                                        <div>
-                                                            <label className={`block text-xs font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
-                                                                Action Items
-                                                            </label>
-                                                            <div className="space-y-2">
+                                                                    {/* Frustrations */}
+                                                                    <div>
+                                                                        <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                                                            Frustrations/Challenges
+                                                                        </label>
+                                                                        <textarea
+                                                                            value={deptNote.frustrations ?? ''}
+                                                                            onChange={(e) => handleUpdateDepartmentNotes(deptNote.id, 'frustrations', e.target.value)}
+                                                                            placeholder="What challenges or blockers are we facing?"
+                                                                            className={`w-full min-h-[80px] p-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                                                        />
+                                                                    </div>
+
+                                                                    {/* Action Items */}
+                                                                    {deptNote.actionItems && deptNote.actionItems.length > 0 && (
+                                                                        <div>
+                                                                            <label className={`block text-xs font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                                                                Action Items
+                                                                            </label>
+                                                                            <div className="space-y-2">
                                                                                 {deptNote.actionItems.map((item) => (
-                                                                    <div key={item.id} className={`flex items-center justify-between p-2 rounded ${isDark ? 'bg-slate-700' : 'bg-gray-50'}`}>
-                                                                        <div className="flex-1">
-                                                                            <p className={`text-xs font-medium ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{item.title}</p>
-                                                                            {item.description && (
-                                                                                <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>{item.description}</p>
-                                                                            )}
+                                                                                    <div key={item.id} className={`flex items-center justify-between p-2 rounded ${isDark ? 'bg-slate-700' : 'bg-gray-50'}`}>
+                                                                                        <div className="flex-1">
+                                                                                            <p className={`text-xs font-medium ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{item.title}</p>
+                                                                                            {item.description && (
+                                                                                                <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>{item.description}</p>
+                                                                                            )}
+                                                                                        </div>
+                                                                                        <div className="flex gap-1">
+                                                                                            <button
+                                                                                                onClick={() => {
+                                                                                                    setEditingActionItem(item);
+                                                                                                    setShowActionItemModal(true);
+                                                                                                }}
+                                                                                                className={`p-1 ${isDark ? 'text-slate-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
+                                                                                            >
+                                                                                                <i className="fas fa-edit text-xs"></i>
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
                                                                         </div>
-                                                                        <div className="flex gap-1">
-                                                                            <button
-                                                                                onClick={() => {
-                                                                                    setEditingActionItem(item);
-                                                                                    setShowActionItemModal(true);
-                                                                                }}
-                                                                                className={`p-1 ${isDark ? 'text-slate-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
-                                                                            >
-                                                                                <i className="fas fa-edit text-xs"></i>
-                                                                            </button>
-                                                                        </div>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    )}
+                                                                    )}
 
-                                                    {/* Comments */}
-                                                    {deptNote.comments && deptNote.comments.length > 0 && (
-                                                        <div>
-                                                            <label className={`block text-xs font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
-                                                                Comments
-                                                            </label>
-                                                            <div className="space-y-2">
+                                                                    {/* Comments */}
+                                                                    {deptNote.comments && deptNote.comments.length > 0 && (
+                                                                        <div>
+                                                                            <label className={`block text-xs font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                                                                Comments
+                                                                            </label>
+                                                                            <div className="space-y-2">
                                                                                 {deptNote.comments.map((comment) => (
-                                                                    <div key={comment.id} className={`p-2 rounded ${isDark ? 'bg-slate-700' : 'bg-gray-50'}`}>
-                                                                        <p className={`text-xs ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{comment.content}</p>
-                                                                        <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                                                                            {comment.author ? (comment.author.name || comment.author.email) : 'Unknown'} • {new Date(comment.createdAt).toLocaleDateString()}
-                                                                        </p>
-                                                                    </div>
-                                                                ))}
+                                                                                    <div key={comment.id} className={`p-2 rounded ${isDark ? 'bg-slate-700' : 'bg-gray-50'}`}>
+                                                                                        <p className={`text-xs ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{comment.content}</p>
+                                                                                        <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                                                                                            {comment.author ? (comment.author.name || comment.author.email) : 'Unknown'} • {new Date(comment.createdAt).toLocaleDateString()}
+                                                                                        </p>
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* Add Comment Button */}
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setCommentContext({ type: 'department', id: deptNote.id });
+                                                                            setShowCommentModal(true);
+                                                                        }}
+                                                                        className={`w-full text-xs px-3 py-2 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                                    >
+                                                                        <i className="fas fa-comment mr-1"></i>
+                                                                        Add Comment
+                                                                    </button>
+
+                                                                    {/* Add Action Item Button */}
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setEditingActionItem({ weeklyNotesId: week.id, departmentNotesId: deptNote.id });
+                                                                            setShowActionItemModal(true);
+                                                                        }}
+                                                                        className={`w-full text-xs px-3 py-2 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                                    >
+                                                                        <i className="fas fa-plus mr-1"></i>
+                                                                        Add Action Item
+                                                                    </button>
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    )}
-
-                                                    {/* Add Comment Button */}
-                                                    <button
-                                                        onClick={() => {
-                                                            setCommentContext({ type: 'department', id: deptNote.id });
-                                                            setShowCommentModal(true);
-                                                        }}
-                                                        className={`w-full text-xs px-3 py-2 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                                                    >
-                                                        <i className="fas fa-comment mr-1"></i>
-                                                        Add Comment
-                                                    </button>
-
-                                                    {/* Add Action Item Button */}
-                                                    <button
-                                                        onClick={() => {
-                                                            setEditingActionItem({ weeklyNotesId: week.id, departmentNotesId: deptNote.id });
-                                                            setShowActionItemModal(true);
-                                                        }}
-                                                        className={`w-full text-xs px-3 py-2 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                                                    >
-                                                        <i className="fas fa-plus mr-1"></i>
-                                                        Add Action Item
-                                                    </button>
-                                                </div>
+                                                        );
+                                                    })
+                                                ) : (
+                                                    <div className={`rounded-lg border px-3 py-4 text-center ${isDark ? 'border-slate-700 bg-slate-900/30 text-slate-300' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+                                                        <p className="text-xs">No department notes captured for this week yet.</p>
+                                                        <p className="text-[11px] mt-1">
+                                                            Add a department update above to get started.
+                                                        </p>
+                                                    </div>
+                                                )}
                                             </div>
-                                        );
-                                    })}
-                                </div>
-                                            ) : (
-                                                <div className={`rounded-lg border px-3 py-4 text-center mt-auto ${isDark ? 'border-slate-700 bg-slate-900/30 text-slate-300' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
-                                                    <p className="text-xs mb-2">Select this week to review and update department notes.</p>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setSelectedWeek(identifier)}
-                                                        className="text-xs px-3 py-1.5 rounded bg-primary-600 text-white hover:bg-primary-500 transition"
-                                                    >
-                                                        View Week
-                                                    </button>
-                                                </div>
-                            )}
                         </div>
                                     </div>
                                 );

@@ -1143,7 +1143,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
     const handleDragStart = (event, item, type) => {
         if (event?.dataTransfer) {
             try {
-                event.dataTransfer.setData('application/json', JSON.stringify({ id: item.id, type }));
+                const payload = JSON.stringify({ id: item.id, type });
+                event.dataTransfer.setData('application/json', payload);
+                event.dataTransfer.setData('text/plain', payload);
                 event.dataTransfer.effectAllowed = 'move';
             } catch (error) {
                 console.warn('⚠️ Pipeline: Unable to serialise drag payload', error);

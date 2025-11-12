@@ -789,17 +789,24 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 if (allUsers.length === 0) return [];
                 
                 // Extract mentioned users
-                const mentionedUsernames = window.MentionHelper.getMentionedUsernames(commentText);
+                const mentionedEntries = window.MentionHelper.getMentionedUsernames(commentText);
                 const mentionedUsers = allUsers.filter(user => {
-                    const userNameLower = (user.name || '').toLowerCase().replace(/\s+/g, '');
-                    const emailUsername = (user.email || '').split('@')[0].toLowerCase();
+                    const userNameNormalized = window.MentionHelper.normalizeIdentifier(user.name || '');
+                    const emailUsernameNormalized = window.MentionHelper.normalizeIdentifier(
+                        (user.email || '').split('@')[0]
+                    );
                     
-                    return mentionedUsernames.some(username => {
-                        const usernameLower = username.toLowerCase();
-                        return userNameLower === usernameLower ||
-                               userNameLower.includes(usernameLower) ||
-                               usernameLower.includes(userNameLower) ||
-                               emailUsername === usernameLower;
+                    return mentionedEntries.some(entry => {
+                        const mentionNormalized = typeof entry === 'string'
+                            ? window.MentionHelper.normalizeIdentifier(entry)
+                            : entry.normalized;
+                        
+                        if (!mentionNormalized) return false;
+                        
+                        return userNameNormalized === mentionNormalized ||
+                               userNameNormalized.includes(mentionNormalized) ||
+                               mentionNormalized.includes(userNameNormalized) ||
+                               emailUsernameNormalized === mentionNormalized;
                     });
                 }).filter(user => user.id !== currentUser.id);
                 
