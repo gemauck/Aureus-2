@@ -55,6 +55,7 @@
     padding: 0 !important;
     transform: none !important;
     background-color: #f3f4f6 !important;
+    box-sizing: border-box !important;
   }
 
   /* Hide desktop sidebar on mobile/tablet */
@@ -107,12 +108,14 @@
     transform: none !important;
     margin: 0 !important;
     min-height: 0 !important;
+    max-height: 100% !important;
     visibility: visible !important;
     opacity: 1 !important;
     height: auto !important;
+    padding-bottom: 0 !important;
   }
 
-  /* Fixed Footer - ensure it's at bottom */
+  /* Fixed Footer - ensure it's at bottom and always visible */
   body.job-card-public .job-card-public-wrapper > footer,
   body.job-card-public .job-card-public-wrapper > div.flex-1 > footer {
     flex-shrink: 0 !important;
@@ -125,12 +128,22 @@
     margin: 0 !important;
     margin-top: auto !important;
     padding: 0 !important;
-    z-index: 10 !important;
+    z-index: 50 !important;
     background-color: #ffffff !important;
     border-top: 1px solid #e5e7eb !important;
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1) !important;
+  }
+
+  /* Ensure footer buttons are visible and clickable */
+  body.job-card-public .job-card-public-wrapper footer button {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    z-index: 51 !important;
+    position: relative !important;
   }
 
   /* Form styling */
