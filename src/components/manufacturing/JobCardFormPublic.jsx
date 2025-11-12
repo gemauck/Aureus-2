@@ -1137,21 +1137,50 @@ const JobCardFormPublic = () => {
         }
       }
 
+      // Always save to localStorage first
       const existingJobCards = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
       const updatedJobCards = [...existingJobCards, jobCardData];
       localStorage.setItem('manufacturing_jobcards', JSON.stringify(updatedJobCards));
+      console.log('✅ Job card saved to local storage');
 
-      if (isOnline && window.DatabaseAPI?.createJobCard) {
+      // Try to submit to public API endpoint (no authentication required)
+      if (isOnline) {
         try {
-          await window.DatabaseAPI.createJobCard(jobCardData);
-          await syncClientContact(jobCardData);
-          console.log('✅ Job card synced to API');
+          console.log('📡 Submitting job card to public API...');
+          const response = await fetch('/api/public/jobcards', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(jobCardData)
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+            throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          const result = await response.json();
+          console.log('✅ Job card submitted to API:', result);
+          
+          // Try to sync client contact if function exists
+          if (typeof syncClientContact === 'function') {
+            try {
+              await syncClientContact(jobCardData);
+            } catch (contactError) {
+              console.warn('⚠️ Failed to sync client contact:', contactError.message);
+            }
+          }
+          
+          alert('✅ Job card saved and submitted successfully!');
         } catch (error) {
-          console.warn('⚠️ Failed to sync job card to API, saved offline:', error.message);
+          console.error('❌ Failed to submit job card to API:', error);
+          alert('✅ Job card saved locally, but failed to submit to server: ' + error.message + '\n\nIt will be synced when you are online.');
         }
+      } else {
+        alert('✅ Job card saved offline! It will be synced when you are online.');
       }
 
-      alert('✅ Job card saved successfully!' + (isOnline ? '' : ' (Saved offline - will sync when online)'));
       resetForm();
     } catch (error) {
       console.error('Error saving job card:', error);
