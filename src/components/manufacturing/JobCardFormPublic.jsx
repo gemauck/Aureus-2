@@ -472,6 +472,7 @@ const JobCardFormPublic = () => {
   useEffect(() => {
     const loadClients = async () => {
       try {
+        console.log('📡 JobCardFormPublic: Loading clients...');
         const token = window.storage?.getToken?.();
         const isLoggedIn = !!token;
         const cached1 = JSON.parse(localStorage.getItem('manufacturing_clients') || '[]');
@@ -483,13 +484,17 @@ const JobCardFormPublic = () => {
           return (status === 'active' || status === '' || !c.status) && (type === 'client' || !c.type);
         }) : [];
         
+        console.log(`📋 JobCardFormPublic: Found ${activeClients.length} active clients in cache`);
+        
         if (activeClients.length > 0) {
+          console.log('✅ JobCardFormPublic: Setting clients from cache');
           setClients(activeClients);
           setIsLoading(false);
         }
 
         if (isOnline && (isLoggedIn || window.DatabaseAPI?.getClients)) {
           try {
+            console.log('📡 JobCardFormPublic: Attempting to load clients from API...');
             const response = await window.DatabaseAPI.getClients();
             if (response?.data?.clients || Array.isArray(response?.data)) {
               const allClients = response.data.clients || response.data || [];
@@ -499,6 +504,7 @@ const JobCardFormPublic = () => {
                 return (status === 'active' || status === '' || !c.status) && (type === 'client' || !c.type);
               }) : [];
               
+              console.log(`✅ JobCardFormPublic: Loaded ${active.length} active clients from API`);
               if (active.length > 0) {
                 setClients(active);
                 localStorage.setItem('manufacturing_clients', JSON.stringify(active));
@@ -551,11 +557,15 @@ const JobCardFormPublic = () => {
   useEffect(() => {
     const loadUsers = async () => {
       try {
+        console.log('📡 JobCardFormPublic: Loading users...');
         const cached1 = JSON.parse(localStorage.getItem('manufacturing_users') || '[]');
         const cached2 = JSON.parse(localStorage.getItem('users') || '[]');
         const cached = cached1.length > 0 ? cached1 : cached2;
         
+        console.log(`📋 JobCardFormPublic: Found ${cached.length} users in cache`);
+        
         if (cached.length > 0) {
+          console.log('✅ JobCardFormPublic: Setting users from cache');
           setUsers(cached);
         }
 
@@ -564,9 +574,11 @@ const JobCardFormPublic = () => {
         
         if (isOnline && (isLoggedIn || window.DatabaseAPI?.getUsers)) {
           try {
+            console.log('📡 JobCardFormPublic: Attempting to load users from API...');
             const response = await window.DatabaseAPI.getUsers();
             if (response?.data?.users || Array.isArray(response?.data)) {
               const usersData = response.data.users || response.data || [];
+              console.log(`✅ JobCardFormPublic: Loaded ${usersData.length} users from API`);
               if (Array.isArray(usersData) && usersData.length > 0) {
                 setUsers(usersData);
                 localStorage.setItem('manufacturing_users', JSON.stringify(usersData));

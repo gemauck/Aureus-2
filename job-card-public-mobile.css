@@ -162,6 +162,34 @@
     border-radius: 8px !important;
   }
 
+  /* Ensure select dropdowns work properly - options must be visible */
+  body.job-card-public .job-card-public-wrapper select {
+    z-index: auto !important;
+    position: relative !important;
+    overflow: visible !important;
+    -webkit-appearance: menulist !important;
+    appearance: menulist !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper select option {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    z-index: 9999 !important;
+    position: static !important;
+    background-color: white !important;
+    color: black !important;
+    padding: 8px 12px !important;
+  }
+
+  /* Ensure parent containers don't clip dropdown options */
+  body.job-card-public .job-card-public-wrapper section,
+  body.job-card-public .job-card-public-wrapper .max-w-4xl,
+  body.job-card-public .job-card-public-wrapper .job-card-scrollable-content {
+    overflow: visible !important;
+    z-index: auto !important;
+  }
+
   body.job-card-public .job-card-public-wrapper button {
     min-height: 44px !important;
     border-radius: 8px !important;
