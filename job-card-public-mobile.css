@@ -19,8 +19,8 @@
 
   body.job-card-public #root {
     display: block !important;
-    width: 100% !important;
-    max-width: 100% !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
     height: auto !important;
     min-height: 100vh !important;
     overflow: visible !important;
@@ -31,7 +31,7 @@
   body.job-card-public #root > * {
     display: block !important;
     width: 100% !important;
-    max-width: 100% !important;
+    max-width: 100vw !important;
   }
 
   body.job-card-public .job-card-public-wrapper,
@@ -42,10 +42,14 @@
 
   body.job-card-public .job-card-public-wrapper {
     display: block !important;
+    width: 100% !important;
+    max-width: 100vw !important;
     min-height: 100vh !important;
     overflow-x: hidden !important;
     overflow-y: auto !important;
-    padding: 20px 18px 120px !important;
+    padding: 20px 14px 120px !important;
+    box-sizing: border-box !important;
+    margin: 0 auto !important;
     -webkit-overflow-scrolling: touch !important;
   }
 
@@ -93,6 +97,14 @@
 
   body.job-card-public .job-card-public-wrapper header {
     display: block !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper header.relative,
+  body.job-card-public .job-card-public-wrapper section,
+  body.job-card-public .job-card-public-wrapper footer {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   /* Touch-friendly inputs and buttons */
@@ -167,13 +179,16 @@
 
 @media (max-width: 420px) {
   body.job-card-public .job-card-public-wrapper {
-    padding: 16px 14px 112px !important;
+    padding: 16px 12px 112px !important;
   }
 
   body.job-card-public .job-card-public-wrapper header.relative,
   body.job-card-public .job-card-public-wrapper section,
   body.job-card-public .job-card-public-wrapper footer {
-    padding: 16px !important;
+    padding: 16px 12px !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
 
   body.job-card-public .job-card-public-wrapper header.relative h1 {
@@ -199,6 +214,8 @@
   body.job-card-public .job-card-public-wrapper footer {
     flex-direction: column !important;
     gap: 12px !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
 
   body.job-card-public .job-card-public-wrapper footer > div:last-child > button {
@@ -208,13 +225,16 @@
 
 @media (max-width: 340px) {
   body.job-card-public .job-card-public-wrapper {
-    padding: 14px 12px 108px !important;
+    padding: 14px 10px 108px !important;
   }
 
   body.job-card-public .job-card-public-wrapper header.relative,
   body.job-card-public .job-card-public-wrapper section,
   body.job-card-public .job-card-public-wrapper footer {
-    padding: 14px !important;
+    padding: 14px 10px !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
 
   body.job-card-public .job-card-public-wrapper header.relative h1 {
@@ -226,8 +246,8 @@
   }
 
   body.job-card-public .job-card-public-wrapper .mobile-step-scroll {
-    margin-inline: -12px !important;
-    padding-inline: 12px !important;
+    margin-inline: -10px !important;
+    padding-inline: 10px !important;
   }
 
   body.job-card-public .job-card-public-wrapper .mobile-step-scroll button {
