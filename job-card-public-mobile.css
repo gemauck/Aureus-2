@@ -142,12 +142,15 @@
     flex-wrap: nowrap !important;
   }
 
-  /* ULTRA SPECIFIC button styles to override all conflicting CSS */
+  /* ULTRA SPECIFIC button styles to override all conflicting CSS including Tailwind */
   body.job-card-public footer button,
   body.job-card-public .job-card-public-wrapper footer button,
   body.job-card-public footer > div > div > button,
-  body.job-card-public footer .flex-row button {
-    padding: 0.375rem 0.625rem !important; /* Smaller padding */
+  body.job-card-public footer .flex-row button,
+  body.job-card-public footer button[disabled],
+  body.job-card-public footer button.px-3,
+  body.job-card-public footer button.py-2 {
+    padding: 0.375rem 0.625rem !important; /* Smaller padding - override Tailwind px-3 py-2 */
     padding-top: 0.375rem !important;
     padding-bottom: 0.375rem !important;
     padding-left: 0.625rem !important;
@@ -162,6 +165,8 @@
     max-width: 100px !important; /* Smaller max-width */
     line-height: 1.2 !important; /* Tighter line-height for smaller buttons */
     box-sizing: border-box !important;
+    /* Override any Tailwind spacing utilities */
+    margin: 0 !important;
   }
 
   /* Force buttons container to not stack */
