@@ -472,6 +472,7 @@ const JobCardFormPublic = () => {
   useEffect(() => {
     const loadClients = async () => {
       try {
+        console.log('📡 Loading clients...');
         const token = window.storage?.getToken?.();
         const isLoggedIn = !!token;
         const cached1 = JSON.parse(localStorage.getItem('manufacturing_clients') || '[]');
@@ -484,10 +485,12 @@ const JobCardFormPublic = () => {
         }) : [];
         
         if (activeClients.length > 0) {
+          console.log('✅ Loaded clients from cache:', activeClients.length);
           setClients(activeClients);
           setIsLoading(false);
         }
 
+        // Always try to load from API, even if we have cache
         if (isOnline && (isLoggedIn || window.DatabaseAPI?.getClients)) {
           try {
             const response = await window.DatabaseAPI.getClients();
@@ -500,10 +503,15 @@ const JobCardFormPublic = () => {
               }) : [];
               
               if (active.length > 0) {
+                console.log('✅ Loaded clients from API:', active.length);
                 setClients(active);
                 localStorage.setItem('manufacturing_clients', JSON.stringify(active));
                 localStorage.setItem('clients', JSON.stringify(active));
+              } else {
+                console.warn('⚠️ No active clients returned from API');
               }
+            } else {
+              console.warn('⚠️ Invalid response format from getClients API');
             }
           } catch (error) {
             console.warn('⚠️ JobCardFormPublic: Failed to load clients from API, using cache:', error.message);
@@ -551,27 +559,35 @@ const JobCardFormPublic = () => {
   useEffect(() => {
     const loadUsers = async () => {
       try {
+        console.log('📡 Loading users...');
         const cached1 = JSON.parse(localStorage.getItem('manufacturing_users') || '[]');
         const cached2 = JSON.parse(localStorage.getItem('users') || '[]');
         const cached = cached1.length > 0 ? cached1 : cached2;
         
         if (cached.length > 0) {
+          console.log('✅ Loaded users from cache:', cached.length);
           setUsers(cached);
         }
 
         const token = window.storage?.getToken?.();
         const isLoggedIn = !!token;
         
+        // Always try to load from API, even if we have cache
         if (isOnline && (isLoggedIn || window.DatabaseAPI?.getUsers)) {
           try {
             const response = await window.DatabaseAPI.getUsers();
             if (response?.data?.users || Array.isArray(response?.data)) {
               const usersData = response.data.users || response.data || [];
               if (Array.isArray(usersData) && usersData.length > 0) {
+                console.log('✅ Loaded users from API:', usersData.length);
                 setUsers(usersData);
                 localStorage.setItem('manufacturing_users', JSON.stringify(usersData));
                 localStorage.setItem('users', JSON.stringify(usersData));
+              } else {
+                console.warn('⚠️ No users returned from API');
               }
+            } else {
+              console.warn('⚠️ Invalid response format from getUsers API');
             }
           } catch (error) {
             console.warn('⚠️ JobCardFormPublic: Failed to load users from API, using cache:', error.message);
@@ -711,18 +727,55 @@ const JobCardFormPublic = () => {
   }, [isOnline]);
 
   useEffect(() => {
-    if (formData.clientId && clients.length > 0) {
-      const client = clients.find(c => c.id === formData.clientId);
-      if (client) {
-        const sites = typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []);
-        setAvailableSites(sites);
-        setFormData(prev => ({ ...prev, clientName: client.name || '' }));
+    const loadSitesForClient = async () => {
+      if (formData.clientId && clients.length > 0) {
+        const client = clients.find(c => c.id === formData.clientId);
+        if (client) {
+          // First, try to get sites from client object
+          let sites = typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []);
+          
+          // Also try to load from API if online
+          const token = window.storage?.getToken?.();
+          const isLoggedIn = !!token;
+          
+          if (isOnline && isLoggedIn && token) {
+            try {
+              const response = await fetch(`/api/sites/client/${formData.clientId}`, {
+                method: 'GET',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                }
+              });
+              if (response.ok) {
+                const data = await response.json();
+                const apiSites = data?.data?.sites || data?.sites || [];
+                if (Array.isArray(apiSites) && apiSites.length > 0) {
+                  sites = apiSites;
+                  console.log('✅ Loaded sites from API:', apiSites.length);
+                } else {
+                  console.log('📋 No sites returned from API, using client.sites:', sites.length);
+                }
+              } else {
+                console.warn('⚠️ API returned error status:', response.status);
+              }
+            } catch (error) {
+              console.warn('⚠️ Failed to load sites from API, using client.sites:', error.message);
+            }
+          }
+          
+          setAvailableSites(sites);
+          setFormData(prev => ({ ...prev, clientName: client.name || '' }));
+          console.log('📋 Sites available for client:', sites.length);
+        }
+      } else {
+        setAvailableSites([]);
+        setFormData(prev => ({ ...prev, siteId: '', siteName: '' }));
       }
-    } else {
-      setAvailableSites([]);
-      setFormData(prev => ({ ...prev, siteId: '', siteName: '' }));
-    }
-  }, [formData.clientId, clients]);
+    };
+    
+    loadSitesForClient();
+  }, [formData.clientId, clients, isOnline]);
 
   useEffect(() => {
     if (formData.siteId && availableSites.length > 0) {
