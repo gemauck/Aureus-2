@@ -179,6 +179,7 @@
   /* Fixed Footer - ensure it's at bottom and always visible */
   /* Support iPhone safe areas - use env() for bottom inset */
   /* CRITICAL: Footer must escape ALL parent containers to stay fixed */
+  /* Use position:fixed with explicit viewport coordinates */
   body.job-card-public .job-card-public-wrapper > footer,
   body.job-card-public .job-card-public-wrapper > div.flex-1 > footer,
   body.job-card-public footer {
@@ -206,6 +207,11 @@
     /* Remove isolation and contain as they can create stacking context issues */
     isolation: auto !important; /* Don't create new stacking context */
     contain: none !important; /* Don't contain - allow footer to escape */
+    /* Force footer to be positioned relative to viewport, not parent */
+    position: fixed !important;
+    /* Ensure no parent clipping */
+    clip: auto !important;
+    clip-path: none !important;
   }
 
   /* Footer must escape parent container - ensure it's fixed to viewport */
@@ -222,22 +228,43 @@
     isolation: isolate !important;
   }
   
-  /* Ensure parent containers don't create stacking contexts that hide footer */
+  /* CRITICAL: Remove ALL properties that create containing blocks for fixed positioning */
+  /* These properties cause position:fixed to be relative to parent instead of viewport */
   body.job-card-public .job-card-public-wrapper,
-  body.job-card-public .job-card-public-wrapper > div.flex-1 {
+  body.job-card-public .job-card-public-wrapper > div.flex-1,
+  body.job-card-public .job-card-public-wrapper > div.flex-1 > div {
     transform: none !important;
     -webkit-transform: none !important;
     perspective: none !important;
     -webkit-perspective: none !important;
-    position: relative !important; /* Keep relative but don't create stacking context */
-    z-index: auto !important; /* Remove z-index that creates stacking context */
+    filter: none !important;
+    -webkit-filter: none !important;
+    will-change: auto !important;
     isolation: auto !important; /* Don't isolate */
+    contain: none !important; /* Don't contain */
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
   
   /* Ensure footer's direct parent doesn't interfere */
   body.job-card-public .job-card-public-wrapper > div.flex-1 {
     position: relative !important;
     z-index: auto !important;
+    /* Allow footer to escape overflow hidden */
+    overflow: visible !important; /* Override overflow-hidden on mobile */
+  }
+  
+  /* On mobile, the flex-1 container should not clip the footer */
+  @media (max-width: 1279px) {
+    body.job-card-public .job-card-public-wrapper > div.flex-1 {
+      overflow: visible !important; /* Let footer escape */
+    }
+    
+    /* But keep scrollable content scrollable */
+    body.job-card-public .job-card-public-wrapper > div.flex-1 > .job-card-scrollable-content {
+      overflow-y: auto !important;
+      overflow-x: hidden !important;
+    }
   }
 
   /* Keep wrapper overflow for layout but footer escapes via fixed positioning */
