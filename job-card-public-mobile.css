@@ -125,6 +125,7 @@
     will-change: scroll-position !important; /* Optimize scrolling performance */
     -webkit-transform: translateZ(0) !important; /* Force hardware acceleration */
     transform: translateZ(0) !important; /* Force hardware acceleration */
+    scroll-snap-type: y proximity !important; /* Enable scroll snapping to help reach buttons */
   }
 
   /* Add padding to scrollable content for better spacing - ensure bottom is reachable */
@@ -155,6 +156,8 @@
     margin-left: -1.25rem !important; /* Extend to section edges */
     margin-right: -1.25rem !important;
     margin-bottom: -1.25rem !important;
+    scroll-margin-bottom: 2rem !important; /* Ensure buttons are scrolled into view */
+    scroll-snap-align: end !important; /* Snap to buttons when scrolling */
   }
 
   /* Ensure navigation buttons are side by side */
