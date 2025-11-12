@@ -12,6 +12,7 @@ async function handler(req, res) {
     console.log('📡 Public inventory endpoint: Fetching inventory items for job card form...')
     
     // Get all active inventory items
+    // Note: InventoryItem doesn't have a 'description' field, and status values are: in_stock, low_stock, out_of_stock, in_production
     const items = await prisma.inventoryItem.findMany({
       where: {
         status: {
@@ -22,11 +23,12 @@ async function handler(req, res) {
         id: true,
         sku: true,
         name: true,
-        description: true,
         unitCost: true,
         unit: true,
         category: true,
-        status: true
+        type: true,
+        status: true,
+        quantity: true
       },
       orderBy: {
         name: 'asc'
