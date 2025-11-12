@@ -1667,63 +1667,53 @@ const JobCardFormPublic = () => {
   }
 
   return (
-    <div className="job-card-public-wrapper min-h-screen bg-gradient-to-b from-gray-100 to-gray-50 py-5 px-3 sm:py-8 sm:px-4 lg:px-6">
-      <div className="max-w-4xl mx-auto space-y-5 sm:space-y-6">
-        <header className="relative overflow-hidden rounded-3xl border border-blue-200/50 bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-500 text-white shadow-xl shadow-blue-500/35">
-          <div className="pointer-events-none absolute inset-0">
-            <div className="absolute -top-24 -left-20 h-44 w-44 rounded-full bg-white/15 blur-3xl"></div>
-            <div className="absolute -bottom-24 right-0 h-56 w-56 rounded-full bg-white/10 blur-3xl"></div>
-          </div>
-          <div className="relative p-5 sm:p-8">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div className="max-w-2xl">
-                <p className="text-[11px] uppercase tracking-[0.35em] text-white/70 font-semibold">
+    <div className="job-card-public-wrapper fixed inset-0 flex flex-col bg-gradient-to-b from-gray-100 to-gray-50 overflow-hidden">
+      {/* Fixed Header */}
+      <header className="flex-shrink-0 relative overflow-hidden bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-500 text-white shadow-lg z-10">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute -top-24 -left-20 h-44 w-44 rounded-full bg-white/15 blur-3xl"></div>
+          <div className="absolute -bottom-24 right-0 h-56 w-56 rounded-full bg-white/10 blur-3xl"></div>
+        </div>
+        <div className="relative p-3 sm:p-5">
+          <div className="max-w-4xl mx-auto">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] sm:text-[11px] uppercase tracking-wide text-white/70 font-semibold">
                   Mobile Job Card
                 </p>
-                <h1 className="text-2xl sm:text-3xl font-bold leading-snug">
+                <h1 className="text-lg sm:text-2xl font-bold leading-tight mt-1">
                   Field Job Card Wizard
                 </h1>
-                <p className="text-sm sm:text-base text-white/80 mt-3">
-                  Capture job cards in minutes with a guided, offline-friendly flow. Photos, smart defaults,
-                  checklists, and customer sign-off included.
+                <p className="text-xs sm:text-sm text-white/80 mt-2 hidden sm:block">
+                  Capture job cards in minutes with a guided, offline-friendly flow.
                 </p>
               </div>
-              <div className="flex flex-col sm:flex-row sm:items-end items-stretch gap-2 sm:gap-3 w-full sm:w-auto">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-2 sm:mt-0">
                 <span
-                  className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold justify-center sm:justify-end ${
+                  className={`inline-flex items-center gap-2 px-2 py-1 rounded-full text-[10px] sm:text-xs font-semibold justify-center ${
                     isOnline ? 'bg-white/15 text-white' : 'bg-amber-200/90 text-amber-900'
                   }`}
                 >
                   <span
-                    className={`h-2.5 w-2.5 rounded-full ${
+                    className={`h-2 w-2 rounded-full ${
                       isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-500 animate-pulse'
                     }`}
                   ></span>
-                  {isOnline ? 'Online • Auto-sync enabled' : 'Offline mode • Saving locally'}
+                  {isOnline ? 'Online' : 'Offline'}
                 </span>
-                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={handleShareLink}
-                    className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-full bg-white/15 px-4 py-2 text-xs font-semibold tracking-wide hover:bg-white/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white focus-visible:ring-offset-transparent transition"
-                  >
-                    <i className="fa-regular fa-share-from-square text-sm"></i>
-                    {shareStatus}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleOpenClassicView}
-                    className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-semibold text-blue-700 shadow hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:ring-offset-2 focus-visible:ring-offset-blue-600 transition"
-                  >
-                    <i className="fa-solid fa-desktop text-sm"></i>
-                    Open classic view
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={handleShareLink}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-[10px] sm:text-xs font-semibold hover:bg-white/25 transition"
+                >
+                  <i className="fa-regular fa-share-from-square text-xs"></i>
+                  <span className="hidden sm:inline">Share</span>
+                </button>
               </div>
             </div>
-            <div className="mt-6">
+            <div className="mt-3 sm:mt-4">
               <div
-                className="mobile-step-scroll flex sm:hidden gap-3 overflow-x-auto pb-2 -mx-5 px-5 snap-x snap-mandatory"
+                className="mobile-step-scroll flex gap-2 overflow-x-auto pb-1 -mx-3 px-3 snap-x snap-mandatory scrollbar-hide"
                 aria-label="Wizard steps"
               >
                 {STEP_IDS.map((stepId, idx) => (
@@ -1738,25 +1728,13 @@ const JobCardFormPublic = () => {
                   />
                 ))}
               </div>
-              <div className="hidden sm:grid sm:grid-cols-5 gap-2 sm:gap-3">
-                {STEP_IDS.map((stepId, idx) => (
-                  <StepBadge
-                    key={stepId}
-                    index={idx}
-                    stepId={stepId}
-                    active={idx === currentStep}
-                    complete={idx < currentStep}
-                    onClick={() => goToStep(idx)}
-                  />
-                ))}
-              </div>
             </div>
-            <div className="mt-6 space-y-2">
-              <div className="flex items-center justify-between text-xs font-medium text-white/70">
+            <div className="mt-3 space-y-1">
+              <div className="flex items-center justify-between text-[10px] sm:text-xs font-medium text-white/70">
                 <span>Progress</span>
-                <span>{progressPercent}% complete</span>
+                <span>{progressPercent}%</span>
               </div>
-              <div className="h-2 w-full rounded-full bg-white/20 overflow-hidden">
+              <div className="h-1.5 w-full rounded-full bg-white/20 overflow-hidden">
                 <div
                   className="h-full rounded-full bg-white transition-all duration-500 ease-out"
                   style={{ width: `${progressPercent}%` }}
@@ -1764,28 +1742,38 @@ const JobCardFormPublic = () => {
               </div>
             </div>
           </div>
-        </header>
+        </div>
+      </header>
 
-        {stepError && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 flex items-start gap-3">
-            <i className="fas fa-exclamation-circle mt-0.5"></i>
-            <div className="text-sm leading-relaxed">{stepError}</div>
-          </div>
-        )}
+      {/* Scrollable Content Area */}
+      <div className="job-card-scrollable-content flex-1 overflow-y-auto overflow-x-hidden">
+        <div className="max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-5">
+          {stepError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2 flex items-start gap-2 text-sm">
+              <i className="fas fa-exclamation-circle mt-0.5 flex-shrink-0"></i>
+              <div className="leading-relaxed">{stepError}</div>
+            </div>
+          )}
 
-        <form onSubmit={(event) => { event.preventDefault(); handleSave(); }} className="space-y-5 sm:space-y-6">
-          {renderStepContent()}
+          <form onSubmit={(event) => { event.preventDefault(); handleSave(); }} className="space-y-4 sm:space-y-5">
+            {renderStepContent()}
+          </form>
+        </div>
+      </div>
 
-          <footer className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sticky bottom-0 sm:static sm:rounded-xl sm:shadow-sm">
-            <div className="text-xs text-gray-500">
+      {/* Fixed Footer */}
+      <footer className="flex-shrink-0 bg-white border-t border-gray-200 shadow-lg z-10">
+        <div className="max-w-4xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="text-[10px] sm:text-xs text-gray-500 text-center sm:text-left">
               Step {currentStep + 1} of {STEP_IDS.length}
             </div>
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
               <button
                 type="button"
                 onClick={handlePrevious}
                 disabled={currentStep === 0 || isSubmitting}
-                className="px-5 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
+                className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold touch-manipulation"
               >
                 Back
               </button>
@@ -1795,23 +1783,24 @@ const JobCardFormPublic = () => {
                   type="button"
                   onClick={handleNext}
                   disabled={isSubmitting}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-semibold shadow-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-semibold shadow-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Next
                 </button>
               ) : (
-            <button
-              type="submit"
+                <button
+                  type="submit"
+                  onClick={(event) => { event.preventDefault(); handleSave(); }}
                   disabled={isSubmitting}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-semibold shadow-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+                  className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-semibold shadow-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+                >
                   {isSubmitting ? 'Saving...' : 'Submit Job Card'}
-            </button>
+                </button>
               )}
+            </div>
           </div>
-          </footer>
-        </form>
-      </div>
+        </div>
+      </footer>
     </div>
   );
 };
