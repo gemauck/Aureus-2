@@ -64,22 +64,20 @@
   }
 
   /* Ensure main content area takes full width and footer stays at bottom */
+  /* DRAMATICALLY DIFFERENT: Use absolute positioning for explicit control */
   body.job-card-public .job-card-public-wrapper > div.flex-1 {
-    flex: 1 1 auto !important;
+    position: relative !important; /* Changed to relative to contain absolute scroll container */
     min-width: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
+    display: block !important; /* Changed from flex to block */
     overflow: hidden !important;
     visibility: visible !important;
     opacity: 1 !important;
-    min-height: 0 !important;
-    height: 100% !important; /* Take full available height */
-    max-height: 100% !important; /* Don't exceed viewport */
-    padding: 0 !important; /* Remove padding to maximize scrollable area */
-    margin: 0 !important; /* Remove margin */
-    gap: 0 !important; /* Remove gap */
+    height: 100% !important; /* Explicit height */
+    max-height: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
 
   /* Fixed Header */
@@ -129,18 +127,19 @@
   }
 
   /* Add padding to scrollable content for better spacing - ensure bottom is reachable */
-  /* ULTRA SPECIFIC - Target the inner div with multiple selectors for maximum specificity */
+  /* DRAMATICALLY DIFFERENT: Ensure content expands naturally with generous padding */
   body.job-card-public .job-card-public-wrapper .job-card-scrollable-content > div,
   html.job-card-public body.job-card-public .job-card-public-wrapper .job-card-scrollable-content > div,
   body.job-card-public .job-card-public-wrapper > div.flex-1 > .job-card-scrollable-content > div,
   html.job-card-public body.job-card-public .job-card-public-wrapper > div.flex-1 > .job-card-scrollable-content > div {
-    padding: 1rem 1rem 16rem 1rem !important; /* Increased bottom padding to 16rem (256px) to ensure nav buttons are fully visible when scrolled on all devices */
-    min-height: auto !important; /* Remove min-height constraint to allow natural content height */
-    height: auto !important; /* Allow content to expand beyond viewport */
-    max-height: none !important; /* Remove any max-height constraints */
+    padding: 1rem 1rem 20rem 1rem !important; /* Increased to 20rem (320px) to ensure nav buttons are definitely reachable */
+    min-height: 100% !important; /* Ensure minimum height of viewport */
+    height: auto !important; /* Allow content to expand naturally */
+    max-height: none !important;
     box-sizing: border-box !important;
-    display: block !important; /* Ensure it's a block element */
-    position: relative !important; /* Ensure proper positioning */
+    display: block !important;
+    position: relative !important;
+    width: 100% !important; /* Ensure full width */
   }
 
   /* Navigation buttons at end of each section - mobile optimized */
