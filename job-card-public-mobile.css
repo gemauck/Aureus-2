@@ -71,6 +71,8 @@
     display: flex !important;
     flex-direction: column !important;
     overflow: hidden !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
 
   /* Fixed Header */
@@ -87,8 +89,11 @@
     z-index: 10 !important;
   }
 
-  /* Scrollable Content Area */
-  body.job-card-public .job-card-public-wrapper .job-card-scrollable-content {
+  /* Scrollable Content Area - ULTRA SPECIFIC to override other mobile CSS */
+  body.job-card-public .job-card-public-wrapper .job-card-scrollable-content,
+  body.job-card-public .job-card-public-wrapper > div.flex-1 > .job-card-scrollable-content,
+  html.job-card-public body.job-card-public .job-card-public-wrapper .job-card-scrollable-content {
+    display: block !important;
     flex: 1 1 auto !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
@@ -101,6 +106,9 @@
     transform: none !important;
     margin: 0 !important;
     min-height: 0 !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    height: auto !important;
   }
 
   /* Fixed Footer */
@@ -120,7 +128,8 @@
   }
 
   /* Form styling */
-  body.job-card-public .job-card-public-wrapper form {
+  body.job-card-public .job-card-public-wrapper form,
+  body.job-card-public .job-card-scrollable-content form {
     display: block !important;
     width: 100% !important;
     max-width: 100% !important;
@@ -130,6 +139,23 @@
     transform: none !important;
     margin: 0 !important;
     padding: 0 !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  /* Ensure form content is visible */
+  body.job-card-public .job-card-scrollable-content form > *,
+  body.job-card-public .job-card-scrollable-content > * {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+
+  body.job-card-public .job-card-scrollable-content form section,
+  body.job-card-public .job-card-scrollable-content section {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
 
   /* All nested elements reset */
@@ -248,11 +274,14 @@
   }
 
   body.job-card-public .job-card-public-wrapper .job-card-scrollable-content {
+    display: block !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
     -webkit-overflow-scrolling: touch !important;
     width: 100% !important;
     max-width: 100% !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
 
   /* Ensure all content fits */
@@ -335,12 +364,15 @@
 
   /* Scrollable content - works when zoomed */
   body.job-card-public .job-card-public-wrapper .job-card-scrollable-content {
+    display: block !important;
     flex: 1 1 auto !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
     -webkit-overflow-scrolling: touch !important;
     min-height: 0 !important;
     max-height: 100% !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
 
   /* Ensure form content is scrollable */
@@ -374,8 +406,11 @@
 /* Ensure scrolling works when zoomed in */
 @media (min-width: 1280px) {
   body.job-card-public .job-card-public-wrapper .job-card-scrollable-content {
+    display: block !important;
     overflow-y: scroll !important;
     overflow-x: hidden !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
 
   /* When zoomed, allow horizontal scroll if needed */
