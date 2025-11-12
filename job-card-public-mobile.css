@@ -123,9 +123,17 @@
 
   /* Navigation buttons at end of each section - mobile optimized */
   body.job-card-public .job-card-public-wrapper .mt-6.pt-4 {
-    margin-top: 1.5rem !important;
-    padding-top: 1rem !important;
-    border-top: 1px solid #e5e7eb !important;
+    margin-top: 2rem !important; /* More space above */
+    padding-top: 1.25rem !important;
+    padding-bottom: 0.5rem !important;
+    border-top: 2px solid #e5e7eb !important; /* Thicker, more visible border */
+    background-color: #f9fafb !important; /* Light background */
+    border-radius: 8px !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    margin-left: -1.25rem !important; /* Extend to section edges */
+    margin-right: -1.25rem !important;
+    margin-bottom: -1.25rem !important;
   }
 
   /* Ensure navigation buttons are side by side */
@@ -138,16 +146,26 @@
 
   /* Navigation button styles - mobile friendly */
   body.job-card-public .job-card-public-wrapper .mt-6.pt-4 button {
-    padding: 0.5rem 1rem !important;
+    padding: 0.625rem 1.25rem !important; /* Slightly larger */
     font-size: 0.875rem !important;
     min-height: 44px !important; /* Touch-friendly */
     height: auto !important;
     width: auto !important;
     flex: 0 0 auto !important;
-    min-width: 80px !important;
+    min-width: 90px !important;
     line-height: 1.4 !important;
     box-sizing: border-box !important;
     touch-action: manipulation !important;
+    font-weight: 500 !important; /* Medium weight */
+    border-radius: 8px !important; /* Rounded corners */
+    transition: all 0.2s ease !important; /* Smooth transitions */
+  }
+  
+  /* Step indicator text styling */
+  body.job-card-public .job-card-public-wrapper .mt-6.pt-4 > div:first-child {
+    font-size: 0.8125rem !important;
+    color: #6b7280 !important; /* Medium gray */
+    font-weight: 500 !important;
   }
 
   /* Footer removed - navigation buttons are now inline at end of each section */
@@ -305,30 +323,35 @@
 
   body.job-card-public .job-card-public-wrapper label {
     font-size: 0.875rem !important;
-    line-height: 1.6 !important; /* Increased from 1.5 */
-    margin-bottom: 0.75rem !important; /* Increased from 0.625rem */
-    margin-top: 0.75rem !important; /* Increased from 0.5rem */
+    line-height: 1.5 !important;
+    margin-bottom: 0.5rem !important;
+    margin-top: 0.75rem !important;
     display: block !important;
-    letter-spacing: 0.015em !important; /* Increased spacing */
+    letter-spacing: 0.01em !important;
+    font-weight: 500 !important; /* Medium weight for labels */
+    color: #374151 !important; /* Dark gray for better contrast */
   }
 
   body.job-card-public .job-card-public-wrapper h2 {
     font-size: 1.125rem !important;
     line-height: 1.5 !important; /* Increased from 1.4 */
-    margin-bottom: 1rem !important; /* Increased from 0.75rem */
-    margin-top: 0.75rem !important; /* Increased from 0.5rem */
-    letter-spacing: -0.005em !important;
+    margin-bottom: 0.75rem !important;
+    margin-top: 0 !important;
+    letter-spacing: -0.01em !important;
+    font-weight: 600 !important; /* Slightly bolder */
+    color: #111827 !important; /* Darker for better contrast */
   }
 
   body.job-card-public .job-card-public-wrapper p {
     font-size: 0.875rem !important;
-    line-height: 1.7 !important; /* Increased from 1.6 */
-    margin-bottom: 1.25rem !important; /* Increased from 1rem */
-    margin-top: 0.5rem !important; /* Increased from 0.25rem */
-    letter-spacing: 0.015em !important; /* Increased spacing */
+    line-height: 1.6 !important; /* Slightly tighter for better readability */
+    margin-bottom: 1rem !important;
+    margin-top: 0.25rem !important;
+    letter-spacing: 0.01em !important;
+    color: #4b5563 !important; /* Better contrast gray */
   }
 
-  /* Section cards - improved spacing */
+  /* Section cards - improved spacing and visual design */
   body.job-card-public .job-card-public-wrapper section {
     width: 100% !important;
     max-width: 100% !important;
@@ -336,9 +359,13 @@
     left: 0 !important;
     right: 0 !important;
     transform: none !important;
-    margin: 0 0 1rem 0 !important;
-    padding: 1rem !important;
+    margin: 0 0 1.25rem 0 !important;
+    padding: 1.25rem !important; /* Increased padding */
     box-sizing: border-box !important;
+    background-color: #ffffff !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 12px !important; /* More rounded */
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important; /* Subtle shadow */
   }
 
   /* Better spacing between sections */
