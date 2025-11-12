@@ -74,17 +74,18 @@ async function handler(req, res) {
         reasonForVisit: body.reasonForVisit || '',
         diagnosis: body.diagnosis || '',
         actionsTaken: body.actionsTaken || '',
-        otherComments: body.otherComments || '',
         stockUsed: JSON.stringify(stockUsed),
         materialsBought: JSON.stringify(materialsBought),
         totalMaterialsCost,
         photos: JSON.stringify(photos),
-        // Store customer signature and details in otherComments if needed
-        otherComments: (body.otherComments || '') + 
-          (body.customerSignature ? `\n\nCustomer Signature: ${body.customerSignature.substring(0, 100)}...` : '') +
-          (body.customerName ? `\nCustomer: ${body.customerName}` : '') +
-          (body.customerPosition ? `\nPosition: ${body.customerPosition}` : '') +
-          (body.customerFeedback ? `\nFeedback: ${body.customerFeedback}` : ''),
+        // Store customer signature and details in otherComments
+        otherComments: [
+          body.otherComments || '',
+          body.customerName ? `Customer: ${body.customerName}` : '',
+          body.customerPosition ? `Position: ${body.customerPosition}` : '',
+          body.customerFeedback ? `Feedback: ${body.customerFeedback}` : '',
+          body.customerSignature ? `Signature: [Captured]` : ''
+        ].filter(Boolean).join('\n'),
         status: body.status || 'draft',
         submittedAt: body.submittedAt ? new Date(body.submittedAt) : new Date(),
         ownerId: null // Public form - no owner
