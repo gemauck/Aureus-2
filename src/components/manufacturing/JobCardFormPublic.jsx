@@ -1054,10 +1054,19 @@ const JobCardFormPublic = () => {
       setCurrentStep(0);
       return;
     }
-    if (!formData.agentName) {
+    // Check for technician - can be agentName or leadTechnicianId
+    if (!formData.agentName && !formData.leadTechnicianId) {
       setStepError('Please select the attending technician.');
       setCurrentStep(0);
       return;
+    }
+    
+    // If leadTechnicianId is set but agentName is not, set agentName from the technician list
+    if (formData.leadTechnicianId && !formData.agentName) {
+      const tech = availableTechnicians.find(t => t.id === formData.leadTechnicianId);
+      if (tech) {
+        formData.agentName = tech.name || tech.email;
+      }
     }
     // Check signature - verify canvas has content (not just relying on state)
     const canvas = signatureCanvasRef.current;

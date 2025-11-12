@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
+    <title>Mobile Form Test - Abcotronics ERP</title>
+    
+    <!-- Tailwind CSS -->
+    <link rel="stylesheet" href="./dist/styles.css">
+    
+    <!-- Mobile Optimizations CSS -->
+    <link rel="stylesheet" href="mobile-optimizations.css">
+    <link rel="stylesheet" href="mobile-refresh-2025.css">
+    <link rel="stylesheet" href="mobile-critical-fix.css">
+    <link rel="stylesheet" href="mobile-nuclear-fix.css">
+    <link rel="stylesheet" href="dark-mode-fixes.css">
+    <link rel="stylesheet" href="mobile-ux-enhancement.css">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- React and ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel Standalone for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+        
+        .test-container {
+            min-height: 100vh;
+            background: #f3f4f6;
+        }
+        
+        .test-header {
+            background: white;
+            padding: 1rem;
+            border-bottom: 1px solid #e5e7eb;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .test-controls {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .test-button {
+            padding: 0.5rem 1rem;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .test-button:hover {
+            background: #2563eb;
+        }
+        
+        .test-button.secondary {
+            background: #6b7280;
+        }
+        
+        .test-button.secondary:hover {
+            background: #4b5563;
+        }
+        
+        .device-info {
+            padding: 0.5rem 1rem;
+            background: #f3f4f6;
+            border-radius: 0.5rem;
+            font-size: 12px;
+            color: #6b7280;
+        }
+        
+        @media (max-width: 768px) {
+            .test-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .test-button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <div class="test-header">
+            <h1 style="margin: 0 0 1rem 0; font-size: 1.25rem; font-weight: 600;">Mobile Form Test</h1>
+            <div class="test-controls">
+                <button class="test-button" onclick="openNewClientForm()">New Client Form</button>
+                <button class="test-button" onclick="openEditClientForm()">Edit Client Form</button>
+                <button class="test-button secondary" onclick="toggleDarkMode()">Toggle Dark Mode</button>
+                <div class="device-info" id="deviceInfo">Width: <span id="width">-</span>px</div>
+            </div>
+        </div>
+        
+        <div id="form-container"></div>
+    </div>
+
+    <!-- Load the mobile form component using the same method as index.html -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script type="text/babel" data-type="module" src="./src/components/clients/ClientDetailModalMobile.jsx"></script>
+    
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        
+        // Mock theme hook
+        window.useTheme = () => {
+            const [isDark, setIsDark] = useState(document.documentElement.classList.contains('dark'));
+            
+            useEffect(() => {
+                const observer = new MutationObserver(() => {
+                    setIsDark(document.documentElement.classList.contains('dark'));
+                });
+                observer.observe(document.documentElement, {
+                    attributes: true,
+                    attributeFilter: ['class']
+                });
+                return () => observer.disconnect();
+            }, []);
+            
+            return { isDark };
+        };
+        
+        // Wait for component to load
+        const waitForComponent = () => {
+            if (window.ClientDetailModalMobile) {
+                console.log('✅ ClientDetailModalMobile is ready');
+                return true;
+            }
+            return false;
+        };
+        
+        // Poll for component availability
+        const checkComponent = setInterval(() => {
+            if (waitForComponent()) {
+                clearInterval(checkComponent);
+            }
+        }, 100);
+        
+        // Timeout after 5 seconds
+        setTimeout(() => {
+            clearInterval(checkComponent);
+            if (!window.ClientDetailModalMobile) {
+                console.error('❌ ClientDetailModalMobile failed to load');
+                alert('Component failed to load. Make sure the server is running and the file exists at ./src/components/clients/ClientDetailModalMobile.jsx');
+            }
+        }, 5000);
+        
+        // Mock data
+        const mockClient = {
+            id: 1,
+            name: 'Test Company',
+            industry: 'Technology',
+            status: 'Active',
+            address: '123 Test Street, Test City',
+            website: 'https://example.com',
+            notes: 'This is a test client for mobile form testing.',
+            contacts: [
+                {
+                    id: 1,
+                    name: 'John Doe',
+                    email: 'john@example.com',
+                    phone: '+27 12 345 6789',
+                    role: 'CEO',
+                    department: 'Executive',
+                    isPrimary: true
+                }
+            ],
+            sites: [
+                {
+                    id: 1,
+                    name: 'Main Office',
+                    address: '123 Test Street',
+                    gpsCoordinates: '-26.2041, 28.0473',
+                    notes: 'Headquarters'
+                }
+            ],
+            opportunities: [
+                {
+                    id: 1,
+                    name: 'Q1 Project',
+                    value: 50000,
+                    stage: 'Interest',
+                    expectedCloseDate: '2025-03-31',
+                    notes: 'Potential project opportunity'
+                }
+            ],
+            projectIds: [],
+            comments: [],
+            contracts: [],
+            followUps: [],
+            activityLog: [],
+            billingTerms: {
+                paymentTerms: 'Net 30',
+                billingFrequency: 'Monthly',
+                currency: 'ZAR',
+                retainerAmount: 0,
+                taxExempt: false,
+                notes: ''
+            }
+        };
+        
+        const mockProjects = [
+            { id: 1, name: 'Project Alpha', description: 'First project', status: 'Active' },
+            { id: 2, name: 'Project Beta', description: 'Second project', status: 'Active' }
+        ];
+        
+        // Test functions
+        window.openNewClientForm = () => {
+            const container = document.getElementById('form-container');
+            const root = ReactDOM.createRoot(container);
+            
+            if (!window.ClientDetailModalMobile) {
+                alert('Component not loaded yet. Please wait...');
+                return;
+            }
+            
+            root.render(
+                React.createElement(window.ClientDetailModalMobile, {
+                    client: null,
+                    onSave: (data) => {
+                        console.log('Form saved:', data);
+                        alert('Form saved! Check console for data.');
+                    },
+                    onClose: () => {
+                        root.render(null);
+                    },
+                    allProjects: mockProjects,
+                    onNavigateToProject: (projectId) => {
+                        console.log('Navigate to project:', projectId);
+                    }
+                })
+            );
+        };
+        
+        window.openEditClientForm = () => {
+            const container = document.getElementById('form-container');
+            const root = ReactDOM.createRoot(container);
+            
+            if (!window.ClientDetailModalMobile) {
+                alert('Component not loaded yet. Please wait...');
+                return;
+            }
+            
+            root.render(
+                React.createElement(window.ClientDetailModalMobile, {
+                    client: mockClient,
+                    onSave: (data) => {
+                        console.log('Form saved:', data);
+                        alert('Form saved! Check console for data.');
+                    },
+                    onClose: () => {
+                        root.render(null);
+                    },
+                    allProjects: mockProjects,
+                    onNavigateToProject: (projectId) => {
+                        console.log('Navigate to project:', projectId);
+                    }
+                })
+            );
+        };
+        
+        window.toggleDarkMode = () => {
+            document.documentElement.classList.toggle('dark');
+        };
+        
+        // Update device info
+        const updateDeviceInfo = () => {
+            const width = window.innerWidth;
+            document.getElementById('width').textContent = width;
+        };
+        
+        window.addEventListener('resize', updateDeviceInfo);
+        updateDeviceInfo();
+        
+        // Load component on page load
+        loadComponent();
+    </script>
+</body>
+</html>
+
