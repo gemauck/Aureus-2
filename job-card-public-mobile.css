@@ -142,16 +142,26 @@
     flex-wrap: nowrap !important;
   }
 
-  body.job-card-public footer button {
+  /* ULTRA SPECIFIC button styles to override all conflicting CSS */
+  body.job-card-public footer button,
+  body.job-card-public .job-card-public-wrapper footer button,
+  body.job-card-public footer > div > div > button,
+  body.job-card-public footer .flex-row button {
     padding: 0.375rem 0.625rem !important; /* Smaller padding */
+    padding-top: 0.375rem !important;
+    padding-bottom: 0.375rem !important;
+    padding-left: 0.625rem !important;
+    padding-right: 0.625rem !important;
     font-size: 0.6875rem !important; /* Smaller font (11px) */
     min-height: 32px !important; /* Smaller height */
-    height: auto !important;
+    height: 32px !important; /* Force height */
+    max-height: 32px !important; /* Prevent expansion */
     width: auto !important;
     flex: 0 0 auto !important;
     min-width: 60px !important; /* Smaller min-width */
     max-width: 100px !important; /* Smaller max-width */
     line-height: 1.2 !important; /* Tighter line-height for smaller buttons */
+    box-sizing: border-box !important;
   }
 
   /* Force buttons container to not stack */
@@ -188,9 +198,9 @@
     opacity: 1 !important;
     box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1) !important;
     pointer-events: auto !important;
-    /* Remove translateZ as it can create stacking context issues */
-    isolation: isolate !important; /* Create new stacking context */
-    contain: layout style paint !important; /* Optimize rendering */
+    /* Remove isolation and contain as they can create stacking context issues */
+    isolation: auto !important; /* Don't create new stacking context */
+    contain: none !important; /* Don't contain - allow footer to escape */
   }
 
   /* Footer must escape parent container - ensure it's fixed to viewport */
@@ -214,6 +224,15 @@
     -webkit-transform: none !important;
     perspective: none !important;
     -webkit-perspective: none !important;
+    position: relative !important; /* Keep relative but don't create stacking context */
+    z-index: auto !important; /* Remove z-index that creates stacking context */
+    isolation: auto !important; /* Don't isolate */
+  }
+  
+  /* Ensure footer's direct parent doesn't interfere */
+  body.job-card-public .job-card-public-wrapper > div.flex-1 {
+    position: relative !important;
+    z-index: auto !important;
   }
 
   /* Keep wrapper overflow for layout but footer escapes via fixed positioning */
