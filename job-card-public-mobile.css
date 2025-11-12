@@ -1,292 +1,43 @@
 /* ==========================================================================
-   Job Card Public - iPhone/Mobile Optimized (COMPLETE REWRITE)
-   Simple, native scrolling approach for iPhone-sized phones
+   Job Card Public - Mobile Optimized (FRESH START)
+   Simple, clean mobile styles
    ========================================================================== */
 
-/* iPhone and small mobile devices (up to 1024px - covers all mobile) */
 @media (max-width: 1024px) {
-  /* Reset everything - start fresh */
-  html.job-card-public,
-  body.job-card-public {
-    height: 100% !important;
-    width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow-x: hidden !important;
-    position: relative !important;
-    -webkit-text-size-adjust: 100% !important;
-  }
-
-  body.job-card-public #root {
-    height: 100% !important;
-    width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow-x: hidden !important;
-  }
-
-  /* Main wrapper - simple container */
+  /* Basic mobile layout */
   body.job-card-public .job-card-public-wrapper {
-    position: relative !important;
     width: 100% !important;
     min-height: 100vh !important;
-    min-height: -webkit-fill-available !important; /* iOS Safari fix */
-    display: flex !important;
-    flex-direction: column !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    background-color: #f3f4f6 !important;
-    overflow-x: hidden !important;
+    min-height: -webkit-fill-available !important;
   }
 
-  /* Hide desktop sidebar */
-  body.job-card-public .job-card-public-wrapper > aside {
-    display: none !important;
-  }
-
-  /* Header - simple, no fixed positioning */
-  body.job-card-public .job-card-public-wrapper > header {
-    position: relative !important;
-    width: 100% !important;
-    flex-shrink: 0 !important;
-    z-index: 10 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  /* Main content area - simple flex container */
-  body.job-card-public .job-card-public-wrapper > div.flex-1 {
-    flex: 1 1 auto !important;
-    min-height: 0 !important;
-    width: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-    position: relative !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: visible !important;
-  }
-
-  /* Scrollable content - NATIVE SCROLLING (no nested scroll) */
+  /* Ensure form is visible */
   body.job-card-public .job-card-public-wrapper .job-card-scrollable-content {
-    display: block !important; /* CRITICAL: Force display */
+    display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
-    flex: 1 1 auto !important;
-    width: 100% !important;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    -webkit-overflow-scrolling: touch !important;
-    position: relative !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    min-height: 0 !important;
-    height: auto !important;
-    max-height: none !important;
   }
 
-  /* Inner content div - ensure it expands naturally */
-  body.job-card-public .job-card-public-wrapper .job-card-scrollable-content > div {
-    width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 auto !important;
-    padding: 0.75rem 0.75rem 25rem 0.75rem !important; /* Reduced side padding, keep bottom padding */
-    box-sizing: border-box !important;
-    display: block !important;
-    position: relative !important;
-    min-height: calc(100vh - 200px) !important; /* Ensure minimum height */
-  }
-
-  /* Form container - proper alignment */
-  body.job-card-public .job-card-public-wrapper form {
-    width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  /* Card/section containers - consistent sizing */
-  body.job-card-public .job-card-public-wrapper .bg-white,
-  body.job-card-public .job-card-public-wrapper .rounded-lg,
-  body.job-card-public .job-card-public-wrapper .p-4,
-  body.job-card-public .job-card-public-wrapper .p-5,
-  body.job-card-public .job-card-public-wrapper .p-6 {
-    width: 100% !important;
-    max-width: 100% !important;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-    padding: 1rem !important; /* Balanced padding - slightly larger */
-    box-sizing: border-box !important;
-  }
-
-  /* Navigation buttons - always at end of content */
-  body.job-card-public .job-card-public-wrapper .mt-6.pt-4 {
-    margin-top: 2rem !important;
-    padding-top: 1.5rem !important;
-    padding-bottom: 1rem !important;
-    border-top: 2px solid #e5e7eb !important;
-    background-color: #ffffff !important;
-    border-radius: 12px !important;
-    padding-left: 1rem !important;
-    padding-right: 1rem !important;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-    margin-bottom: 0 !important;
-    position: relative !important;
-    z-index: 5 !important;
-    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.05) !important;
-  }
-
-  /* Navigation buttons container - side by side */
-  body.job-card-public .job-card-public-wrapper .mt-6.pt-4 > div:last-child {
-    display: flex !important;
-    flex-direction: row !important;
-    gap: 0.75rem !important;
-    flex-wrap: nowrap !important;
-    justify-content: flex-end !important;
-    align-items: center !important;
-  }
-
-  /* Navigation button styles */
-  body.job-card-public .job-card-public-wrapper .mt-6.pt-4 button {
-    padding: 0.75rem 1.5rem !important;
-    font-size: 0.875rem !important;
-    min-height: 44px !important; /* iOS touch target */
-    height: auto !important;
-    width: auto !important;
-    flex: 0 0 auto !important;
-    min-width: 80px !important;
-    max-width: 120px !important;
-    line-height: 1.4 !important;
-    box-sizing: border-box !important;
-    touch-action: manipulation !important;
-    font-weight: 600 !important;
-    border-radius: 8px !important;
-    transition: all 0.2s ease !important;
-    cursor: pointer !important;
-  }
-
-  /* Step indicator */
-  body.job-card-public .job-card-public-wrapper .mt-6.pt-4 > div:first-child {
-    font-size: 0.8125rem !important;
-    color: #6b7280 !important;
-    font-weight: 500 !important;
-    margin-bottom: 0.5rem !important;
-  }
-
-  /* Form elements - properly sized and aligned */
+  /* Form inputs - reasonable size */
   body.job-card-public .job-card-public-wrapper input,
   body.job-card-public .job-card-public-wrapper select,
   body.job-card-public .job-card-public-wrapper textarea {
-    font-size: 16px !important; /* Prevents iOS zoom on focus */
-    min-height: 42px !important; /* Balanced size - not too big, not too small */
-    max-height: 42px !important; /* Fixed height for consistency */
-    height: 42px !important;
-    padding: 0.625rem 0.875rem !important; /* Balanced padding */
-    margin: 0 !important;
-    margin-top: 0.5rem !important; /* Space above input to prevent covering label */
+    font-size: 16px !important;
+    min-height: 42px !important;
+    padding: 0.625rem 0.875rem !important;
     width: 100% !important;
-    max-width: 100% !important;
     box-sizing: border-box !important;
-    border-radius: 6px !important;
-    border: 1px solid #d1d5db !important;
-    display: block !important;
-    vertical-align: middle !important;
   }
 
-  /* Textarea - allow height to expand */
-  body.job-card-public .job-card-public-wrapper textarea {
-    min-height: 80px !important;
-    max-height: none !important;
-    height: auto !important;
-    resize: vertical !important;
-  }
-
-  /* Form field containers - ensure proper alignment */
-  body.job-card-public .job-card-public-wrapper .space-y-4 > *,
-  body.job-card-public .job-card-public-wrapper .space-y-5 > *,
-  body.job-card-public .job-card-public-wrapper .space-y-6 > * {
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-
-  /* Form groups - consistent spacing */
-  body.job-card-public .job-card-public-wrapper form > div,
-  body.job-card-public .job-card-public-wrapper form > section {
-    margin-bottom: 1rem !important;
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-
-  /* Labels - proper alignment with spacing */
+  /* Proper spacing */
   body.job-card-public .job-card-public-wrapper label {
     display: block !important;
-    width: 100% !important;
-    margin-bottom: 0.5rem !important; /* Increased spacing below label */
-    margin-top: 0 !important;
-    text-align: left !important;
-    padding: 0 !important;
-    line-height: 1.5 !important;
+    margin-bottom: 0.5rem !important;
   }
 
-  /* Ensure labels don't overlap with inputs */
-  body.job-card-public .job-card-public-wrapper label + input,
-  body.job-card-public .job-card-public-wrapper label + select,
-  body.job-card-public .job-card-public-wrapper label + textarea {
+  body.job-card-public .job-card-public-wrapper input,
+  body.job-card-public .job-card-public-wrapper select {
     margin-top: 0.5rem !important;
   }
-
-  /* Form field groups - proper spacing */
-  body.job-card-public .job-card-public-wrapper .space-y-4 > * + *,
-  body.job-card-public .job-card-public-wrapper .space-y-5 > * + *,
-  body.job-card-public .job-card-public-wrapper .space-y-6 > * + * {
-    margin-top: 1rem !important; /* Ensure spacing between form sections */
-  }
-
-  /* Paragraphs and descriptions - proper spacing */
-  body.job-card-public .job-card-public-wrapper p {
-    font-size: 0.875rem !important;
-    line-height: 1.6 !important;
-    margin-bottom: 1rem !important; /* Increased spacing below paragraphs */
-    margin-top: 0 !important;
-    padding: 0 !important;
-  }
-
-  /* Headings - proper spacing */
-  body.job-card-public .job-card-public-wrapper h2 {
-    font-size: 1.125rem !important;
-    line-height: 1.5 !important;
-    margin-bottom: 0.75rem !important; /* Increased spacing below headings */
-    margin-top: 0 !important;
-    padding: 0 !important;
-  }
-
 }
 
-/* Small mobile devices (340px and below) */
-@media (max-width: 340px) {
-  body.job-card-public .job-card-public-wrapper .job-card-scrollable-content > div {
-    padding: 0.75rem 0.75rem 20rem 0.75rem !important;
-  }
-
-  body.job-card-public .job-card-public-wrapper .mt-6.pt-4 {
-    padding-left: 0.75rem !important;
-    padding-right: 0.75rem !important;
-  }
-
-  body.job-card-public .job-card-public-wrapper .mt-6.pt-4 button {
-    padding: 0.625rem 1rem !important;
-    font-size: 0.8125rem !important;
-    min-width: 70px !important;
-  }
-}
-
-/* Medium mobile and tablets (481px to 1024px) - keep existing behavior */
-@media (min-width: 481px) and (max-width: 1024px) {
-  /* Keep the existing CSS for tablets */
-  body.job-card-public .job-card-public-wrapper .job-card-scrollable-content > div {
-    padding-bottom: 15rem !important;
-  }
-}

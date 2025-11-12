@@ -1015,15 +1015,36 @@ const JobCardFormPublic = () => {
 
       if (isOnline && window.DatabaseAPI?.createJobCard) {
         try {
-          await window.DatabaseAPI.createJobCard(jobCardData);
-          await syncClientContact(jobCardData);
-          console.log('✅ Job card synced to API');
+          console.log('📡 Attempting to save job card to database...', { 
+            hasClientId: !!jobCardData.clientId,
+            hasAgentName: !!jobCardData.agentName,
+            hasSignature: !!jobCardData.customerSignature 
+          });
+          
+          const response = await window.DatabaseAPI.createJobCard(jobCardData);
+          
+          if (response && response.data) {
+            console.log('✅ Job card saved to database successfully:', response.data);
+            await syncClientContact(jobCardData);
+            alert('✅ Job card saved successfully to database!');
+          } else {
+            throw new Error('No response data from API');
+          }
         } catch (error) {
-          console.warn('⚠️ Failed to sync job card to API, saved offline:', error.message);
+          console.error('❌ Failed to sync job card to API:', error);
+          alert(`⚠️ Saved locally but failed to sync to database: ${error.message}. Please check your connection and try again.`);
+          // Don't return - still show success for local save
         }
+      } else if (!isOnline) {
+        console.log('📴 Offline mode - saved to localStorage only');
+      } else {
+        console.warn('⚠️ DatabaseAPI.createJobCard not available');
       }
 
-      alert('✅ Job card saved successfully!' + (isOnline ? '' : ' (Saved offline - will sync when online)'));
+      // Only show generic success if we didn't already show a specific message
+      if (!isOnline || !window.DatabaseAPI?.createJobCard) {
+        alert('✅ Job card saved successfully!' + (isOnline ? '' : ' (Saved offline - will sync when online)'));
+      }
       resetForm();
     } catch (error) {
       console.error('Error saving job card:', error);
