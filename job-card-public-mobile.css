@@ -62,7 +62,7 @@
     display: none !important;
   }
 
-  /* Ensure main content area takes full width */
+  /* Ensure main content area takes full width and footer stays at bottom */
   body.job-card-public .job-card-public-wrapper > div.flex-1 {
     flex: 1 1 auto !important;
     min-width: 0 !important;
@@ -73,6 +73,7 @@
     overflow: hidden !important;
     visibility: visible !important;
     opacity: 1 !important;
+    min-height: 0 !important;
   }
 
   /* Fixed Header */
@@ -111,8 +112,9 @@
     height: auto !important;
   }
 
-  /* Fixed Footer */
-  body.job-card-public .job-card-public-wrapper > footer {
+  /* Fixed Footer - ensure it's at bottom */
+  body.job-card-public .job-card-public-wrapper > footer,
+  body.job-card-public .job-card-public-wrapper > div.flex-1 > footer {
     flex-shrink: 0 !important;
     position: relative !important;
     width: 100% !important;
@@ -121,10 +123,14 @@
     right: 0 !important;
     transform: none !important;
     margin: 0 !important;
+    margin-top: auto !important;
     padding: 0 !important;
     z-index: 10 !important;
     background-color: #ffffff !important;
     border-top: 1px solid #e5e7eb !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
 
   /* Form styling */
