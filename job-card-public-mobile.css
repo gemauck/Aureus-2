@@ -118,8 +118,6 @@
     min-height: 0 !important; /* Critical for flex scrolling */
     height: 0 !important; /* Force flex to calculate height */
     max-height: none !important; /* Remove max-height constraints */
-    /* Ensure scrollHeight includes all content including padding */
-    scroll-padding-bottom: 0 !important;
     visibility: visible !important;
     opacity: 1 !important;
     touch-action: pan-y !important; /* Enable vertical touch scrolling */
