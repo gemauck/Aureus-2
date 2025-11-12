@@ -133,10 +133,12 @@
   }
 
   /* Ensure buttons are side by side and smaller */
-  body.job-card-public footer .flex-row {
+  body.job-card-public footer .flex-row,
+  body.job-card-public footer > div > div:last-child {
     display: flex !important;
     flex-direction: row !important;
     gap: 0.5rem !important;
+    flex-wrap: nowrap !important;
   }
 
   body.job-card-public footer button {
@@ -144,6 +146,17 @@
     font-size: 0.75rem !important;
     min-height: 36px !important;
     height: auto !important;
+    width: auto !important;
+    flex: 0 0 auto !important;
+    min-width: 70px !important;
+    max-width: none !important;
+  }
+
+  /* Force buttons container to not stack */
+  body.job-card-public footer > div > div {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
   }
 
   /* Fixed Footer - ensure it's at bottom and always visible */
