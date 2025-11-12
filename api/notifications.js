@@ -8,6 +8,17 @@ import { sendNotificationEmail } from './_lib/email.js'
 import { parseJsonBody } from './_lib/body.js'
 import { logDatabaseError } from './_lib/dbErrorHandler.js'
 
+// Helper function to escape HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
 async function handler(req, res) {
     // JWT payload uses 'sub' for user ID, not 'id'
     const userId = req.user?.sub || req.user?.id;
@@ -86,7 +97,23 @@ async function handler(req, res) {
             const body = req.body || await parseJsonBody(req);
             const { userId: targetUserId, type, title, message, link, metadata } = body;
             
+            console.log('📥 POST /notifications - Received notification request:', {
+                targetUserId,
+                type,
+                title: title?.substring(0, 50),
+                message: message?.substring(0, 50),
+                hasLink: !!link,
+                hasMetadata: !!metadata,
+                requestUserId: userId
+            });
+            
             if (!targetUserId || !type || !title || !message) {
+                console.error('❌ POST /notifications - Missing required fields:', {
+                    hasUserId: !!targetUserId,
+                    hasType: !!type,
+                    hasTitle: !!title,
+                    hasMessage: !!message
+                });
                 return badRequest(res, 'Missing required fields: userId, type, title, message');
             }
             
@@ -105,11 +132,38 @@ async function handler(req, res) {
             });
             
             if (!settings) {
-                // Create default settings (all in-app notifications enabled by default)
+                // Create default settings (all notifications enabled by default, including emailTasks)
                 settings = await prisma.notificationSetting.create({
-                    data: { userId: targetUserId }
+                    data: { 
+                        userId: targetUserId,
+                        emailTasks: true,  // Explicitly set to true for new users
+                        emailMentions: true,
+                        emailComments: true,
+                        emailInvoices: true,
+                        emailSystem: true,
+                        inAppTasks: true,
+                        inAppMentions: true,
+                        inAppComments: true,
+                        inAppInvoices: true,
+                        inAppSystem: true
+                    }
                 });
+                console.log(`📋 Created default notification settings for user ${targetUserId} (all notifications enabled)`);
             }
+            
+            console.log(`🔍 Notification settings for user ${targetUserId}:`, {
+                inAppMentions: settings.inAppMentions,
+                inAppComments: settings.inAppComments,
+                inAppTasks: settings.inAppTasks,
+                inAppInvoices: settings.inAppInvoices,
+                inAppSystem: settings.inAppSystem,
+                emailMentions: settings.emailMentions,
+                emailComments: settings.emailComments,
+                emailTasks: settings.emailTasks,
+                emailInvoices: settings.emailInvoices,
+                emailSystem: settings.emailSystem,
+                requestedType: type
+            });
             
             // Check if user wants in-app notifications for this type
             let shouldCreateInAppNotification = false;
@@ -125,24 +179,51 @@ async function handler(req, res) {
                 shouldCreateInAppNotification = true;
             }
             
+            console.log(`🔔 Should create in-app notification: ${shouldCreateInAppNotification} (type: ${type})`);
+            
             let notification = null;
             
             // Only create in-app notification if user has enabled it for this type
             if (shouldCreateInAppNotification) {
-                notification = await prisma.notification.create({
-                    data: {
-                        userId: targetUserId,
-                        type,
+                try {
+                    notification = await prisma.notification.create({
+                        data: {
+                            userId: targetUserId,
+                            type,
+                            title,
+                            message,
+                            link: link || '',
+                            metadata: metadata ? JSON.stringify(metadata) : '{}',
+                            read: false
+                        }
+                    });
+                    console.log(`✅ In-app notification created for user ${targetUserId} (type: ${type})`, {
+                        notificationId: notification.id,
                         title,
-                        message,
-                        link: link || '',
-                        metadata: metadata ? JSON.stringify(metadata) : '{}',
-                        read: false
-                    }
-                });
-                console.log(`✅ In-app notification created for user ${targetUserId} (type: ${type})`);
+                        message: message.substring(0, 50) + '...'
+                    });
+                } catch (dbError) {
+                    console.error(`❌ Failed to create in-app notification for user ${targetUserId}:`, dbError);
+                    console.error('❌ Database error details:', {
+                        message: dbError.message,
+                        code: dbError.code,
+                        meta: dbError.meta
+                    });
+                    // Don't fail the request if notification creation fails
+                }
             } else {
-                console.log(`⏭️ Skipping in-app notification for user ${targetUserId} (type: ${type}) - preference disabled`);
+                console.warn(`⏭️ Skipping in-app notification for user ${targetUserId} (type: ${type}) - preference disabled`, {
+                    setting: type === 'mention' ? 'inAppMentions' : 
+                            type === 'comment' ? 'inAppComments' : 
+                            type === 'task' ? 'inAppTasks' : 
+                            type === 'invoice' ? 'inAppInvoices' : 
+                            type === 'system' ? 'inAppSystem' : 'unknown',
+                    value: type === 'mention' ? settings.inAppMentions : 
+                            type === 'comment' ? settings.inAppComments : 
+                            type === 'task' ? settings.inAppTasks : 
+                            type === 'invoice' ? settings.inAppInvoices : 
+                            type === 'system' ? settings.inAppSystem : false
+                });
             }
             
             // Determine if email should be sent based on type and user settings
@@ -159,111 +240,207 @@ async function handler(req, res) {
                 shouldSendEmail = true;
             }
             
-            // Send email notification if enabled
-            if (shouldSendEmail && targetUser.email) {
-                // PRIORITY: For @mentions, send email IMMEDIATELY without waiting for project details
-                // This ensures emails are sent right after tagging
-                if (type === 'mention') {
-                    // Send email immediately for mentions (don't wait for project/client fetch)
-                    sendNotificationEmail(
-                        targetUser.email,
-                        title,
-                        message,
-                        {
-                            commentLink: link || null,
-                            isProjectRelated: !!(metadata && (type === 'comment' || type === 'mention' || type === 'task'))
-                        }
-                    ).then(() => {
-                        console.log(`✅ @Mention email sent immediately to ${targetUser.email}`);
-                    }).catch(emailError => {
-                        console.error('❌ Failed to send @mention email:', emailError.message);
-                    });
-                } else {
-                    // For other notification types, fetch project details (can be async)
-                    try {
-                        // For project-related notifications, fetch client and project details
-                        let clientDescription = null;
-                        let projectDescription = null;
-                        let commentLink = link || null;
-                        
-                        if (metadata && (type === 'comment' || type === 'mention' || type === 'task')) {
-                            try {
-                                const metadataObj = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
-                                const projectId = metadataObj?.projectId;
-                                
-                                if (projectId) {
-                                    // Fetch project with client information (non-blocking for mentions)
-                                    const project = await prisma.project.findUnique({
-                                        where: { id: projectId },
-                                        include: {
-                                            client: true
-                                        }
-                                    });
-                                    
-                                    if (project) {
-                                        // Get project description
-                                        projectDescription = project.description || null;
-                                        
-                                        // Get client description if client exists
-                                        if (project.client) {
-                                            clientDescription = project.client.notes || null;
-                                        } else if (project.clientId) {
-                                            // Try to fetch client separately if not included
-                                            const client = await prisma.client.findUnique({
-                                                where: { id: project.clientId }
-                                            });
-                                            if (client) {
-                                                clientDescription = client.notes || null;
-                                            }
-                                        }
-                                        
-                                        // Build comment link - include task ID if available
-                                        if (metadataObj?.taskId) {
-                                            commentLink = `${link || `/projects/${projectId}`}#task-${metadataObj.taskId}`;
-                                        } else {
-                                            commentLink = link || `/projects/${projectId}`;
-                                        }
-                                    }
-                                }
-                            } catch (fetchError) {
-                                console.error('❌ Error fetching project/client details for email:', fetchError.message);
-                                // Continue with email even if fetch fails
-                            }
-                        }
-                        
-                        await sendNotificationEmail(
-                            targetUser.email,
-                            title,
-                            message,
-                            {
-                                clientDescription,
-                                projectDescription,
-                                commentLink,
-                                isProjectRelated: !!(metadata && (type === 'comment' || type === 'mention' || type === 'task'))
-                            }
-                        );
-                        console.log(`✅ Email notification sent to ${targetUser.email}`);
-                    } catch (emailError) {
-                        console.error('❌ Failed to send email notification:', emailError.message);
-                        console.error('❌ Email notification error details:', {
-                            message: emailError.message,
-                            code: emailError.code,
-                            response: emailError.response,
-                            to: targetUser.email,
-                            subject: title
-                        });
-                        // Log full error for debugging
-                        if (emailError.stack) {
-                            console.error('❌ Email notification error stack:', emailError.stack);
-                        }
-                        // Don't fail the request if email fails
-                    }
-                }
+            console.log(`📧 Should send email: ${shouldSendEmail} (type: ${type}, user email: ${targetUser.email ? 'present' : 'missing'})`);
+            
+            if (!shouldSendEmail) {
+                console.warn(`⚠️ Email notification skipped for user ${targetUserId} (type: ${type}) - user preference disabled`, {
+                    setting: type === 'mention' ? 'emailMentions' : 
+                            type === 'comment' ? 'emailComments' : 
+                            type === 'task' ? 'emailTasks' : 
+                            type === 'invoice' ? 'emailInvoices' : 
+                            type === 'system' ? 'emailSystem' : 'unknown',
+                    value: type === 'mention' ? settings.emailMentions : 
+                            type === 'comment' ? settings.emailComments : 
+                            type === 'task' ? settings.emailTasks : 
+                            type === 'invoice' ? settings.emailInvoices : 
+                            type === 'system' ? settings.emailSystem : false
+                });
             }
             
-            return ok(res, { notification, created: !!notification });
+            if (!targetUser.email) {
+                console.warn(`⚠️ Email notification skipped for user ${targetUserId} (type: ${type}) - user has no email address`);
+            }
+            
+            // Send email notification if enabled
+            if (shouldSendEmail && targetUser.email) {
+                console.log(`📧 Preparing to send email notification to ${targetUser.email} (type: ${type})`);
+                
+                // For ALL project-related notifications (including mentions), fetch project and client details
+                // This ensures emails include project name, client name, and comment extract
+                try {
+                    // For project-related notifications, fetch client and project details
+                    let projectName = null;
+                    let clientName = null;
+                    let clientDescription = null;
+                    let projectDescription = null;
+                    let commentText = null;
+                    let commentLink = link || null;
+                    let taskTitle = null;
+                    
+                    if (metadata && (type === 'comment' || type === 'mention' || type === 'task')) {
+                        try {
+                            const metadataObj = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
+                            const projectId = metadataObj?.projectId;
+                            
+                            // Extract comment text from metadata
+                            if (metadataObj?.commentText) {
+                                commentText = metadataObj.commentText;
+                            } else if (metadataObj?.fullComment) {
+                                commentText = metadataObj.fullComment;
+                            }
+                            
+                            // Extract task title from metadata
+                            if (metadataObj?.taskTitle) {
+                                taskTitle = metadataObj.taskTitle;
+                            }
+                            
+                            if (projectId) {
+                                // Fetch project with client information
+                                const project = await prisma.project.findUnique({
+                                    where: { id: projectId },
+                                    include: {
+                                        client: true
+                                    }
+                                });
+                                
+                                if (project) {
+                                    // Get project name and description
+                                    projectName = project.name || null;
+                                    projectDescription = project.description || null;
+                                    
+                                    // Get client name and description if client exists
+                                    if (project.client) {
+                                        clientName = project.client.name || null;
+                                        clientDescription = project.client.notes || null;
+                                    } else if (project.clientId) {
+                                        // Try to fetch client separately if not included
+                                        const client = await prisma.client.findUnique({
+                                            where: { id: project.clientId }
+                                        });
+                                        if (client) {
+                                            clientName = client.name || null;
+                                            clientDescription = client.notes || null;
+                                        }
+                                    }
+                                    
+                                    // Build comment link - include task ID if available
+                                    if (metadataObj?.taskId) {
+                                        commentLink = `${link || `/projects/${projectId}`}#task-${metadataObj.taskId}`;
+                                    } else {
+                                        commentLink = link || `/projects/${projectId}`;
+                                    }
+                                }
+                            }
+                        } catch (fetchError) {
+                            console.error('❌ Error fetching project/client details for email:', fetchError.message);
+                            // Continue with email even if fetch fails - we'll use what we have
+                        }
+                    }
+                    
+                    // Build enhanced email subject with project and client names
+                    let enhancedSubject = title;
+                    if (projectName || clientName) {
+                        const parts = [];
+                        if (clientName) parts.push(clientName);
+                        if (projectName) parts.push(projectName);
+                        if (parts.length > 0) {
+                            enhancedSubject = `[${parts.join(' - ')}] ${title}`;
+                        }
+                    }
+                    
+                    // Build enhanced message with project/client context and comment extract
+                    let enhancedMessage = message;
+                    
+                    // Add project and client context at the top of the message
+                    if (projectName || clientName) {
+                        let contextHtml = '<div style="background: #e7f3ff; border-left: 4px solid #007bff; padding: 15px; margin-bottom: 20px; border-radius: 4px;">';
+                        contextHtml += '<h3 style="color: #333; margin-top: 0; margin-bottom: 10px; font-size: 16px;">📋 Project Context</h3>';
+                        if (clientName) {
+                            contextHtml += `<p style="color: #555; margin: 5px 0;"><strong>Client:</strong> ${escapeHtml(clientName)}</p>`;
+                        }
+                        if (projectName) {
+                            contextHtml += `<p style="color: #555; margin: 5px 0;"><strong>Project:</strong> ${escapeHtml(projectName)}</p>`;
+                        }
+                        if (taskTitle) {
+                            contextHtml += `<p style="color: #555; margin: 5px 0;"><strong>Task:</strong> ${escapeHtml(taskTitle)}</p>`;
+                        }
+                        contextHtml += '</div>';
+                        enhancedMessage = contextHtml + enhancedMessage;
+                    }
+                    
+                    // Add comment extract if available
+                    if (commentText) {
+                        const commentPreview = commentText.length > 200 
+                            ? commentText.substring(0, 200) + '...' 
+                            : commentText;
+                        const commentHtml = `
+                            <div style="background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px; padding: 15px; margin: 20px 0;">
+                                <h4 style="color: #333; margin-top: 0; margin-bottom: 10px; font-size: 14px;">💬 Comment:</h4>
+                                <p style="color: #555; margin: 0; line-height: 1.6; white-space: pre-wrap;">${escapeHtml(commentPreview)}</p>
+                            </div>
+                        `;
+                        enhancedMessage = enhancedMessage + commentHtml;
+                    }
+                    
+                    const emailResult = await sendNotificationEmail(
+                        targetUser.email,
+                        enhancedSubject,
+                        enhancedMessage,
+                        {
+                            projectName,
+                            clientName,
+                            clientDescription,
+                            projectDescription,
+                            commentText,
+                            commentLink,
+                            taskTitle,
+                            isProjectRelated: !!(metadata && (type === 'comment' || type === 'mention' || type === 'task'))
+                        }
+                    );
+                    console.log(`✅ Email notification sent to ${targetUser.email}`, {
+                        messageId: emailResult?.messageId,
+                        success: emailResult?.success,
+                        type,
+                        subject: enhancedSubject,
+                        hasProjectName: !!projectName,
+                        hasClientName: !!clientName,
+                        hasCommentText: !!commentText
+                    });
+                } catch (emailError) {
+                    console.error('❌ Failed to send email notification:', emailError);
+                    console.error('❌ Email notification error details:', {
+                        message: emailError.message,
+                        code: emailError.code,
+                        response: emailError.response,
+                        to: targetUser.email,
+                        subject: title,
+                        type,
+                        stack: emailError.stack
+                    });
+                    // Don't fail the request if email fails - notification was still created
+                    // But log the error so we can diagnose email configuration issues
+                }
+            } else if (shouldSendEmail && !targetUser.email) {
+                console.warn(`⚠️ Cannot send email notification to user ${targetUserId} - user has no email address`);
+            }
+            
+            const responseData = { notification, created: !!notification };
+            console.log('📤 POST /notifications - Sending response:', {
+                hasNotification: !!notification,
+                notificationId: notification?.id,
+                created: !!notification,
+                type
+            });
+            
+            return ok(res, responseData);
         } catch (error) {
-            console.error('Create notification error:', error);
+            console.error('❌ POST /notifications - Error creating notification:', error);
+            console.error('❌ Error details:', {
+                message: error.message,
+                stack: error.stack,
+                code: error.code,
+                meta: error.meta
+            });
             return serverError(res, 'Failed to create notification', error.message);
         }
     }

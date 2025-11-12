@@ -115,13 +115,17 @@ const MentionHelper = {
      * @returns {Promise} - API response
      */
     async createMentionNotification(mentionedUserId, mentionedByName, contextTitle, contextLink, commentText, projectInfo = {}) {
-        // Version check - this log confirms new code is loaded
-        console.log('🔔 MentionHelper v3: Creating notification for user:', mentionedUserId);
-        console.log('🔔 Using DatabaseAPI.makeRequest() with built-in token refresh');
+        console.log('🔔 MentionHelper: Creating notification for user:', mentionedUserId);
+        console.log('🔔 Notification details:', {
+            mentionedByName,
+            contextTitle,
+            contextLink,
+            projectInfo,
+            commentLength: commentText.length
+        });
         
         try {
             // Use DatabaseAPI.makeRequest() which handles token refresh automatically
-            // This is the same method used by all other successful API calls (projects, clients, etc.)
             if (!window.DatabaseAPI || typeof window.DatabaseAPI.makeRequest !== 'function') {
                 console.error('❌ DatabaseAPI.makeRequest is not available');
                 return null;
@@ -136,7 +140,8 @@ const MentionHelper = {
             const metadata = {
                 mentionedBy: mentionedByName,
                 context: contextTitle,
-                fullComment: commentText
+                fullComment: commentText,
+                commentText: commentText  // Also include as commentText for consistency
             };
             
             // Add project information if available
@@ -149,26 +154,41 @@ const MentionHelper = {
                 }
             }
             
+            const notificationPayload = {
+                userId: mentionedUserId,
+                type: 'mention',
+                title: `${mentionedByName} mentioned you`,
+                message: `${mentionedByName} mentioned you in ${contextTitle}: "${previewText}"`,
+                link: contextLink,
+                metadata: metadata
+            };
+            
+            console.log('📤 Sending mention notification request:', {
+                endpoint: '/notifications',
+                method: 'POST',
+                payload: notificationPayload
+            });
+            
             // Use DatabaseAPI.makeRequest() which automatically handles:
             // - Token extraction from storage
             // - Token refresh on 401 errors
             // - Proper error handling
             const response = await window.DatabaseAPI.makeRequest('/notifications', {
                 method: 'POST',
-                body: JSON.stringify({
-                    userId: mentionedUserId,
-                    type: 'mention',
-                    title: `${mentionedByName} mentioned you`,
-                    message: `${mentionedByName} mentioned you in ${contextTitle}: "${previewText}"`,
-                    link: contextLink,
-                    metadata: metadata
-                })
+                body: JSON.stringify(notificationPayload)
             });
+            
+            console.log('📥 Mention notification API response:', response);
             
             // DatabaseAPI.makeRequest returns { data: {...} } structure
             if (response && (response.data || response)) {
-                console.log(`✅ Mention notification created for user ${mentionedUserId}`);
-                return response.data || response;
+                const notification = response.data || response;
+                console.log(`✅ Mention notification created successfully for user ${mentionedUserId}`, {
+                    notificationId: notification?.id || notification?.notification?.id,
+                    created: notification?.created !== false,
+                    response
+                });
+                return notification;
             } else {
                 console.error('❌ Unexpected response structure from DatabaseAPI:', response);
                 return null;
@@ -178,7 +198,10 @@ const MentionHelper = {
             console.error('❌ Error details:', {
                 message: error.message,
                 status: error.status,
-                code: error.code
+                code: error.code,
+                stack: error.stack,
+                mentionedUserId,
+                mentionedByName
             });
             return null;
         }
@@ -242,12 +265,14 @@ const MentionHelper = {
             });
 
             if (matchedUser) {
-                // Don't notify if the user mentioned themselves
-                if (matchedUser.id === window.storage?.getUserInfo?.()?.id) {
-                    console.log(`⚠️ Skipping self-mention for ${matchedUser.name}`);
-                    continue;
+                const currentUser = window.storage?.getUserInfo?.() || {};
+                const isSelfMention = matchedUser.id === currentUser.id;
+                
+                if (isSelfMention) {
+                    console.log(`ℹ️ Self-mention detected for ${matchedUser.name} - notification will still be sent for testing purposes`);
                 }
-
+                
+                // Send notification even for self-mentions (removed filter for testing)
                 notificationPromises.push(
                     this.createMentionNotification(
                         matchedUser.id,
@@ -256,10 +281,16 @@ const MentionHelper = {
                         contextLink,
                         commentText,
                         projectInfo
-                    )
+                    ).catch(error => {
+                        console.error(`❌ Failed to create mention notification for ${matchedUser.name}:`, error);
+                        return null;
+                    })
                 );
             } else {
-                console.log(`⚠️ No user found matching mention: @${rawMention}`);
+                console.warn(`⚠️ No user found matching mention: @${rawMention}`, {
+                    normalized: normalizedMention,
+                    availableUsers: allUsers.slice(0, 5).map(u => ({ id: u.id, name: u.name, email: u.email }))
+                });
             }
         }
 

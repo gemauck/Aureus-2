@@ -873,7 +873,7 @@ model NotificationSetting {
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   emailMentions Boolean  @default(true)
   emailComments Boolean  @default(true)
-  emailTasks    Boolean  @default(false)
+  emailTasks    Boolean  @default(true)  // Changed to true - users should get task assignment emails by default
   emailInvoices Boolean  @default(true)
   emailSystem   Boolean  @default(true)
   inAppMentions Boolean  @default(true)

@@ -1691,19 +1691,86 @@ function initializeProjectDetail() {
             }
         }
         
+        // Helper function to find user by assignee value (name, email, or id)
+        const findAssigneeUser = (assigneeValue) => {
+            if (!assigneeValue || !users || users.length === 0) {
+                console.log('🔍 findAssigneeUser: No assignee value or users available', { assigneeValue, usersCount: users?.length });
+                return null;
+            }
+            
+            // Try multiple matching strategies
+            const assigneeLower = String(assigneeValue).toLowerCase().trim();
+            
+            const matchedUser = users.find(u => {
+                if (!u || !u.id) return false;
+                
+                // Exact match by ID
+                if (u.id === assigneeValue) {
+                    return true;
+                }
+                
+                // Match by name (case-insensitive)
+                const userName = String(u.name || '').toLowerCase().trim();
+                if (userName === assigneeLower) {
+                    return true;
+                }
+                
+                // Match by email (case-insensitive)
+                const userEmail = String(u.email || '').toLowerCase().trim();
+                if (userEmail === assigneeLower) {
+                    return true;
+                }
+                
+                // Partial match by name
+                if (userName && assigneeLower && userName.includes(assigneeLower)) {
+                    return true;
+                }
+                
+                // Match email username (before @)
+                const emailUsername = userEmail.split('@')[0];
+                if (emailUsername === assigneeLower) {
+                    return true;
+                }
+                
+                return false;
+            });
+            
+            if (matchedUser) {
+                console.log('✅ findAssigneeUser: Found user', { assigneeValue, matchedUserId: matchedUser.id, matchedUserName: matchedUser.name });
+            } else {
+                console.warn('⚠️ findAssigneeUser: No user found', { assigneeValue, availableUsers: users.map(u => ({ id: u.id, name: u.name, email: u.email })) });
+            }
+            
+            return matchedUser || null;
+        };
+        
         // Send notification if assignee changed
         if (!isNewTask && oldTask && updatedTaskData.assignee && updatedTaskData.assignee !== oldTask.assignee) {
-            // Find the assignee user
-            const assigneeUser = users.find(u => 
-                u.name === updatedTaskData.assignee || 
-                u.email === updatedTaskData.assignee ||
-                u.id === updatedTaskData.assignee
-            );
+            console.log('🔔 Assignment changed - sending notification', { 
+                oldAssignee: oldTask.assignee, 
+                newAssignee: updatedTaskData.assignee,
+                taskTitle: updatedTaskData.title,
+                currentUserId: currentUser.id
+            });
             
-            if (assigneeUser && assigneeUser.id !== currentUser.id) {
+            const assigneeUser = findAssigneeUser(updatedTaskData.assignee);
+            
+            if (assigneeUser) {
+                // Allow self-notifications for testing, but log them
+                if (assigneeUser.id === currentUser.id) {
+                    console.log('ℹ️ Self-assignment detected - notification will still be sent for testing purposes');
+                }
+                
                 try {
                     const projectLink = `/projects/${project.id}`;
-                    await window.DatabaseAPI.makeRequest('/notifications', {
+                    console.log('📤 Sending task assignment notification', {
+                        userId: assigneeUser.id,
+                        userName: assigneeUser.name,
+                        type: 'task',
+                        taskTitle: updatedTaskData.title
+                    });
+                    
+                    const response = await window.DatabaseAPI.makeRequest('/notifications', {
                         method: 'POST',
                         body: JSON.stringify({
                             userId: assigneeUser.id,
@@ -1720,25 +1787,53 @@ function initializeProjectDetail() {
                             }
                         })
                     });
-                    console.log(`✅ Task assignment notification sent to ${assigneeUser.name}`);
+                    
+                    console.log('✅ Task assignment notification sent successfully', { 
+                        assigneeName: assigneeUser.name,
+                        response: response
+                    });
                 } catch (error) {
                     console.error('❌ Failed to send task assignment notification:', error);
+                    console.error('❌ Error details:', {
+                        message: error.message,
+                        stack: error.stack,
+                        assigneeUser: assigneeUser ? { id: assigneeUser.id, name: assigneeUser.name } : null
+                    });
                 }
+            } else {
+                console.warn('⚠️ Cannot send assignment notification - assignee user not found', {
+                    assignee: updatedTaskData.assignee,
+                    availableUsers: users.length
+                });
             }
         }
         
         // Send notification if this is a new task with an assignee
         if (isNewTask && updatedTaskData.assignee) {
-            const assigneeUser = users.find(u => 
-                u.name === updatedTaskData.assignee || 
-                u.email === updatedTaskData.assignee ||
-                u.id === updatedTaskData.assignee
-            );
+            console.log('🔔 New task with assignee - sending notification', { 
+                assignee: updatedTaskData.assignee,
+                taskTitle: updatedTaskData.title,
+                currentUserId: currentUser.id
+            });
             
-            if (assigneeUser && assigneeUser.id !== currentUser.id) {
+            const assigneeUser = findAssigneeUser(updatedTaskData.assignee);
+            
+            if (assigneeUser) {
+                // Allow self-notifications for testing, but log them
+                if (assigneeUser.id === currentUser.id) {
+                    console.log('ℹ️ Self-assignment detected - notification will still be sent for testing purposes');
+                }
+                
                 try {
                     const projectLink = `/projects/${project.id}`;
-                    await window.DatabaseAPI.makeRequest('/notifications', {
+                    console.log('📤 Sending new task assignment notification', {
+                        userId: assigneeUser.id,
+                        userName: assigneeUser.name,
+                        type: 'task',
+                        taskTitle: updatedTaskData.title
+                    });
+                    
+                    const response = await window.DatabaseAPI.makeRequest('/notifications', {
                         method: 'POST',
                         body: JSON.stringify({
                             userId: assigneeUser.id,
@@ -1755,10 +1850,24 @@ function initializeProjectDetail() {
                             }
                         })
                     });
-                    console.log(`✅ Task assignment notification sent to ${assigneeUser.name}`);
+                    
+                    console.log('✅ New task assignment notification sent successfully', { 
+                        assigneeName: assigneeUser.name,
+                        response: response
+                    });
                 } catch (error) {
-                    console.error('❌ Failed to send task assignment notification:', error);
+                    console.error('❌ Failed to send new task assignment notification:', error);
+                    console.error('❌ Error details:', {
+                        message: error.message,
+                        stack: error.stack,
+                        assigneeUser: assigneeUser ? { id: assigneeUser.id, name: assigneeUser.name } : null
+                    });
                 }
+            } else {
+                console.warn('⚠️ Cannot send assignment notification - assignee user not found', {
+                    assignee: updatedTaskData.assignee,
+                    availableUsers: users.length
+                });
             }
         }
         

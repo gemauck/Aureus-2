@@ -448,7 +448,16 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
     const fromAddress = emailFrom.includes('<') ? emailFrom : `Abcotronics <${emailFrom}>`;
     
     // Extract project-related information from options
-    const { clientDescription, projectDescription, commentLink, isProjectRelated } = options;
+    const { 
+        projectName, 
+        clientName, 
+        clientDescription, 
+        projectDescription, 
+        commentText, 
+        commentLink, 
+        taskTitle,
+        isProjectRelated 
+    } = options;
     
     // Helper function to escape HTML for security
     const escapeHtml = (text) => {
@@ -465,15 +474,15 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
     const baseUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     const fullCommentLink = commentLink ? `${baseUrl}${commentLink.startsWith('/') ? commentLink : '/' + commentLink}` : null;
     
-    // Build project information section HTML
+    // Build project information section HTML (shown at bottom after message)
     let projectInfoHtml = '';
-    if (isProjectRelated) {
+    if (isProjectRelated && (projectDescription || clientDescription)) {
         projectInfoHtml = `
             <div style="background: #f8f9fa; border-left: 4px solid #007bff; padding: 15px; margin: 20px 0; border-radius: 4px;">
-                <h3 style="color: #333; margin-top: 0; margin-bottom: 15px; font-size: 16px;">Project Information</h3>
+                <h3 style="color: #333; margin-top: 0; margin-bottom: 15px; font-size: 16px;">📋 Additional Information</h3>
                 ${clientDescription ? `
                     <div style="margin-bottom: 12px;">
-                        <strong style="color: #555; display: block; margin-bottom: 5px;">Client Description:</strong>
+                        <strong style="color: #555; display: block; margin-bottom: 5px;">Client Notes:</strong>
                         <p style="color: #666; margin: 0; line-height: 1.5;">${escapeHtml(clientDescription)}</p>
                     </div>
                 ` : ''}
@@ -487,7 +496,7 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
                     <div style="margin-top: 15px;">
                         <a href="${fullCommentLink}" 
                            style="background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
-                            View Comment Location
+                            View in Project
                         </a>
                     </div>
                 ` : ''}
@@ -519,46 +528,100 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
             </div>
         `,
         text: (() => {
-            let text = subject + '\n\n' + message.replace(/<[^>]*>/g, '');
+            let text = subject + '\n\n';
+            
+            // Add project context to plain text email
+            if (isProjectRelated && (clientName || projectName || taskTitle)) {
+                text += '--- Project Context ---\n';
+                if (clientName) {
+                    text += `Client: ${clientName}\n`;
+                }
+                if (projectName) {
+                    text += `Project: ${projectName}\n`;
+                }
+                if (taskTitle) {
+                    text += `Task: ${taskTitle}\n`;
+                }
+                text += '\n';
+            }
+            
+            // Add message content (strip HTML)
+            text += message.replace(/<[^>]*>/g, '');
+            
+            // Add comment text if available
+            if (commentText) {
+                const commentPreview = commentText.length > 200 
+                    ? commentText.substring(0, 200) + '...' 
+                    : commentText;
+                text += '\n\n--- Comment ---\n';
+                text += commentPreview + '\n';
+            }
+            
+            // Add additional project information
             if (isProjectRelated) {
-                text += '\n\n--- Project Information ---\n';
+                text += '\n--- Additional Information ---\n';
                 if (clientDescription) {
-                    text += `Client Description: ${clientDescription.replace(/<[^>]*>/g, '')}\n\n`;
+                    text += `Client Notes: ${clientDescription.replace(/<[^>]*>/g, '')}\n\n`;
                 }
                 if (projectDescription) {
                     text += `Project Description: ${projectDescription.replace(/<[^>]*>/g, '')}\n\n`;
                 }
                 if (fullCommentLink) {
-                    text += `View Comment Location: ${fullCommentLink}\n`;
+                    text += `View in Project: ${fullCommentLink}\n`;
                 }
             }
+            
             return text;
         })()
     };
 
     try {
         // Check configuration before attempting to send
-        checkEmailConfiguration();
+        let configError = null;
+        try {
+            checkEmailConfiguration();
+        } catch (configCheckError) {
+            configError = configCheckError;
+            console.error('❌ Email configuration check failed:', configCheckError.message);
+            // Continue anyway - the actual send attempt will provide better error details
+        }
         
         const emailTransporter = getTransporter();
         
         // Get SendGrid API key - check multiple sources
         const sendGridKey = process.env.SENDGRID_API_KEY || 
-                           (emailTransporter.apiKey && emailTransporter.apiKey.startsWith('SG.') ? emailTransporter.apiKey : null) ||
+                           (emailTransporter?.apiKey && emailTransporter.apiKey.startsWith('SG.') ? emailTransporter.apiKey : null) ||
                            (process.env.SMTP_PASS && process.env.SMTP_PASS.startsWith('SG.') ? process.env.SMTP_PASS : null);
+        
+        // Check if we have any email configuration
+        const hasAnyConfig = !!(
+            process.env.SENDGRID_API_KEY || 
+            (process.env.SMTP_USER && process.env.SMTP_PASS) ||
+            (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) ||
+            process.env.SMTP_URL
+        );
+        
+        if (!hasAnyConfig) {
+            const errorMsg = 'Email configuration not available. Please configure SENDGRID_API_KEY or SMTP settings in your .env file.';
+            console.error('❌', errorMsg);
+            throw new Error(errorMsg);
+        }
         
         console.log('📧 Sending notification email with options:', {
             from: mailOptions.from,
             to: mailOptions.to,
             subject: mailOptions.subject,
             method: useSendGridHTTP ? 'SendGrid HTTP API' : 'SMTP',
-            hasSendGridKey: !!sendGridKey
+            hasSendGridKey: !!sendGridKey,
+            hasEmailTransporter: !!emailTransporter,
+            configError: configError?.message
         });
         
         // Use SendGrid HTTP API if configured
         // Priority: SendGrid API key takes precedence over SMTP
         let result;
-        if (sendGridKey && (useSendGridHTTP || emailTransporter.useHTTP)) {
+        if (sendGridKey && (useSendGridHTTP || emailTransporter?.useHTTP)) {
+            console.log('📧 Using SendGrid HTTP API for notification email');
             mailOptions.fromName = 'Abcotronics';
             // Extract email from "Name <email>" format if needed
             const fromEmail = mailOptions.from.includes('<') 
@@ -566,12 +629,27 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
                 : mailOptions.from;
             mailOptions.from = fromEmail; // SendGrid API expects just email
             result = await sendViaSendGridAPI(mailOptions, sendGridKey);
+        } else if (emailTransporter && typeof emailTransporter.sendMail === 'function') {
+            console.log('📧 Using SMTP for notification email');
+            // Use Promise.race to prevent long timeouts
+            const sendPromise = emailTransporter.sendMail(mailOptions);
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Email sending timed out after 15 seconds')), 15000)
+            );
+            result = await Promise.race([sendPromise, timeoutPromise]);
         } else {
-            result = await emailTransporter.sendMail(mailOptions);
+            const errorMsg = 'No email transporter available. Please configure SENDGRID_API_KEY or SMTP settings.';
+            console.error('❌', errorMsg);
+            throw new Error(errorMsg);
         }
         
-        console.log('✅ Notification email sent successfully:', result.messageId);
-        return { success: true, messageId: result.messageId };
+        console.log('✅ Notification email sent successfully:', {
+            messageId: result?.messageId,
+            success: result?.success,
+            to: mailOptions.to,
+            subject: mailOptions.subject
+        });
+        return { success: true, messageId: result?.messageId || result?.messageId || 'unknown' };
     } catch (error) {
         console.error('❌ Failed to send notification email:', error);
         console.error('❌ Email sending error details:', {
@@ -579,8 +657,28 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
             code: error.code,
             command: error.command,
             response: error.response,
-            stack: error.stack
+            stack: error.stack,
+            to: mailOptions.to,
+            subject: mailOptions.subject
         });
-        throw new Error(`Failed to send notification email: ${error.message}`);
+        
+        // Provide more helpful error messages
+        let errorMessage = error.message;
+        if (error.code === 'EAUTH') {
+            errorMessage = 'Email authentication failed. Please check your SMTP username and password (app password for Gmail).';
+        } else if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
+            errorMessage = 'Email connection failed. Please check your network connection and SMTP server settings.';
+        } else if (error.message && error.message.includes('SendGrid API error')) {
+            // Extract SendGrid-specific errors
+            if (error.message.includes('verified')) {
+                errorMessage = 'SendGrid sender email not verified. Please verify your sender email in SendGrid dashboard.';
+            } else {
+                errorMessage = error.message;
+            }
+        } else if (error.message && error.message.includes('configuration')) {
+            errorMessage = error.message;
+        }
+        
+        throw new Error(`Failed to send notification email: ${errorMessage}`);
     }
 };
