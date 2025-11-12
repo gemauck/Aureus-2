@@ -3,8 +3,8 @@
    Simple, native scrolling approach for iPhone-sized phones
    ========================================================================== */
 
-/* iPhone and small mobile devices (up to 480px) */
-@media (max-width: 480px) {
+/* iPhone and small mobile devices (up to 1024px - covers all mobile) */
+@media (max-width: 1024px) {
   /* Reset everything - start fresh */
   html.job-card-public,
   body.job-card-public {
@@ -69,6 +69,9 @@
 
   /* Scrollable content - NATIVE SCROLLING (no nested scroll) */
   body.job-card-public .job-card-public-wrapper .job-card-scrollable-content {
+    display: block !important; /* CRITICAL: Force display */
+    visibility: visible !important;
+    opacity: 1 !important;
     flex: 1 1 auto !important;
     width: 100% !important;
     overflow-y: auto !important;
