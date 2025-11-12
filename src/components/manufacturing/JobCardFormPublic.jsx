@@ -725,18 +725,55 @@ const JobCardFormPublic = () => {
   }, [isOnline]);
 
   useEffect(() => {
-    if (formData.clientId && clients.length > 0) {
-      const client = clients.find(c => c.id === formData.clientId);
-      if (client) {
-        const sites = typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []);
-        setAvailableSites(sites);
-        setFormData(prev => ({ ...prev, clientName: client.name || '' }));
+    const loadSitesForClient = async () => {
+      if (formData.clientId && clients.length > 0) {
+        const client = clients.find(c => c.id === formData.clientId);
+        if (client) {
+          console.log('📡 JobCardFormPublic: Loading sites for client:', client.id);
+          
+          // First, try to get sites from client object
+          let sites = typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []);
+          
+          console.log(`📋 JobCardFormPublic: Found ${sites.length} sites in client object`);
+          
+          // Also try to load from API if online
+          if (isOnline && sites.length === 0) {
+            try {
+              console.log('📡 JobCardFormPublic: Attempting to load sites from API...');
+              const response = await fetch(`/api/sites/client/${formData.clientId}`, {
+                method: 'GET',
+                headers: {
+                  'Content-Type': 'application/json'
+                }
+              });
+              
+              if (response.ok) {
+                const data = await response.json();
+                const apiSites = data?.data?.sites || data?.sites || [];
+                if (Array.isArray(apiSites) && apiSites.length > 0) {
+                  console.log(`✅ JobCardFormPublic: Loaded ${apiSites.length} sites from API`);
+                  sites = apiSites;
+                }
+              } else {
+                console.warn('⚠️ JobCardFormPublic: Sites API returned error:', response.status);
+              }
+            } catch (error) {
+              console.warn('⚠️ JobCardFormPublic: Failed to load sites from API:', error.message);
+            }
+          }
+          
+          setAvailableSites(sites);
+          setFormData(prev => ({ ...prev, clientName: client.name || '' }));
+          console.log(`✅ JobCardFormPublic: Set ${sites.length} sites for client`);
+        }
+      } else {
+        setAvailableSites([]);
+        setFormData(prev => ({ ...prev, siteId: '', siteName: '' }));
       }
-    } else {
-      setAvailableSites([]);
-      setFormData(prev => ({ ...prev, siteId: '', siteName: '' }));
-    }
-  }, [formData.clientId, clients]);
+    };
+    
+    loadSitesForClient();
+  }, [formData.clientId, clients, isOnline]);
 
   useEffect(() => {
     if (formData.siteId && availableSites.length > 0) {

@@ -786,6 +786,29 @@ app.all('/api/leave-platform/import-balances', async (req, res, next) => {
   }
 })
 
+// Public API endpoints for job card form (no authentication required)
+app.all('/api/public/clients', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'public', 'clients.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Public clients API error:', e)
+    return next(e)
+  }
+})
+
+app.all('/api/public/users', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'public', 'users.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Public users API error:', e)
+    return next(e)
+  }
+})
+
 // Explicit mapping for user operations with ID (GET, PUT, DELETE /api/users/[id])
 // IMPORTANT: This must come BEFORE /api/users route so Express matches it first
 app.all('/api/users/:id', async (req, res, next) => {

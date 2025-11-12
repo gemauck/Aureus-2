@@ -11,14 +11,11 @@ async function handler(req, res) {
   try {
     console.log('📡 Public clients endpoint: Fetching active clients for job card form...')
     
-    // Get only active clients (type = 'client', status = 'active' or null)
+    // Get only active clients (type = 'client')
+    // Status can be 'active', 'Active', or empty - all are considered active for job cards
     const clients = await prisma.client.findMany({
       where: {
-        type: 'client',
-        OR: [
-          { status: 'active' },
-          { status: null }
-        ]
+        type: 'client'
       },
       select: {
         id: true,
