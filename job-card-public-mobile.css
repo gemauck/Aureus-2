@@ -3,8 +3,8 @@
    Complete mobile-first redesign with fixed header/footer and scrollable content
    ========================================================================== */
 
-/* Base mobile-first layout */
-@media (max-width: 1024px) {
+/* Base mobile-first layout (up to 1279px) */
+@media (max-width: 1279px) {
   html.job-card-public,
   body.job-card-public {
     height: 100% !important;
@@ -55,6 +55,22 @@
     padding: 0 !important;
     transform: none !important;
     background-color: #f3f4f6 !important;
+  }
+
+  /* Hide desktop sidebar on mobile/tablet */
+  body.job-card-public .job-card-public-wrapper > aside {
+    display: none !important;
+  }
+
+  /* Ensure main content area takes full width */
+  body.job-card-public .job-card-public-wrapper > div.flex-1 {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
   }
 
   /* Fixed Header */
@@ -215,6 +231,45 @@
   }
 }
 
+/* Medium screens (700px and below) - ensure proper layout */
+@media (max-width: 700px) {
+  body.job-card-public .job-card-public-wrapper {
+    flex-direction: column !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper > aside {
+    display: none !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper > div.flex-1 {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: 1 1 auto !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper .job-card-scrollable-content {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Ensure all content fits */
+  body.job-card-public .job-card-public-wrapper .max-w-4xl {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper section {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0.875rem !important;
+  }
+}
+
 /* Extra small screens (300px and below) */
 @media (max-width: 340px) {
   body.job-card-public .job-card-public-wrapper > header {
@@ -246,8 +301,8 @@
   }
 }
 
-/* Desktop styles (above 1024px) */
-@media (min-width: 1025px) {
+/* Desktop styles (above 1280px - xl breakpoint) */
+@media (min-width: 1280px) {
   body.job-card-public .job-card-public-wrapper {
     position: fixed !important;
     top: 0 !important;
@@ -300,8 +355,24 @@
   }
 }
 
+/* Tablet range (701px - 1279px) - ensure mobile layout */
+@media (min-width: 701px) and (max-width: 1279px) {
+  body.job-card-public .job-card-public-wrapper {
+    flex-direction: column !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper > aside {
+    display: none !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper > div.flex-1 {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
 /* Ensure scrolling works when zoomed in */
-@media (min-width: 1025px) {
+@media (min-width: 1280px) {
   body.job-card-public .job-card-public-wrapper .job-card-scrollable-content {
     overflow-y: scroll !important;
     overflow-x: hidden !important;

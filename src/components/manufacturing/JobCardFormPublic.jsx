@@ -1829,9 +1829,9 @@ const JobCardFormPublic = () => {
   }
 
   return (
-    <div className="job-card-public-wrapper fixed inset-0 flex flex-col lg:flex-row bg-gradient-to-b from-gray-100 to-gray-50 overflow-hidden">
+    <div className="job-card-public-wrapper fixed inset-0 flex flex-col xl:flex-row bg-gradient-to-b from-gray-100 to-gray-50 overflow-hidden">
       {/* Desktop Sidebar - Vertical Steps */}
-      <aside className="hidden lg:flex lg:flex-col lg:w-56 flex-shrink-0 bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-500 text-white shadow-xl z-10 overflow-y-auto overflow-x-hidden">
+      <aside className="hidden xl:flex xl:flex-col xl:w-56 flex-shrink-0 bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-500 text-white shadow-xl z-10 overflow-y-auto overflow-x-hidden">
         <div className="p-4 pb-2 border-b border-white/20">
           <p className="text-[10px] uppercase tracking-wide text-white/70 font-semibold mb-1">
             Mobile Job Card
@@ -1892,7 +1892,7 @@ const JobCardFormPublic = () => {
       </aside>
 
       {/* Mobile Header */}
-      <header className="lg:hidden flex-shrink-0 relative overflow-hidden bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-500 text-white shadow-lg z-10">
+      <header className="xl:hidden flex-shrink-0 relative overflow-hidden bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-500 text-white shadow-lg z-10">
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -top-24 -left-20 h-44 w-44 rounded-full bg-white/15 blur-3xl"></div>
           <div className="absolute -bottom-24 right-0 h-56 w-56 rounded-full bg-white/10 blur-3xl"></div>
