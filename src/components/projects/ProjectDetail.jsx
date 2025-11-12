@@ -1756,49 +1756,49 @@ function initializeProjectDetail() {
             const assigneeUser = findAssigneeUser(updatedTaskData.assignee);
             
             if (assigneeUser) {
-                // Allow self-notifications for testing, but log them
+                // Don't notify if the user assigned the task to themselves
                 if (assigneeUser.id === currentUser.id) {
-                    console.log('ℹ️ Self-assignment detected - notification will still be sent for testing purposes');
-                }
-                
-                try {
-                    const projectLink = `/projects/${project.id}`;
-                    console.log('📤 Sending task assignment notification', {
-                        userId: assigneeUser.id,
-                        userName: assigneeUser.name,
-                        type: 'task',
-                        taskTitle: updatedTaskData.title
-                    });
-                    
-                    const response = await window.DatabaseAPI.makeRequest('/notifications', {
-                        method: 'POST',
-                        body: JSON.stringify({
+                    console.log('⚠️ Skipping self-assignment notification - user assigned task to themselves');
+                } else {
+                    try {
+                        const projectLink = `/projects/${project.id}`;
+                        console.log('📤 Sending task assignment notification', {
                             userId: assigneeUser.id,
+                            userName: assigneeUser.name,
                             type: 'task',
-                            title: `Task assigned: ${updatedTaskData.title || 'Untitled Task'}`,
-                            message: `${currentUser.name} assigned you to "${updatedTaskData.title || 'Untitled Task'}" in project "${project.name}"`,
-                            link: projectLink,
-                            metadata: {
-                                taskId: updatedTaskData.id,
-                                taskTitle: updatedTaskData.title,
-                                projectId: project.id,
-                                projectName: project.name,
-                                assignedBy: currentUser.name
-                            }
-                        })
-                    });
-                    
-                    console.log('✅ Task assignment notification sent successfully', { 
-                        assigneeName: assigneeUser.name,
-                        response: response
-                    });
-                } catch (error) {
-                    console.error('❌ Failed to send task assignment notification:', error);
-                    console.error('❌ Error details:', {
-                        message: error.message,
-                        stack: error.stack,
-                        assigneeUser: assigneeUser ? { id: assigneeUser.id, name: assigneeUser.name } : null
-                    });
+                            taskTitle: updatedTaskData.title
+                        });
+                        
+                        const response = await window.DatabaseAPI.makeRequest('/notifications', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                userId: assigneeUser.id,
+                                type: 'task',
+                                title: `Task assigned: ${updatedTaskData.title || 'Untitled Task'}`,
+                                message: `${currentUser.name} assigned you to "${updatedTaskData.title || 'Untitled Task'}" in project "${project.name}"`,
+                                link: projectLink,
+                                metadata: {
+                                    taskId: updatedTaskData.id,
+                                    taskTitle: updatedTaskData.title,
+                                    projectId: project.id,
+                                    projectName: project.name,
+                                    assignedBy: currentUser.name
+                                }
+                            })
+                        });
+                        
+                        console.log('✅ Task assignment notification sent successfully', { 
+                            assigneeName: assigneeUser.name,
+                            response: response
+                        });
+                    } catch (error) {
+                        console.error('❌ Failed to send task assignment notification:', error);
+                        console.error('❌ Error details:', {
+                            message: error.message,
+                            stack: error.stack,
+                            assigneeUser: assigneeUser ? { id: assigneeUser.id, name: assigneeUser.name } : null
+                        });
+                    }
                 }
             } else {
                 console.warn('⚠️ Cannot send assignment notification - assignee user not found', {
@@ -1819,49 +1819,49 @@ function initializeProjectDetail() {
             const assigneeUser = findAssigneeUser(updatedTaskData.assignee);
             
             if (assigneeUser) {
-                // Allow self-notifications for testing, but log them
+                // Don't notify if the user assigned the task to themselves
                 if (assigneeUser.id === currentUser.id) {
-                    console.log('ℹ️ Self-assignment detected - notification will still be sent for testing purposes');
-                }
-                
-                try {
-                    const projectLink = `/projects/${project.id}`;
-                    console.log('📤 Sending new task assignment notification', {
-                        userId: assigneeUser.id,
-                        userName: assigneeUser.name,
-                        type: 'task',
-                        taskTitle: updatedTaskData.title
-                    });
-                    
-                    const response = await window.DatabaseAPI.makeRequest('/notifications', {
-                        method: 'POST',
-                        body: JSON.stringify({
+                    console.log('⚠️ Skipping self-assignment notification - user assigned task to themselves');
+                } else {
+                    try {
+                        const projectLink = `/projects/${project.id}`;
+                        console.log('📤 Sending new task assignment notification', {
                             userId: assigneeUser.id,
+                            userName: assigneeUser.name,
                             type: 'task',
-                            title: `Task assigned: ${updatedTaskData.title || 'Untitled Task'}`,
-                            message: `${currentUser.name} assigned you to "${updatedTaskData.title || 'Untitled Task'}" in project "${project.name}"`,
-                            link: projectLink,
-                            metadata: {
-                                taskId: updatedTaskData.id,
-                                taskTitle: updatedTaskData.title,
-                                projectId: project.id,
-                                projectName: project.name,
-                                assignedBy: currentUser.name
-                            }
-                        })
-                    });
-                    
-                    console.log('✅ New task assignment notification sent successfully', { 
-                        assigneeName: assigneeUser.name,
-                        response: response
-                    });
-                } catch (error) {
-                    console.error('❌ Failed to send new task assignment notification:', error);
-                    console.error('❌ Error details:', {
-                        message: error.message,
-                        stack: error.stack,
-                        assigneeUser: assigneeUser ? { id: assigneeUser.id, name: assigneeUser.name } : null
-                    });
+                            taskTitle: updatedTaskData.title
+                        });
+                        
+                        const response = await window.DatabaseAPI.makeRequest('/notifications', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                userId: assigneeUser.id,
+                                type: 'task',
+                                title: `Task assigned: ${updatedTaskData.title || 'Untitled Task'}`,
+                                message: `${currentUser.name} assigned you to "${updatedTaskData.title || 'Untitled Task'}" in project "${project.name}"`,
+                                link: projectLink,
+                                metadata: {
+                                    taskId: updatedTaskData.id,
+                                    taskTitle: updatedTaskData.title,
+                                    projectId: project.id,
+                                    projectName: project.name,
+                                    assignedBy: currentUser.name
+                                }
+                            })
+                        });
+                        
+                        console.log('✅ New task assignment notification sent successfully', { 
+                            assigneeName: assigneeUser.name,
+                            response: response
+                        });
+                    } catch (error) {
+                        console.error('❌ Failed to send new task assignment notification:', error);
+                        console.error('❌ Error details:', {
+                            message: error.message,
+                            stack: error.stack,
+                            assigneeUser: assigneeUser ? { id: assigneeUser.id, name: assigneeUser.name } : null
+                        });
+                    }
                 }
             } else {
                 console.warn('⚠️ Cannot send assignment notification - assignee user not found', {

@@ -268,11 +268,13 @@ const MentionHelper = {
                 const currentUser = window.storage?.getUserInfo?.() || {};
                 const isSelfMention = matchedUser.id === currentUser.id;
                 
+                // Don't notify if the user mentioned themselves
                 if (isSelfMention) {
-                    console.log(`ℹ️ Self-mention detected for ${matchedUser.name} - notification will still be sent for testing purposes`);
+                    console.log(`⚠️ Skipping self-mention for ${matchedUser.name}`);
+                    continue;
                 }
                 
-                // Send notification even for self-mentions (removed filter for testing)
+                // Send notification for mentions (excluding self-mentions)
                 notificationPromises.push(
                     this.createMentionNotification(
                         matchedUser.id,
