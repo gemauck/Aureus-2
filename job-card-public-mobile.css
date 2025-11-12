@@ -184,6 +184,7 @@
     height: 42px !important;
     padding: 0.625rem 0.875rem !important; /* Balanced padding */
     margin: 0 !important;
+    margin-top: 0.5rem !important; /* Space above input to prevent covering label */
     width: 100% !important;
     max-width: 100% !important;
     box-sizing: border-box !important;
@@ -219,33 +220,49 @@
     max-width: 100% !important;
   }
 
-  /* Labels - proper alignment */
+  /* Labels - proper alignment with spacing */
   body.job-card-public .job-card-public-wrapper label {
     display: block !important;
     width: 100% !important;
-    margin-bottom: 0.375rem !important;
+    margin-bottom: 0.5rem !important; /* Increased spacing below label */
+    margin-top: 0 !important;
     text-align: left !important;
-  }
-
-  /* Headings - readable sizes */
-  body.job-card-public .job-card-public-wrapper h2 {
-    font-size: 1.125rem !important;
+    padding: 0 !important;
     line-height: 1.5 !important;
-    margin-bottom: 0.5rem !important;
   }
 
+  /* Ensure labels don't overlap with inputs */
+  body.job-card-public .job-card-public-wrapper label + input,
+  body.job-card-public .job-card-public-wrapper label + select,
+  body.job-card-public .job-card-public-wrapper label + textarea {
+    margin-top: 0.5rem !important;
+  }
+
+  /* Form field groups - proper spacing */
+  body.job-card-public .job-card-public-wrapper .space-y-4 > * + *,
+  body.job-card-public .job-card-public-wrapper .space-y-5 > * + *,
+  body.job-card-public .job-card-public-wrapper .space-y-6 > * + * {
+    margin-top: 1rem !important; /* Ensure spacing between form sections */
+  }
+
+  /* Paragraphs and descriptions - proper spacing */
   body.job-card-public .job-card-public-wrapper p {
     font-size: 0.875rem !important;
     line-height: 1.6 !important;
-    margin-bottom: 0.75rem !important;
+    margin-bottom: 1rem !important; /* Increased spacing below paragraphs */
+    margin-top: 0 !important;
+    padding: 0 !important;
   }
 
-  /* Labels */
-  body.job-card-public .job-card-public-wrapper label {
-    font-size: 0.875rem !important;
+  /* Headings - proper spacing */
+  body.job-card-public .job-card-public-wrapper h2 {
+    font-size: 1.125rem !important;
     line-height: 1.5 !important;
-    margin-bottom: 0.5rem !important;
+    margin-bottom: 0.75rem !important; /* Increased spacing below headings */
+    margin-top: 0 !important;
+    padding: 0 !important;
   }
+
 }
 
 /* Small mobile devices (340px and below) */
