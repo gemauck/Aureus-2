@@ -106,6 +106,10 @@
     display: block !important;
   }
 
+  body.job-card-public .job-card-public-wrapper header.overflow-hidden {
+    display: block !important;
+  }
+
   body.job-card-public .job-card-public-wrapper header.relative,
   body.job-card-public .job-card-public-wrapper section,
   body.job-card-public .job-card-public-wrapper footer {
