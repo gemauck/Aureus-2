@@ -67,19 +67,6 @@ const storage = {
     }
 };
 
-const COLUMN_FILTER_DEFAULTS = {
-    name: '',
-    company: '',
-    type: 'All',
-    status: 'All',
-    stage: 'All',
-    minValue: '',
-    maxValue: '',
-    minAge: '',
-    maxAge: '',
-    expectedClose: 'All'
-};
-
 const normalizeLifecycleStageValue = (value) => {
     switch ((value || '').toLowerCase()) {
         case 'active':
@@ -131,7 +118,6 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
     const [draggedOverStage, setDraggedOverStage] = useState(null);
     const [dataLoaded, setDataLoaded] = useState(false); // Track when data is fully loaded from API
     const [fallbackDeal, setFallbackDeal] = useState(null); // { type: 'lead' | 'opportunity', id, data, client }
-    const [columnFilters, setColumnFilters] = useState(() => ({ ...COLUMN_FILTER_DEFAULTS }));
     const [listSortColumn, setListSortColumn] = useState(null);
     const [listSortDirection, setListSortDirection] = useState('asc');
 
@@ -166,32 +152,6 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
 
         return Array.from(statuses).filter(Boolean).sort((a, b) => a.localeCompare(b));
     }, [clients, leads]);
-
-    const activeColumnFilterCount = useMemo(() => {
-        return Object.keys(columnFilters).reduce((total, key) => {
-            const value = columnFilters[key];
-            const defaultValue = COLUMN_FILTER_DEFAULTS[key];
-
-            if (typeof value === 'string') {
-                const trimmedValue = value.trim();
-                const trimmedDefault = typeof defaultValue === 'string' ? defaultValue.trim() : defaultValue;
-                return trimmedValue !== trimmedDefault && trimmedValue !== '' ? total + 1 : total;
-            }
-
-            return value !== defaultValue ? total + 1 : total;
-        }, 0);
-    }, [columnFilters]);
-
-    const handleColumnFilterChange = useCallback((key, rawValue) => {
-        setColumnFilters((prev) => ({
-            ...prev,
-            [key]: rawValue
-        }));
-    }, []);
-
-    const clearColumnFilters = useCallback(() => {
-        setColumnFilters({ ...COLUMN_FILTER_DEFAULTS });
-    }, []);
 
     const handleListSort = useCallback((column) => {
         setListSortColumn((prevColumn) => {
@@ -1105,69 +1065,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
             });
         }
 
-        // Column filters
-        if (columnFilters.name && columnFilters.name.trim()) {
-            const needle = columnFilters.name.trim().toLowerCase();
-            items = items.filter((item) => item.name?.toLowerCase().includes(needle));
-        }
-
-        if (columnFilters.company && columnFilters.company.trim()) {
-            const needle = columnFilters.company.trim().toLowerCase();
-            items = items.filter((item) => {
-                const companyName = item.type === 'lead'
-                    ? (item.company || item.name || '')
-                    : (item.clientName || '');
-                return companyName.toLowerCase().includes(needle);
-            });
-        }
-
-        if (columnFilters.type !== 'All') {
-            items = items.filter((item) => item.type === columnFilters.type);
-        }
-
-        if (columnFilters.status !== 'All') {
-            items = items.filter((item) => normalizeLifecycleStage(item.status) === columnFilters.status);
-        }
-
-        if (columnFilters.stage !== 'All') {
-            const stageNeedle = columnFilters.stage.toLowerCase();
-            items = items.filter((item) => (item.stage || '').toLowerCase() === stageNeedle);
-        }
-
-        if (columnFilters.minValue && columnFilters.minValue !== '') {
-            const minValue = Number(columnFilters.minValue);
-            if (!Number.isNaN(minValue)) {
-                items = items.filter((item) => item.value >= minValue);
-            }
-        }
-
-        if (columnFilters.maxValue && columnFilters.maxValue !== '') {
-            const maxValue = Number(columnFilters.maxValue);
-            if (!Number.isNaN(maxValue)) {
-                items = items.filter((item) => item.value <= maxValue);
-            }
-        }
-
-        if (columnFilters.minAge && columnFilters.minAge !== '') {
-            const minAge = Number(columnFilters.minAge);
-            if (!Number.isNaN(minAge)) {
-                items = items.filter((item) => getDealAge(item.createdDate) >= minAge);
-            }
-        }
-
-        if (columnFilters.maxAge && columnFilters.maxAge !== '') {
-            const maxAge = Number(columnFilters.maxAge);
-            if (!Number.isNaN(maxAge)) {
-                items = items.filter((item) => getDealAge(item.createdDate) <= maxAge);
-            }
-        }
-
-        if (columnFilters.expectedClose === 'scheduled') {
-            items = items.filter((item) => Boolean(item.expectedCloseDate));
-        } else if (columnFilters.expectedClose === 'not-scheduled') {
-            items = items.filter((item) => !item.expectedCloseDate);
-        }
-
         const compareWithDirection = (value) => (value === 'asc' ? 1 : -1);
 
         const getListComparator = () => {
@@ -1948,8 +1845,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
                     openDealDetail(item);
                 }}
-                className={`bg-white rounded-lg border border-gray-200 shadow-sm cursor-move flex flex-col gap-2 p-3 touch-none leading-relaxed ${
-                    !isDragging ? 'hover:shadow-md transition' : ''
+                className={`bg-white rounded-md border border-gray-200 cursor-move flex flex-col gap-1.5 p-2 touch-none ${
+                    !isDragging ? 'hover:border-gray-300 transition' : ''
                 } ${draggedItem?.id === item.id ? 'opacity-50' : ''}`}
                 style={{
                     WebkitTouchCallout: 'none',
@@ -1957,67 +1854,26 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     userSelect: 'none'
                 }}
             >
-                <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-start gap-2 min-w-0">
-                        <button
-                            type="button"
-                            aria-label={item.isStarred ? 'Unstar deal' : 'Star deal'}
-                            className="shrink-0 p-1 rounded hover:bg-yellow-50 transition"
-                            onClick={(e) => handleToggleStar(e, item)}
-                            onMouseDown={(e) => {
-                                e.stopPropagation();
-                                e.preventDefault();
-                            }}
-                            onTouchStart={(e) => {
-                                e.stopPropagation();
-                                e.preventDefault();
-                            }}
-                        >
-                            <i className={`${item.isStarred ? 'fas text-yellow-500' : 'far text-gray-300'} fa-star text-xs`}></i>
-                        </button>
-                        <div className="min-w-0">
-                            <p className="font-semibold text-sm text-gray-900 truncate">
-                                {item.name}
-                            </p>
-                            <p className="text-xs text-gray-500 truncate">
-                                {item.clientName || item.company || item.industry || item.itemType || 'Untitled deal'}
-                            </p>
-                        </div>
-                    </div>
+                <div className="flex items-center justify-between gap-2">
+                    <p className="font-medium text-sm text-gray-900 truncate">
+                        {item.name || 'Untitled deal'}
+                    </p>
                     <span
-                        className={`px-2 py-0.5 text-xs font-semibold rounded-full ${
-                            item.type === 'lead' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
+                        className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${
+                            item.type === 'lead' ? 'bg-blue-50 text-blue-600' : 'bg-green-50 text-green-600'
                         }`}
                     >
-                        {item.type === 'lead' ? 'LEAD' : 'OPP'}
+                        {item.type === 'lead' ? 'Lead' : 'Opportunity'}
                     </span>
                 </div>
 
-                <div className="flex items-center justify-between text-sm text-gray-700">
-                    <span className="font-bold text-gray-900">{formatCurrency(item.value)}</span>
-                    <span
-                        className={`px-2 py-0.5 text-xs font-medium rounded-full ${getLifecycleBadgeColor(item.status || 'Potential')}`}
-                    >
-                        {item.status || 'Potential'}
-                    </span>
-                </div>
+                <p className="text-xs text-gray-500 truncate">
+                    {item.clientName || item.company || 'No company'}
+                </p>
 
                 <div className="flex items-center justify-between text-xs text-gray-500">
-                    <span className={`px-2 py-0.5 rounded-full font-medium ${getAgeBadgeColor(age)}`}>
-                        {age}d
-                    </span>
-                    {item.expectedCloseDate ? (
-                        <span className="flex items-center gap-1 whitespace-nowrap">
-                            <i className="fas fa-calendar-alt text-gray-400 text-xs"></i>
-                            {new Date(item.expectedCloseDate).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}
-                        </span>
-                    ) : (
-                        <span className="text-gray-400 italic">No close date</span>
-                    )}
-                </div>
-
-                <div className="text-xs text-gray-500 truncate">
-                    {item.industry || item.source || 'No industry specified'}
+                    <span className="font-semibold text-gray-800 text-sm">{formatCurrency(item.value)}</span>
+                    <span>{age}d</span>
                 </div>
             </div>
         );
@@ -2133,14 +1989,14 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
             return (
                 <th
-                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase"
+                    className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500"
                     aria-sort={getAriaSort(column)}
                     scope="col"
                 >
                     <button
                         type="button"
                         onClick={() => handleListSort(column)}
-                        className={`inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide transition ${
+                        className={`flex items-center gap-2 transition-colors ${
                             isActive ? 'text-gray-900' : 'text-gray-500 hover:text-gray-700'
                         }`}
                     >
@@ -2153,19 +2009,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
         return (
             <div className="space-y-4">
-                {activeColumnFilterCount > 0 && (
-                    <div className="flex items-center justify-between px-4 py-2 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-700">
-                        <span>{activeColumnFilterCount} column filter{activeColumnFilterCount > 1 ? 's' : ''} active</span>
-                        <button
-                            type="button"
-                            onClick={clearColumnFilters}
-                            className="text-xs font-semibold hover:text-blue-900 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-1 rounded"
-                        >
-                            Clear column filters
-                        </button>
-                    </div>
-                )}
-
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200">
                     <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200">
@@ -2179,110 +2022,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                     {renderSortableHeader('Value', 'value')}
                                     {renderSortableHeader('Age', 'age')}
                                     {renderSortableHeader('Expected Close', 'expectedClose')}
-                                </tr>
-                                <tr className="bg-white border-t border-gray-200">
-                                    <th className="px-4 py-2">
-                                        <input
-                                            type="text"
-                                            value={columnFilters.name}
-                                            onChange={(e) => handleColumnFilterChange('name', e.target.value)}
-                                            placeholder="Filter name"
-                                            className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                        />
-                                    </th>
-                                    <th className="px-4 py-2">
-                                        <input
-                                            type="text"
-                                            value={columnFilters.company}
-                                            onChange={(e) => handleColumnFilterChange('company', e.target.value)}
-                                            placeholder="Filter company"
-                                            className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                        />
-                                    </th>
-                                    <th className="px-4 py-2">
-                                        <select
-                                            value={columnFilters.type}
-                                            onChange={(e) => handleColumnFilterChange('type', e.target.value)}
-                                            className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                        >
-                                            <option value="All">All types</option>
-                                            <option value="lead">Leads</option>
-                                            <option value="opportunity">Opportunities</option>
-                                        </select>
-                                    </th>
-                                    <th className="px-4 py-2">
-                                        <select
-                                            value={columnFilters.status}
-                                            onChange={(e) => handleColumnFilterChange('status', e.target.value)}
-                                            className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                        >
-                                            <option value="All">All statuses</option>
-                                            {statusOptions.map((status) => (
-                                                <option key={status} value={status}>{status}</option>
-                                            ))}
-                                        </select>
-                                    </th>
-                                    <th className="px-4 py-2">
-                                        <select
-                                            value={columnFilters.stage}
-                                            onChange={(e) => handleColumnFilterChange('stage', e.target.value)}
-                                            className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                        >
-                                            <option value="All">All AIDA stages</option>
-                                            {pipelineStages.map((stage) => (
-                                                <option key={stage.id} value={stage.name}>{stage.name}</option>
-                                            ))}
-                                        </select>
-                                    </th>
-                                    <th className="px-4 py-2">
-                                        <div className="flex items-center gap-1">
-                                            <input
-                                                type="number"
-                                                value={columnFilters.minValue}
-                                                onChange={(e) => handleColumnFilterChange('minValue', e.target.value)}
-                                                placeholder="Min"
-                                                className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                            />
-                                            <input
-                                                type="number"
-                                                value={columnFilters.maxValue}
-                                                onChange={(e) => handleColumnFilterChange('maxValue', e.target.value)}
-                                                placeholder="Max"
-                                                className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                            />
-                                        </div>
-                                    </th>
-                                    <th className="px-4 py-2">
-                                        <div className="flex items-center gap-1">
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                value={columnFilters.minAge}
-                                                onChange={(e) => handleColumnFilterChange('minAge', e.target.value)}
-                                                placeholder="Min"
-                                                className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                            />
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                value={columnFilters.maxAge}
-                                                onChange={(e) => handleColumnFilterChange('maxAge', e.target.value)}
-                                                placeholder="Max"
-                                                className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                            />
-                                        </div>
-                                    </th>
-                                    <th className="px-4 py-2">
-                                        <select
-                                            value={columnFilters.expectedClose}
-                                            onChange={(e) => handleColumnFilterChange('expectedClose', e.target.value)}
-                                            className="w-full px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                        >
-                                            <option value="All">All</option>
-                                            <option value="scheduled">Has date</option>
-                                            <option value="not-scheduled">Not set</option>
-                                        </select>
-                                    </th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
@@ -2305,12 +2044,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                 className="hover:bg-gray-50 cursor-pointer transition"
                                                 onClick={() => openDealDetail(item)}
                                             >
-                                                <td className="px-4 py-3">
-                                                    <div className="flex items-center gap-2">
+                                                <td className="px-6 py-4">
+                                                    <div className="flex items-center gap-3">
                                                         <button
                                                             type="button"
                                                             aria-label={item.isStarred ? 'Unstar deal' : 'Star deal'}
-                                                            className="shrink-0 p-1 rounded-full hover:bg-yellow-50 transition"
+                                                            className="shrink-0 flex items-center justify-center w-7 h-7 rounded-full hover:bg-yellow-50 transition"
                                                             onClick={(e) => handleToggleStar(e, item)}
                                                             onMouseDown={(e) => {
                                                                 e.stopPropagation();
@@ -2323,59 +2062,39 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         >
                                                             <i className={`${item.isStarred ? 'fas text-yellow-500' : 'far text-gray-300'} fa-star text-sm`}></i>
                                                         </button>
-                                                        <div className="min-w-0">
-                                                            <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
-                                                                <span className="truncate">{item.name}</span>
-                                                                {isLead ? (
-                                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">Lead</span>
-                                                                ) : (
-                                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700">Opportunity</span>
-                                                                )}
-                                                            </div>
-                                                            <div className="text-xs text-gray-500 mt-1">
-                                                                Created {new Date(item.createdDate).toLocaleDateString('en-ZA')}
-                                                            </div>
-                                                        </div>
+                                                        <span className="text-sm font-medium text-gray-900">
+                                                            {item.name}
+                                                        </span>
                                                     </div>
                                                 </td>
-                                                <td className="px-4 py-3">
-                                                    <div className="text-sm text-gray-900">
-                                                        {isLead ? (item.company || 'Lead') : (item.clientName || 'Unknown Client')}
-                                                    </div>
-                                                    {item.industry && (
-                                                        <div className="text-xs text-gray-500 mt-0.5">{item.industry}</div>
-                                                    )}
+                                                <td className="px-6 py-4 text-sm text-gray-700">
+                                                    {isLead ? (item.company || 'Lead') : (item.clientName || 'Unknown Client')}
                                                 </td>
-                                                <td className="px-4 py-3">
-                                                    <div className="text-xs text-gray-600 uppercase font-medium tracking-wide">
-                                                        {isLead ? 'New Lead' : 'Expansion'}
-                                                    </div>
-                                                    {item.source && (
-                                                        <div className="text-[10px] text-gray-400 mt-0.5">Source: {item.source}</div>
-                                                    )}
+                                                <td className="px-6 py-4">
+                                                    <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${isLead ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                                                        {isLead ? 'Lead' : 'Opportunity'}
+                                                    </span>
                                                 </td>
-                                                <td className="px-4 py-3">
-                                                <span className={`inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded ${getLifecycleBadgeColor(item.status || 'Potential')}`}>
-                                                    {item.status || 'Potential'}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <span className="text-sm font-medium text-gray-900">{item.stage}</span>
+                                                <td className="px-6 py-4">
+                                                    <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${getLifecycleBadgeColor(item.status || 'Potential')}`}>
+                                                        {item.status || 'Potential'}
+                                                    </span>
                                                 </td>
-                                                <td className="px-4 py-3">
+                                                <td className="px-6 py-4">
+                                                    <span className="text-sm font-medium text-gray-900">{item.stage}</span>
+                                                </td>
+                                                <td className="px-6 py-4">
                                                     <span className="text-sm font-semibold text-gray-900">{formatCurrency(item.value)}</span>
                                                 </td>
-                                                <td className="px-4 py-3">
-                                                    <span className={`px-2 py-1 text-xs rounded font-medium ${getAgeBadgeColor(age)}`}>
+                                                <td className="px-6 py-4">
+                                                    <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${getAgeBadgeColor(age)}`}>
                                                         {age}d
                                                     </span>
                                                 </td>
-                                                <td className="px-4 py-3">
-                                                    <span className="text-xs text-gray-600">
-                                                        {item.expectedCloseDate
-                                                            ? new Date(item.expectedCloseDate).toLocaleDateString('en-ZA')
-                                                            : 'Not set'}
-                                                    </span>
+                                                <td className="px-6 py-4 text-sm text-gray-700">
+                                                    {item.expectedCloseDate
+                                                        ? new Date(item.expectedCloseDate).toLocaleDateString('en-ZA')
+                                                        : 'Not set'}
                                                 </td>
                                             </tr>
                                         );

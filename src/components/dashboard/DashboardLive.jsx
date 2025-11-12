@@ -448,9 +448,6 @@ const DashboardLive = () => {
 
         // Get Calendar component - always check window.Calendar directly for latest value
         const CalendarComponent = window.Calendar;
-        // Get TaskManagement component (may be lazy loaded)
-        const TaskManagement = window.TaskManagement || (() => <div>Loading task management...</div>);
-        
         return (
         <div className="space-y-4">
             {/* Calendar Widget - Always render, Calendar will appear when ready */}
@@ -465,11 +462,6 @@ const DashboardLive = () => {
                         </div>
                     </div>
                 )}
-            </div>
-            
-            {/* Task Management Component */}
-            <div>
-                <TaskManagement />
             </div>
         </div>
     );

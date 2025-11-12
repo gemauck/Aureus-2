@@ -1,5 +1,5 @@
 // Get dependencies from window
-const { useState, useEffect, useMemo, useCallback } = React;
+const { useState, useEffect, useMemo, useCallback, useRef } = React;
 
 const ADMIN_ROLES = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'];
 const ADMIN_PERMISSION_KEYS = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'];
@@ -176,6 +176,8 @@ const ManagementMeetingNotes = () => {
     const [showCommentModal, setShowCommentModal] = useState(false);
     const [editingActionItem, setEditingActionItem] = useState(null);
     const [commentContext, setCommentContext] = useState(null); // {type: 'monthly'|'department'|'action', id: string}
+
+    const weekCardRefs = useRef({});
     
     const reloadMonthlyNotes = useCallback(async (preferredMonthKey = null) => {
         try {
@@ -351,6 +353,101 @@ const ManagementMeetingNotes = () => {
             return new Date(b.weekStart) - new Date(a.weekStart);
         });
     }, [currentMonthlyNotes]);
+
+    const getWeekIdentifier = (week) => {
+        if (!week) {
+            return '';
+        }
+        return week.weekKey || week.id || '';
+    };
+
+    const selectedWeekIndex = useMemo(() => {
+        if (!Array.isArray(weeks) || weeks.length === 0) {
+            return -1;
+        }
+        return weeks.findIndex((week, index) => {
+            const identifier = getWeekIdentifier(week) || `week-${index}`;
+            return identifier === selectedWeek;
+        });
+    }, [weeks, selectedWeek]);
+
+    const resolvedSelectedWeekIndex = selectedWeekIndex >= 0 ? selectedWeekIndex : -1;
+
+    const nextActiveWeekId = useMemo(() => {
+        if (!Array.isArray(weeks) || weeks.length === 0 || resolvedSelectedWeekIndex < 0) {
+            return null;
+        }
+        const nextWeek = weeks[resolvedSelectedWeekIndex + 1];
+        if (!nextWeek) {
+            return null;
+        }
+        const rawIdentifier = getWeekIdentifier(nextWeek);
+        return rawIdentifier || `week-${resolvedSelectedWeekIndex + 1}`;
+    }, [weeks, resolvedSelectedWeekIndex]);
+
+    useEffect(() => {
+        if (!Array.isArray(weeks) || weeks.length === 0) {
+            if (selectedWeek !== null) {
+                setSelectedWeek(null);
+            }
+            return;
+        }
+
+        const hasSelectedWeek = weeks.some((week, index) => {
+            const identifier = getWeekIdentifier(week) || `week-${index}`;
+            return identifier === selectedWeek;
+        });
+        if (hasSelectedWeek && selectedWeek) {
+            return;
+        }
+
+        const today = new Date();
+        const matchedWeek =
+            weeks.find((week) => {
+                if (!week) {
+                    return false;
+                }
+                const start = week.weekStart ? new Date(week.weekStart) : null;
+                if (!start || Number.isNaN(start.getTime())) {
+                    return false;
+                }
+                const end = week.weekEnd ? new Date(week.weekEnd) : new Date(start);
+                if (Number.isNaN(end.getTime())) {
+                    return false;
+                }
+                const startOfDay = new Date(start);
+                startOfDay.setHours(0, 0, 0, 0);
+                const endOfDay = new Date(end);
+                endOfDay.setHours(23, 59, 59, 999);
+                return today >= startOfDay && today <= endOfDay;
+            }) || null;
+
+        const fallbackWeek = matchedWeek || weeks[0];
+        const fallbackIndex = weeks.indexOf(fallbackWeek);
+        const fallbackId = getWeekIdentifier(fallbackWeek) || (fallbackIndex >= 0 ? `week-${fallbackIndex}` : '');
+        if (fallbackId && fallbackId !== selectedWeek) {
+            setSelectedWeek(fallbackId);
+        }
+    }, [weeks, selectedWeek]);
+
+    useEffect(() => {
+        if (!selectedWeek) {
+            return;
+        }
+        const refs = weekCardRefs.current || {};
+        const node = refs[selectedWeek];
+        if (node && typeof node.scrollIntoView === 'function') {
+            try {
+                node.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'nearest',
+                    inline: 'center'
+                });
+            } catch (error) {
+                // Ignore scroll errors (non-DOM environments, etc.)
+            }
+        }
+    }, [selectedWeek, weeks]);
 
     // Get all action items for the month
     const allActionItems = useMemo(() => {
@@ -968,6 +1065,31 @@ const ManagementMeetingNotes = () => {
         return dept?.name || departmentId;
     };
 
+    const getWeekSummaryStats = (week) => {
+        const departmentNotes = Array.isArray(week?.departmentNotes) ? week.departmentNotes : [];
+        const weeklyActionItems = Array.isArray(week?.actionItems) ? week.actionItems : [];
+
+        const departmentActionItemsCount = departmentNotes.reduce((count, deptNote) => {
+            if (!Array.isArray(deptNote?.actionItems)) {
+                return count;
+            }
+            return count + deptNote.actionItems.length;
+        }, 0);
+
+        const departmentCommentsCount = departmentNotes.reduce((count, deptNote) => {
+            if (!Array.isArray(deptNote?.comments)) {
+                return count;
+            }
+            return count + deptNote.comments.length;
+        }, 0);
+
+        return {
+            departmentCount: departmentNotes.length,
+            totalActionItems: weeklyActionItems.length + departmentActionItemsCount,
+            totalComments: departmentCommentsCount
+        };
+    };
+
     if (!isAdminUser) {
         return (
             <div className="p-4">
@@ -1183,47 +1305,152 @@ const ManagementMeetingNotes = () => {
             {/* Weekly Notes Section */}
             {selectedMonth && currentMonthlyNotes && weeks.length > 0 && (
                 <div className="space-y-4">
-                    {weeks.map((week) => (
-                        <div key={week.id || week.weekKey} className={`rounded-lg border p-4 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                            <div className="flex items-center justify-between mb-4">
+                    <div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-900/40 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
+                        <div className="flex items-start justify-between gap-3 flex-wrap">
+                            <div>
+                                <p className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                                    Week Navigation
+                                </p>
+                                <p className={`text-[11px] leading-tight ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                    Focus on this week alongside next week while keeping earlier updates a swipe away. Scroll horizontally to move between weeks in the month.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="overflow-x-auto -mx-1 mt-3">
+                            <div className="flex gap-2 px-1 pb-1">
+                                {weeks.map((week, index) => {
+                                    const rawId = getWeekIdentifier(week);
+                                    const identifier = rawId || `week-${index}`;
+                                    const isPrimary = identifier === selectedWeek;
+                                    const isNext = identifier === nextActiveWeekId;
+                                    const label = isPrimary ? 'This Week' : isNext ? 'Next Week' : 'View Week';
+                                    return (
+                                        <button
+                                            key={identifier}
+                                            type="button"
+                                            onClick={() => setSelectedWeek(identifier)}
+                                            className={`relative whitespace-nowrap px-3 py-2 rounded-lg border text-xs font-medium transition ${
+                                                isPrimary
+                                                    ? isDark
+                                                        ? 'bg-primary-600/20 border-primary-400 text-primary-200'
+                                                        : 'bg-primary-50 border-primary-500 text-primary-700'
+                                                    : isNext
+                                                        ? isDark
+                                                            ? 'bg-amber-500/20 border-amber-400 text-amber-200'
+                                                            : 'bg-amber-50 border-amber-400 text-amber-700'
+                                                        : isDark
+                                                            ? 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-500 hover:text-slate-200'
+                                                            : 'bg-white border-slate-200 text-slate-600 hover:border-slate-400 hover:text-slate-700'
+                                            }`}
+                                        >
+                                            <span className="block text-[10px] uppercase tracking-wide">
+                                                {label}
+                                            </span>
+                                            <span className="block text-[11px] font-semibold">
+                                                {formatWeek(week.weekKey, week.weekStart)}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="overflow-x-auto pb-2">
+                        <div className="flex gap-4 min-w-full">
+                            {weeks.map((week, index) => {
+                                const rawId = getWeekIdentifier(week);
+                                const identifier = rawId || `week-${index}`;
+                                const isPrimary = identifier === selectedWeek;
+                                const isNext = identifier === nextActiveWeekId;
+                                const isActive = isPrimary || isNext;
+                                const summary = getWeekSummaryStats(week);
+
+                                return (
+                                    <div
+                                        key={identifier}
+                                        ref={(node) => {
+                                            if (!weekCardRefs.current) {
+                                                weekCardRefs.current = {};
+                                            }
+                                            if (node) {
+                                                weekCardRefs.current[identifier] = node;
+                                            } else if (weekCardRefs.current[identifier]) {
+                                                delete weekCardRefs.current[identifier];
+                                            }
+                                        }}
+                                        className={`flex-shrink-0 w-full md:w-[520px] xl:w-[560px] rounded-lg border transition-all duration-200 ${
+                                            isPrimary
+                                                ? isDark
+                                                    ? 'border-primary-400 shadow-lg shadow-primary-900/40'
+                                                    : 'border-primary-500 shadow-lg shadow-primary-200/60'
+                                                : isNext
+                                                    ? isDark
+                                                        ? 'border-amber-400 shadow-md shadow-amber-900/30'
+                                                        : 'border-amber-400 shadow-md shadow-amber-100/80'
+                                                    : isDark
+                                                        ? 'border-slate-700'
+                                                        : 'border-gray-200'
+                                        } ${!isActive ? 'opacity-90' : ''}`}
+                                    >
+                                        <div className={`p-4 h-full flex flex-col ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
+                                            <div className="flex items-start justify-between gap-2 mb-3">
+                                                <div>
+                                                    <p className={`text-[11px] uppercase tracking-wide font-semibold ${isPrimary ? (isDark ? 'text-primary-300' : 'text-primary-600') : isNext ? (isDark ? 'text-amber-300' : 'text-amber-600') : isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                                        {isPrimary ? 'This Week' : isNext ? 'Next Week' : 'Week Overview'}
+                                                    </p>
                                 <h3 className={`text-sm font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
                                     <i className="fas fa-calendar-week mr-2 text-primary-600"></i>
-                                    Week: {formatWeek(week.weekKey, week.weekStart)}
+                                                        {formatWeek(week.weekKey, week.weekStart)}
                                 </h3>
+                                                </div>
                                 <div className="flex items-center gap-2">
+                                                    {!isPrimary && (
                                     <button
-                                        onClick={() => {
-                                            setSelectedWeek(week.weekKey === selectedWeek ? null : week.weekKey);
-                                        }}
-                                        className={`text-xs ${isDark ? 'text-primary-400 hover:text-primary-300' : 'text-primary-600 hover:text-primary-700'}`}
-                                    >
-                                        {selectedWeek === week.weekKey ? (
-                                            <><i className="fas fa-chevron-up mr-1"></i> Collapse</>
-                                        ) : (
-                                            <><i className="fas fa-chevron-down mr-1"></i> Expand</>
-                                        )}
+                                                            type="button"
+                                                            onClick={() => setSelectedWeek(identifier)}
+                                                            className={`text-[11px] px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                        >
+                                                            Focus
                                     </button>
+                                                    )}
                                     <button
+                                                        type="button"
                                         onClick={() => handleDeleteWeek(week)}
-                                        className={`text-xs flex items-center gap-1 px-2 py-1 rounded ${isDark ? 'bg-red-900 text-red-200 hover:bg-red-800' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
+                                                        className={`text-[11px] flex items-center gap-1 px-2 py-1 rounded ${isDark ? 'bg-red-900 text-red-200 hover:bg-red-800' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
                                     >
                                         <i className="fas fa-trash"></i>
-                                        Delete Week
+                                                        Delete
                                     </button>
                                 </div>
                             </div>
 
-                            {selectedWeek === week.weekKey && (
-                                <div className="space-y-4">
+                                            <div className="grid grid-cols-3 gap-2 mb-4">
+                                                <div className={`rounded border px-2 py-1 ${isDark ? 'border-slate-700 bg-slate-900/40 text-slate-200' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
+                                                    <p className="text-[10px] uppercase tracking-wide">Departments</p>
+                                                    <p className="text-sm font-semibold">{summary.departmentCount}</p>
+                                                </div>
+                                                <div className={`rounded border px-2 py-1 ${isDark ? 'border-slate-700 bg-slate-900/40 text-slate-200' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
+                                                    <p className="text-[10px] uppercase tracking-wide">Action Items</p>
+                                                    <p className="text-sm font-semibold">{summary.totalActionItems}</p>
+                                                </div>
+                                                <div className={`rounded border px-2 py-1 ${isDark ? 'border-slate-700 bg-slate-900/40 text-slate-200' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
+                                                    <p className="text-[10px] uppercase tracking-wide">Comments</p>
+                                                    <p className="text-sm font-semibold">{summary.totalComments}</p>
+                                                </div>
+                                            </div>
+
+                                            {isActive ? (
+                                                <div className="space-y-4 flex-1 overflow-y-auto">
                                     {DEPARTMENTS.map((dept) => {
                                         const deptNote = week.departmentNotes?.find(
-                                            dn => dn.departmentId === dept.id
+                                                            (dn) => dn.departmentId === dept.id
                                         );
 
                                         if (!deptNote) return null;
 
                                         const allocations = currentMonthlyNotes.userAllocations?.filter(
-                                            a => a.departmentId === dept.id
+                                                            (a) => a.departmentId === dept.id
                                         ) || [];
                                         return (
                                             <div key={dept.id} className={`border rounded-lg p-3 ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
@@ -1235,7 +1462,7 @@ const ManagementMeetingNotes = () => {
                                                     <div className="flex gap-2">
                                                         {allocations.length > 0 && (
                                                             <div className="flex gap-1">
-                                                                {allocations.map(allocation => (
+                                                                                {allocations.map((allocation) => (
                                                                     <span key={allocation.id} className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-gray-100 text-gray-700'}`}>
                                                                         {getUserName(allocation.userId)}
                                                                     </span>
@@ -1302,7 +1529,7 @@ const ManagementMeetingNotes = () => {
                                                                 Action Items
                                                             </label>
                                                             <div className="space-y-2">
-                                                                {deptNote.actionItems.map(item => (
+                                                                                {deptNote.actionItems.map((item) => (
                                                                     <div key={item.id} className={`flex items-center justify-between p-2 rounded ${isDark ? 'bg-slate-700' : 'bg-gray-50'}`}>
                                                                         <div className="flex-1">
                                                                             <p className={`text-xs font-medium ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{item.title}</p>
@@ -1334,7 +1561,7 @@ const ManagementMeetingNotes = () => {
                                                                 Comments
                                                             </label>
                                                             <div className="space-y-2">
-                                                                {deptNote.comments.map(comment => (
+                                                                                {deptNote.comments.map((comment) => (
                                                                     <div key={comment.id} className={`p-2 rounded ${isDark ? 'bg-slate-700' : 'bg-gray-50'}`}>
                                                                         <p className={`text-xs ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{comment.content}</p>
                                                                         <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
@@ -1374,9 +1601,24 @@ const ManagementMeetingNotes = () => {
                                         );
                                     })}
                                 </div>
+                                            ) : (
+                                                <div className={`rounded-lg border px-3 py-4 text-center mt-auto ${isDark ? 'border-slate-700 bg-slate-900/30 text-slate-300' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+                                                    <p className="text-xs mb-2">Select this week to review and update department notes.</p>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setSelectedWeek(identifier)}
+                                                        className="text-xs px-3 py-1.5 rounded bg-primary-600 text-white hover:bg-primary-500 transition"
+                                                    >
+                                                        View Week
+                                                    </button>
+                                                </div>
                             )}
                         </div>
-                    ))}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -1691,3 +1933,4 @@ const CommentForm = ({ isDark, onSubmit, onCancel }) => {
 
 // Make available globally
 window.ManagementMeetingNotes = ManagementMeetingNotes;
+

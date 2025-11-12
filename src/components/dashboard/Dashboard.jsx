@@ -221,19 +221,11 @@ const Dashboard = () => {
 
     // Get Calendar component (may be lazy loaded)
     const Calendar = window.Calendar || (() => <div>Loading calendar...</div>);
-    // Get TaskManagement component (may be lazy loaded)
-    const TaskManagement = window.TaskManagement || (() => <div>Loading task management...</div>);
-    
     return (
         <div className="space-y-4">
             {/* Calendar Component */}
             <div>
                 <Calendar />
-            </div>
-            
-            {/* Task Management Component */}
-            <div>
-                <TaskManagement />
             </div>
         </div>
     );

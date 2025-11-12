@@ -275,20 +275,14 @@ const DashboardEnhanced = () => {
         );
     }
 
-    // Get Calendar and TaskManagement components
+    // Get Calendar component
     const Calendar = window.Calendar || (() => <div>Loading calendar...</div>);
-    const TaskManagement = window.TaskManagement || (() => <div>Loading task management...</div>);
 
     return (
         <div className="space-y-4">
             {/* Calendar Component */}
             <div>
                 <Calendar />
-            </div>
-            
-            {/* Task Management Component */}
-            <div>
-                <TaskManagement />
             </div>
         </div>
     );

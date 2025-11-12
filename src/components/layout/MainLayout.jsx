@@ -13,7 +13,7 @@ const MainLayout = () => {
         }
         // Extract page from URL (e.g., /leave-platform -> leave-platform)
         const page = pathname.replace(/^\//, '').split('/')[0];
-        const validPages = ['dashboard', 'clients', 'projects', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking'];
+        const validPages = ['dashboard', 'clients', 'projects', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking', 'my-tasks'];
         if (validPages.includes(page)) {
             return page;
         }
@@ -221,6 +221,9 @@ const MainLayout = () => {
     }, [clientsComponentReady]);
     
     const [notificationCenterReady, setNotificationCenterReady] = React.useState(false);
+    const [taskManagementReady, setTaskManagementReady] = React.useState(
+        !!(window.TaskManagement && typeof window.TaskManagement === 'function')
+    );
     
     React.useEffect(() => {
         const checkNotificationCenter = () => {
@@ -253,7 +256,58 @@ const MainLayout = () => {
             clearTimeout(timeout);
         };
     }, [notificationCenterReady]);
+
+    React.useEffect(() => {
+        if (taskManagementReady) {
+            return;
+        }
+
+        const handleTaskManagementReady = () => {
+            if (window.TaskManagement && typeof window.TaskManagement === 'function') {
+                setTaskManagementReady(true);
+            }
+        };
+
+        window.addEventListener('taskManagementComponentReady', handleTaskManagementReady);
+
+        const interval = setInterval(() => {
+            if (window.TaskManagement && typeof window.TaskManagement === 'function') {
+                setTaskManagementReady(true);
+                clearInterval(interval);
+                clearTimeout(timeout);
+            }
+        }, 200);
+
+        const timeout = setTimeout(() => {
+            clearInterval(interval);
+        }, 10000);
+
+        if (window.TaskManagement && typeof window.TaskManagement === 'function') {
+            setTaskManagementReady(true);
+            clearInterval(interval);
+            clearTimeout(timeout);
+        }
+
+        return () => {
+            window.removeEventListener('taskManagementComponentReady', handleTaskManagementReady);
+            clearInterval(interval);
+            clearTimeout(timeout);
+        };
+    }, [taskManagementReady]);
     
+    const TaskManagementComponent = React.useMemo(() => {
+        if (window.TaskManagement && typeof window.TaskManagement === 'function') {
+            return window.TaskManagement;
+        }
+
+        return () => (
+            <div className={`${isDark ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-white border-gray-200 text-gray-600'} border rounded-lg p-6 text-center`}>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p>Loading My Tasks...</p>
+            </div>
+        );
+    }, [taskManagementReady, isDark]);
+
     const Clients = React.useMemo(() => {
         if (isMobile && window.ClientsMobileOptimized) {
             return window.ClientsMobileOptimized;
@@ -495,6 +549,7 @@ const MainLayout = () => {
         { id: 'tools', label: 'Tools', icon: 'fa-toolbox', permission: 'ACCESS_TOOL' },
         { id: 'documents', label: 'Documents', icon: 'fa-folder-open', permission: null }, // Always accessible
         { id: 'reports', label: 'Reports', icon: 'fa-chart-bar', permission: 'ACCESS_REPORTS' },
+        { id: 'my-tasks', label: 'My Tasks', icon: 'fa-check-square', permission: null },
     ];
 
     const [refreshingRole, setRefreshingRole] = React.useState(false);
@@ -527,7 +582,7 @@ const MainLayout = () => {
         
         // Guest users can only see Projects
         if (userRole === 'guest') {
-            return allMenuItems.filter(item => item.id === 'projects');
+            return allMenuItems.filter(item => ['projects', 'my-tasks'].includes(item.id));
         }
         
         // Filter menu items based on permissions
@@ -573,6 +628,14 @@ const MainLayout = () => {
         
         return filtered;
     }, [user?.role, user?.id, user?.email, refreshingRole, permissionChecker]);
+
+    const myTasksMenuItem = React.useMemo(() => {
+        return menuItems.find(item => item.id === 'my-tasks') || null;
+    }, [menuItems]);
+
+    const primaryMenuItems = React.useMemo(() => {
+        return menuItems.filter(item => item.id !== 'my-tasks');
+    }, [menuItems]);
 
     const isAdmin = React.useMemo(() => {
         const userRole = user?.role?.toLowerCase();
@@ -669,6 +732,8 @@ const MainLayout = () => {
                     return <ErrorBoundary key="tools"><Tools /></ErrorBoundary>;
                 case 'reports': 
                     return <ErrorBoundary key="reports"><Reports /></ErrorBoundary>;
+                case 'my-tasks':
+                    return <ErrorBoundary key="my-tasks"><TaskManagementComponent /></ErrorBoundary>;
                 case 'settings': 
                     return <ErrorBoundary key="settings"><Settings /></ErrorBoundary>;
                 case 'documents': 
@@ -692,7 +757,7 @@ const MainLayout = () => {
                 </div>
             );
         }
-    }, [currentPage, Dashboard, Clients, Projects, Teams, Users, Account, TimeTracking, LeavePlatform, Manufacturing, ServiceAndMaintenance, Tools, Reports, Settings, ErrorBoundary, isAdmin]);
+    }, [currentPage, Dashboard, Clients, Projects, Teams, Users, Account, TimeTracking, LeavePlatform, Manufacturing, ServiceAndMaintenance, Tools, Reports, TaskManagementComponent, Settings, ErrorBoundary, isAdmin]);
 
     React.useEffect(() => {
         window.currentPage = currentPage;
@@ -700,6 +765,31 @@ const MainLayout = () => {
             delete window.currentPage;
         };
     }, [currentPage]);
+
+    const renderMenuButton = (item, extraClasses = '') => (
+        <button
+            key={item.id}
+            onClick={() => {
+                navigateToPage(item.id);
+                if (isMobile) {
+                    setSidebarOpen(false);
+                }
+            }}
+            className={`w-full flex items-center ${sidebarOpen ? 'px-4 py-3 space-x-3' : 'px-2 py-3 justify-center'} transition-colors ${
+                currentPage === item.id 
+                    ? isDark
+                        ? 'bg-primary-900 text-primary-200 border-r-2 border-primary-400'
+                        : 'bg-primary-50 text-primary-600 border-r-2 border-primary-600'
+                    : isDark 
+                        ? 'text-gray-200 hover:bg-gray-700' 
+                        : 'text-gray-700 hover:bg-gray-50'
+            } ${extraClasses}`}
+            title={!sidebarOpen ? item.label : ''}
+        >
+            <i className={`fas ${item.icon} text-lg`}></i>
+            {sidebarOpen && <span className="font-medium">{item.label}</span>}
+        </button>
+    );
 
     return (
         <div className={`flex h-screen overflow-hidden ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
@@ -757,31 +847,15 @@ const MainLayout = () => {
                 </div>
 
                 {/* Menu Items */}
-                <nav className="flex-1 overflow-y-auto py-2">
-                    {menuItems.map(item => (
-                        <button
-                            key={item.id}
-                            onClick={() => {
-                                navigateToPage(item.id);
-                                if (isMobile) {
-                                    setSidebarOpen(false);
-                                }
-                            }}
-                            className={`w-full flex items-center ${sidebarOpen ? 'px-4 py-3 space-x-3' : 'px-2 py-3 justify-center'} transition-colors ${
-                                currentPage === item.id 
-                                    ? isDark
-                                        ? 'bg-primary-900 text-primary-200 border-r-2 border-primary-400'
-                                        : 'bg-primary-50 text-primary-600 border-r-2 border-primary-600'
-                                    : isDark 
-                                        ? 'text-gray-200 hover:bg-gray-700' 
-                                        : 'text-gray-700 hover:bg-gray-50'
-                            }`}
-                            title={!sidebarOpen ? item.label : ''}
-                        >
-                            <i className={`fas ${item.icon} text-lg`}></i>
-                            {sidebarOpen && <span className="font-medium">{item.label}</span>}
-                        </button>
-                    ))}
+                <nav className="flex-1 overflow-y-auto py-2 flex flex-col">
+                    <div className="flex-1">
+                        {primaryMenuItems.map((item) => renderMenuButton(item))}
+                    </div>
+                    {myTasksMenuItem && (
+                        <div className={sidebarOpen ? 'mt-4' : 'mt-2'}>
+                            {renderMenuButton(myTasksMenuItem)}
+                        </div>
+                    )}
                 </nav>
 
                 {/* User Profile */}

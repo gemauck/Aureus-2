@@ -221,19 +221,11 @@ const DashboardDatabaseFirst = () => {
         );
     }, [calendarReady, isDark]); // Re-evaluate when calendarReady changes or theme changes
     
-    // Get TaskManagement component (may be lazy loaded)
-    const TaskManagement = window.TaskManagement || (() => <div>Loading task management...</div>);
-    
     return (
         <div className="space-y-4">
             {/* Calendar Component */}
             <div>
                 <Calendar />
-            </div>
-            
-            {/* Task Management Component */}
-            <div>
-                <TaskManagement />
             </div>
         </div>
     );
