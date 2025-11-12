@@ -1055,6 +1055,7 @@ const JobCardFormPublic = () => {
       return;
     }
     // Check for technician - can be agentName or leadTechnicianId
+    let finalAgentName = formData.agentName;
     if (!formData.agentName && !formData.leadTechnicianId) {
       setStepError('Please select the attending technician.');
       setCurrentStep(0);
@@ -1065,7 +1066,8 @@ const JobCardFormPublic = () => {
     if (formData.leadTechnicianId && !formData.agentName) {
       const tech = availableTechnicians.find(t => t.id === formData.leadTechnicianId);
       if (tech) {
-        formData.agentName = tech.name || tech.email;
+        finalAgentName = tech.name || tech.email;
+        setFormData(prev => ({ ...prev, agentName: finalAgentName }));
       }
     }
     // Check signature - verify canvas has content (not just relying on state)
@@ -1098,6 +1100,7 @@ const JobCardFormPublic = () => {
     try {
       const jobCardData = {
         ...formData,
+        agentName: finalAgentName || formData.agentName,
         customerSignature: exportSignature(),
         id: Date.now().toString(),
         createdAt: new Date().toISOString(),
