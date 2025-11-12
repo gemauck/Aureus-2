@@ -196,32 +196,49 @@
     overflow: visible !important; /* Override overflow-hidden on mobile */
   }
   
-  /* On mobile, the flex-1 container should not clip the footer */
+  /* On mobile, ensure scrolling works properly */
   @media (max-width: 1279px) {
     body.job-card-public .job-card-public-wrapper > div.flex-1 {
-      overflow: visible !important; /* Let footer escape */
+      overflow: hidden !important; /* Keep hidden for layout */
+      display: flex !important;
+      flex-direction: column !important;
+      min-height: 0 !important; /* Critical for flex scrolling */
     }
     
-    /* But keep scrollable content scrollable */
+    /* Scrollable content must be able to scroll */
     body.job-card-public .job-card-public-wrapper > div.flex-1 > .job-card-scrollable-content {
       overflow-y: auto !important;
       overflow-x: hidden !important;
+      -webkit-overflow-scrolling: touch !important;
+      flex: 1 1 auto !important;
+      min-height: 0 !important; /* Critical for scrolling */
+      height: 100% !important;
     }
   }
 
-  /* Keep wrapper overflow for layout but footer escapes via fixed positioning */
+  /* Keep wrapper overflow for layout */
   body.job-card-public .job-card-public-wrapper {
     overflow: hidden !important;
   }
 
+  /* Parent container must allow scrolling - CRITICAL FIX */
   body.job-card-public .job-card-public-wrapper > div.flex-1 {
     overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important; /* Allow flex child to shrink */
+    flex: 1 1 auto !important;
   }
 
-  /* But keep scrollable content scrollable */
+  /* Scrollable content - MUST be able to scroll */
   body.job-card-public .job-card-scrollable-content {
     overflow-y: auto !important;
     overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important; /* Critical for flex scrolling */
+    height: 100% !important;
+    max-height: 100% !important;
   }
 
   /* Navigation buttons are now inline - no special footer handling needed */
