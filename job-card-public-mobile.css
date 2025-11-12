@@ -95,7 +95,8 @@
   body.job-card-public .job-card-public-wrapper .job-card-scrollable-content,
   body.job-card-public .job-card-public-wrapper > div.flex-1 > .job-card-scrollable-content,
   html.job-card-public body.job-card-public .job-card-public-wrapper .job-card-scrollable-content {
-    display: block !important;
+    display: flex !important;
+    flex-direction: column !important;
     flex: 1 1 auto !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
@@ -107,11 +108,10 @@
     right: 0 !important;
     transform: none !important;
     margin: 0 !important;
-    min-height: 0 !important;
-    max-height: 100% !important;
+    min-height: 0 !important; /* Critical for flex scrolling */
+    height: 100% !important; /* Take full height of parent */
     visibility: visible !important;
     opacity: 1 !important;
-    height: auto !important;
     padding-bottom: 0 !important;
     margin-bottom: 0 !important;
   }
