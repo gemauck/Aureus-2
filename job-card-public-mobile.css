@@ -85,6 +85,14 @@
   /* Ensure the form content remains comfortably readable */
   body.job-card-public .job-card-public-wrapper .max-w-4xl {
     max-width: min(100%, 48rem) !important;
+    width: 100% !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    transform: none !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper header {
+    display: block !important;
   }
 
   /* Touch-friendly inputs and buttons */
@@ -109,6 +117,7 @@
     overflow: visible !important;
     padding-left: 0 !important;
     padding-right: 0 !important;
+    width: 100% !important;
   }
 
   body.job-card-public .job-card-public-wrapper form > * {
