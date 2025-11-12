@@ -53,6 +53,13 @@
     -webkit-overflow-scrolling: touch !important;
   }
 
+  body.job-card-public .job-card-public-wrapper header,
+  body.job-card-public .job-card-public-wrapper section,
+  body.job-card-public .job-card-public-wrapper footer {
+    display: block !important;
+    width: 100% !important;
+  }
+
   /* Re-enable core layout utilities that were disabled by nuclear overrides */
   body.job-card-public .job-card-public-wrapper :is(.flex) {
     display: flex !important;
