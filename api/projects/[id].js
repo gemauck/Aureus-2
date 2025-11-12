@@ -65,7 +65,23 @@ async function handler(req, res) {
 
     // Update Project (PUT /api/projects/[id])
     if (req.method === 'PUT' || req.method === 'PATCH') {
-      const body = req.body || {}
+      let body = req.body
+
+      if (typeof body === 'string') {
+        try {
+          body = JSON.parse(body)
+        } catch (parseError) {
+          console.error('❌ Failed to parse string body for project update:', parseError)
+          body = {}
+        }
+      }
+
+      if (!body || typeof body !== 'object' || Object.keys(body).length === 0) {
+        body = await parseJsonBody(req)
+      }
+
+      body = body || {}
+
       console.log('🔍 PUT/PATCH request body:', body)
       
       // Find or create client by name if clientName is provided
@@ -96,14 +112,17 @@ async function handler(req, res) {
         }
       }
       
+      const normalizedStartDate = typeof body.startDate === 'string' ? body.startDate.trim() : ''
+      const normalizedDueDate = typeof body.dueDate === 'string' ? body.dueDate.trim() : ''
+
       const updateData = {
         name: body.name,
         description: body.description,
         clientName: body.clientName || body.client,
         clientId: clientId || body.clientId,
         status: body.status,
-        startDate: body.startDate && body.startDate.trim() ? new Date(body.startDate) : undefined,
-        dueDate: body.dueDate && body.dueDate.trim() ? new Date(body.dueDate) : undefined,
+        startDate: normalizedStartDate ? new Date(normalizedStartDate) : undefined,
+        dueDate: normalizedDueDate ? new Date(normalizedDueDate) : undefined,
         budget: body.budget,
         priority: body.priority,
         type: body.type,

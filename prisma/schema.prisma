@@ -193,6 +193,7 @@ model Project {
   // Document Collection Process fields
   hasDocumentCollectionProcess Boolean @default(false)
   documentSections             String  @default("[]")
+  monthlyProgress              String  @default("{}")
 
   ownerId     String?
   owner       User?       @relation("ProjectOwner", fields: [ownerId], references: [id])

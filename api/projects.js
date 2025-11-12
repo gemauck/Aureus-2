@@ -87,6 +87,7 @@ async function handler(req, res) {
             description: true,
             createdAt: true,
             updatedAt: true,
+            monthlyProgress: true,
             tasksList: true, // Include to count tasks stored in JSON
             _count: {
               select: {
@@ -120,11 +121,8 @@ async function handler(req, res) {
             }
           }
           
-          // Remove tasksList from response to keep it lean (we only needed it for counting)
-          const { tasksList, ...projectWithoutTasksList } = project;
-          
           return {
-            ...projectWithoutTasksList,
+            ...project,
             tasksCount
           };
         })
@@ -169,7 +167,23 @@ async function handler(req, res) {
 
     // Create Project (POST /api/projects)
     if (req.method === 'POST' && pathSegments.length === 1 && pathSegments[0] === 'projects') {
-      const body = req.body || {}
+      let body = req.body
+
+      if (typeof body === 'string') {
+        try {
+          body = JSON.parse(body)
+        } catch (parseError) {
+          console.error('❌ Failed to parse string body for project creation:', parseError)
+          body = {}
+        }
+      }
+
+      if (!body || typeof body !== 'object' || Object.keys(body).length === 0) {
+        body = await parseJsonBody(req)
+      }
+
+      body = body || {}
+
       console.log('🔍 POST request body:', JSON.stringify(body, null, 2))
       console.log('🔍 req.body type:', typeof req.body)
       console.log('🔍 req.body is null:', req.body === null)
@@ -217,17 +231,19 @@ async function handler(req, res) {
       }
 
       // Parse dates safely
+      const normalizedStartDate = typeof body.startDate === 'string' ? body.startDate.trim() : ''
       let startDate = new Date();
-      if (body.startDate && typeof body.startDate === 'string' && body.startDate.trim() !== '') {
-        const parsedStartDate = new Date(body.startDate);
+      if (normalizedStartDate) {
+        const parsedStartDate = new Date(normalizedStartDate);
         if (!isNaN(parsedStartDate.getTime())) {
           startDate = parsedStartDate;
         }
       }
 
       let dueDate = null;
-      if (body.dueDate && typeof body.dueDate === 'string' && body.dueDate.trim() !== '') {
-        const parsedDueDate = new Date(body.dueDate);
+      const normalizedDueDate = typeof body.dueDate === 'string' ? body.dueDate.trim() : ''
+      if (normalizedDueDate) {
+        const parsedDueDate = new Date(normalizedDueDate);
         if (!isNaN(parsedDueDate.getTime())) {
           dueDate = parsedDueDate;
         }
@@ -255,7 +271,14 @@ async function handler(req, res) {
         ownerId: req.user?.sub || null,
         // Automatically add monthly document collection process to all new projects
         hasDocumentCollectionProcess: true,
-        documentSections: typeof body.documentSections === 'string' ? body.documentSections : JSON.stringify(Array.isArray(body.documentSections) ? body.documentSections : [])
+        documentSections: typeof body.documentSections === 'string' ? body.documentSections : JSON.stringify(Array.isArray(body.documentSections) ? body.documentSections : []),
+        monthlyProgress: typeof body.monthlyProgress === 'string'
+          ? body.monthlyProgress
+          : JSON.stringify(
+              body.monthlyProgress && typeof body.monthlyProgress === 'object' && !Array.isArray(body.monthlyProgress)
+                ? body.monthlyProgress
+                : {}
+            )
       }
 
       console.log('🔍 Creating project with data:', JSON.stringify(projectData, null, 2))
@@ -308,7 +331,23 @@ async function handler(req, res) {
         }
       }
       if (req.method === 'PUT') {
-        const body = req.body || {}
+        let body = req.body
+
+        if (typeof body === 'string') {
+          try {
+            body = JSON.parse(body)
+          } catch (parseError) {
+            console.error('❌ Failed to parse string body for project update:', parseError)
+            body = {}
+          }
+        }
+
+        if (!body || typeof body !== 'object' || Object.keys(body).length === 0) {
+          body = await parseJsonBody(req)
+        }
+
+        body = body || {}
+
         console.log('🔍 PUT request body:', body)
         
         // Find or create client by name if clientName is provided
@@ -339,14 +378,17 @@ async function handler(req, res) {
           }
         }
         
+        const normalizedStartDate = typeof body.startDate === 'string' ? body.startDate.trim() : ''
+        const normalizedDueDate = typeof body.dueDate === 'string' ? body.dueDate.trim() : ''
+
         const updateData = {
           name: body.name,
           description: body.description,
           clientName: body.clientName || body.client,
           clientId: clientId || body.clientId,
           status: body.status,
-          startDate: body.startDate && body.startDate.trim() ? new Date(body.startDate) : undefined,
-          dueDate: body.dueDate && body.dueDate.trim() ? new Date(body.dueDate) : undefined,
+          startDate: normalizedStartDate ? new Date(normalizedStartDate) : undefined,
+          dueDate: normalizedDueDate ? new Date(normalizedDueDate) : undefined,
           budget: body.budget,
           priority: body.priority,
           type: body.type,
