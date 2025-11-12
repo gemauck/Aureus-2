@@ -115,7 +115,7 @@
     max-width: 100% !important;
     margin-left: 0 !important;
     margin-right: 0 !important;
-    padding: 0.875rem !important; /* Consistent smaller padding */
+    padding: 1rem !important; /* Balanced padding - slightly larger */
     box-sizing: border-box !important;
   }
 
@@ -179,10 +179,10 @@
   body.job-card-public .job-card-public-wrapper select,
   body.job-card-public .job-card-public-wrapper textarea {
     font-size: 16px !important; /* Prevents iOS zoom on focus */
-    min-height: 40px !important; /* Reduced from 44px */
-    max-height: 40px !important; /* Fixed height for consistency */
-    height: 40px !important;
-    padding: 0.5rem 0.75rem !important; /* Reduced padding */
+    min-height: 42px !important; /* Balanced size - not too big, not too small */
+    max-height: 42px !important; /* Fixed height for consistency */
+    height: 42px !important;
+    padding: 0.625rem 0.875rem !important; /* Balanced padding */
     margin: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
