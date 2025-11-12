@@ -1988,17 +1988,17 @@ const JobCardFormPublic = () => {
 
         {/* Fixed Footer */}
         <footer className="flex-shrink-0 bg-white border-t border-gray-200 shadow-lg z-10">
-          <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-6 py-3 sm:py-4">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-              <div className="text-[10px] sm:text-xs text-gray-500 text-center sm:text-left">
+          <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-6 py-2 sm:py-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[10px] sm:text-xs text-gray-500">
                 Step {currentStep + 1} of {STEP_IDS.length}
               </div>
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+              <div className="flex flex-row gap-2">
                 <button
                   type="button"
                   onClick={handlePrevious}
                   disabled={currentStep === 0 || isSubmitting}
-                  className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold touch-manipulation"
+                  className="px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium touch-manipulation"
                 >
                   Back
                 </button>
@@ -2008,7 +2008,7 @@ const JobCardFormPublic = () => {
                     type="button"
                     onClick={handleNext}
                     disabled={isSubmitting}
-                    className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-semibold shadow-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-xs font-medium shadow-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Next
                   </button>
@@ -2017,9 +2017,9 @@ const JobCardFormPublic = () => {
                     type="submit"
                     onClick={(event) => { event.preventDefault(); handleSave(); }}
                     disabled={isSubmitting}
-                    className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-semibold shadow-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-xs font-medium shadow-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isSubmitting ? 'Saving...' : 'Submit Job Card'}
+                    {isSubmitting ? 'Saving...' : 'Submit'}
                   </button>
                 )}
               </div>

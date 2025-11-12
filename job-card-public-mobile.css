@@ -116,9 +116,34 @@
     margin-bottom: 0 !important;
   }
 
-  /* Add padding to scrollable content to account for fixed footer */
+  /* Add padding to scrollable content to account for fixed footer - reduced for smaller footer */
   body.job-card-public .job-card-public-wrapper .job-card-scrollable-content > div {
-    padding-bottom: 80px !important;
+    padding-bottom: 60px !important;
+  }
+
+  /* Make footer more compact on mobile */
+  body.job-card-public footer {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+
+  body.job-card-public footer > div {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+
+  /* Ensure buttons are side by side and smaller */
+  body.job-card-public footer .flex-row {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 0.5rem !important;
+  }
+
+  body.job-card-public footer button {
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.75rem !important;
+    min-height: 36px !important;
+    height: auto !important;
   }
 
   /* Fixed Footer - ensure it's at bottom and always visible */
