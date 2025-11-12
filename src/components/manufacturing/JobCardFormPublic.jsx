@@ -1059,7 +1059,26 @@ const JobCardFormPublic = () => {
       setCurrentStep(0);
       return;
     }
-    if (!hasSignature) {
+    // Check signature - verify canvas has content (not just relying on state)
+    const canvas = signatureCanvasRef.current;
+    let signatureExists = hasSignature;
+    if (canvas) {
+      try {
+        const imageData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+        const hasContent = imageData.data.some((channel, index) => {
+          // Check alpha channel (every 4th byte) - if any pixel is not fully transparent, there's content
+          return index % 4 === 3 && channel < 255;
+        });
+        if (hasContent) {
+          signatureExists = true;
+          setHasSignature(true); // Update state if canvas has content
+        }
+      } catch (e) {
+        console.warn('Could not check signature canvas:', e);
+      }
+    }
+
+    if (!signatureExists) {
       setStepError('Customer signature is required before submitting.');
       setCurrentStep(STEP_IDS.indexOf('signoff'));
       return;
