@@ -4,6 +4,16 @@ const storage = window.storage;
 
 // Main component - completely rebuilt for reliability
 const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
+    const {
+        onBack: onBackProp,
+        focusProjectId: focusProjectIdProp = null,
+        focusMonthIndex: focusMonthIndexProp = null,
+        focusField: focusFieldProp = null,
+        focusYear: focusYearProp = null,
+        focusMonthName: focusMonthNameProp = null,
+        onFocusHandled: onFocusHandledProp = null
+    } = props || {};
+
     // Reduced logging - only log on initial mount to reduce noise
     const hasLoggedRef = useRef(false);
     useEffect(() => {
@@ -19,7 +29,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     }
     
     // Validate props
-    const onBack = props && typeof props.onBack === 'function' ? props.onBack : () => console.warn('onBack not available');
+    const onBack = typeof onBackProp === 'function' ? onBackProp : () => console.warn('onBack not available');
     
     // Safe constants
     const currentYear = Number(new Date().getFullYear()) || 2025;
@@ -58,6 +68,12 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     
     // Refs
     const tableRef = useRef(null);
+    const [focusedCellKey, setFocusedCellKey] = useState(null);
+    const [focusedRowId, setFocusedRowId] = useState(null);
+    const usersCacheRef = useRef([]);
+    const usersLoadPromiseRef = useRef(null);
+    const focusRequestRef = useRef(null);
+    const pendingFocusRef = useRef(false);
     
     // Auto focus on highlighted month columns when data loads
     useEffect(() => {
@@ -219,6 +235,135 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         load();
     }, []);
     
+    useEffect(() => {
+        fetchUsersSafe().catch(error => {
+            console.warn('⚠️ ProjectProgressTracker: Initial user preload failed:', error);
+        });
+    }, []);
+
+    useEffect(() => {
+        if (!focusProjectIdProp) {
+            return;
+        }
+
+        const normalizedProjectId = String(focusProjectIdProp);
+        let normalizedMonthIndex = null;
+        if (typeof focusMonthIndexProp === 'number' && !Number.isNaN(focusMonthIndexProp)) {
+            normalizedMonthIndex = focusMonthIndexProp;
+        } else if (
+            focusMonthIndexProp !== null &&
+            focusMonthIndexProp !== undefined &&
+            !Number.isNaN(Number(focusMonthIndexProp))
+        ) {
+            normalizedMonthIndex = Number(focusMonthIndexProp);
+        }
+
+        const normalizedYear =
+            focusYearProp !== null &&
+            focusYearProp !== undefined &&
+            !Number.isNaN(Number(focusYearProp))
+                ? Number(focusYearProp)
+                : null;
+
+        focusRequestRef.current = {
+            projectId: normalizedProjectId,
+            monthIndex: normalizedMonthIndex,
+            monthName: focusMonthNameProp || null,
+            field: focusFieldProp || 'comments',
+            year: normalizedYear
+        };
+        pendingFocusRef.current = true;
+    }, [focusProjectIdProp, focusMonthIndexProp, focusFieldProp, focusYearProp, focusMonthNameProp]);
+
+    useEffect(() => {
+        if (!pendingFocusRef.current) {
+            return;
+        }
+
+        const focusRequest = focusRequestRef.current;
+        if (!focusRequest || !focusRequest.projectId) {
+            return;
+        }
+
+        if (!Array.isArray(projects) || projects.length === 0) {
+            return;
+        }
+
+        const targetYear = focusRequest.year;
+        if (
+            targetYear !== null &&
+            targetYear !== undefined &&
+            !Number.isNaN(targetYear) &&
+            targetYear !== selectedYear
+        ) {
+            setSelectedYear(targetYear);
+            return;
+        }
+
+        const resolvedMonthIndex =
+            typeof focusRequest.monthIndex === 'number' &&
+            !Number.isNaN(focusRequest.monthIndex) &&
+            focusRequest.monthIndex >= 0
+                ? focusRequest.monthIndex
+                : months.indexOf(String(focusRequest.monthName || ''));
+        const resolvedMonthName =
+            resolvedMonthIndex >= 0 && resolvedMonthIndex < months.length
+                ? months[resolvedMonthIndex]
+                : focusRequest.monthName || months[Math.max(currentMonth, 0)];
+        const resolvedField = focusRequest.field || 'comments';
+        const cellKey = `${focusRequest.projectId}-${resolvedMonthName}-${resolvedField}`;
+
+        const attemptFocus = (attempt = 0) => {
+            const container = tableRef.current;
+            if (!container) {
+                if (attempt < 6) {
+                    setTimeout(() => attemptFocus(attempt + 1), 200);
+                }
+                return;
+            }
+
+            const selector = `[data-cell-key="${escapeAttributeValue(cellKey)}"]`;
+            const targetCell = container.querySelector(selector);
+
+            if (targetCell) {
+                setFocusedCellKey(cellKey);
+                setFocusedRowId(focusRequest.projectId);
+                try {
+                    targetCell.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center',
+                        inline: 'center'
+                    });
+                } catch (error) {
+                    console.warn('⚠️ ProjectProgressTracker: scrollIntoView failed for focus cell:', error);
+                }
+                pendingFocusRef.current = false;
+                focusRequestRef.current = null;
+                if (typeof onFocusHandledProp === 'function') {
+                    try {
+                        onFocusHandledProp();
+                    } catch (error) {
+                        console.error('❌ ProjectProgressTracker: Error running onFocusHandled callback:', error);
+                    }
+                }
+            } else if (attempt < 6) {
+                setTimeout(() => attemptFocus(attempt + 1), 200);
+            } else {
+                pendingFocusRef.current = false;
+                focusRequestRef.current = null;
+                if (typeof onFocusHandledProp === 'function') {
+                    try {
+                        onFocusHandledProp();
+                    } catch (error) {
+                        console.error('❌ ProjectProgressTracker: Error running onFocusHandled callback after retries:', error);
+                    }
+                }
+            }
+        };
+
+        attemptFocus();
+    }, [projects, selectedYear, onFocusHandledProp]);
+    
     // Validate projects before render
     // Normalize and validate projects - handle both numeric and string IDs, client/clientName
     // Wrap in try-catch to ensure it never crashes, always returns an array
@@ -367,6 +512,162 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             return { valid: false, error: `Validation error: ${e.message}` };
         }
     };
+
+    const escapeAttributeValue = (value) => {
+        return String(value || '')
+            .replace(/\\/g, '\\\\')
+            .replace(/"/g, '\\"');
+    };
+
+    const fetchUsersSafe = async () => {
+        if (Array.isArray(usersCacheRef.current) && usersCacheRef.current.length > 0) {
+            return usersCacheRef.current;
+        }
+
+        if (usersLoadPromiseRef.current) {
+            try {
+                await usersLoadPromiseRef.current;
+                return usersCacheRef.current;
+            } catch (error) {
+                console.error('❌ ProjectProgressTracker: Error awaiting cached users promise:', error);
+                usersLoadPromiseRef.current = null;
+            }
+        }
+
+        usersLoadPromiseRef.current = (async () => {
+            let fetchedUsers = [];
+            try {
+                if (window.DatabaseAPI && typeof window.DatabaseAPI.getUsers === 'function') {
+                    const response = await window.DatabaseAPI.getUsers();
+                    fetchedUsers = response?.data?.users || response?.data?.data?.users || response?.users || [];
+                } else if (window.api && typeof window.api.getUsers === 'function') {
+                    const response = await window.api.getUsers();
+                    fetchedUsers = response?.data?.users || response?.users || [];
+                }
+            } catch (error) {
+                console.error('❌ ProjectProgressTracker: Failed to load users for @mentions:', error);
+            }
+
+            if (!Array.isArray(fetchedUsers)) {
+                fetchedUsers = [];
+            }
+
+            usersCacheRef.current = fetchedUsers;
+            return fetchedUsers;
+        })();
+
+        try {
+            return await usersLoadPromiseRef.current;
+        } catch (error) {
+            console.error('❌ ProjectProgressTracker: Error loading users:', error);
+            usersLoadPromiseRef.current = null;
+            return usersCacheRef.current || [];
+        }
+    };
+
+    const buildProgressTrackerLink = (projectId, monthName, monthIndex, year, field = 'comments') => {
+        try {
+            const basePath = `${window.location.origin}${window.location.pathname}`;
+            const params = new URLSearchParams();
+            params.set('progressTracker', '1');
+
+            if (projectId) {
+                params.set('projectId', String(projectId));
+            }
+
+            if (typeof monthIndex === 'number' && !Number.isNaN(monthIndex) && monthIndex >= 0) {
+                params.set('monthIndex', String(monthIndex));
+            }
+
+            if (monthName) {
+                params.set('month', monthName);
+            }
+
+            if (year) {
+                params.set('year', String(year));
+            }
+
+            if (field) {
+                params.set('field', field);
+            }
+
+            return `${basePath}#/projects?${params.toString()}`;
+        } catch (error) {
+            console.error('❌ ProjectProgressTracker: Failed to build tracker link:', error);
+            return '#/projects';
+        }
+    };
+
+    const processCommentMentions = async (commentText, project, monthName, monthIndex, year, field) => {
+        try {
+            if (!commentText || !window.MentionHelper || !window.MentionHelper.hasMentions(commentText)) {
+                return;
+            }
+
+            const allUsers = await fetchUsersSafe();
+            if (!Array.isArray(allUsers) || allUsers.length === 0) {
+                console.warn('⚠️ ProjectProgressTracker: No users available for @mention notifications');
+                return;
+            }
+
+            let currentUserInfo = null;
+            try {
+                if (window.storage && typeof window.storage.getUserInfo === 'function') {
+                    currentUserInfo = window.storage.getUserInfo();
+                } else if (window.useAuth && typeof window.useAuth === 'function') {
+                    currentUserInfo = window.useAuth()?.user || null;
+                }
+            } catch (error) {
+                console.warn('⚠️ ProjectProgressTracker: Unable to determine current user for mention notifications:', error);
+            }
+
+            const authorName =
+                currentUserInfo?.name ||
+                currentUserInfo?.email ||
+                'Unknown';
+
+            const safeProjectName = (project && project.name) || 'Project';
+            const resolvedMonthIndex =
+                typeof monthIndex === 'number' && !Number.isNaN(monthIndex) && monthIndex >= 0
+                    ? monthIndex
+                    : months.indexOf(String(monthName || ''));
+            const resolvedMonthName =
+                typeof monthName === 'string' && monthName
+                    ? monthName
+                    : resolvedMonthIndex >= 0
+                        ? months[resolvedMonthIndex]
+                        : '';
+            const resolvedYear = Number(year) || Number(selectedYear) || currentYear;
+            const resolvedField = field || 'comments';
+
+            const contextTitle = `${safeProjectName} • ${resolvedMonthName || 'Progress'} ${resolvedYear}`;
+            const contextLink = buildProgressTrackerLink(
+                project?.id,
+                resolvedMonthName,
+                resolvedMonthIndex >= 0 ? resolvedMonthIndex : null,
+                resolvedYear,
+                resolvedField
+            );
+
+            await window.MentionHelper.processMentions(
+                commentText,
+                contextTitle,
+                contextLink,
+                authorName,
+                allUsers,
+                {
+                    projectId: project?.id,
+                    projectName: safeProjectName,
+                    month: resolvedMonthName,
+                    monthIndex: resolvedMonthIndex >= 0 ? resolvedMonthIndex : null,
+                    year: resolvedYear,
+                    field: resolvedField
+                }
+            );
+        } catch (error) {
+            console.error('❌ ProjectProgressTracker: Error processing @mentions:', error);
+        }
+    };
     
     // Save progress data with safety checks
     const saveProgressData = async (project, month, field, value) => {
@@ -437,20 +738,41 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             // Store backup of current state before update
             const backupProgress = JSON.parse(JSON.stringify(parsedProgress));
             
+            // Clear cache BEFORE updating to ensure fresh data after save
+            if (window.DatabaseAPI && window.DatabaseAPI._responseCache) {
+                window.DatabaseAPI._responseCache.delete('GET:/projects');
+                window.DatabaseAPI._responseCache.delete(`GET:/projects/${project.id}`);
+                console.log('🗑️ ProjectProgressTracker: Cleared project caches before save');
+            }
+            
             // Update project via API - only send monthlyProgress field to prevent overwriting other fields
             const updatePayload = {
                 monthlyProgress: JSON.stringify(updatedProgress)
             };
             
+            console.log('💾 ProjectProgressTracker: Saving progress data:', {
+                projectId: project.id,
+                month: month,
+                field: field,
+                valueLength: sanitizedValue.length,
+                progressKeys: Object.keys(updatedProgress),
+                monthKey: key
+            });
+            
             let updateSuccess = false;
             let apiError = null;
+            let savedProject = null;
             
             try {
                 if (window.DatabaseAPI && window.DatabaseAPI.updateProject) {
-                    await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                    const response = await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                    console.log('✅ ProjectProgressTracker: API update response:', response);
+                    savedProject = response?.data?.project || response?.project;
                     updateSuccess = true;
                 } else if (window.api && window.api.updateProject) {
-                    await window.api.updateProject(project.id, updatePayload);
+                    const response = await window.api.updateProject(project.id, updatePayload);
+                    console.log('✅ ProjectProgressTracker: API update response:', response);
+                    savedProject = response?.data?.project || response?.project;
                     updateSuccess = true;
                 } else {
                     throw new Error('Update API not available');
@@ -458,10 +780,15 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             } catch (apiErr) {
                 apiError = apiErr;
                 console.error('❌ ProjectProgressTracker: API update failed:', apiErr);
+                console.error('❌ ProjectProgressTracker: Error details:', {
+                    message: apiErr?.message,
+                    stack: apiErr?.stack,
+                    name: apiErr?.name
+                });
                 
                 // Restore backup on failure
                 setProjects(prevProjects => prevProjects.map(p => 
-                    p.id === project.id 
+                    String(p?.id) === String(project.id)
                         ? { ...p, monthlyProgress: backupProgress }
                         : p
                 ));
@@ -470,12 +797,41 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             }
             
             if (updateSuccess) {
-                // Only update local state after successful API call
-                setProjects(prevProjects => prevProjects.map(p => 
-                    p.id === project.id 
-                        ? { ...p, monthlyProgress: updatedProgress }
-                        : p
-                ));
+                // Update local state with saved data (use API response if available, otherwise use local update)
+                let finalProgress = updatedProgress;
+                if (savedProject?.monthlyProgress) {
+                    try {
+                        finalProgress = typeof savedProject.monthlyProgress === 'string' 
+                            ? JSON.parse(savedProject.monthlyProgress) 
+                            : savedProject.monthlyProgress;
+                        console.log('✅ ProjectProgressTracker: Using saved project data from API response');
+                    } catch (parseErr) {
+                        console.warn('⚠️ ProjectProgressTracker: Failed to parse saved project monthlyProgress, using local update:', parseErr);
+                        finalProgress = updatedProgress;
+                    }
+                }
+                
+                console.log('✅ ProjectProgressTracker: Updating local state with saved data:', {
+                    projectId: project.id,
+                    finalProgressKeys: Object.keys(finalProgress),
+                    monthKey: key,
+                    fieldValue: finalProgress[key]?.[field]
+                });
+                
+                // Update the project reference directly
+                try {
+                    project.monthlyProgress = finalProgress;
+                } catch (syncErr) {
+                    console.warn('⚠️ ProjectProgressTracker: Failed to sync project reference after save:', syncErr);
+                }
+                
+                // Update state with the saved data - use String comparison for IDs
+                setProjects(prevProjects => prevProjects.map(p => {
+                    if (String(p?.id) === String(project.id)) {
+                        return { ...p, monthlyProgress: finalProgress };
+                    }
+                    return p;
+                }));
                 
                 // Clear editing state only after successful save
                 setEditingCell(null);
@@ -485,6 +841,19 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     delete updated[cellKey];
                     return updated;
                 });
+
+                if (field === 'comments') {
+                    const safeMonthName = String(month || '');
+                    const monthIdx = months.indexOf(safeMonthName);
+                    processCommentMentions(
+                        sanitizedValue,
+                        project,
+                        safeMonthName,
+                        monthIdx,
+                        safeYear,
+                        field
+                    );
+                }
             }
         } catch (e) {
             console.error('❌ ProjectProgressTracker: Error saving progress data:', e);
@@ -522,6 +891,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         const monthIdx = months.indexOf(safeMonth);
         const isWorking = Array.isArray(workingMonths) && workingMonths.includes(monthIdx) && selectedYear === currentYear;
         const cellKey = `${project.id}-${safeMonth}-${field}`;
+        const cellIdentifier = providedKey || cellKey;
+        const isFocusedCell = focusedCellKey === cellIdentifier;
         const isEditing = editingCell && editingCell.projectId === project.id && editingCell.month === safeMonth && editingCell.field === field;
         
         // Get current value
@@ -571,25 +942,37 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         
         // Modern cell styling with enhanced visual design
         const defaultBgColor = rowBgColor === '#ffffff' ? '#ffffff' : '#f8fafc';
+        const calculatedBackground = isFocusedCell
+            ? '#dbeafe'
+            : isWorking
+                ? 'rgba(59, 130, 246, 0.05)'
+                : defaultBgColor;
         const cellStyle = {
             padding: '8px 12px',
             border: 'none',
             borderBottom: '1px solid #e5e7eb',
-            backgroundColor: isWorking ? 'rgba(59, 130, 246, 0.05)' : defaultBgColor,
+            backgroundColor: calculatedBackground,
             minHeight: field === 'comments' ? '60px' : '40px',
             verticalAlign: 'top',
             width: field === 'comments' ? '160px' : field === 'compliance' ? '130px' : '130px',
             minWidth: field === 'comments' ? '160px' : field === 'compliance' ? '130px' : '130px',
             transition: 'all 0.2s ease',
-            position: 'relative'
+            position: 'relative',
+            boxShadow: isFocusedCell ? '0 0 0 2px rgba(59, 130, 246, 0.35)' : 'none',
+            borderRadius: '10px'
         };
         
         // Modern input styling with better UX
         if (field === 'comments') {
             return React.createElement('td', {
-                key: providedKey || `${project.id}-${safeMonth}-${field}`,
+                key: cellIdentifier,
                 style: cellStyle,
-                className: 'relative group'
+                className: 'relative group',
+                'data-cell-key': cellIdentifier,
+                'data-project-id': project.id,
+                'data-month-name': safeMonth,
+                'data-month-index': monthIdx >= 0 ? String(monthIdx) : '',
+                'data-field': field
             }, React.createElement('textarea', {
                 value: displayValue || '',
                 onChange: handleChange,
@@ -618,9 +1001,14 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         } else {
             // Modern input for compliance and data fields
             return React.createElement('td', {
-                key: providedKey || `${project.id}-${safeMonth}-${field}`,
+                key: cellIdentifier,
                 style: cellStyle,
-                className: 'relative group'
+                className: 'relative group',
+                'data-cell-key': cellIdentifier,
+                'data-project-id': project.id,
+                'data-month-name': safeMonth,
+                'data-month-index': monthIdx >= 0 ? String(monthIdx) : '',
+                'data-field': field
             }, React.createElement('div', { style: { position: 'relative', width: '100%' } },
                 React.createElement('input', {
                     type: 'text',
@@ -1065,14 +1453,16 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         // Modern row styling with subtle gradients
                         const isEvenRow = rowIndex % 2 === 0;
                         const rowBgColor = isEvenRow ? '#ffffff' : '#f8fafc';
+                        const isRowFocused = focusedRowId === project.id;
+                        const rowBaseBgColor = isRowFocused ? '#eff6ff' : rowBgColor;
                         
                         // Build all cells for this row
                         const monthCells = (Array.isArray(months) ? months : []).reduce((acc, month) => {
                             const safeMonth = String(month || '');
                             acc.push(
-                                renderProgressCell(project, safeMonth, 'compliance', rowBgColor, `${project.id}-${safeMonth}-compliance`),
-                                renderProgressCell(project, safeMonth, 'data', rowBgColor, `${project.id}-${safeMonth}-data`),
-                                renderProgressCell(project, safeMonth, 'comments', rowBgColor, `${project.id}-${safeMonth}-comments`)
+                                renderProgressCell(project, safeMonth, 'compliance', rowBaseBgColor, `${project.id}-${safeMonth}-compliance`),
+                                renderProgressCell(project, safeMonth, 'data', rowBaseBgColor, `${project.id}-${safeMonth}-data`),
+                                renderProgressCell(project, safeMonth, 'comments', rowBaseBgColor, `${project.id}-${safeMonth}-comments`)
                             );
                             return acc;
                         }, []);
@@ -1083,7 +1473,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                 style: {
                                     padding: '12px 16px',
                                     fontSize: '13px',
-                                    backgroundColor: rowBgColor,
+                                    backgroundColor: rowBaseBgColor,
                                     border: 'none',
                                     borderRight: '2px solid #374151',
                                     position: 'sticky',
@@ -1093,7 +1483,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                     width: '320px',
                                     transition: 'background-color 0.2s ease'
                                 },
-                                className: 'sticky left-0'
+                                className: 'sticky left-0',
+                                'data-project-id': project.id
                             },
                                 React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
                                     React.createElement('span', { 
@@ -1137,7 +1528,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                     fontSize: '12px',
                                     border: 'none',
                                     borderLeft: '2px solid #374151',
-                                    backgroundColor: rowBgColor,
+                                    backgroundColor: rowBaseBgColor,
                                     color: '#374151',
                                     minWidth: '120px',
                                     width: '120px',
@@ -1159,7 +1550,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                     padding: '12px 16px',
                                     fontSize: '12px',
                                     border: 'none',
-                                    backgroundColor: rowBgColor,
+                                    backgroundColor: rowBaseBgColor,
                                     color: '#374151',
                                     minWidth: '140px',
                                     width: '140px',
@@ -1175,7 +1566,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                 style: {
                                     padding: '12px 16px',
                                     border: 'none',
-                                    backgroundColor: rowBgColor,
+                                    backgroundColor: rowBaseBgColor,
                                     minWidth: '120px',
                                     width: '120px'
                                 }
@@ -1195,20 +1586,26 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         ];
                         
                         // Use React.createElement with all children as separate arguments
+                        const rowStyle = {
+                            borderBottom: '1px solid #e5e7eb',
+                            backgroundColor: rowBaseBgColor,
+                            transition: 'all 0.2s ease',
+                            boxShadow: isRowFocused ? 'inset 0 0 0 2px rgba(37, 99, 235, 0.2)' : 'none'
+                        };
+
                         return React.createElement('tr', { 
                             key: String(project.id),
-                            style: {
-                                borderBottom: '1px solid #e5e7eb',
-                                backgroundColor: rowBgColor,
-                                transition: 'all 0.2s ease'
-                            },
+                            'data-project-row': project.id,
+                            style: rowStyle,
                             onMouseEnter: (e) => {
-                                e.currentTarget.style.backgroundColor = '#f1f5f9';
-                                e.currentTarget.style.boxShadow = 'inset 0 0 0 1px rgba(59, 130, 246, 0.1)';
+                                if (!isRowFocused) {
+                                    e.currentTarget.style.backgroundColor = '#f1f5f9';
+                                    e.currentTarget.style.boxShadow = 'inset 0 0 0 1px rgba(59, 130, 246, 0.1)';
+                                }
                             },
                             onMouseLeave: (e) => {
-                                e.currentTarget.style.backgroundColor = rowBgColor;
-                                e.currentTarget.style.boxShadow = 'none';
+                                e.currentTarget.style.backgroundColor = rowBaseBgColor;
+                                e.currentTarget.style.boxShadow = isRowFocused ? 'inset 0 0 0 2px rgba(37, 99, 235, 0.2)' : 'none';
                             }
                         }, ...rowChildren);
                     }).filter(item => item !== null) : []

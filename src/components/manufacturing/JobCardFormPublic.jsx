@@ -472,7 +472,6 @@ const JobCardFormPublic = () => {
   useEffect(() => {
     const loadClients = async () => {
       try {
-        console.log('📡 Loading clients...');
         const token = window.storage?.getToken?.();
         const isLoggedIn = !!token;
         const cached1 = JSON.parse(localStorage.getItem('manufacturing_clients') || '[]');
@@ -485,12 +484,10 @@ const JobCardFormPublic = () => {
         }) : [];
         
         if (activeClients.length > 0) {
-          console.log('✅ Loaded clients from cache:', activeClients.length);
           setClients(activeClients);
           setIsLoading(false);
         }
 
-        // Always try to load from API, even if we have cache
         if (isOnline && (isLoggedIn || window.DatabaseAPI?.getClients)) {
           try {
             const response = await window.DatabaseAPI.getClients();
@@ -503,15 +500,10 @@ const JobCardFormPublic = () => {
               }) : [];
               
               if (active.length > 0) {
-                console.log('✅ Loaded clients from API:', active.length);
                 setClients(active);
                 localStorage.setItem('manufacturing_clients', JSON.stringify(active));
                 localStorage.setItem('clients', JSON.stringify(active));
-              } else {
-                console.warn('⚠️ No active clients returned from API');
               }
-            } else {
-              console.warn('⚠️ Invalid response format from getClients API');
             }
           } catch (error) {
             console.warn('⚠️ JobCardFormPublic: Failed to load clients from API, using cache:', error.message);
@@ -559,35 +551,27 @@ const JobCardFormPublic = () => {
   useEffect(() => {
     const loadUsers = async () => {
       try {
-        console.log('📡 Loading users...');
         const cached1 = JSON.parse(localStorage.getItem('manufacturing_users') || '[]');
         const cached2 = JSON.parse(localStorage.getItem('users') || '[]');
         const cached = cached1.length > 0 ? cached1 : cached2;
         
         if (cached.length > 0) {
-          console.log('✅ Loaded users from cache:', cached.length);
           setUsers(cached);
         }
 
         const token = window.storage?.getToken?.();
         const isLoggedIn = !!token;
         
-        // Always try to load from API, even if we have cache
         if (isOnline && (isLoggedIn || window.DatabaseAPI?.getUsers)) {
           try {
             const response = await window.DatabaseAPI.getUsers();
             if (response?.data?.users || Array.isArray(response?.data)) {
               const usersData = response.data.users || response.data || [];
               if (Array.isArray(usersData) && usersData.length > 0) {
-                console.log('✅ Loaded users from API:', usersData.length);
                 setUsers(usersData);
                 localStorage.setItem('manufacturing_users', JSON.stringify(usersData));
                 localStorage.setItem('users', JSON.stringify(usersData));
-              } else {
-                console.warn('⚠️ No users returned from API');
               }
-            } else {
-              console.warn('⚠️ Invalid response format from getUsers API');
             }
           } catch (error) {
             console.warn('⚠️ JobCardFormPublic: Failed to load users from API, using cache:', error.message);
@@ -727,55 +711,18 @@ const JobCardFormPublic = () => {
   }, [isOnline]);
 
   useEffect(() => {
-    const loadSitesForClient = async () => {
-      if (formData.clientId && clients.length > 0) {
-        const client = clients.find(c => c.id === formData.clientId);
-        if (client) {
-          // First, try to get sites from client object
-          let sites = typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []);
-          
-          // Also try to load from API if online
-          const token = window.storage?.getToken?.();
-          const isLoggedIn = !!token;
-          
-          if (isOnline && isLoggedIn && token) {
-            try {
-              const response = await fetch(`/api/sites/client/${formData.clientId}`, {
-                method: 'GET',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`
-                }
-              });
-              if (response.ok) {
-                const data = await response.json();
-                const apiSites = data?.data?.sites || data?.sites || [];
-                if (Array.isArray(apiSites) && apiSites.length > 0) {
-                  sites = apiSites;
-                  console.log('✅ Loaded sites from API:', apiSites.length);
-                } else {
-                  console.log('📋 No sites returned from API, using client.sites:', sites.length);
-                }
-              } else {
-                console.warn('⚠️ API returned error status:', response.status);
-              }
-            } catch (error) {
-              console.warn('⚠️ Failed to load sites from API, using client.sites:', error.message);
-            }
-          }
-          
-          setAvailableSites(sites);
-          setFormData(prev => ({ ...prev, clientName: client.name || '' }));
-          console.log('📋 Sites available for client:', sites.length);
-        }
-      } else {
-        setAvailableSites([]);
-        setFormData(prev => ({ ...prev, siteId: '', siteName: '' }));
+    if (formData.clientId && clients.length > 0) {
+      const client = clients.find(c => c.id === formData.clientId);
+      if (client) {
+        const sites = typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []);
+        setAvailableSites(sites);
+        setFormData(prev => ({ ...prev, clientName: client.name || '' }));
       }
-    };
-    
-    loadSitesForClient();
-  }, [formData.clientId, clients, isOnline]);
+    } else {
+      setAvailableSites([]);
+      setFormData(prev => ({ ...prev, siteId: '', siteName: '' }));
+    }
+  }, [formData.clientId, clients]);
 
   useEffect(() => {
     if (formData.siteId && availableSites.length > 0) {
@@ -1068,36 +1015,15 @@ const JobCardFormPublic = () => {
 
       if (isOnline && window.DatabaseAPI?.createJobCard) {
         try {
-          console.log('📡 Attempting to save job card to database...', { 
-            hasClientId: !!jobCardData.clientId,
-            hasAgentName: !!jobCardData.agentName,
-            hasSignature: !!jobCardData.customerSignature 
-          });
-          
-          const response = await window.DatabaseAPI.createJobCard(jobCardData);
-          
-          if (response && response.data) {
-            console.log('✅ Job card saved to database successfully:', response.data);
-            await syncClientContact(jobCardData);
-            alert('✅ Job card saved successfully to database!');
-          } else {
-            throw new Error('No response data from API');
-          }
+          await window.DatabaseAPI.createJobCard(jobCardData);
+          await syncClientContact(jobCardData);
+          console.log('✅ Job card synced to API');
         } catch (error) {
-          console.error('❌ Failed to sync job card to API:', error);
-          alert(`⚠️ Saved locally but failed to sync to database: ${error.message}. Please check your connection and try again.`);
-          // Don't return - still show success for local save
+          console.warn('⚠️ Failed to sync job card to API, saved offline:', error.message);
         }
-      } else if (!isOnline) {
-        console.log('📴 Offline mode - saved to localStorage only');
-      } else {
-        console.warn('⚠️ DatabaseAPI.createJobCard not available');
       }
 
-      // Only show generic success if we didn't already show a specific message
-      if (!isOnline || !window.DatabaseAPI?.createJobCard) {
-        alert('✅ Job card saved successfully!' + (isOnline ? '' : ' (Saved offline - will sync when online)'));
-      }
+      alert('✅ Job card saved successfully!' + (isOnline ? '' : ' (Saved offline - will sync when online)'));
       resetForm();
     } catch (error) {
       console.error('Error saving job card:', error);
@@ -1273,8 +1199,6 @@ const JobCardFormPublic = () => {
           </div>
         </div>
       </section>
-      
-      {renderNavigationButtons()}
     </div>
   );
 
@@ -1426,8 +1350,6 @@ const JobCardFormPublic = () => {
           )}
         </div>
       </section>
-      
-      {renderNavigationButtons()}
     </div>
   );
 
@@ -1480,9 +1402,7 @@ const JobCardFormPublic = () => {
           style={{ fontSize: '16px' }}
         />
       </section>
-      
-      {renderNavigationButtons()}
-    </div>
+          </div>
   );
 
   const renderStockStep = () => (
@@ -1673,9 +1593,7 @@ const JobCardFormPublic = () => {
           <p className="text-sm text-gray-400">No ad-hoc purchases recorded yet.</p>
             )}
       </section>
-      
-      {renderNavigationButtons()}
-    </div>
+          </div>
   );
 
   const renderSignoffStep = () => (
@@ -1879,46 +1797,6 @@ const JobCardFormPublic = () => {
           <SummaryRow label="Customer Signature" value={hasSignature ? 'Captured' : 'Pending'} />
         </div>
       </section>
-      
-      {renderNavigationButtons()}
-    </div>
-  );
-
-  const renderNavigationButtons = () => (
-    <div className="mt-6 pt-4 border-t border-gray-200 flex items-center justify-between gap-3">
-      <div className="text-xs text-gray-500">
-        Step {currentStep + 1} of {STEP_IDS.length}
-      </div>
-      <div className="flex flex-row gap-2">
-        <button
-          type="button"
-          onClick={handlePrevious}
-          disabled={currentStep === 0 || isSubmitting}
-          className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium touch-manipulation"
-        >
-          Back
-        </button>
-
-        {currentStep < STEP_IDS.length - 1 ? (
-          <button
-            type="button"
-            onClick={handleNext}
-            disabled={isSubmitting}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-medium shadow-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Next
-          </button>
-        ) : (
-          <button
-            type="submit"
-            onClick={(event) => { event.preventDefault(); handleSave(); }}
-            disabled={isSubmitting}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-medium shadow-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isSubmitting ? 'Saving...' : 'Submit'}
-          </button>
-        )}
-      </div>
     </div>
   );
 
@@ -2107,6 +1985,47 @@ const JobCardFormPublic = () => {
             </form>
           </div>
         </div>
+
+        {/* Fixed Footer */}
+        <footer className="flex-shrink-0 bg-white border-t border-gray-200 shadow-lg z-10">
+          <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-6 py-3 sm:py-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div className="text-[10px] sm:text-xs text-gray-500 text-center sm:text-left">
+                Step {currentStep + 1} of {STEP_IDS.length}
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                <button
+                  type="button"
+                  onClick={handlePrevious}
+                  disabled={currentStep === 0 || isSubmitting}
+                  className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold touch-manipulation"
+                >
+                  Back
+                </button>
+
+                {currentStep < STEP_IDS.length - 1 ? (
+                  <button
+                    type="button"
+                    onClick={handleNext}
+                    disabled={isSubmitting}
+                    className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-semibold shadow-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    onClick={(event) => { event.preventDefault(); handleSave(); }}
+                    disabled={isSubmitting}
+                    className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-semibold shadow-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSubmitting ? 'Saving...' : 'Submit Job Card'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </footer>
       </div>
 
       {/* Map Selection Modal */}

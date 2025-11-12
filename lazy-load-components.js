@@ -230,9 +230,9 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
             }
 
             // Use timestamp-based version for components that require fresh load each time
-            if (scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || scriptSrc.includes('UserManagement') || scriptSrc.includes('ProjectProgressTracker') || scriptSrc.includes('TaskManagement') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            if (scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || scriptSrc.includes('UserManagement') || scriptSrc.includes('ProjectProgressTracker') || scriptSrc.includes('TaskManagement') || scriptSrc.includes('Projects.jsx') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
                 const separator = scriptSrc.includes('?') ? '&' : '?';
-                scriptSrc = scriptSrc + separator + 'v=ui-overhaul-' + Date.now();
+                scriptSrc = scriptSrc + separator + 'v=20251112-list-view-' + Date.now();
             }
             
             // Wait for React if needed (for ProjectDetail), then proceed with loading

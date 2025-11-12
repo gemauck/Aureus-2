@@ -2,3 +2,4 @@
 ALTER TABLE "Project"
 ADD COLUMN IF NOT EXISTS "monthlyProgress" TEXT NOT NULL DEFAULT '{}';
 
+

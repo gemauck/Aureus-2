@@ -163,7 +163,28 @@ async function handler(req, res) {
           })
         }
         
-        return ok(res, { client })
+        // Parse JSON fields before returning (same as GET handler) - CRITICAL for services persistence
+        const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
+        const parsedClient = { ...client }
+        
+        // Parse JSON fields
+        for (const field of jsonFields) {
+          const value = parsedClient[field]
+          if (typeof value === 'string' && value) {
+            try {
+              parsedClient[field] = JSON.parse(value)
+            } catch (e) {
+              // Set safe defaults on parse error
+              parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
+            }
+          } else if (!value) {
+            // Set defaults for missing/null fields
+            parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
+          }
+        }
+        
+        console.log('✅ Client updated with parsed JSON fields, services count:', Array.isArray(parsedClient.services) ? parsedClient.services.length : 0)
+        return ok(res, { client: parsedClient })
       } catch (dbError) {
         console.error('❌ Database error updating client:', dbError)
         return serverError(res, 'Failed to update client', dbError.message)

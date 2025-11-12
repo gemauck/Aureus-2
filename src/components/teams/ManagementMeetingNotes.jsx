@@ -361,6 +361,25 @@ const ManagementMeetingNotes = () => {
         return week.weekKey || week.id || '';
     };
 
+    const scrollToWeekId = useCallback((weekId) => {
+        if (!weekId) {
+            return;
+        }
+        const refs = weekCardRefs.current || {};
+        const node = refs[weekId];
+        if (node && typeof node.scrollIntoView === 'function') {
+            try {
+                node.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'nearest',
+                    inline: 'center'
+                });
+            } catch (error) {
+                console.warn('ManagementMeetingNotes: Failed to scroll to week', weekId, error);
+            }
+        }
+    }, []);
+
     const selectedWeekIndex = useMemo(() => {
         if (!Array.isArray(weeks) || weeks.length === 0) {
             return -1;
@@ -434,20 +453,8 @@ const ManagementMeetingNotes = () => {
         if (!selectedWeek) {
             return;
         }
-        const refs = weekCardRefs.current || {};
-        const node = refs[selectedWeek];
-        if (node && typeof node.scrollIntoView === 'function') {
-            try {
-                node.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'nearest',
-                    inline: 'center'
-                });
-            } catch (error) {
-                // Ignore scroll errors (non-DOM environments, etc.)
-            }
-        }
-    }, [selectedWeek, weeks]);
+        scrollToWeekId(selectedWeek);
+    }, [selectedWeek, weeks, scrollToWeekId]);
 
     // Get all action items for the month
     const allActionItems = useMemo(() => {
@@ -1328,7 +1335,10 @@ const ManagementMeetingNotes = () => {
                                         <button
                                             key={identifier}
                                             type="button"
-                                            onClick={() => setSelectedWeek(identifier)}
+                                            onClick={() => {
+                                                setSelectedWeek(identifier);
+                                                scrollToWeekId(identifier);
+                                            }}
                                             className={`relative whitespace-nowrap px-3 py-2 rounded-lg border text-xs font-medium transition ${
                                                 isPrimary
                                                     ? isDark
@@ -1410,7 +1420,10 @@ const ManagementMeetingNotes = () => {
                                                     {!isPrimary && (
                                     <button
                                                             type="button"
-                                                            onClick={() => setSelectedWeek(identifier)}
+                                                            onClick={() => {
+                                                                setSelectedWeek(identifier);
+                                                                scrollToWeekId(identifier);
+                                                            }}
                                                             className={`text-[11px] px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                                                         >
                                                             Focus

@@ -29,17 +29,125 @@ const Projects = () => {
     const [selectedProject, setSelectedProject] = useState(null);
     const [viewingProject, setViewingProject] = useState(null);
     const [showProgressTracker, setShowProgressTracker] = useState(false);
+    const [trackerFocus, setTrackerFocus] = useState(null);
     const [draggedProject, setDraggedProject] = useState(null);
     const mouseDownRef = useRef(null);
     const [selectedClient, setSelectedClient] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
+    const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
     const [waitingForProjectDetail, setWaitingForProjectDetail] = useState(false);
     const [projectDetailAvailable, setProjectDetailAvailable] = useState(!!window.ProjectDetail);
     const [waitingForTracker, setWaitingForTracker] = useState(false);
     const [forceRender, setForceRender] = useState(0); // Force re-render when ProjectDetail loads
+    
+    const openProgressTrackerHash = (params = {}) => {
+        try {
+            const basePath = '#/projects';
+            const searchParams = new URLSearchParams();
+            searchParams.set('progressTracker', '1');
+
+            if (params.projectId) {
+                searchParams.set('projectId', params.projectId);
+            }
+            if (typeof params.monthIndex === 'number' && !Number.isNaN(params.monthIndex)) {
+                searchParams.set('monthIndex', String(params.monthIndex));
+            }
+            if (params.month) {
+                searchParams.set('month', params.month);
+            }
+            if (params.field) {
+                searchParams.set('field', params.field);
+            }
+            if (params.year) {
+                searchParams.set('year', String(params.year));
+            }
+
+            const newHash = `${basePath}?${searchParams.toString()}`;
+            if (window.location.hash !== newHash) {
+                window.location.hash = newHash;
+            } else {
+                setShowProgressTracker(true);
+                setTrackerFocus({
+                    projectId: params.projectId || null,
+                    monthIndex: typeof params.monthIndex === 'number' && !Number.isNaN(params.monthIndex) ? params.monthIndex : null,
+                    month: params.month || null,
+                    field: params.field || null,
+                    year: params.year || null
+                });
+            }
+        } catch (error) {
+            console.error('❌ Projects: Failed to set progress tracker hash:', error);
+            setShowProgressTracker(true);
+        }
+    };
+
+    const clearProgressTrackerHash = () => {
+        try {
+            setShowProgressTracker(false);
+            setTrackerFocus(null);
+            const hash = window.location.hash || '#/projects';
+            const trimmed = hash.startsWith('#') ? hash.substring(1) : hash;
+            const [pathPart = '/projects', queryString = ''] = trimmed.split('?');
+            const params = new URLSearchParams(queryString);
+            params.delete('progressTracker');
+            params.delete('projectId');
+            params.delete('monthIndex');
+            params.delete('month');
+            params.delete('field');
+            params.delete('year');
+            const cleanQuery = params.toString();
+            const normalizedPath = pathPart || '/projects';
+            const newHash = `#${normalizedPath}${cleanQuery ? `?${cleanQuery}` : ''}`;
+            if (window.location.hash !== newHash) {
+                window.location.hash = newHash;
+            }
+        } catch (error) {
+            console.error('❌ Projects: Failed to clear progress tracker hash:', error);
+        }
+    };
+
+    useEffect(() => {
+        const handleHashChangeForTracker = () => {
+            try {
+                const hash = window.location.hash || '';
+                const trimmed = hash.startsWith('#') ? hash.substring(1) : hash;
+                const [pathPart = '', queryString = ''] = trimmed.split('?');
+                const normalizedPath = (pathPart || '').replace(/^\/+/, '');
+                if (normalizedPath !== 'projects') {
+                    return;
+                }
+
+                const params = new URLSearchParams(queryString);
+                if (params.get('progressTracker')) {
+                    const rawMonthIndex = params.get('monthIndex');
+                    const rawYear = params.get('year');
+                    const parsedMonthIndex = rawMonthIndex !== null ? Number(rawMonthIndex) : null;
+                    const parsedYear = rawYear !== null ? Number(rawYear) : null;
+
+                    setTrackerFocus({
+                        projectId: params.get('projectId') || null,
+                        monthIndex: parsedMonthIndex !== null && !Number.isNaN(parsedMonthIndex) ? parsedMonthIndex : null,
+                        month: params.get('month') || null,
+                        field: params.get('field') || null,
+                        year: parsedYear !== null && !Number.isNaN(parsedYear) ? parsedYear : null
+                    });
+                    setShowProgressTracker(true);
+                } else {
+                    setTrackerFocus(null);
+                    setShowProgressTracker(prev => (prev ? false : prev));
+                }
+            } catch (error) {
+                console.error('❌ Projects: Error parsing hash for progress tracker:', error);
+            }
+        };
+
+        handleHashChangeForTracker();
+        window.addEventListener('hashchange', handleHashChangeForTracker);
+        return () => window.removeEventListener('hashchange', handleHashChangeForTracker);
+    }, []);
     
     // Ensure storage is available
     useEffect(() => {
@@ -1253,7 +1361,7 @@ const Projects = () => {
                 <div className="space-y-3">
                     <div className="flex items-center justify-between">
                         <button 
-                            onClick={() => setShowProgressTracker(false)} 
+                            onClick={() => clearProgressTrackerHash()} 
                             className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                         >
                             <i className="fas fa-arrow-left"></i>
@@ -1294,8 +1402,8 @@ const Projects = () => {
             return (
                 <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                        <button 
-                            onClick={() => setShowProgressTracker(false)} 
+                    <button 
+                        onClick={() => clearProgressTrackerHash()} 
                             className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                         >
                             <i className="fas fa-arrow-left"></i>
@@ -1320,8 +1428,20 @@ const Projects = () => {
             const trackerProps = {
                 onBack: () => {
                     console.log('🔍 ProjectProgressTracker onBack called');
-                    setShowProgressTracker(false);
-                }
+                    clearProgressTrackerHash();
+                },
+                focusProjectId: trackerFocus?.projectId || null,
+                focusMonthIndex:
+                    typeof trackerFocus?.monthIndex === 'number' && !Number.isNaN(trackerFocus.monthIndex)
+                        ? trackerFocus.monthIndex
+                        : null,
+                focusField: trackerFocus?.field || null,
+                focusYear:
+                    typeof trackerFocus?.year === 'number' && !Number.isNaN(trackerFocus.year)
+                        ? trackerFocus.year
+                        : null,
+                focusMonthName: trackerFocus?.month || null,
+                onFocusHandled: () => setTrackerFocus(null)
             };
             
             console.log('🔍 Tracker props:', trackerProps);
@@ -1366,7 +1486,7 @@ const Projects = () => {
                 <div className="space-y-3">
                     <div className="flex items-center justify-between">
                         <button 
-                            onClick={() => setShowProgressTracker(false)} 
+                            onClick={() => clearProgressTrackerHash()} 
                             className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                         >
                             <i className="fas fa-arrow-left"></i>
@@ -1403,7 +1523,7 @@ const Projects = () => {
             return React.createElement('div', { className: 'space-y-3' },
                 React.createElement('div', { className: 'flex items-center justify-between' },
                     React.createElement('button', {
-                        onClick: () => setShowProgressTracker(false),
+                        onClick: () => clearProgressTrackerHash(),
                         className: 'p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors'
                     }, React.createElement('i', { className: 'fas fa-arrow-left' })),
                     React.createElement('h1', { className: 'text-lg font-semibold text-gray-900' }, 'Project Progress Tracker')
@@ -1429,8 +1549,8 @@ const Projects = () => {
             return (
                 <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                        <button 
-                            onClick={() => setShowProgressTracker(false)} 
+                    <button 
+                        onClick={() => clearProgressTrackerHash()} 
                             className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                         >
                             <i className="fas fa-arrow-left"></i>
@@ -1743,11 +1863,36 @@ const Projects = () => {
                     )}
                 </div>
                 <div className="flex gap-2">
+                    {/* View Toggle */}
+                    <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+                        <button
+                            onClick={() => setViewMode('grid')}
+                            className={`px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                                viewMode === 'grid'
+                                    ? 'bg-primary-600 text-white'
+                                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                            }`}
+                            title="Grid View"
+                        >
+                            <i className="fas fa-th"></i>
+                        </button>
+                        <button
+                            onClick={() => setViewMode('list')}
+                            className={`px-2.5 py-1.5 text-sm font-medium transition-colors border-l border-gray-300 ${
+                                viewMode === 'list'
+                                    ? 'bg-primary-600 text-white'
+                                    : 'bg-white text-gray-600 hover:bg-gray-50'
+                            }`}
+                            title="List View"
+                        >
+                            <i className="fas fa-list"></i>
+                        </button>
+                    </div>
                     <button 
                         onClick={() => {
                             console.log('🔍 Progress Tracker button clicked');
                             console.log('🔍 window.ProjectProgressTracker before setShowProgressTracker:', window.ProjectProgressTracker);
-                            setShowProgressTracker(true);
+                            openProgressTrackerHash();
                             // Also log after state update
                             setTimeout(() => {
                                 console.log('🔍 window.ProjectProgressTracker after setShowProgressTracker:', window.ProjectProgressTracker);
@@ -1867,7 +2012,7 @@ const Projects = () => {
                                 </button>
                             )}
                         </div>
-                    ) : (
+                    ) : viewMode === 'grid' ? (
                         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
                             {filteredProjects.map((project, index) => (
                                 <div 
@@ -1983,6 +2128,69 @@ const Projects = () => {
                                 </div>
                             ))}
                         </div>
+                    ) : (
+                        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead className="bg-gray-50 border-b border-gray-200">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Project</th>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Client</th>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Type</th>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Dates</th>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Assigned To</th>
+                                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Tasks</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                        {filteredProjects.map((project) => (
+                                            <tr
+                                                key={project.id}
+                                                onClick={() => handleViewProject(project)}
+                                                className="hover:bg-gray-50 cursor-pointer transition-colors"
+                                            >
+                                                <td className="px-4 py-3 whitespace-nowrap">
+                                                    <div className="text-sm font-medium text-gray-900">{project.name}</div>
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-600">{project.client}</div>
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-600">{project.type}</div>
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap">
+                                                    <span className={`px-2 py-1 text-xs rounded font-medium ${
+                                                        project.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                                                        project.status === 'Active' ? 'bg-green-100 text-green-700' :
+                                                        project.status === 'Completed' ? 'bg-purple-100 text-purple-700' :
+                                                        project.status === 'On Hold' ? 'bg-yellow-100 text-yellow-700' :
+                                                        project.status === 'Cancelled' ? 'bg-red-100 text-red-700' :
+                                                        'bg-gray-100 text-gray-700'
+                                                    }`}>
+                                                        {project.status}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-600">
+                                                        {project.startDate && project.dueDate 
+                                                            ? `${project.startDate} - ${project.dueDate}`
+                                                            : project.dueDate || project.startDate || 'No dates'
+                                                        }
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-600">{project.assignedTo || 'Unassigned'}</div>
+                                                </td>
+                                                <td className="px-4 py-3 whitespace-nowrap">
+                                                    <div className="text-sm text-gray-600">{project.tasksCount || 0}</div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     )}
                 </>
             )}
@@ -2020,10 +2228,16 @@ const Projects = () => {
     );
 };
 
-// Make available globally
+// Make available globally with version identifier for cache-busting
 try {
+    // Clear any old version first
+    if (window.Projects) {
+        console.log('🔄 Replacing existing Projects component with new version');
+    }
     window.Projects = Projects;
-    console.log('✅ Projects component registered on window.Projects');
+    window.Projects._version = '20251112-list-view';
+    console.log('✅ Projects component registered on window.Projects (version: 20251112-list-view)');
+    console.log('✅ Projects component includes list view toggle buttons');
 } catch (error) {
     console.error('❌ Error registering Projects component:', error);
 }
