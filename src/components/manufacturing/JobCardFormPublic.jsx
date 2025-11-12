@@ -493,60 +493,54 @@ const JobCardFormPublic = () => {
         
         setIsLoading(false); // Always set loading to false after checking cache
 
-        // Try to load from API if online (regardless of auth status)
-        if (isOnline && window.DatabaseAPI?.getClients) {
+        // Try to load from public API endpoint (no auth required)
+        if (isOnline) {
           try {
-            console.log('📡 JobCardFormPublic: Attempting to load clients from API...');
-            const response = await window.DatabaseAPI.getClients();
-            if (response?.data?.clients || Array.isArray(response?.data)) {
-              const allClients = response.data.clients || response.data || [];
-              const active = Array.isArray(allClients) ? allClients.filter(c => {
-                const status = (c.status || '').toLowerCase();
-                const type = (c.type || 'client').toLowerCase();
-                return (status === 'active' || status === '' || !c.status) && (type === 'client' || !c.type);
-              }) : [];
+            console.log('📡 JobCardFormPublic: Attempting to load clients from public API...');
+            const response = await fetch('/api/public/clients', {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              const clients = data?.data?.clients || data?.clients || [];
               
-              console.log(`✅ JobCardFormPublic: Loaded ${active.length} active clients from API`);
-              if (active.length > 0) {
-                setClients(active);
-                localStorage.setItem('manufacturing_clients', JSON.stringify(active));
-                localStorage.setItem('clients', JSON.stringify(active));
+              console.log(`✅ JobCardFormPublic: Loaded ${clients.length} clients from public API`);
+              if (clients.length > 0) {
+                setClients(clients);
+                localStorage.setItem('manufacturing_clients', JSON.stringify(clients));
+                localStorage.setItem('clients', JSON.stringify(clients));
+              }
+            } else {
+              console.warn('⚠️ JobCardFormPublic: Public API returned error:', response.status);
+              // Try authenticated API as fallback
+              if (window.DatabaseAPI?.getClients) {
+                try {
+                  const response = await window.DatabaseAPI.getClients();
+                  if (response?.data?.clients || Array.isArray(response?.data)) {
+                    const allClients = response.data.clients || response.data || [];
+                    const active = Array.isArray(allClients) ? allClients.filter(c => {
+                      const status = (c.status || '').toLowerCase();
+                      const type = (c.type || 'client').toLowerCase();
+                      return (status === 'active' || status === '' || !c.status) && (type === 'client' || !c.type);
+                    }) : [];
+                    if (active.length > 0) {
+                      console.log(`✅ JobCardFormPublic: Loaded ${active.length} clients from authenticated API`);
+                      setClients(active);
+                      localStorage.setItem('manufacturing_clients', JSON.stringify(active));
+                      localStorage.setItem('clients', JSON.stringify(active));
+                    }
+                  }
+                } catch (authError) {
+                  console.warn('⚠️ JobCardFormPublic: Authenticated API also failed:', authError.message);
+                }
               }
             }
           } catch (error) {
-            console.warn('⚠️ JobCardFormPublic: Failed to load clients from API:', error.message);
-            // Try direct fetch as fallback
-            try {
-              const token = window.storage?.getToken?.();
-              const headers = {
-                'Content-Type': 'application/json'
-              };
-              if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
-              }
-              
-              const response = await fetch('/api/clients', {
-                method: 'GET',
-                headers: headers
-              });
-              if (response.ok) {
-                const data = await response.json();
-                const allClients = data?.data?.clients || data?.data || data?.clients || [];
-                const active = Array.isArray(allClients) ? allClients.filter(c => {
-                  const status = (c.status || '').toLowerCase();
-                  const type = (c.type || 'client').toLowerCase();
-                  return (status === 'active' || status === '' || !c.status) && (type === 'client' || !c.type);
-                }) : [];
-                if (active.length > 0) {
-                  console.log(`✅ JobCardFormPublic: Loaded ${active.length} clients from direct API call`);
-                  setClients(active);
-                  localStorage.setItem('manufacturing_clients', JSON.stringify(active));
-                  localStorage.setItem('clients', JSON.stringify(active));
-                }
-              }
-            } catch (fallbackError) {
-              console.warn('⚠️ JobCardFormPublic: Direct API fetch also failed:', fallbackError.message);
-            }
+            console.warn('⚠️ JobCardFormPublic: Failed to load clients from public API:', error.message);
           }
         }
       } catch (error) {
@@ -574,49 +568,49 @@ const JobCardFormPublic = () => {
           setUsers(cached);
         }
 
-        // Try to load from API if online (regardless of auth status)
-        if (isOnline && window.DatabaseAPI?.getUsers) {
+        // Try to load from public API endpoint (no auth required)
+        if (isOnline) {
           try {
-            console.log('📡 JobCardFormPublic: Attempting to load users from API...');
-            const response = await window.DatabaseAPI.getUsers();
-            if (response?.data?.users || Array.isArray(response?.data)) {
-              const usersData = response.data.users || response.data || [];
-              console.log(`✅ JobCardFormPublic: Loaded ${usersData.length} users from API`);
-              if (Array.isArray(usersData) && usersData.length > 0) {
+            console.log('📡 JobCardFormPublic: Attempting to load users from public API...');
+            const response = await fetch('/api/public/users', {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              const usersData = data?.data?.users || data?.users || [];
+              
+              console.log(`✅ JobCardFormPublic: Loaded ${usersData.length} users from public API`);
+              if (usersData.length > 0) {
                 setUsers(usersData);
                 localStorage.setItem('manufacturing_users', JSON.stringify(usersData));
                 localStorage.setItem('users', JSON.stringify(usersData));
               }
-            }
-          } catch (error) {
-            console.warn('⚠️ JobCardFormPublic: Failed to load users from API:', error.message);
-            // Try direct fetch as fallback
-            try {
-              const token = window.storage?.getToken?.();
-              const headers = {
-                'Content-Type': 'application/json'
-              };
-              if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
-              }
-              
-              const response = await fetch('/api/users', {
-                method: 'GET',
-                headers: headers
-              });
-              if (response.ok) {
-                const data = await response.json();
-                const usersData = data?.data?.users || data?.data || data?.users || [];
-                if (Array.isArray(usersData) && usersData.length > 0) {
-                  console.log(`✅ JobCardFormPublic: Loaded ${usersData.length} users from direct API call`);
-                  setUsers(usersData);
-                  localStorage.setItem('manufacturing_users', JSON.stringify(usersData));
-                  localStorage.setItem('users', JSON.stringify(usersData));
+            } else {
+              console.warn('⚠️ JobCardFormPublic: Public API returned error:', response.status);
+              // Try authenticated API as fallback
+              if (window.DatabaseAPI?.getUsers) {
+                try {
+                  const response = await window.DatabaseAPI.getUsers();
+                  if (response?.data?.users || Array.isArray(response?.data)) {
+                    const usersData = response.data.users || response.data || [];
+                    if (usersData.length > 0) {
+                      console.log(`✅ JobCardFormPublic: Loaded ${usersData.length} users from authenticated API`);
+                      setUsers(usersData);
+                      localStorage.setItem('manufacturing_users', JSON.stringify(usersData));
+                      localStorage.setItem('users', JSON.stringify(usersData));
+                    }
+                  }
+                } catch (authError) {
+                  console.warn('⚠️ JobCardFormPublic: Authenticated API also failed:', authError.message);
                 }
               }
-            } catch (fallbackError) {
-              console.warn('⚠️ JobCardFormPublic: Direct API fetch also failed:', fallbackError.message);
             }
+          } catch (error) {
+            console.warn('⚠️ JobCardFormPublic: Failed to load users from public API:', error.message);
           }
         }
       } catch (error) {
