@@ -104,7 +104,7 @@
     display: flex !important;
     flex-direction: column !important;
     flex: 1 1 auto !important;
-    overflow-y: auto !important;
+    overflow-y: scroll !important; /* Changed from auto to scroll to force scrollbar on mobile */
     overflow-x: hidden !important;
     -webkit-overflow-scrolling: touch !important;
     width: 100% !important;
@@ -123,6 +123,8 @@
     touch-action: pan-y !important; /* Enable vertical touch scrolling */
     overscroll-behavior: contain !important; /* Prevent scroll chaining */
     will-change: scroll-position !important; /* Optimize scrolling performance */
+    -webkit-transform: translateZ(0) !important; /* Force hardware acceleration */
+    transform: translateZ(0) !important; /* Force hardware acceleration */
   }
 
   /* Add padding to scrollable content for better spacing - ensure bottom is reachable */
