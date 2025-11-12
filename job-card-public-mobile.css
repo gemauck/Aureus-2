@@ -320,15 +320,25 @@
 
 /* Small mobile screens (400px and below) - optimize spacing and sizes */
 @media (max-width: 400px) {
-  /* Reduce input sizes */
+  /* Reduce input sizes - ULTRA SPECIFIC to override other CSS */
   body.job-card-public .job-card-public-wrapper input,
   body.job-card-public .job-card-public-wrapper select,
-  body.job-card-public .job-card-public-wrapper textarea {
+  body.job-card-public .job-card-public-wrapper textarea,
+  body.job-card-public .job-card-scrollable-content input,
+  body.job-card-public .job-card-scrollable-content select,
+  body.job-card-public .job-card-scrollable-content textarea,
+  body.job-card-public form input,
+  body.job-card-public form select,
+  body.job-card-public form textarea {
     font-size: 16px !important;
-    padding: 10px 12px !important;
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
     min-height: 40px !important;
     height: auto !important;
     line-height: 1.4 !important;
+    box-sizing: border-box !important;
   }
 
   /* Improve section spacing */
@@ -401,13 +411,24 @@
     padding: 0.75rem !important;
   }
 
-  /* Even smaller inputs on very small screens */
+  /* Even smaller inputs on very small screens - ULTRA SPECIFIC */
   body.job-card-public .job-card-public-wrapper input,
   body.job-card-public .job-card-public-wrapper select,
-  body.job-card-public .job-card-public-wrapper textarea {
+  body.job-card-public .job-card-public-wrapper textarea,
+  body.job-card-public .job-card-scrollable-content input,
+  body.job-card-public .job-card-scrollable-content select,
+  body.job-card-public .job-card-scrollable-content textarea,
+  body.job-card-public form input,
+  body.job-card-public form select,
+  body.job-card-public form textarea {
     font-size: 16px !important;
-    padding: 8px 10px !important;
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
     min-height: 38px !important;
+    height: auto !important;
+    box-sizing: border-box !important;
   }
 
   /* Tighter spacing */
