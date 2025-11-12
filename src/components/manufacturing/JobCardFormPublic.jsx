@@ -356,6 +356,9 @@ const JobCardFormPublic = () => {
 
   const initializeMap = useCallback(() => {
     if (!mapContainerRef.current || typeof window === 'undefined' || !window.L) {
+      console.warn('⚠️ JobCardFormPublic: Cannot initialize map - missing container or Leaflet');
+      if (!mapContainerRef.current) console.warn('  - Map container ref is null');
+      if (!window.L) console.warn('  - Leaflet (window.L) is not loaded');
       return;
     }
 
@@ -369,12 +372,26 @@ const JobCardFormPublic = () => {
     const defaultLat = formData.latitude ? parseFloat(formData.latitude) : -25.7479; // South Africa default
     const defaultLng = formData.longitude ? parseFloat(formData.longitude) : 28.2293;
 
+    console.log('🗺️ JobCardFormPublic: Initializing map at', defaultLat, defaultLng);
+
+    // Ensure container is visible
+    if (mapContainerRef.current) {
+      mapContainerRef.current.style.display = 'block';
+      mapContainerRef.current.style.visibility = 'visible';
+      mapContainerRef.current.style.opacity = '1';
+      mapContainerRef.current.style.width = '100%';
+      mapContainerRef.current.style.height = '100%';
+      mapContainerRef.current.style.minHeight = '400px';
+    }
+
     // Create map
     const map = L.map(mapContainerRef.current, {
       center: [defaultLat, defaultLng],
       zoom: formData.latitude && formData.longitude ? 15 : 6,
       zoomControl: true
     });
+
+    console.log('✅ JobCardFormPublic: Map created successfully');
 
     // Add tile layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -2102,8 +2119,8 @@ const JobCardFormPublic = () => {
             <div className="flex-1 relative overflow-hidden">
               <div
                 ref={mapContainerRef}
-                className="w-full h-full"
-                style={{ minHeight: '400px' }}
+                className="w-full h-full map-container"
+                style={{ minHeight: '400px', height: '100%' }}
               ></div>
             </div>
             <div className="p-4 border-t border-gray-200 bg-gray-50">
