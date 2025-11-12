@@ -118,6 +118,8 @@
     min-height: 0 !important; /* Critical for flex scrolling */
     height: 0 !important; /* Force flex to calculate height */
     max-height: none !important; /* Remove max-height constraints */
+    /* Ensure scrollHeight includes all content including padding */
+    scroll-padding-bottom: 0 !important;
     visibility: visible !important;
     opacity: 1 !important;
     touch-action: pan-y !important; /* Enable vertical touch scrolling */
@@ -133,7 +135,7 @@
   html.job-card-public body.job-card-public .job-card-public-wrapper .job-card-scrollable-content > div,
   body.job-card-public .job-card-public-wrapper > div.flex-1 > .job-card-scrollable-content > div,
   html.job-card-public body.job-card-public .job-card-public-wrapper > div.flex-1 > .job-card-scrollable-content > div {
-    padding: 1rem 1rem 12rem 1rem !important; /* Increased bottom padding to 12rem (192px) to ensure nav buttons are fully visible when scrolled */
+    padding: 1rem 1rem 16rem 1rem !important; /* Increased bottom padding to 16rem (256px) to ensure nav buttons are fully visible when scrolled on all devices */
     min-height: auto !important; /* Remove min-height constraint to allow natural content height */
     height: auto !important; /* Allow content to expand beyond viewport */
     max-height: none !important; /* Remove any max-height constraints */
