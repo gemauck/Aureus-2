@@ -473,8 +473,8 @@ const JobCardFormPublic = () => {
     const loadClients = async () => {
       try {
         console.log('📡 JobCardFormPublic: Loading clients...');
-        const token = window.storage?.getToken?.();
-        const isLoggedIn = !!token;
+        
+        // Always load from cache first
         const cached1 = JSON.parse(localStorage.getItem('manufacturing_clients') || '[]');
         const cached2 = JSON.parse(localStorage.getItem('clients') || '[]');
         const cached = cached1.length > 0 ? cached1 : cached2;
@@ -489,10 +489,12 @@ const JobCardFormPublic = () => {
         if (activeClients.length > 0) {
           console.log('✅ JobCardFormPublic: Setting clients from cache');
           setClients(activeClients);
-          setIsLoading(false);
         }
+        
+        setIsLoading(false); // Always set loading to false after checking cache
 
-        if (isOnline && (isLoggedIn || window.DatabaseAPI?.getClients)) {
+        // Try to load from API if online (regardless of auth status)
+        if (isOnline && window.DatabaseAPI?.getClients) {
           try {
             console.log('📡 JobCardFormPublic: Attempting to load clients from API...');
             const response = await window.DatabaseAPI.getClients();
@@ -512,39 +514,40 @@ const JobCardFormPublic = () => {
               }
             }
           } catch (error) {
-            console.warn('⚠️ JobCardFormPublic: Failed to load clients from API, using cache:', error.message);
+            console.warn('⚠️ JobCardFormPublic: Failed to load clients from API:', error.message);
+            // Try direct fetch as fallback
             try {
+              const token = window.storage?.getToken?.();
+              const headers = {
+                'Content-Type': 'application/json'
+              };
               if (token) {
-                const response = await fetch('/api/clients', {
-                  method: 'GET',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                  }
-                });
-                if (response.ok) {
-                  const data = await response.json();
-                  const allClients = data?.data?.clients || data?.data || [];
-                  const active = Array.isArray(allClients) ? allClients.filter(c => {
-                    const status = (c.status || '').toLowerCase();
-                    const type = (c.type || 'client').toLowerCase();
-                    return (status === 'active' || status === '' || !c.status) && (type === 'client' || !c.type);
-                  }) : [];
-                  if (active.length > 0) {
-                    setClients(active);
-                    localStorage.setItem('manufacturing_clients', JSON.stringify(active));
-                    localStorage.setItem('clients', JSON.stringify(active));
-                  }
+                headers['Authorization'] = `Bearer ${token}`;
+              }
+              
+              const response = await fetch('/api/clients', {
+                method: 'GET',
+                headers: headers
+              });
+              if (response.ok) {
+                const data = await response.json();
+                const allClients = data?.data?.clients || data?.data || data?.clients || [];
+                const active = Array.isArray(allClients) ? allClients.filter(c => {
+                  const status = (c.status || '').toLowerCase();
+                  const type = (c.type || 'client').toLowerCase();
+                  return (status === 'active' || status === '' || !c.status) && (type === 'client' || !c.type);
+                }) : [];
+                if (active.length > 0) {
+                  console.log(`✅ JobCardFormPublic: Loaded ${active.length} clients from direct API call`);
+                  setClients(active);
+                  localStorage.setItem('manufacturing_clients', JSON.stringify(active));
+                  localStorage.setItem('clients', JSON.stringify(active));
                 }
               }
             } catch (fallbackError) {
-              console.warn('⚠️ JobCardFormPublic: Fallback fetch also failed:', fallbackError.message);
+              console.warn('⚠️ JobCardFormPublic: Direct API fetch also failed:', fallbackError.message);
             }
           }
-        }
-        
-        if (activeClients.length === 0) {
-          setIsLoading(false);
         }
       } catch (error) {
         console.error('❌ JobCardFormPublic: Error loading clients:', error);
@@ -558,6 +561,8 @@ const JobCardFormPublic = () => {
     const loadUsers = async () => {
       try {
         console.log('📡 JobCardFormPublic: Loading users...');
+        
+        // Always load from cache first
         const cached1 = JSON.parse(localStorage.getItem('manufacturing_users') || '[]');
         const cached2 = JSON.parse(localStorage.getItem('users') || '[]');
         const cached = cached1.length > 0 ? cached1 : cached2;
@@ -569,10 +574,8 @@ const JobCardFormPublic = () => {
           setUsers(cached);
         }
 
-        const token = window.storage?.getToken?.();
-        const isLoggedIn = !!token;
-        
-        if (isOnline && (isLoggedIn || window.DatabaseAPI?.getUsers)) {
+        // Try to load from API if online (regardless of auth status)
+        if (isOnline && window.DatabaseAPI?.getUsers) {
           try {
             console.log('📡 JobCardFormPublic: Attempting to load users from API...');
             const response = await window.DatabaseAPI.getUsers();
@@ -586,28 +589,33 @@ const JobCardFormPublic = () => {
               }
             }
           } catch (error) {
-            console.warn('⚠️ JobCardFormPublic: Failed to load users from API, using cache:', error.message);
+            console.warn('⚠️ JobCardFormPublic: Failed to load users from API:', error.message);
+            // Try direct fetch as fallback
             try {
+              const token = window.storage?.getToken?.();
+              const headers = {
+                'Content-Type': 'application/json'
+              };
               if (token) {
-                const response = await fetch('/api/users', {
-                  method: 'GET',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                  }
-                });
-                if (response.ok) {
-                  const data = await response.json();
-                  const usersData = data?.data?.users || data?.data || [];
-                  if (Array.isArray(usersData) && usersData.length > 0) {
-                    setUsers(usersData);
-                    localStorage.setItem('manufacturing_users', JSON.stringify(usersData));
-                    localStorage.setItem('users', JSON.stringify(usersData));
-                  }
+                headers['Authorization'] = `Bearer ${token}`;
+              }
+              
+              const response = await fetch('/api/users', {
+                method: 'GET',
+                headers: headers
+              });
+              if (response.ok) {
+                const data = await response.json();
+                const usersData = data?.data?.users || data?.data || data?.users || [];
+                if (Array.isArray(usersData) && usersData.length > 0) {
+                  console.log(`✅ JobCardFormPublic: Loaded ${usersData.length} users from direct API call`);
+                  setUsers(usersData);
+                  localStorage.setItem('manufacturing_users', JSON.stringify(usersData));
+                  localStorage.setItem('users', JSON.stringify(usersData));
                 }
               }
             } catch (fallbackError) {
-              console.warn('⚠️ JobCardFormPublic: Fallback fetch also failed:', fallbackError.message);
+              console.warn('⚠️ JobCardFormPublic: Direct API fetch also failed:', fallbackError.message);
             }
           }
         }
