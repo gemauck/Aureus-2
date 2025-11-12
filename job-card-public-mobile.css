@@ -249,20 +249,68 @@
 /* Desktop styles (above 1024px) */
 @media (min-width: 1025px) {
   body.job-card-public .job-card-public-wrapper {
-    position: relative !important;
-    min-height: 100vh !important;
-    height: auto !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    display: flex !important;
+    flex-direction: row !important;
+    overflow: hidden !important;
   }
 
-  body.job-card-public .job-card-public-wrapper > header {
-    position: relative !important;
+  /* Desktop Sidebar - Thinner */
+  body.job-card-public .job-card-public-wrapper > aside {
+    width: 14rem !important;
+    max-width: 14rem !important;
+    flex-shrink: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
   }
 
-  body.job-card-public .job-card-public-wrapper > div:not(header):not(footer) {
+  /* Main content area - scrollable when zoomed */
+  body.job-card-public .job-card-public-wrapper > div.flex-1 {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  /* Scrollable content - works when zoomed */
+  body.job-card-public .job-card-public-wrapper .job-card-scrollable-content {
+    flex: 1 1 auto !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+  }
+
+  /* Ensure form content is scrollable */
+  body.job-card-public .job-card-public-wrapper form {
     overflow: visible !important;
   }
 
-  body.job-card-public .job-card-public-wrapper > footer {
+  /* Footer stays fixed at bottom */
+  body.job-card-public .job-card-public-wrapper > div.flex-1 > footer {
+    flex-shrink: 0 !important;
     position: relative !important;
+  }
+}
+
+/* Ensure scrolling works when zoomed in */
+@media (min-width: 1025px) {
+  body.job-card-public .job-card-public-wrapper .job-card-scrollable-content {
+    overflow-y: scroll !important;
+    overflow-x: hidden !important;
+  }
+
+  /* When zoomed, allow horizontal scroll if needed */
+  @media (max-width: 1400px) {
+    body.job-card-public .job-card-public-wrapper {
+      overflow-x: auto !important;
+    }
   }
 }

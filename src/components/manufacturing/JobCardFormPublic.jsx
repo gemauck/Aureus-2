@@ -34,7 +34,7 @@ const STEP_META = {
 
 const StepBadge = ({ index, stepId, active, complete, onClick, className = '' }) => {
   const meta = STEP_META[stepId] || {};
-  const baseClasses = 'group flex items-center sm:flex-col sm:items-center justify-between sm:justify-center gap-3 sm:gap-2 rounded-xl px-3 py-3 sm:px-4 sm:py-4 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-600 min-w-[160px] sm:min-w-0 snap-start';
+  const baseClasses = 'group flex items-center lg:flex-col lg:items-start lg:justify-start sm:flex-col sm:items-center justify-between sm:justify-center gap-3 sm:gap-2 lg:gap-3 rounded-xl px-3 py-3 sm:px-4 sm:py-4 lg:px-3 lg:py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-600 min-w-[160px] sm:min-w-0 lg:min-w-0 snap-start w-full lg:w-full';
   const stateClass = active
     ? 'bg-white/95 text-blue-700 shadow-lg shadow-blue-500/25'
     : complete
@@ -60,15 +60,15 @@ const StepBadge = ({ index, stepId, active, complete, onClick, className = '' })
       >
         <i className={`fa-solid ${meta.icon || 'fa-circle-dot'} text-base`}></i>
       </div>
-      <div className="flex-1 sm:flex sm:w-full sm:flex-col sm:items-center">
-        <span className={`text-[11px] uppercase tracking-wide font-semibold ${active ? 'text-blue-500' : 'text-white/70'} sm:text-center`}>
+      <div className="flex-1 sm:flex sm:w-full sm:flex-col sm:items-center lg:items-start lg:flex-1">
+        <span className={`text-[11px] uppercase tracking-wide font-semibold ${active ? 'text-blue-500' : 'text-white/70'} sm:text-center lg:text-left`}>
           Step {index + 1}
         </span>
-        <span className={`text-sm font-semibold ${active ? 'text-blue-700' : 'text-white'} sm:text-center`}>
+        <span className={`text-sm font-semibold ${active ? 'text-blue-700' : 'text-white'} sm:text-center lg:text-left`}>
           {meta.title || stepId}
         </span>
         {meta.subtitle && (
-          <span className={`text-[11px] sm:text-xs mt-0.5 ${active ? 'text-blue-500/80' : 'text-white/70'} sm:text-center`}>
+          <span className={`text-[11px] sm:text-xs mt-0.5 ${active ? 'text-blue-500/80' : 'text-white/70'} sm:text-center lg:text-left`}>
             {meta.subtitle}
           </span>
         )}
@@ -1829,9 +1829,70 @@ const JobCardFormPublic = () => {
   }
 
   return (
-    <div className="job-card-public-wrapper fixed inset-0 flex flex-col bg-gradient-to-b from-gray-100 to-gray-50 overflow-hidden">
-      {/* Fixed Header */}
-      <header className="flex-shrink-0 relative overflow-hidden bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-500 text-white shadow-lg z-10">
+    <div className="job-card-public-wrapper fixed inset-0 flex flex-col lg:flex-row bg-gradient-to-b from-gray-100 to-gray-50 overflow-hidden">
+      {/* Desktop Sidebar - Vertical Steps */}
+      <aside className="hidden lg:flex lg:flex-col lg:w-56 flex-shrink-0 bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-500 text-white shadow-xl z-10 overflow-y-auto overflow-x-hidden">
+        <div className="p-4 pb-2 border-b border-white/20">
+          <p className="text-[10px] uppercase tracking-wide text-white/70 font-semibold mb-1">
+            Mobile Job Card
+          </p>
+          <h1 className="text-lg font-bold leading-tight">
+            Field Job Card Wizard
+          </h1>
+          <p className="text-xs text-white/80 mt-2">
+            Capture job cards in minutes with a guided, offline-friendly flow.
+          </p>
+        </div>
+        <div className="flex-1 p-4 space-y-2">
+          {STEP_IDS.map((stepId, idx) => (
+            <StepBadge
+              key={`desktop-${stepId}`}
+              index={idx}
+              stepId={stepId}
+              active={idx === currentStep}
+              complete={idx < currentStep}
+              onClick={() => goToStep(idx)}
+              className="w-full"
+            />
+          ))}
+        </div>
+        <div className="p-4 pt-2 border-t border-white/20 space-y-2">
+          <div className="flex items-center justify-between text-xs font-medium text-white/70">
+            <span>Progress</span>
+            <span>{progressPercent}%</span>
+          </div>
+          <div className="h-2 w-full rounded-full bg-white/20 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-white transition-all duration-500 ease-out"
+              style={{ width: `${progressPercent}%` }}
+            ></div>
+          </div>
+          <div className="flex items-center gap-2 mt-3">
+            <span
+              className={`inline-flex items-center gap-2 px-2 py-1 rounded-full text-xs font-semibold ${
+                isOnline ? 'bg-white/15 text-white' : 'bg-amber-200/90 text-amber-900'
+              }`}
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-500 animate-pulse'
+                }`}
+              ></span>
+              {isOnline ? 'Online' : 'Offline'}
+            </span>
+            <button
+              type="button"
+              onClick={handleShareLink}
+              className="inline-flex items-center justify-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 text-xs font-semibold hover:bg-white/25 transition"
+            >
+              <i className="fa-regular fa-share-from-square text-xs"></i>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* Mobile Header */}
+      <header className="lg:hidden flex-shrink-0 relative overflow-hidden bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-500 text-white shadow-lg z-10">
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -top-24 -left-20 h-44 w-44 rounded-full bg-white/15 blur-3xl"></div>
           <div className="absolute -bottom-24 right-0 h-56 w-56 rounded-full bg-white/10 blur-3xl"></div>
@@ -1907,62 +1968,65 @@ const JobCardFormPublic = () => {
         </div>
       </header>
 
-      {/* Scrollable Content Area */}
-      <div className="job-card-scrollable-content flex-1 overflow-y-auto overflow-x-hidden">
-        <div className="max-w-4xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-5">
-          {stepError && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2 flex items-start gap-2 text-sm">
-              <i className="fas fa-exclamation-circle mt-0.5 flex-shrink-0"></i>
-              <div className="leading-relaxed">{stepError}</div>
-            </div>
-          )}
+      {/* Main Content Area - Scrollable */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Scrollable Content Area */}
+        <div className="job-card-scrollable-content flex-1 overflow-y-auto overflow-x-hidden -webkit-overflow-scrolling-touch">
+          <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 space-y-4 sm:space-y-5">
+            {stepError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2 flex items-start gap-2 text-sm">
+                <i className="fas fa-exclamation-circle mt-0.5 flex-shrink-0"></i>
+                <div className="leading-relaxed">{stepError}</div>
+              </div>
+            )}
 
-          <form onSubmit={(event) => { event.preventDefault(); handleSave(); }} className="space-y-4 sm:space-y-5">
-            {renderStepContent()}
-          </form>
-        </div>
-      </div>
-
-      {/* Fixed Footer */}
-      <footer className="flex-shrink-0 bg-white border-t border-gray-200 shadow-lg z-10">
-        <div className="max-w-4xl mx-auto px-3 sm:px-4 py-3 sm:py-4">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            <div className="text-[10px] sm:text-xs text-gray-500 text-center sm:text-left">
-              Step {currentStep + 1} of {STEP_IDS.length}
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-              <button
-                type="button"
-                onClick={handlePrevious}
-                disabled={currentStep === 0 || isSubmitting}
-                className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold touch-manipulation"
-              >
-                Back
-              </button>
-
-              {currentStep < STEP_IDS.length - 1 ? (
-                <button
-                  type="button"
-                  onClick={handleNext}
-                  disabled={isSubmitting}
-                  className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-semibold shadow-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  onClick={(event) => { event.preventDefault(); handleSave(); }}
-                  disabled={isSubmitting}
-                  className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-semibold shadow-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSubmitting ? 'Saving...' : 'Submit Job Card'}
-                </button>
-              )}
-            </div>
+            <form onSubmit={(event) => { event.preventDefault(); handleSave(); }} className="space-y-4 sm:space-y-5">
+              {renderStepContent()}
+            </form>
           </div>
         </div>
-      </footer>
+
+        {/* Fixed Footer */}
+        <footer className="flex-shrink-0 bg-white border-t border-gray-200 shadow-lg z-10">
+          <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-6 py-3 sm:py-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div className="text-[10px] sm:text-xs text-gray-500 text-center sm:text-left">
+                Step {currentStep + 1} of {STEP_IDS.length}
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                <button
+                  type="button"
+                  onClick={handlePrevious}
+                  disabled={currentStep === 0 || isSubmitting}
+                  className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold touch-manipulation"
+                >
+                  Back
+                </button>
+
+                {currentStep < STEP_IDS.length - 1 ? (
+                  <button
+                    type="button"
+                    onClick={handleNext}
+                    disabled={isSubmitting}
+                    className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-semibold shadow-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    onClick={(event) => { event.preventDefault(); handleSave(); }}
+                    disabled={isSubmitting}
+                    className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-semibold shadow-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSubmitting ? 'Saving...' : 'Submit Job Card'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </footer>
+      </div>
 
       {/* Map Selection Modal */}
       {showMapModal && (
