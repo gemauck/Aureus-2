@@ -133,7 +133,7 @@
   html.job-card-public body.job-card-public .job-card-public-wrapper .job-card-scrollable-content > div,
   body.job-card-public .job-card-public-wrapper > div.flex-1 > .job-card-scrollable-content > div,
   html.job-card-public body.job-card-public .job-card-public-wrapper > div.flex-1 > .job-card-scrollable-content > div {
-    padding: 1rem 1rem 8rem 1rem !important; /* Increased bottom padding to ensure nav buttons are fully visible when scrolled */
+    padding: 1rem 1rem 12rem 1rem !important; /* Increased bottom padding to 12rem (192px) to ensure nav buttons are fully visible when scrolled */
     min-height: auto !important; /* Remove min-height constraint to allow natural content height */
     height: auto !important; /* Allow content to expand beyond viewport */
     max-height: none !important; /* Remove any max-height constraints */
