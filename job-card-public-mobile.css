@@ -15,6 +15,9 @@
     max-width: 100% !important;
     min-width: 0 !important;
     background-color: #f3f4f6 !important;
+    position: relative !important;
+    left: 0 !important;
+    transform: none !important;
   }
 
   body.job-card-public #root {
@@ -26,6 +29,9 @@
     overflow: visible !important;
     padding: 0 !important;
     margin: 0 !important;
+    position: relative !important;
+    left: 0 !important;
+    transform: none !important;
   }
 
   body.job-card-public #root > * {
@@ -58,6 +64,24 @@
 
   /* Reset any inherited positioning that might push content off-screen */
   body.job-card-public .job-card-public-wrapper > * {
+    position: relative !important;
+    left: 0 !important;
+    right: auto !important;
+    transform: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  /* Reset transforms and positioning for all nested elements that might be offset */
+  body.job-card-public .job-card-public-wrapper * {
+    left: auto !important;
+    transform: none !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper header,
+  body.job-card-public .job-card-public-wrapper section,
+  body.job-card-public .job-card-public-wrapper footer,
+  body.job-card-public .job-card-public-wrapper form {
     position: relative !important;
     left: 0 !important;
     transform: none !important;
