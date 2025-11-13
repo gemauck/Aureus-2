@@ -2438,7 +2438,7 @@ function initializeProjectDetail() {
                                                             <div className="flex items-center gap-1.5">
                                                                 <button
                                                                     onClick={(e) => openTaskComments(e, task)}
-                                                                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-gray-100 text-gray-600 rounded-lg hover:bg-primary-600 hover:text-white transition-colors"
+                                                                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-primary-500 text-white rounded-lg hover:bg-primary-600 hover:shadow-md transition-all font-medium"
                                                                     title="Open comments"
                                                                 >
                                                                     <i className="fas fa-comments text-[10px]"></i>
@@ -2449,7 +2449,7 @@ function initializeProjectDetail() {
                                                                         e.stopPropagation();
                                                                         handleAddSubtask(task);
                                                                     }}
-                                                                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-gray-100 text-gray-600 rounded-lg hover:bg-primary-600 hover:text-white transition-colors"
+                                                                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-primary-500 text-white rounded-lg hover:bg-primary-600 hover:shadow-md transition-all font-medium"
                                                                     title="Add subtask"
                                                                 >
                                                                     <i className="fas fa-level-down-alt text-[10px]"></i>
@@ -2462,7 +2462,7 @@ function initializeProjectDetail() {
                                                                             handleDeleteTask(task.id);
                                                                         }
                                                                     }}
-                                                                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-red-100 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-colors"
+                                                                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-red-500 text-white rounded-lg hover:bg-red-600 hover:shadow-md transition-all font-medium"
                                                                     title="Delete task"
                                                                 >
                                                                     <i className="fas fa-trash text-[10px]"></i>
