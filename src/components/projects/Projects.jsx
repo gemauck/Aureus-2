@@ -2230,14 +2230,27 @@ const Projects = () => {
 
 // Make available globally with version identifier for cache-busting
 try {
-    // Clear any old version first
+    // Clear any old version first and force replacement
+    const oldVersion = window.Projects?._version;
     if (window.Projects) {
-        console.log('🔄 Replacing existing Projects component with new version');
+        console.log(`🔄 Replacing existing Projects component (old version: ${oldVersion || 'unknown'}) with new version`);
+        // Delete the old version to ensure clean replacement
+        delete window.Projects;
     }
     window.Projects = Projects;
     window.Projects._version = '20251112-list-view';
+    window.Projects._hasListView = true;
     console.log('✅ Projects component registered on window.Projects (version: 20251112-list-view)');
     console.log('✅ Projects component includes list view toggle buttons');
+    console.log('✅ Projects component version:', window.Projects._version);
+    console.log('✅ Projects component has list view:', window.Projects._hasListView);
+    
+    // Dispatch event to notify that Projects component is ready
+    if (typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('projectsComponentReady', { 
+            detail: { version: '20251112-list-view', hasListView: true } 
+        }));
+    }
 } catch (error) {
     console.error('❌ Error registering Projects component:', error);
 }

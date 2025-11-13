@@ -59,6 +59,7 @@ import './components/clients/Clients.jsx';
 import './components/clients/Pipeline.jsx';
 import './components/clients/PipelineIntegration.js';
 import './components/settings/NotificationSettings.jsx';
+import './utils/leaveUtils.js';
 import './components/leave-platform/LeavePlatform.jsx';
 import './components/layout/MainLayout.jsx';
 

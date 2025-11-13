@@ -36,63 +36,142 @@ const ClientDetailModalMobile = ({ client, onSave, onClose, allProjects, onNavig
     const [newContact, setNewContact] = useState({ name: '', email: '', phone: '', role: '', department: '' });
     const [newSite, setNewSite] = useState({ name: '', address: '', gpsCoordinates: '', notes: '' });
     const [newOpportunity, setNewOpportunity] = useState({ name: '', value: '', stage: 'Awareness', expectedCloseDate: '', notes: '' });
+    
+    // Validation state
+    const [errors, setErrors] = useState({});
+    const [touched, setTouched] = useState({});
+
+    // Validate form
+    const validateForm = () => {
+        const newErrors = {};
+        
+        // Company Name is required
+        if (!formData.name || formData.name.trim() === '') {
+            newErrors.name = 'Company Name is required';
+        }
+        
+        // Validate website format if provided
+        if (formData.website && formData.website.trim() !== '') {
+            const urlPattern = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
+            if (!urlPattern.test(formData.website.trim())) {
+                newErrors.website = 'Please enter a valid website URL';
+            }
+        }
+        
+        setErrors(newErrors);
+        return { isValid: Object.keys(newErrors).length === 0, errors: newErrors };
+    };
 
     const handleSave = () => {
+        // Validate before saving
+        const validation = validateForm();
+        if (!validation.isValid) {
+            // Scroll to first error field
+            setTimeout(() => {
+                const firstErrorField = Object.keys(validation.errors)[0];
+                if (firstErrorField) {
+                    const errorElement = document.querySelector(`[name="${firstErrorField}"]`);
+                    if (errorElement) {
+                        errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        errorElement.focus();
+                    }
+                }
+                // Show alert with error message
+                const firstError = validation.errors[Object.keys(validation.errors)[0]];
+                alert(firstError || 'Please fill in all required fields');
+            }, 100);
+            return;
+        }
+        
         onSave(formData);
+    };
+    
+    // Handle field blur for validation
+    const handleBlur = (fieldName) => {
+        setTouched({ ...touched, [fieldName]: true });
+        // Trigger validation on blur to show errors immediately
+        validateForm();
     };
 
     const handleAddContact = () => {
-        if (newContact.name) {
-            const contact = {
-                ...newContact,
-                id: Date.now(),
-                isPrimary: formData.contacts.length === 0
-            };
-            const updatedFormData = {
-                ...formData,
-                contacts: [...formData.contacts, contact]
-            };
-            setFormData(updatedFormData);
-            setNewContact({ name: '', email: '', phone: '', role: '', department: '' });
-            setShowAddContact(false);
-            onSave(updatedFormData);
+        // Validate contact name is required
+        if (!newContact.name || newContact.name.trim() === '') {
+            alert('Contact Name is required');
+            return;
         }
+        
+        // Validate email format if provided
+        if (newContact.email && newContact.email.trim() !== '') {
+            const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailPattern.test(newContact.email.trim())) {
+                alert('Please enter a valid email address');
+                return;
+            }
+        }
+        
+        const contact = {
+            ...newContact,
+            id: Date.now(),
+            isPrimary: formData.contacts.length === 0
+        };
+        const updatedFormData = {
+            ...formData,
+            contacts: [...formData.contacts, contact]
+        };
+        setFormData(updatedFormData);
+        setNewContact({ name: '', email: '', phone: '', role: '', department: '' });
+        setShowAddContact(false);
+        onSave(updatedFormData);
     };
 
     const handleAddSite = () => {
-        if (newSite.name) {
-            const site = {
-                ...newSite,
-                id: Date.now()
-            };
-            const updatedFormData = {
-                ...formData,
-                sites: [...formData.sites, site]
-            };
-            setFormData(updatedFormData);
-            setNewSite({ name: '', address: '', gpsCoordinates: '', notes: '' });
-            setShowAddSite(false);
-            onSave(updatedFormData);
+        // Validate site name is required
+        if (!newSite.name || newSite.name.trim() === '') {
+            alert('Site Name is required');
+            return;
         }
+        
+        const site = {
+            ...newSite,
+            id: Date.now()
+        };
+        const updatedFormData = {
+            ...formData,
+            sites: [...formData.sites, site]
+        };
+        setFormData(updatedFormData);
+        setNewSite({ name: '', address: '', gpsCoordinates: '', notes: '' });
+        setShowAddSite(false);
+        onSave(updatedFormData);
     };
 
     const handleAddOpportunity = () => {
-        if (newOpportunity.name) {
-            const opportunity = {
-                ...newOpportunity,
-                id: Date.now(),
-                value: parseFloat(newOpportunity.value) || 0,
-                clientId: formData.id
-            };
-            const updatedFormData = {
-                ...formData,
-                opportunities: [...formData.opportunities, opportunity]
-            };
-            setFormData(updatedFormData);
-            setNewOpportunity({ name: '', value: '', stage: 'Awareness', expectedCloseDate: '', notes: '' });
-            setShowAddOpportunity(false);
-            onSave(updatedFormData);
+        // Validate opportunity name is required
+        if (!newOpportunity.name || newOpportunity.name.trim() === '') {
+            alert('Opportunity Name is required');
+            return;
         }
+        
+        // Validate value is a positive number if provided
+        if (newOpportunity.value && (isNaN(parseFloat(newOpportunity.value)) || parseFloat(newOpportunity.value) < 0)) {
+            alert('Please enter a valid positive number for value');
+            return;
+        }
+        
+        const opportunity = {
+            ...newOpportunity,
+            id: Date.now(),
+            value: parseFloat(newOpportunity.value) || 0,
+            clientId: formData.id
+        };
+        const updatedFormData = {
+            ...formData,
+            opportunities: [...formData.opportunities, opportunity]
+        };
+        setFormData(updatedFormData);
+        setNewOpportunity({ name: '', value: '', stage: 'Awareness', expectedCloseDate: '', notes: '' });
+        setShowAddOpportunity(false);
+        onSave(updatedFormData);
     };
 
     const removeContact = (contactId) => {
@@ -216,11 +295,24 @@ const ClientDetailModalMobile = ({ client, onSave, onClose, allProjects, onNavig
                                     </label>
                                     <input
                                         type="text"
+                                        name="name"
                                         value={formData.name}
-                                        onChange={(e) => setFormData({...formData, name: e.target.value})}
-                                        className="w-full px-4 py-3 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                        onChange={(e) => {
+                                            setFormData({...formData, name: e.target.value});
+                                            if (errors.name) {
+                                                setErrors({...errors, name: ''});
+                                            }
+                                        }}
+                                        onBlur={() => handleBlur('name')}
+                                        className={`w-full px-4 py-3 text-base border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
+                                            errors.name ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-gray-600'
+                                        }`}
                                         placeholder="Enter company name"
+                                        required
                                     />
+                                    {errors.name && (
+                                        <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.name}</p>
+                                    )}
                                 </div>
 
                                 <div className="grid grid-cols-1 gap-4">
@@ -278,11 +370,23 @@ const ClientDetailModalMobile = ({ client, onSave, onClose, allProjects, onNavig
                                     </label>
                                     <input
                                         type="url"
+                                        name="website"
                                         value={formData.website}
-                                        onChange={(e) => setFormData({...formData, website: e.target.value})}
-                                        className="w-full px-4 py-3 text-base border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                                        onChange={(e) => {
+                                            setFormData({...formData, website: e.target.value});
+                                            if (errors.website) {
+                                                setErrors({...errors, website: ''});
+                                            }
+                                        }}
+                                        onBlur={() => handleBlur('website')}
+                                        className={`w-full px-4 py-3 text-base border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
+                                            errors.website ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-gray-600'
+                                        }`}
                                         placeholder="https://example.com"
                                     />
+                                    {errors.website && (
+                                        <p className="mt-1 text-sm text-red-600 dark:text-red-400">{errors.website}</p>
+                                    )}
                                 </div>
 
                                 <div>

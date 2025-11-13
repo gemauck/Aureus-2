@@ -134,6 +134,113 @@
   input, textarea, [contenteditable] {
     -webkit-user-select: text !important;
     user-select: text !important;
+    /* Enable handwriting input on iPad/tablets */
+    touch-action: auto !important;
+    -webkit-touch-callout: default !important;
+  }
+  
+  /* Signature canvas - must allow touch drawing AND be visible */
+  .signature-canvas,
+  canvas.signature-canvas,
+  canvas[class*="signature-canvas"],
+  canvas[class*="signature"],
+  canvas[id*="signature"] {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    touch-action: none !important;
+    pointer-events: auto !important;
+    -webkit-user-select: none !important;
+    user-select: none !important;
+    -webkit-touch-callout: none !important;
+    cursor: crosshair !important;
+    position: relative !important;
+    z-index: 1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 150px !important;
+    height: auto !important;
+    background-color: white !important;
+    border: 2px solid #e5e7eb !important;
+    border-radius: 8px !important;
+  }
+  
+  /* Signature wrapper container - must not block events AND be visible */
+  .signature-wrapper,
+  div.signature-wrapper,
+  div[class*="signature-wrapper"],
+  div[class*="signature-container"],
+  div[id*="signature"] {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    touch-action: none !important;
+    pointer-events: auto !important;
+    -webkit-user-select: none !important;
+    user-select: none !important;
+    -webkit-touch-callout: none !important;
+    position: relative !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0.5rem 0 !important;
+    padding: 0.5rem !important;
+  }
+  
+  /* Ensure signature canvas and wrapper are not affected by global rules */
+  .signature-wrapper *,
+  div[class*="signature-wrapper"] *,
+  div[class*="signature-container"] * {
+    pointer-events: auto !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+  
+  .signature-wrapper .signature-canvas,
+  div[class*="signature-wrapper"] canvas {
+    pointer-events: auto !important;
+    touch-action: none !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+  
+  /* Job card form page - allow signature drawing AND ensure visibility */
+  body.job-card-public .signature-canvas,
+  body.job-card-public .signature-wrapper,
+  body.job-card-public canvas[class*="signature"],
+  body.job-card-public div[class*="signature-wrapper"],
+  body.job-card-public div[class*="signature-container"] {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    touch-action: none !important;
+    pointer-events: auto !important;
+    -webkit-user-select: none !important;
+    user-select: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  
+  /* Prevent body scroll interference on signature canvas */
+  body.job-card-public {
+    touch-action: manipulation;
+  }
+  
+  body.job-card-public .signature-wrapper,
+  body.job-card-public div[class*="signature-wrapper"] {
+    touch-action: none !important;
+    display: block !important;
+    visibility: visible !important;
+  }
+  
+  /* Signature field label */
+  label[for*="signature"],
+  label:has(+ .signature-wrapper),
+  label:has(+ div[class*="signature"]) {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
   
   /* Ensure login page is fully interactive */
@@ -221,6 +328,9 @@
     -webkit-appearance: none;
     appearance: none;
     background-color: white;
+    /* Enable handwriting input on iPad/tablets */
+    touch-action: auto !important;
+    -webkit-touch-callout: default !important;
   }
   
   /* Special handling for textareas */
@@ -228,6 +338,9 @@
     min-height: 120px !important;
     resize: vertical;
     font-family: inherit;
+    /* Enable handwriting input - especially important for textareas */
+    touch-action: auto !important;
+    -webkit-touch-callout: default !important;
   }
   
   /* Select dropdown styling */
@@ -243,6 +356,28 @@
     outline: none !important;
     border-color: #3b82f6 !important;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+  }
+  
+  /* ============================================
+     HANDWRITING INPUT SUPPORT (iPad/Tablet)
+     ============================================ */
+  
+  /* Enable handwriting recognition on all text inputs and textareas */
+  input[type="text"]:not([readonly]),
+  input[type="email"]:not([readonly]),
+  input[type="search"]:not([readonly]),
+  input[type="url"]:not([readonly]),
+  textarea:not([readonly]),
+  [contenteditable="true"] {
+    /* Allow all touch gestures for handwriting input */
+    touch-action: auto !important;
+    /* Enable callout menu for copy/paste */
+    -webkit-touch-callout: default !important;
+    /* Ensure text selection works */
+    -webkit-user-select: text !important;
+    user-select: text !important;
+    /* Prevent any interference with handwriting */
+    pointer-events: auto !important;
   }
   
   /* Fix for date/time inputs on iOS - prevent floating */
@@ -381,20 +516,55 @@
   /* Map container mobile fixes */
   div[class*="map"],
   div[ref*="Map"],
-  div[id*="map"] {
+  div[id*="map"],
+  .map-container,
+  [class*="mapContainer"],
+  [ref*="mapContainer"] {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
     width: 100% !important;
     max-width: 100% !important;
     min-height: 200px !important;
     height: 200px !important;
+    position: relative !important;
+    z-index: 1 !important;
   }
   
   /* Location map specifically */
   div[class*="locationMap"],
   div[ref*="locationMap"] {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
     width: 100% !important;
     max-width: 100% !important;
     height: 200px !important;
     min-height: 200px !important;
+  }
+  
+  /* Leaflet map container - ensure it's visible */
+  .leaflet-container,
+  .leaflet-pane,
+  .leaflet-map-pane,
+  .leaflet-tile-pane,
+  .leaflet-overlay-pane {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 200px !important;
+    position: relative !important;
+    z-index: 1 !important;
+  }
+  
+  /* Leaflet tiles */
+  .leaflet-tile-container,
+  .leaflet-tile {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
   
   /* Button groups - stack on mobile, but only in forms */
@@ -2175,6 +2345,9 @@
     border: 2px solid #e5e7eb !important;
     width: 100% !important;
     box-sizing: border-box !important;
+    /* Enable handwriting input on iPad/tablets */
+    touch-action: auto !important;
+    -webkit-touch-callout: default !important;
   }
   
   /* Override ANY text size classes in forms */

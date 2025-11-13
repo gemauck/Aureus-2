@@ -5,6 +5,51 @@ if (window.debug && !window.debug.performanceMode) {
 const { useState } = React;
 
 const MainLayout = () => {
+    // Load company name from settings
+    const [companyName, setCompanyName] = React.useState('Abcotronics');
+    
+    React.useEffect(() => {
+        // Load company name from settings
+        const loadCompanyName = () => {
+            if (window.getSystemSettings) {
+                const settings = window.getSystemSettings();
+                if (settings?.companyName) {
+                    setCompanyName(settings.companyName);
+                }
+            } else {
+                // Fallback to localStorage
+                const stored = localStorage.getItem('systemSettings');
+                if (stored) {
+                    try {
+                        const parsed = JSON.parse(stored);
+                        if (parsed?.companyName) {
+                            setCompanyName(parsed.companyName);
+                        }
+                    } catch (e) {
+                        console.warn('Failed to parse settings:', e);
+                    }
+                }
+            }
+        };
+        
+        loadCompanyName();
+        
+        // Listen for settings changes
+        const handleSettingsChange = (event) => {
+            if (event.detail?.companyName) {
+                setCompanyName(event.detail.companyName);
+            }
+        };
+        
+        window.addEventListener('systemSettingsChanged', handleSettingsChange);
+        window.addEventListener('systemSettingsLoaded', handleSettingsChange);
+        
+        return () => {
+            window.removeEventListener('systemSettingsChanged', handleSettingsChange);
+            window.removeEventListener('systemSettingsLoaded', handleSettingsChange);
+        };
+    }, []);
+    
     // Initialize currentPage from URL or default to dashboard
     const getPageFromURL = () => {
         const pathname = (window.location.pathname || '').toLowerCase();
@@ -834,7 +879,7 @@ const MainLayout = () => {
                 <div className={`h-14 flex items-center ${sidebarOpen ? 'justify-between px-4' : 'justify-center px-2'} border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                     {sidebarOpen && (
                         <h1 className="abcotronics-logo font-bold text-lg">
-                            Abcotronics
+                            {companyName}
                         </h1>
                     )}
                     <button 
@@ -908,7 +953,7 @@ const MainLayout = () => {
                         {/* Logo - MOBILE ONLY */}
                         {isMobile && (
                             <h1 className="abcotronics-logo font-bold text-base truncate">
-                                Abcotronics
+                                {companyName}
                             </h1>
                         )}
                         

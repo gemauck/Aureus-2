@@ -1,5 +1,30 @@
-// Get React hooks from window
-const { useState, useEffect, useMemo, useCallback } = React;
+// Get React hooks from window - React should be available since this is loaded in core-entry.js
+// Wrap in try-catch to handle cases where React isn't loaded yet
+let ReactHooks = {};
+try {
+    if (typeof window !== 'undefined' && window.React) {
+        const React = window.React;
+        ReactHooks = {
+            useState: React.useState,
+            useEffect: React.useEffect,
+            useMemo: React.useMemo,
+            useCallback: React.useCallback
+        };
+    } else {
+        throw new Error('React not available');
+    }
+} catch (e) {
+    console.error('❌ LeavePlatform: React not available:', e);
+    // Fallback: create no-op functions that will be replaced when React loads
+    ReactHooks = {
+        useState: () => [null, () => {}],
+        useEffect: () => {},
+        useMemo: (fn) => fn(),
+        useCallback: (fn) => fn()
+    };
+}
+
+const { useState, useEffect, useMemo, useCallback } = ReactHooks;
 
 const matchUserRecord = (record, user) => {
     if (!record || !user) return false;

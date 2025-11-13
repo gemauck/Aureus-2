@@ -157,10 +157,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // BUT: Only sync if we haven't made recent local changes (to prevent overwriting user edits)
     useEffect(() => {
         if (project && project.documentSections !== undefined) {
-            // Don't sync if we're currently saving or just made a local update (within last 3 seconds)
+            // Don't sync if we're currently saving or just made a local update (within last 5 seconds)
+            // Increased from 3 to 5 seconds to prevent race conditions with slow saves
             const timeSinceLastUpdate = Date.now() - lastLocalUpdateRef.current;
-            if (isSavingRef.current || timeSinceLastUpdate < 3000) {
-                console.log('⏭️ Skipping sync - recent local changes or save in progress');
+            if (isSavingRef.current || timeSinceLastUpdate < 5000) {
+                console.log('⏭️ Skipping sync - recent local changes or save in progress', {
+                    isSaving: isSavingRef.current,
+                    timeSinceLastUpdate: Math.round(timeSinceLastUpdate / 1000) + 's'
+                });
                 return;
             }
             
@@ -176,13 +180,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 if (currentSectionsStr !== parsedSectionsStr) {
                     // Only sync if the prop data has more sections OR if local state is empty
                     // This prevents stale prop data from overwriting newer local changes
-                    if (parsed.length > currentSections.length || currentSections.length === 0) {
+                    // Also check if local state was recently modified (more than 5 seconds ago)
+                    const localHasRecentChanges = timeSinceLastUpdate < 10000; // 10 seconds
+                    
+                    if (parsed.length > currentSections.length || (currentSections.length === 0 && !localHasRecentChanges)) {
                         console.log('🔄 Syncing sections from project prop:', parsed.length, 'sections');
                         console.log('  - Previous sections:', currentSections.length);
                         console.log('  - New sections:', parsed.length);
                         return parsed;
                     } else {
-                        console.log('⏭️ Skipping sync - local state has more sections than prop');
+                        console.log('⏭️ Skipping sync - local state has more sections or recent changes', {
+                            parsedLength: parsed.length,
+                            currentLength: currentSections.length,
+                            localHasRecentChanges
+                        });
                     }
                 }
                 
@@ -1486,16 +1497,111 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const DocumentModal = () => {
         const [documentFormData, setDocumentFormData] = useState({
             name: editingDocument?.name || '',
-            description: editingDocument?.description || ''
+            description: editingDocument?.description || '',
+            attachments: editingDocument?.attachments || []
         });
+        const [selectedFiles, setSelectedFiles] = useState([]);
+        const [uploadingFiles, setUploadingFiles] = useState(false);
 
-        const handleSubmit = (e) => {
+        // Reset form when editingDocument changes
+        useEffect(() => {
+            setDocumentFormData({
+                name: editingDocument?.name || '',
+                description: editingDocument?.description || '',
+                attachments: editingDocument?.attachments || []
+            });
+            setSelectedFiles([]);
+            setUploadingFiles(false);
+        }, [editingDocument]);
+
+        const handleFileSelect = (e) => {
+            const files = Array.from(e.target.files);
+            setSelectedFiles(prev => [...prev, ...files]);
+        };
+
+        const handleRemoveFile = (index) => {
+            setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+        };
+
+        const handleSubmit = async (e) => {
             e.preventDefault();
             if (!documentFormData.name.trim()) {
                 alert('Please enter a document/data name');
                 return;
             }
-            handleSaveDocument(documentFormData);
+
+            // Upload files if any are selected
+            let uploadedAttachments = [...(documentFormData.attachments || [])];
+            
+            if (selectedFiles.length > 0) {
+                setUploadingFiles(true);
+                try {
+                    const token = window.storage?.getToken?.();
+                    if (!token) {
+                        alert('Please log in to upload files');
+                        setUploadingFiles(false);
+                        return;
+                    }
+
+                    for (const file of selectedFiles) {
+                        try {
+                            // Read file as data URL
+                            const dataUrl = await new Promise((resolve, reject) => {
+                                const reader = new FileReader();
+                                reader.onload = (e) => resolve(e.target.result);
+                                reader.onerror = reject;
+                                reader.readAsDataURL(file);
+                            });
+
+                            // Upload to server
+                            const response = await fetch('/api/files', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${token}`
+                                },
+                                body: JSON.stringify({
+                                    folder: 'monthly-documents',
+                                    name: file.name,
+                                    dataUrl
+                                })
+                            });
+
+                            if (!response.ok) {
+                                throw new Error(`Failed to upload ${file.name}`);
+                            }
+
+                            const uploadData = await response.json();
+                            const fileUrl = uploadData.data?.url || uploadData.url;
+
+                            uploadedAttachments.push({
+                                id: Date.now() + Math.random(),
+                                name: file.name,
+                                size: file.size,
+                                type: file.type,
+                                url: fileUrl,
+                                uploadedAt: new Date().toISOString()
+                            });
+                        } catch (error) {
+                            console.error(`Error uploading file ${file.name}:`, error);
+                            alert(`Failed to upload ${file.name}: ${error.message}`);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error uploading files:', error);
+                    alert('Failed to upload files: ' + error.message);
+                    setUploadingFiles(false);
+                    return;
+                } finally {
+                    setUploadingFiles(false);
+                }
+            }
+
+            // Save document with attachments
+            handleSaveDocument({
+                ...documentFormData,
+                attachments: uploadedAttachments
+            });
         };
 
         return (
@@ -1541,6 +1647,83 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             ></textarea>
                         </div>
 
+                        {/* File Upload */}
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                                Attachments (Optional)
+                            </label>
+                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 text-center">
+                                <input
+                                    type="file"
+                                    id="documentFileUpload"
+                                    onChange={handleFileSelect}
+                                    className="hidden"
+                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.csv"
+                                    multiple
+                                />
+                                <label
+                                    htmlFor="documentFileUpload"
+                                    className="cursor-pointer block"
+                                >
+                                    <i className="fas fa-cloud-upload-alt text-2xl text-gray-400 mb-1"></i>
+                                    <p className="text-xs text-gray-600">
+                                        Click to upload or drag and drop
+                                    </p>
+                                    <p className="text-[10px] text-gray-500 mt-1">
+                                        PDF, Word, Excel, Images, CSV (Max 8MB each)
+                                    </p>
+                                </label>
+                                
+                                {/* Selected Files Preview */}
+                                {selectedFiles.length > 0 && (
+                                    <div className="mt-3 space-y-1">
+                                        {selectedFiles.map((file, index) => (
+                                            <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded text-left">
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-xs text-gray-700 font-medium truncate">{file.name}</p>
+                                                    <p className="text-[10px] text-gray-500">
+                                                        {(file.size / 1024).toFixed(2)} KB
+                                                    </p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveFile(index)}
+                                                    className="ml-2 text-red-600 hover:text-red-700 p-1"
+                                                    title="Remove"
+                                                >
+                                                    <i className="fas fa-times text-xs"></i>
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Existing Attachments */}
+                                {documentFormData.attachments && documentFormData.attachments.length > 0 && (
+                                    <div className="mt-3 space-y-1">
+                                        <p className="text-[10px] font-medium text-gray-600 mb-1">Existing attachments:</p>
+                                        {documentFormData.attachments.map((attachment, index) => (
+                                            <div key={attachment.id || index} className="flex items-center justify-between p-2 bg-blue-50 rounded text-left">
+                                                <div className="flex-1 min-w-0">
+                                                    <a
+                                                        href={attachment.url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-xs text-blue-700 font-medium truncate hover:underline"
+                                                    >
+                                                        {attachment.name}
+                                                    </a>
+                                                    <p className="text-[10px] text-gray-500">
+                                                        {attachment.size ? `${(attachment.size / 1024).toFixed(2)} KB` : ''}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
                         <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
                             <button
                                 type="button"
@@ -1551,9 +1734,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             </button>
                             <button
                                 type="submit"
-                                className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
+                                disabled={uploadingFiles}
+                                className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                {editingDocument ? 'Update' : 'Add'}
+                                {uploadingFiles ? (
+                                    <>
+                                        <i className="fas fa-spinner fa-spin mr-1"></i>
+                                        Uploading...
+                                    </>
+                                ) : (
+                                    editingDocument ? 'Update' : 'Add'
+                                )}
                             </button>
                         </div>
                     </form>

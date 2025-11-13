@@ -135,6 +135,7 @@ const JobCardFormPublic = () => {
   const signatureCanvasRef = useRef(null);
   const signatureWrapperRef = useRef(null);
   const isDrawingRef = useRef(false);
+  const lastEventTypeRef = useRef(null); // Track last event type to prevent double handling
   const [showMapModal, setShowMapModal] = useState(false);
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -210,10 +211,24 @@ const JobCardFormPublic = () => {
     const canvas = signatureCanvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    const pointer = event.touches ? event.touches[0] : event;
+    // Handle both touch events and pointer events
+    let clientX, clientY;
+    if (event.touches && event.touches.length > 0) {
+      // Touch event
+      clientX = event.touches[0].clientX;
+      clientY = event.touches[0].clientY;
+    } else if (event.changedTouches && event.changedTouches.length > 0) {
+      // Touch end event
+      clientX = event.changedTouches[0].clientX;
+      clientY = event.changedTouches[0].clientY;
+    } else {
+      // Pointer event or mouse event
+      clientX = event.clientX;
+      clientY = event.clientY;
+    }
     return {
-      x: pointer.clientX - rect.left,
-      y: pointer.clientY - rect.top
+      x: clientX - rect.left,
+      y: clientY - rect.top
     };
   }, []);
 
@@ -221,12 +236,39 @@ const JobCardFormPublic = () => {
     const canvas = signatureCanvasRef.current;
     if (!canvas) return;
 
+    // Determine event type to prevent double handling
+    const eventType = event.type;
+    const isPointerEvent = eventType.startsWith('pointer');
+    const isTouchEvent = eventType.startsWith('touch');
+    const isMouseEvent = eventType.startsWith('mouse');
+    
+    // If we're already handling pointer events, ignore touch/mouse events
+    if (lastEventTypeRef.current === 'pointer' && (isTouchEvent || isMouseEvent)) {
+      return;
+    }
+    // If we're handling touch events, ignore mouse events
+    if (lastEventTypeRef.current === 'touch' && isMouseEvent) {
+      return;
+    }
+    
+    // Update last event type
+    if (isPointerEvent) {
+      lastEventTypeRef.current = 'pointer';
+    } else if (isTouchEvent) {
+      lastEventTypeRef.current = 'touch';
+    } else if (isMouseEvent) {
+      lastEventTypeRef.current = 'mouse';
+    }
+
+    // Prevent default to avoid scrolling and other browser behaviors
+    event.preventDefault();
+    event.stopPropagation();
+
     isDrawingRef.current = true;
     const ctx = canvas.getContext('2d');
     const { x, y } = getSignaturePosition(event);
     ctx.beginPath();
     ctx.moveTo(x, y);
-    event.preventDefault();
   }, [getSignaturePosition]);
 
   const drawSignature = useCallback((event) => {
@@ -234,16 +276,52 @@ const JobCardFormPublic = () => {
     const canvas = signatureCanvasRef.current;
     if (!canvas) return;
 
+    // Check event type to prevent double handling
+    const eventType = event.type;
+    const isPointerEvent = eventType.startsWith('pointer');
+    const isTouchEvent = eventType.startsWith('touch');
+    const isMouseEvent = eventType.startsWith('mouse');
+    
+    // Only process events of the same type we started with
+    if (lastEventTypeRef.current === 'pointer' && (isTouchEvent || isMouseEvent)) {
+      return;
+    }
+    if (lastEventTypeRef.current === 'touch' && isMouseEvent) {
+      return;
+    }
+
+    // Prevent default to avoid scrolling
+    event.preventDefault();
+    event.stopPropagation();
+
     const ctx = canvas.getContext('2d');
     const { x, y } = getSignaturePosition(event);
     ctx.lineTo(x, y);
     ctx.stroke();
     setHasSignature(true);
-    event.preventDefault();
   }, [getSignaturePosition]);
 
-  const endSignature = useCallback(() => {
+  const endSignature = useCallback((event) => {
+    if (event) {
+      // Check event type
+      const eventType = event.type;
+      const isPointerEvent = eventType.startsWith('pointer');
+      const isTouchEvent = eventType.startsWith('touch');
+      const isMouseEvent = eventType.startsWith('mouse');
+      
+      // Only process events of the same type we started with
+      if (lastEventTypeRef.current === 'pointer' && (isTouchEvent || isMouseEvent)) {
+        return;
+      }
+      if (lastEventTypeRef.current === 'touch' && isMouseEvent) {
+        return;
+      }
+      
+      event.preventDefault();
+      event.stopPropagation();
+    }
     isDrawingRef.current = false;
+    lastEventTypeRef.current = null; // Reset for next drawing session
   }, []);
 
   const clearSignature = useCallback(() => {
@@ -838,19 +916,54 @@ const JobCardFormPublic = () => {
 
     const handleResize = () => resizeSignatureCanvas();
 
-    canvas.addEventListener('pointerdown', startSignature);
-    canvas.addEventListener('pointermove', drawSignature);
-    canvas.addEventListener('pointerup', endSignature);
-    canvas.addEventListener('pointerleave', endSignature);
-    window.addEventListener('pointerup', endSignature);
+    // Use non-passive listeners to allow preventDefault
+    const options = { passive: false };
+    
+    // Check if pointer events are supported
+    const supportsPointerEvents = typeof window !== 'undefined' && window.PointerEvent;
+    
+    if (supportsPointerEvents) {
+      // Use pointer events (works for mouse, touch, and pen on modern browsers)
+      canvas.addEventListener('pointerdown', startSignature, options);
+      canvas.addEventListener('pointermove', drawSignature, options);
+      canvas.addEventListener('pointerup', endSignature, options);
+      canvas.addEventListener('pointerleave', endSignature, options);
+      canvas.addEventListener('pointercancel', endSignature, options);
+      window.addEventListener('pointerup', endSignature, options);
+    } else {
+      // Fallback to touch and mouse events for older browsers
+      canvas.addEventListener('touchstart', startSignature, options);
+      canvas.addEventListener('touchmove', drawSignature, options);
+      canvas.addEventListener('touchend', endSignature, options);
+      canvas.addEventListener('touchcancel', endSignature, options);
+      canvas.addEventListener('mousedown', startSignature, options);
+      canvas.addEventListener('mousemove', drawSignature, options);
+      canvas.addEventListener('mouseup', endSignature, options);
+      canvas.addEventListener('mouseleave', endSignature, options);
+      window.addEventListener('touchcancel', endSignature, options);
+    }
+    
     window.addEventListener('resize', handleResize);
 
     return () => {
-      canvas.removeEventListener('pointerdown', startSignature);
-      canvas.removeEventListener('pointermove', drawSignature);
-      canvas.removeEventListener('pointerup', endSignature);
-      canvas.removeEventListener('pointerleave', endSignature);
-      window.removeEventListener('pointerup', endSignature);
+      if (supportsPointerEvents) {
+        canvas.removeEventListener('pointerdown', startSignature);
+        canvas.removeEventListener('pointermove', drawSignature);
+        canvas.removeEventListener('pointerup', endSignature);
+        canvas.removeEventListener('pointerleave', endSignature);
+        canvas.removeEventListener('pointercancel', endSignature);
+        window.removeEventListener('pointerup', endSignature);
+      } else {
+        canvas.removeEventListener('touchstart', startSignature);
+        canvas.removeEventListener('touchmove', drawSignature);
+        canvas.removeEventListener('touchend', endSignature);
+        canvas.removeEventListener('touchcancel', endSignature);
+        canvas.removeEventListener('mousedown', startSignature);
+        canvas.removeEventListener('mousemove', drawSignature);
+        canvas.removeEventListener('mouseup', endSignature);
+        canvas.removeEventListener('mouseleave', endSignature);
+        window.removeEventListener('touchcancel', endSignature);
+      }
       window.removeEventListener('resize', handleResize);
     };
   }, [drawSignature, endSignature, resizeSignatureCanvas, startSignature]);
@@ -1909,14 +2022,23 @@ const JobCardFormPublic = () => {
             <div
               ref={signatureWrapperRef}
               className={[
-                'border-2 rounded-lg overflow-hidden relative bg-white',
+                'border-2 rounded-lg overflow-hidden relative bg-white signature-wrapper',
                 hasSignature ? 'border-blue-500' : 'border-gray-300'
               ].join(' ')}
+              style={{ touchAction: 'none', WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
             >
               <canvas
                 ref={signatureCanvasRef}
-                className="w-full h-48 touch-none"
-                style={{ touchAction: 'none', display: 'block' }}
+                className="w-full h-48 signature-canvas"
+                style={{ 
+                  touchAction: 'none', 
+                  display: 'block',
+                  pointerEvents: 'auto',
+                  WebkitTouchCallout: 'none',
+                  WebkitUserSelect: 'none',
+                  userSelect: 'none',
+                  cursor: 'crosshair'
+                }}
               />
               {!hasSignature && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

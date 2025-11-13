@@ -719,6 +719,18 @@ app.all('/api/leave-platform/applications/:id/reject', async (req, res, next) =>
   }
 })
 
+app.all('/api/leave-platform/applications/:id/cancel', async (req, res, next) => {
+  try {
+    req.params = req.params || {}
+    req.params.id = req.params.id || req.url.split('/').slice(-2, -1)[0]
+    const handler = await loadHandler(path.join(apiDir, 'leave-platform', 'applications', '[id]', 'cancel.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
 // Explicit mapping for leave platform base endpoints
 app.all('/api/leave-platform/applications', async (req, res, next) => {
   try {

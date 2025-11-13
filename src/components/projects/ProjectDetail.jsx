@@ -2079,12 +2079,96 @@ function initializeProjectDetail() {
 
     const getStatusColor = (status) => {
         switch(status) {
-            case 'Done': return 'bg-green-100 text-green-800';
-            case 'In Progress': return 'bg-blue-100 text-blue-800';
-            case 'To Do': return 'bg-gray-100 text-gray-800';
-            default: return 'bg-gray-100 text-gray-800';
+            case 'Done': return 'bg-green-100 text-green-800 border-green-500';
+            case 'In Progress': return 'bg-blue-100 text-blue-800 border-blue-500';
+            case 'Review': return 'bg-purple-100 text-purple-800 border-purple-500';
+            case 'Blocked': return 'bg-red-100 text-red-800 border-red-500';
+            case 'To Do': return 'bg-gray-100 text-gray-800 border-gray-500';
+            default: return 'bg-gray-100 text-gray-800 border-gray-500';
         }
     };
+    
+    // Handler for updating task status when dragged in kanban
+    const handleUpdateTaskStatus = useCallback(async (taskId, newStatus, { isSubtask = false, parentId = null } = {}) => {
+        console.log('🔄 Kanban drag: Updating task status', { taskId, newStatus, isSubtask, parentId });
+        
+        // Normalize status - KanbanView passes the column label, but we need to match the actual status value
+        // Try to find matching status from taskLists or use the provided status
+        let normalizedStatus = newStatus;
+        
+        // Check if we have task lists with status definitions
+        if (taskLists && taskLists.length > 0) {
+            for (const list of taskLists) {
+                if (list.statuses && Array.isArray(list.statuses)) {
+                    const matchingStatus = list.statuses.find(s => {
+                        const statusLabel = String(s.label || '').toLowerCase();
+                        const statusValue = String(s.value || '').toLowerCase();
+                        const newStatusLower = String(newStatus || '').toLowerCase();
+                        return statusLabel === newStatusLower || statusValue === newStatusLower;
+                    });
+                    if (matchingStatus) {
+                        normalizedStatus = matchingStatus.value || matchingStatus.label || newStatus;
+                        console.log('✅ Found matching status definition:', { original: newStatus, normalized: normalizedStatus });
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Update local state and get updated tasks for saving
+        let updatedTasks = null;
+        setTasks(prevTasks => {
+            if (isSubtask && parentId) {
+                updatedTasks = prevTasks.map(t => {
+                    if (t.id === parentId || String(t.id) === String(parentId)) {
+                        return {
+                            ...t,
+                            subtasks: (t.subtasks || []).map(st =>
+                                (st.id === taskId || String(st.id) === String(taskId)) ? { ...st, status: normalizedStatus } : st
+                            )
+                        };
+                    }
+                    return t;
+                });
+            } else {
+                updatedTasks = prevTasks.map(t =>
+                    (t.id === taskId || String(t.id) === String(taskId)) ? { ...t, status: normalizedStatus } : t
+                );
+            }
+            return updatedTasks;
+        });
+        
+        // Explicitly trigger save to ensure persistence (don't wait for debounce)
+        if (updatedTasks) {
+            try {
+                await persistProjectData({ nextTasks: updatedTasks });
+                console.log('✅ Task status update saved successfully');
+            } catch (error) {
+                console.error('❌ Failed to save task status update:', error);
+                // Revert on error
+                setTasks(prevTasks => {
+                    if (isSubtask && parentId) {
+                        return prevTasks.map(t => {
+                            if (t.id === parentId || String(t.id) === String(parentId)) {
+                                return {
+                                    ...t,
+                                    subtasks: (t.subtasks || []).map(st =>
+                                        (st.id === taskId || String(st.id) === String(taskId)) ? { ...st, status: st.status } : st
+                                    )
+                                };
+                            }
+                            return t;
+                        });
+                    } else {
+                        return prevTasks.map(t =>
+                            (t.id === taskId || String(t.id) === String(taskId)) ? { ...t, status: t.status } : t
+                        );
+                    }
+                });
+                alert('Failed to save task status. Please try again.');
+            }
+        }
+    }, [taskLists, persistProjectData]);
 
     // List View Component
     const ListView = () => {
@@ -2633,202 +2717,24 @@ function initializeProjectDetail() {
             {viewMode === 'list' ? (
                 <ListView />
             ) : (
-                <div className="space-y-4">
-                    <h3 className="text-sm font-semibold text-gray-700">Status Board</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-4">
-                        {kanbanColumns.map(column => {
-                            const statusValue = column.value;
-                            const statusLabel = column.label;
-                            const statusTasks = filteredTopLevelTasks.filter(task =>
-                                String(task.status || 'To Do').toLowerCase() === statusValue
-                            );
-
-                            return (
-                                <div
-                                    key={statusValue}
-                                    className="bg-white rounded-lg border-2 border-gray-200 p-4"
-                                    onDragOver={(e) => {
-                                        e.preventDefault();
-                                        e.currentTarget.classList.add('border-primary-500', 'bg-primary-50');
-                                    }}
-                                    onDragLeave={(e) => {
-                                        e.currentTarget.classList.remove('border-primary-500', 'bg-primary-50');
-                                    }}
-                                    onDrop={(e) => {
-                                        e.preventDefault();
-                                        e.currentTarget.classList.remove('border-primary-500', 'bg-primary-50');
-
-                                        const taskId = parseInt(e.dataTransfer.getData('taskId'));
-                                        const isSubtask = e.dataTransfer.getData('isSubtask') === 'true';
-                                        const parentId = parseInt(e.dataTransfer.getData('parentId'));
-                                        const newStatus = statusLabel;
-
-                                        if (isSubtask) {
-                                            setTasks(tasks.map(t => {
-                                                if (t.id === parentId) {
-                                                    return {
-                                                        ...t,
-                                                        subtasks: (t.subtasks || []).map(st =>
-                                                            st.id === taskId ? { ...st, status: newStatus } : st
-                                                        )
-                                                    };
-                                                }
-                                                return t;
-                                            }));
-                                        } else {
-                                            setTasks(tasks.map(t =>
-                                                t.id === taskId ? { ...t, status: newStatus } : t
-                                            ));
-                                        }
-                                    }}
-                                >
-                                    <div className="flex items-center justify-between mb-4">
-                                        <div className="flex items-center gap-2">
-                                            <span className={`px-2 py-1 text-xs rounded font-semibold ${getStatusColor(statusLabel)}`}>
-                                                {statusLabel}
-                                            </span>
-                                            <span className="text-xs text-gray-500">({statusTasks.length})</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-2 min-h-[200px]">
-                                        {statusTasks.length === 0 ? (
-                                            <div className="text-center py-8 text-gray-400">
-                                                <i className="fas fa-inbox text-2xl mb-2 opacity-50"></i>
-                                                <p className="text-xs">No tasks</p>
-                                            </div>
-                                        ) : (
-                                            statusTasks.map(task => {
-                                                const dueMeta = getDueDateMeta(task.dueDate);
-                                                const visibleSubtasks = filteredSubtasksMap.get(task.id) || [];
-                                                return (
-                                                    <div
-                                                        key={task.id}
-                                                        draggable
-                                                        onDragStart={(e) => {
-                                                            e.dataTransfer.setData('taskId', task.id.toString());
-                                                            e.dataTransfer.setData('isSubtask', 'false');
-                                                            e.dataTransfer.effectAllowed = 'move';
-                                                        }}
-                                                        className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md transition-shadow cursor-move"
-                                                        onClick={() => handleViewTaskDetail(task)}
-                                                    >
-                                                        <div className="font-medium text-sm text-gray-900 mb-2">{task.title || 'Untitled'}</div>
-                                                        {task.description && (
-                                                            <p className="text-xs text-gray-500 mb-2 line-clamp-2">{task.description}</p>
-                                                        )}
-                                                        <div className="flex items-center justify-between text-xs">
-                                                            <div className="flex items-center gap-2">
-                                                                {task.assignee && (
-                                                                    <span className="text-gray-600">
-                                                                        <i className="fas fa-user mr-1"></i>
-                                                                        {task.assignee}
-                                                                    </span>
-                                                                )}
-                                                                {task.priority && (
-                                                                    <span className={`px-1.5 py-0.5 rounded ${getPriorityColor(task.priority)}`}>
-                                                                        {task.priority}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${dueMeta.pillClass}`}>
-                                                                <i className="fas fa-calendar text-[10px]"></i>
-                                                                {dueMeta.label}
-                                                            </span>
-                                                        </div>
-                                                        <div className="mt-2 flex items-center justify-between text-[11px] text-gray-500">
-                                                            <button
-                                                                onClick={(e) => openTaskComments(e, task)}
-                                                                className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-600 rounded-lg hover:bg-primary-600 hover:text-white transition-colors"
-                                                                title="Open comments"
-                                                            >
-                                                                <i className="fas fa-comments text-[10px]"></i>
-                                                                {task.comments?.length || 0}
-                                                            </button>
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleAddSubtask(task);
-                                                                }}
-                                                                className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-600 rounded-lg hover:bg-primary-600 hover:text-white transition-colors"
-                                                                title="Add subtask"
-                                                            >
-                                                                <i className="fas fa-level-down-alt text-[10px]"></i>
-                                                                Subtask
-                                                            </button>
-                                                        </div>
-                                                        {visibleSubtasks.length > 0 && (
-                                                            <div className="mt-2 pt-2 border-t border-gray-100">
-                                                                <div className="text-[10px] text-gray-500 mb-1">
-                                                                    <i className="fas fa-tasks mr-1"></i>
-                                                                    Subtasks ({visibleSubtasks.length})
-                                                                </div>
-                                                                <div className="space-y-1">
-                                                                    {visibleSubtasks.map(subtask => (
-                                                                        <div
-                                                                            key={subtask.id}
-                                                                            draggable
-                                                                            onDragStart={(e) => {
-                                                                                e.stopPropagation();
-                                                                                e.dataTransfer.setData('taskId', subtask.id.toString());
-                                                                                e.dataTransfer.setData('isSubtask', 'true');
-                                                                                e.dataTransfer.setData('parentId', task.id.toString());
-                                                                                e.dataTransfer.effectAllowed = 'move';
-                                                                            }}
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                handleViewTaskDetail(subtask, task);
-                                                                            }}
-                                                                            className="bg-gray-50 border border-gray-200 rounded p-2 text-xs hover:bg-gray-100 transition-colors cursor-move"
-                                                                        >
-                                                                            <div className="flex items-center justify-between gap-2">
-                                                                                <div className="flex items-center gap-1">
-                                                                                    <i className="fas fa-level-up-alt fa-rotate-90 text-gray-400 text-[10px]"></i>
-                                                                                    <span className="text-gray-800 truncate">{subtask.title || 'Untitled'}</span>
-                                                                                </div>
-                                                                                <span className={`px-1.5 py-0.5 text-[9px] rounded ${getStatusColor(subtask.status || 'To Do')}`}>
-                                                                                    {subtask.status || 'To Do'}
-                                                                                </span>
-                                                                            </div>
-                                                                            <div className="mt-1 flex items-center justify-between text-[10px] text-gray-500">
-                                                                                {subtask.assignee && (
-                                                                                    <span className="inline-flex items-center gap-1 text-gray-500">
-                                                                                        <i className="fas fa-user"></i>
-                                                                                        {subtask.assignee}
-                                                                                    </span>
-                                                                                )}
-                                                                                <button
-                                                                                    onClick={(e) => openTaskComments(e, subtask, { parentTask: task, isSubtask: true })}
-                                                                                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-white text-gray-600 rounded border border-gray-200 hover:bg-primary-600 hover:text-white transition-colors"
-                                                                                    title="Open subtask comments"
-                                                                                >
-                                                                                    <i className="fas fa-comments text-[9px]"></i>
-                                                                                    {subtask.comments?.length || 0}
-                                                                                </button>
-                                                                            </div>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                        {task.comments && task.comments.length > 0 && (
-                                                            <div className="mt-2 pt-2 border-t border-gray-100">
-                                                                <span className="text-[10px] text-gray-500">
-                                                                    <i className="fas fa-comment mr-1"></i>
-                                                                    {task.comments.length} comment{task.comments.length > 1 ? 's' : ''}
-                                                                </span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })
-                                        )}
-                                    </div>
-                                </div>
-                            );
-                        })}
+                KanbanView ? (
+                    <KanbanView
+                        tasks={filteredTopLevelTasks}
+                        statusColumns={kanbanColumns}
+                        onViewTaskDetail={handleViewTaskDetail}
+                        onAddTask={handleAddTask}
+                        onDeleteTask={handleDeleteTask}
+                        onUpdateTaskStatus={handleUpdateTaskStatus}
+                        getStatusColor={getStatusColor}
+                        getPriorityColor={getPriorityColor}
+                        getDueDateMeta={getDueDateMeta}
+                    />
+                ) : (
+                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                        <i className="fas fa-spinner fa-spin text-3xl text-gray-300 mb-2"></i>
+                        <p className="text-sm text-gray-600 mb-1">Loading Kanban view...</p>
                     </div>
-                </div>
+                )
             )}
 
             {/* Comments Popup */}

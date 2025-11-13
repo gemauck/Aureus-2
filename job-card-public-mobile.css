@@ -315,6 +315,63 @@
     grid-template-columns: 1fr !important;
     gap: 1rem !important;
   }
+  
+  /* Signature field - ensure it's visible and functional */
+  body.job-card-public .signature-canvas,
+  body.job-card-public canvas[class*="signature"],
+  body.job-card-public canvas[id*="signature"] {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 150px !important;
+    height: auto !important;
+    background-color: white !important;
+    border: 2px solid #e5e7eb !important;
+    border-radius: 8px !important;
+    touch-action: none !important;
+    pointer-events: auto !important;
+    position: relative !important;
+    z-index: 1 !important;
+  }
+  
+  body.job-card-public .signature-wrapper,
+  body.job-card-public div[class*="signature-wrapper"],
+  body.job-card-public div[class*="signature-container"] {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0.5rem 0 !important;
+    padding: 0.5rem !important;
+    touch-action: none !important;
+    pointer-events: auto !important;
+  }
+  
+  /* Map - ensure it's visible in forms */
+  body.job-card-public .job-card-public-wrapper div[class*="map"],
+  body.job-card-public .job-card-public-wrapper .map-container,
+  body.job-card-public .job-card-public-wrapper [ref*="mapContainer"] {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    height: 200px !important;
+    min-height: 200px !important;
+    position: relative !important;
+    z-index: 1 !important;
+  }
+  
+  body.job-card-public .job-card-public-wrapper .leaflet-container {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 200px !important;
+  }
 }
 
 /* Medium screens (700px and below) - ensure proper layout */

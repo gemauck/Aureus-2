@@ -74,6 +74,10 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     const usersLoadPromiseRef = useRef(null);
     const focusRequestRef = useRef(null);
     const pendingFocusRef = useRef(false);
+    // Ref to store input values to persist across re-renders
+    const cellValuesRef = useRef({});
+    // Ref to store debounce timers for auto-save
+    const saveTimersRef = useRef({});
     
     // Auto focus on highlighted month columns when data loads
     useEffect(() => {
@@ -239,6 +243,19 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         fetchUsersSafe().catch(error => {
             console.warn('⚠️ ProjectProgressTracker: Initial user preload failed:', error);
         });
+    }, []);
+    
+    // Cleanup: Save any pending changes and clear timers on unmount
+    useEffect(() => {
+        return () => {
+            // Clear all pending timers
+            Object.keys(saveTimersRef.current).forEach(cellKey => {
+                if (saveTimersRef.current[cellKey]) {
+                    clearTimeout(saveTimersRef.current[cellKey]);
+                }
+            });
+            saveTimersRef.current = {};
+        };
     }, []);
 
     useEffect(() => {
@@ -767,12 +784,30 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 if (window.DatabaseAPI && window.DatabaseAPI.updateProject) {
                     const response = await window.DatabaseAPI.updateProject(project.id, updatePayload);
                     console.log('✅ ProjectProgressTracker: API update response:', response);
-                    savedProject = response?.data?.project || response?.project;
+                    console.log('🔍 ProjectProgressTracker: Response structure:', {
+                        hasData: !!response?.data,
+                        hasProject: !!response?.data?.project,
+                        hasDirectProject: !!response?.project,
+                        dataKeys: response?.data ? Object.keys(response.data) : [],
+                        responseKeys: Object.keys(response || {}),
+                        monthlyProgressType: typeof (response?.data?.project?.monthlyProgress || response?.project?.monthlyProgress),
+                        monthlyProgressValue: response?.data?.project?.monthlyProgress || response?.project?.monthlyProgress
+                    });
+                    savedProject = response?.data?.project || response?.project || response?.data;
                     updateSuccess = true;
                 } else if (window.api && window.api.updateProject) {
                     const response = await window.api.updateProject(project.id, updatePayload);
                     console.log('✅ ProjectProgressTracker: API update response:', response);
-                    savedProject = response?.data?.project || response?.project;
+                    console.log('🔍 ProjectProgressTracker: Response structure:', {
+                        hasData: !!response?.data,
+                        hasProject: !!response?.data?.project,
+                        hasDirectProject: !!response?.project,
+                        dataKeys: response?.data ? Object.keys(response.data) : [],
+                        responseKeys: Object.keys(response || {}),
+                        monthlyProgressType: typeof (response?.data?.project?.monthlyProgress || response?.project?.monthlyProgress),
+                        monthlyProgressValue: response?.data?.project?.monthlyProgress || response?.project?.monthlyProgress
+                    });
+                    savedProject = response?.data?.project || response?.project || response?.data;
                     updateSuccess = true;
                 } else {
                     throw new Error('Update API not available');
@@ -799,16 +834,32 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             if (updateSuccess) {
                 // Update local state with saved data (use API response if available, otherwise use local update)
                 let finalProgress = updatedProgress;
-                if (savedProject?.monthlyProgress) {
+                
+                // Try to get monthlyProgress from saved project
+                const savedMonthlyProgress = savedProject?.monthlyProgress;
+                
+                if (savedMonthlyProgress) {
                     try {
-                        finalProgress = typeof savedProject.monthlyProgress === 'string' 
-                            ? JSON.parse(savedProject.monthlyProgress) 
-                            : savedProject.monthlyProgress;
-                        console.log('✅ ProjectProgressTracker: Using saved project data from API response');
+                        // Parse if it's a string, otherwise use directly
+                        finalProgress = typeof savedMonthlyProgress === 'string' 
+                            ? JSON.parse(savedMonthlyProgress) 
+                            : savedMonthlyProgress;
+                        
+                        // Validate that we got valid data
+                        if (typeof finalProgress !== 'object' || Array.isArray(finalProgress)) {
+                            console.warn('⚠️ ProjectProgressTracker: Parsed monthlyProgress is not an object, using local update');
+                            finalProgress = updatedProgress;
+                        } else {
+                            console.log('✅ ProjectProgressTracker: Using saved project data from API response');
+                        }
                     } catch (parseErr) {
                         console.warn('⚠️ ProjectProgressTracker: Failed to parse saved project monthlyProgress, using local update:', parseErr);
                         finalProgress = updatedProgress;
                     }
+                } else {
+                    // API response doesn't have monthlyProgress, use our local update (which is correct)
+                    console.log('ℹ️ ProjectProgressTracker: API response missing monthlyProgress, using local update (this is expected)');
+                    finalProgress = updatedProgress;
                 }
                 
                 console.log('✅ ProjectProgressTracker: Updating local state with saved data:', {
@@ -836,6 +887,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 // Clear editing state only after successful save
                 setEditingCell(null);
                 const cellKey = `${project.id}-${month}-${field}`;
+                // Clear both state and ref
+                delete cellValuesRef.current[cellKey];
                 setCellValues(prev => {
                     const updated = { ...prev };
                     delete updated[cellKey];
@@ -862,9 +915,11 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             
             // Reset cell value to original on error
             const cellKey = `${project.id}-${month}-${field}`;
+            const originalValue = getProgressData(project, month, field);
+            // Reset both state and ref to original value
+            cellValuesRef.current[cellKey] = originalValue;
             setCellValues(prev => {
                 const updated = { ...prev };
-                const originalValue = getProgressData(project, month, field);
                 updated[cellKey] = originalValue;
                 return updated;
             });
@@ -895,28 +950,114 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         const isFocusedCell = focusedCellKey === cellIdentifier;
         const isEditing = editingCell && editingCell.projectId === project.id && editingCell.month === safeMonth && editingCell.field === field;
         
-        // Get current value
+        // Get current value from project data
         const currentValue = getProgressData(project, safeMonth, field);
-        const displayValue = cellValues[cellKey] !== undefined ? cellValues[cellKey] : currentValue;
+        // Check both state and ref for the value - ref persists across re-renders and is always up-to-date
+        const stateValue = (cellKey in cellValues) ? cellValues[cellKey] : null;
+        const refValue = (cellKey in cellValuesRef.current) ? cellValuesRef.current[cellKey] : null;
+        // Prefer ref value (synchronous, always latest), then state value, then current value
+        // Ref is updated synchronously in handleChange, so it's always the most recent
+        const displayValue = refValue !== null ? refValue : (stateValue !== null ? stateValue : currentValue);
         
         // Handle edit start
         const handleStartEdit = () => {
             setEditingCell({ projectId: project.id, month: safeMonth, field: field });
-            setCellValues(prev => ({ ...prev, [cellKey]: currentValue }));
+            // Initialize both state and ref with current value if not already set
+            if (!(cellKey in cellValuesRef.current)) {
+                cellValuesRef.current[cellKey] = currentValue;
+            }
+            setCellValues(prev => {
+                if (cellKey in prev) {
+                    return prev; // Already initialized
+                }
+                return { ...prev, [cellKey]: currentValue };
+            });
         };
         
-        // Handle input change
+        // Handle input change - update both state and ref immediately
         const handleChange = (e) => {
-            setCellValues(prev => ({ ...prev, [cellKey]: e.target.value }));
+            const newValue = e.target.value;
+            // Update ref immediately (synchronous) to persist across re-renders
+            cellValuesRef.current[cellKey] = newValue;
+            // Also update state for React reactivity
+            setCellValues(prev => {
+                return { ...prev, [cellKey]: newValue };
+            });
+            
+            // Clear existing timer for this cell
+            if (saveTimersRef.current[cellKey]) {
+                clearTimeout(saveTimersRef.current[cellKey]);
+            }
+            
+            // Set up debounced auto-save (1 second after user stops typing)
+            saveTimersRef.current[cellKey] = setTimeout(async () => {
+                // Get the latest value from ref (most up-to-date)
+                const currentRefValue = cellValuesRef.current[cellKey];
+                const latestValue = currentRefValue !== null && currentRefValue !== undefined ? currentRefValue : currentValue;
+                const normalizedLatest = String(latestValue || '').trim();
+                const normalizedCurrent = String(currentValue || '').trim();
+                
+                if (normalizedLatest !== normalizedCurrent && normalizedLatest !== '') {
+                    console.log('💾 ProjectProgressTracker: Auto-saving after debounce:', {
+                        cellKey,
+                        latestValue: normalizedLatest,
+                        currentValue: normalizedCurrent
+                    });
+                    try {
+                        await saveProgressData(project, safeMonth, field, latestValue);
+                        console.log('✅ ProjectProgressTracker: Auto-save completed');
+                    } catch (error) {
+                        console.error('❌ ProjectProgressTracker: Auto-save failed:', error);
+                    }
+                }
+                delete saveTimersRef.current[cellKey];
+            }, 1000); // 1 second debounce
         };
         
-        // Handle save
-        const handleBlur = () => {
-            const newValue = cellValues[cellKey] !== undefined ? cellValues[cellKey] : displayValue;
-            if (newValue !== currentValue) {
-                saveProgressData(project, safeMonth, field, newValue);
+        // Handle save - capture the latest value from both state and ref
+        const handleBlur = async () => {
+            // Clear any pending debounced save for this cell
+            if (saveTimersRef.current[cellKey]) {
+                clearTimeout(saveTimersRef.current[cellKey]);
+                delete saveTimersRef.current[cellKey];
+            }
+            
+            // Get the latest value - prefer ref (synchronous, always latest), then state, then current
+            const refVal = (cellKey in cellValuesRef.current) ? cellValuesRef.current[cellKey] : null;
+            const stateVal = (cellKey in cellValues) ? cellValues[cellKey] : null;
+            // Ref is updated synchronously, so it's always the most recent value
+            const latestValue = refVal !== null ? refVal : (stateVal !== null ? stateVal : currentValue);
+            
+            // Normalize values for comparison (trim whitespace, handle null/undefined)
+            const normalizedLatest = String(latestValue || '').trim();
+            const normalizedCurrent = String(currentValue || '').trim();
+            
+            console.log('🔍 ProjectProgressTracker: handleBlur triggered:', {
+                cellKey,
+                refVal,
+                stateVal,
+                currentValue,
+                latestValue,
+                normalizedLatest,
+                normalizedCurrent,
+                hasChanged: normalizedLatest !== normalizedCurrent
+            });
+            
+            // Only save if value actually changed (after normalization)
+            if (normalizedLatest !== normalizedCurrent) {
+                // Save the data - saveProgressData will clear both state and ref after successful save
+                try {
+                    await saveProgressData(project, safeMonth, field, latestValue);
+                    console.log('✅ ProjectProgressTracker: Save completed successfully');
+                } catch (error) {
+                    console.error('❌ ProjectProgressTracker: Save failed in handleBlur:', error);
+                    // Error is already handled in saveProgressData with alert
+                }
             } else {
+                console.log('ℹ️ ProjectProgressTracker: No change detected, skipping save');
+                // No change, just clear editing state, state, and ref
                 setEditingCell(null);
+                delete cellValuesRef.current[cellKey];
                 setCellValues(prev => {
                     const updated = { ...prev };
                     delete updated[cellKey];
@@ -931,10 +1072,13 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 e.preventDefault();
                 handleBlur();
             } else if (e.key === 'Escape') {
+                // Cancel editing - restore original value
+                const originalValue = getProgressData(project, safeMonth, field);
+                cellValuesRef.current[cellKey] = originalValue;
                 setEditingCell(null);
                 setCellValues(prev => {
                     const updated = { ...prev };
-                    delete updated[cellKey];
+                    updated[cellKey] = originalValue;
                     return updated;
                 });
             }
