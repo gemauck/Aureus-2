@@ -12,7 +12,8 @@ const TaskDetailModal = ({
     onClose,
     onAddSubtask,
     onViewSubtask,
-    onDeleteSubtask
+    onDeleteSubtask,
+    onDeleteTask
 }) => {
     const isCreating = !task || !task.id;
     const isSubtask = !!parentTask;
@@ -1336,20 +1337,38 @@ const TaskDetailModal = ({
                 </div>
 
                 {/* Footer */}
-                <div className="border-t border-gray-200 px-4 py-2.5 flex justify-end gap-2">
-                    <button
-                        onClick={onClose}
-                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={handleSave}
-                        className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
-                    >
-                        <i className={`fas ${isCreating ? 'fa-plus' : 'fa-save'} mr-1.5`}></i>
-                        {isCreating ? 'Create Task' : 'Save Changes'}
-                    </button>
+                <div className="border-t border-gray-200 px-4 py-2.5 flex justify-between items-center">
+                    <div>
+                        {!isCreating && onDeleteTask && (
+                            <button
+                                onClick={() => {
+                                    if (confirm('Delete this task and all its subtasks?')) {
+                                        onDeleteTask(task.id);
+                                        onClose();
+                                    }
+                                }}
+                                className="px-3 py-1.5 text-xs bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                            >
+                                <i className="fas fa-trash mr-1.5"></i>
+                                Delete Task
+                            </button>
+                        )}
+                    </div>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={onClose}
+                            className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleSave}
+                            className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
+                        >
+                            <i className={`fas ${isCreating ? 'fa-plus' : 'fa-save'} mr-1.5`}></i>
+                            {isCreating ? 'Create Task' : 'Save Changes'}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

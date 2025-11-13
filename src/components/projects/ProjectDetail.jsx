@@ -2455,6 +2455,18 @@ function initializeProjectDetail() {
                                                                     <i className="fas fa-level-down-alt text-[10px]"></i>
                                                                     Subtask
                                                                 </button>
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        if (confirm('Delete this task and all its subtasks?')) {
+                                                                            handleDeleteTask(task.id);
+                                                                        }
+                                                                    }}
+                                                                    className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-red-100 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition-colors"
+                                                                    title="Delete task"
+                                                                >
+                                                                    <i className="fas fa-trash text-[10px]"></i>
+                                                                </button>
                                                             </div>
                                                             <button
                                                                 onClick={(e) => {
@@ -2879,6 +2891,7 @@ function initializeProjectDetail() {
                     onAddSubtask={handleAddSubtask}
                     onViewSubtask={handleViewTaskDetail}
                     onDeleteSubtask={handleDeleteSubtask}
+                    onDeleteTask={handleDeleteTask}
                     onClose={() => {
                         setShowTaskDetailModal(false);
                         setViewingTask(null);
