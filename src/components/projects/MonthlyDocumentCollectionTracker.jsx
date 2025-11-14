@@ -83,12 +83,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         console.log('📋 Initializing sections from project.documentSections:', project.documentSections);
         const parsed = parseSections(project.documentSections);
         console.log('📋 Parsed sections:', parsed.length, 'sections');
-        // Reset initial mount flag when component remounts - this allows sync to work on remount
-        // But don't reset if we just saved (prevent overwriting fresh saves)
-        const timeSinceLastUpdate = Date.now() - lastLocalUpdateRef.current;
-        if (timeSinceLastUpdate > 10000) { // Only reset if no recent saves (10 seconds)
-            isInitialMount.current = true;
-        }
         return parsed;
     });
     const [showSectionModal, setShowSectionModal] = useState(false);
@@ -112,6 +106,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     // Ref to track if we're currently saving to prevent sync during save
     const isSavingRef = useRef(false);
+    
+    // Reset initial mount flag when component remounts - this allows sync to work on remount
+    // But don't reset if we just saved (prevent overwriting fresh saves)
+    useEffect(() => {
+        const timeSinceLastUpdate = Date.now() - lastLocalUpdateRef.current;
+        if (timeSinceLastUpdate > 10000) { // Only reset if no recent saves (10 seconds)
+            isInitialMount.current = true;
+        }
+    }, []); // Only run on mount
 
     // Generate year options (current year ± 5 years)
     const yearOptions = [];

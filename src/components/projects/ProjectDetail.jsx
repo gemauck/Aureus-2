@@ -631,6 +631,18 @@ function initializeProjectDetail() {
         includeSubtasks: true
     });
     
+    // Sync tasks when project prop changes (e.g., after reload or navigation)
+    useEffect(() => {
+        if (project?.tasks && Array.isArray(project.tasks)) {
+            console.log('🔄 ProjectDetail: Syncing tasks from project prop', {
+                projectId: project.id,
+                tasksCount: project.tasks.length,
+                tasksWithComments: project.tasks.filter(t => t.comments && t.comments.length > 0).length
+            });
+            setTasks(project.tasks);
+        }
+    }, [project?.id, project?.tasks]);
+    
     // Initialize custom field definitions with project-specific data
     const [customFieldDefinitions, setCustomFieldDefinitions] = useState(
         project.customFieldDefinitions || []
@@ -1979,12 +1991,23 @@ function initializeProjectDetail() {
                 })
                 : tasks.map(t => t.id === updatedTaskData.id ? updatedTaskData : t);
             
-            console.log('💾 Immediately saving task update (including checklist) to database...');
+            console.log('💾 Immediately saving task update (including checklist, comments, etc.) to database...');
             console.log('  - Task ID:', updatedTaskData.id);
             console.log('  - Checklist items:', updatedTaskData.checklist?.length || 0);
+            console.log('  - Comments count:', updatedTaskData.comments?.length || 0);
+            console.log('  - Attachments count:', updatedTaskData.attachments?.length || 0);
+            console.log('  - Tags count:', updatedTaskData.tags?.length || 0);
+            console.log('  - Full task data:', {
+                id: updatedTaskData.id,
+                title: updatedTaskData.title,
+                hasComments: !!updatedTaskData.comments,
+                commentsLength: updatedTaskData.comments?.length,
+                hasChecklist: !!updatedTaskData.checklist,
+                checklistLength: updatedTaskData.checklist?.length
+            });
             
             await persistProjectData({ nextTasks: updatedTasks });
-            console.log('✅ Task update (including checklist) saved successfully');
+            console.log('✅ Task update (including checklist, comments, etc.) saved successfully');
         } catch (error) {
             console.error('❌ Failed to save task update:', error);
             // Don't block UI - the debounced save will retry

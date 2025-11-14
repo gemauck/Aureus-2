@@ -66,6 +66,68 @@ const TaskDetailModal = ({
     const commentsContainerRef = useRef(null);
     const leftContentRef = useRef(null);
 
+    // Sync all task data when task prop changes - CRITICAL for persistence
+    useEffect(() => {
+        if (task) {
+            console.log('🔄 TaskDetailModal: Syncing task data from prop', {
+                taskId: task.id,
+                commentsCount: task.comments?.length || 0,
+                attachmentsCount: task.attachments?.length || 0,
+                checklistCount: task.checklist?.length || 0,
+                tagsCount: task.tags?.length || 0
+            });
+            
+            // Sync comments
+            if (Array.isArray(task.comments)) {
+                setComments(task.comments);
+            } else if (task.comments === undefined || task.comments === null) {
+                setComments([]);
+            }
+            
+            // Sync attachments
+            if (Array.isArray(task.attachments)) {
+                setAttachments(task.attachments);
+            } else if (task.attachments === undefined || task.attachments === null) {
+                setAttachments([]);
+            }
+            
+            // Sync checklist
+            if (Array.isArray(task.checklist)) {
+                setChecklist(task.checklist);
+            } else if (task.checklist === undefined || task.checklist === null) {
+                setChecklist([]);
+            }
+            
+            // Sync tags
+            if (Array.isArray(task.tags)) {
+                setTags(task.tags);
+            } else if (task.tags === undefined || task.tags === null) {
+                setTags([]);
+            }
+            
+            // Sync editedTask with all task properties
+            setEditedTask(prev => ({
+                ...prev,
+                ...task,
+                // Preserve local edits for fields that might be in progress
+                title: task.title !== undefined ? task.title : prev.title,
+                description: task.description !== undefined ? task.description : prev.description,
+                assignee: task.assignee !== undefined ? task.assignee : prev.assignee,
+                dueDate: task.dueDate !== undefined ? task.dueDate : prev.dueDate,
+                priority: task.priority !== undefined ? task.priority : prev.priority,
+                status: task.status !== undefined ? task.status : prev.status,
+                listId: task.listId !== undefined ? task.listId : prev.listId,
+                customFields: task.customFields !== undefined ? task.customFields : prev.customFields,
+                subtasks: Array.isArray(task.subtasks) ? task.subtasks : (prev.subtasks || []),
+                estimatedHours: task.estimatedHours !== undefined ? task.estimatedHours : prev.estimatedHours,
+                actualHours: task.actualHours !== undefined ? task.actualHours : prev.actualHours,
+                blockedBy: task.blockedBy !== undefined ? task.blockedBy : prev.blockedBy,
+                dependencies: Array.isArray(task.dependencies) ? task.dependencies : (prev.dependencies || []),
+                subscribers: Array.isArray(task.subscribers) ? task.subscribers : (prev.subscribers || [])
+            }));
+        }
+    }, [task?.id, task?.comments, task?.attachments, task?.checklist, task?.tags, task?.subscribers, task?.title, task?.description, task?.assignee, task?.dueDate, task?.priority, task?.status, task?.listId, task?.customFields, task?.subtasks, task?.estimatedHours, task?.actualHours, task?.blockedBy, task?.dependencies]);
+
     // Update users if prop changes
     useEffect(() => {
         if (usersProp && usersProp.length > 0) {
