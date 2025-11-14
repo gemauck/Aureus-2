@@ -789,38 +789,28 @@ function initializeProjectDetail() {
             return;
         }
         
-        // Don't save hasDocumentCollectionProcess if it matches the project prop
-        // This prevents overwriting the database value when the project is loaded
+        // Normalize project prop value for comparison
         const projectHasProcess = project.hasDocumentCollectionProcess === true || 
                                   project.hasDocumentCollectionProcess === 'true' ||
                                   project.hasDocumentCollectionProcess === 1 ||
                                   (typeof project.hasDocumentCollectionProcess === 'string' && project.hasDocumentCollectionProcess.toLowerCase() === 'true');
         
-        // Only include hasDocumentCollectionProcess in save if it differs from project prop
-        // This prevents overwriting the database value when navigating back
-        if (hasDocumentCollectionProcess === projectHasProcess) {
-            // If they match, use the project prop value to ensure we don't overwrite
-            // But we still need to save other changes, so we'll use a modified persistProjectData
-            if (saveTimeoutRef.current) {
-                clearTimeout(saveTimeoutRef.current);
-            }
-            
-            saveTimeoutRef.current = setTimeout(() => {
-                // Save without hasDocumentCollectionProcess to avoid overwriting
-                persistProjectData({
-                    nextHasDocumentCollectionProcess: projectHasProcess // Use project prop value, not state
-                }).catch(() => {});
-            }, 1500);
-        } else {
-            // If they differ, save normally (this means user explicitly changed it)
-            if (saveTimeoutRef.current) {
-                clearTimeout(saveTimeoutRef.current);
-            }
-            
-            saveTimeoutRef.current = setTimeout(() => {
-                persistProjectData().catch(() => {});
-            }, 1500);
+        // Always use project prop value for hasDocumentCollectionProcess in debounced saves
+        // This prevents overwriting the database value when the project is loaded
+        // Only use state value if it was explicitly changed (different from project prop)
+        const valueToSave = (hasDocumentCollectionProcess !== projectHasProcess) 
+            ? hasDocumentCollectionProcess  // User explicitly changed it
+            : projectHasProcess;           // Use project prop value to avoid overwriting
+        
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
         }
+        
+        saveTimeoutRef.current = setTimeout(() => {
+            persistProjectData({
+                nextHasDocumentCollectionProcess: valueToSave
+            }).catch(() => {});
+        }, 1500); // Increased debounce to 1.5 seconds to avoid excessive API calls
         
         return () => {
             if (saveTimeoutRef.current) {
