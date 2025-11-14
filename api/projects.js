@@ -401,7 +401,11 @@ async function handler(req, res) {
           comments: typeof body.comments === 'string' ? body.comments : JSON.stringify(body.comments),
           activityLog: typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(body.activityLog),
           notes: body.notes,
-          hasDocumentCollectionProcess: body.hasDocumentCollectionProcess !== undefined ? Boolean(body.hasDocumentCollectionProcess === true || body.hasDocumentCollectionProcess === 'true' || body.hasDocumentCollectionProcess === 1) : undefined,
+          // Always process hasDocumentCollectionProcess if provided, even if false
+          // This ensures we can explicitly set it to false if needed
+          hasDocumentCollectionProcess: body.hasDocumentCollectionProcess !== undefined 
+            ? Boolean(body.hasDocumentCollectionProcess === true || body.hasDocumentCollectionProcess === 'true' || body.hasDocumentCollectionProcess === 1) 
+            : undefined,
           documentSections: typeof body.documentSections === 'string' ? body.documentSections : JSON.stringify(body.documentSections)
         }
         Object.keys(updateData).forEach(key => {
@@ -418,6 +422,13 @@ async function handler(req, res) {
           inUpdateData: 'hasDocumentCollectionProcess' in updateData
         })
         try {
+          // Verify hasDocumentCollectionProcess is in updateData before updating
+          if ('hasDocumentCollectionProcess' in updateData) {
+            console.log('✅ hasDocumentCollectionProcess will be updated to:', updateData.hasDocumentCollectionProcess);
+          } else {
+            console.warn('⚠️ hasDocumentCollectionProcess NOT in updateData - will not be updated');
+          }
+          
           const project = await prisma.project.update({ 
             where: { id }, 
             data: updateData 
@@ -425,8 +436,18 @@ async function handler(req, res) {
           console.log('✅ Project updated successfully:', project.id)
           console.log('🔍 hasDocumentCollectionProcess after update:', {
             value: project.hasDocumentCollectionProcess,
-            type: typeof project.hasDocumentCollectionProcess
+            type: typeof project.hasDocumentCollectionProcess,
+            isTrue: project.hasDocumentCollectionProcess === true
           })
+          
+          // Verify the update actually worked
+          const verifyProject = await prisma.project.findUnique({ where: { id } });
+          console.log('🔍 Verification - hasDocumentCollectionProcess in database:', {
+            value: verifyProject?.hasDocumentCollectionProcess,
+            type: typeof verifyProject?.hasDocumentCollectionProcess,
+            isTrue: verifyProject?.hasDocumentCollectionProcess === true
+          });
+          
           return ok(res, { project })
         } catch (dbError) {
           console.error('❌ Database error updating project:', dbError)
