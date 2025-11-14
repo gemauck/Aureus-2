@@ -79,10 +79,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         return [];
     };
     
+    // ULTRA AGGRESSIVE: Initialize sections from props, but mark initialized immediately if we have sections
     const [sections, setSections] = useState(() => {
         console.log('📋 Initializing sections from project.documentSections:', project.documentSections);
         const parsed = parseSections(project.documentSections);
         console.log('📋 Parsed sections:', parsed.length, 'sections');
+        // ULTRA AGGRESSIVE: Mark as initialized immediately if we have sections
+        if (parsed.length > 0) {
+            hasInitializedRef.current = true;
+            console.log('🛑 ULTRA AGGRESSIVE: Initialized with sections - BLOCKING all future syncs');
+        }
         return parsed;
     });
     const [showSectionModal, setShowSectionModal] = useState(false);
