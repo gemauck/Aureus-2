@@ -1671,15 +1671,20 @@ const ManagementMeetingNotes = () => {
                                                                                 </div>
                                                                             )}
                                                                         </div>
-                                                                        <textarea
-                                                                            value={editingFields[getFieldKey(deptNote.id, 'successes')] 
-                                                                                ? (tempFieldValues[getFieldKey(deptNote.id, 'successes')] ?? '')
-                                                                                : (deptNote.successes ?? '')}
-                                                                            onChange={(e) => handleTempValueChange(deptNote.id, 'successes', e.target.value)}
-                                                                            readOnly={!editingFields[getFieldKey(deptNote.id, 'successes')]}
-                                                                            placeholder="What went well this week?"
-                                                                            className={`w-full min-h-[80px] p-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'} ${!editingFields[getFieldKey(deptNote.id, 'successes')] ? (isDark ? 'cursor-not-allowed opacity-75' : 'cursor-not-allowed opacity-60') : ''}`}
-                                                                        />
+                                                                        {editingFields[getFieldKey(deptNote.id, 'successes')] && window.RichTextEditor ? (
+                                                                            <window.RichTextEditor
+                                                                                value={tempFieldValues[getFieldKey(deptNote.id, 'successes')] ?? ''}
+                                                                                onChange={(html) => handleTempValueChange(deptNote.id, 'successes', html)}
+                                                                                placeholder="What went well this week? (Use formatting toolbar for bullets, bold, etc.)"
+                                                                                rows={4}
+                                                                                isDark={isDark}
+                                                                            />
+                                                                        ) : (
+                                                                            <div 
+                                                                                className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'} ${!editingFields[getFieldKey(deptNote.id, 'successes')] ? (isDark ? 'cursor-not-allowed opacity-75' : 'cursor-not-allowed opacity-60') : ''}`}
+                                                                                dangerouslySetInnerHTML={{ __html: deptNote.successes || '' }}
+                                                                            />
+                                                                        )}
                                                                     </div>
 
                                                                     {/* Week to Follow */}
@@ -1718,15 +1723,20 @@ const ManagementMeetingNotes = () => {
                                                                                 </div>
                                                                             )}
                                                                         </div>
-                                                                        <textarea
-                                                                            value={editingFields[getFieldKey(deptNote.id, 'weekToFollow')] 
-                                                                                ? (tempFieldValues[getFieldKey(deptNote.id, 'weekToFollow')] ?? '')
-                                                                                : (deptNote.weekToFollow ?? '')}
-                                                                            onChange={(e) => handleTempValueChange(deptNote.id, 'weekToFollow', e.target.value)}
-                                                                            readOnly={!editingFields[getFieldKey(deptNote.id, 'weekToFollow')]}
-                                                                            placeholder="What's planned for this week?"
-                                                                            className={`w-full min-h-[80px] p-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'} ${!editingFields[getFieldKey(deptNote.id, 'weekToFollow')] ? (isDark ? 'cursor-not-allowed opacity-75' : 'cursor-not-allowed opacity-60') : ''}`}
-                                                                        />
+                                                                        {editingFields[getFieldKey(deptNote.id, 'weekToFollow')] && window.RichTextEditor ? (
+                                                                            <window.RichTextEditor
+                                                                                value={tempFieldValues[getFieldKey(deptNote.id, 'weekToFollow')] ?? ''}
+                                                                                onChange={(html) => handleTempValueChange(deptNote.id, 'weekToFollow', html)}
+                                                                                placeholder="What's planned for this week? (Use formatting toolbar for bullets, bold, etc.)"
+                                                                                rows={4}
+                                                                                isDark={isDark}
+                                                                            />
+                                                                        ) : (
+                                                                            <div 
+                                                                                className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'} ${!editingFields[getFieldKey(deptNote.id, 'weekToFollow')] ? (isDark ? 'cursor-not-allowed opacity-75' : 'cursor-not-allowed opacity-60') : ''}`}
+                                                                                dangerouslySetInnerHTML={{ __html: deptNote.weekToFollow || '' }}
+                                                                            />
+                                                                        )}
                                                                     </div>
 
                                                                     {/* Frustrations */}
@@ -1765,15 +1775,20 @@ const ManagementMeetingNotes = () => {
                                                                                 </div>
                                                                             )}
                                                                         </div>
-                                                                        <textarea
-                                                                            value={editingFields[getFieldKey(deptNote.id, 'frustrations')] 
-                                                                                ? (tempFieldValues[getFieldKey(deptNote.id, 'frustrations')] ?? '')
-                                                                                : (deptNote.frustrations ?? '')}
-                                                                            onChange={(e) => handleTempValueChange(deptNote.id, 'frustrations', e.target.value)}
-                                                                            readOnly={!editingFields[getFieldKey(deptNote.id, 'frustrations')]}
-                                                                            placeholder="What challenges or blockers are we facing?"
-                                                                            className={`w-full min-h-[80px] p-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'} ${!editingFields[getFieldKey(deptNote.id, 'frustrations')] ? (isDark ? 'cursor-not-allowed opacity-75' : 'cursor-not-allowed opacity-60') : ''}`}
-                                                                        />
+                                                                        {editingFields[getFieldKey(deptNote.id, 'frustrations')] && window.RichTextEditor ? (
+                                                                            <window.RichTextEditor
+                                                                                value={tempFieldValues[getFieldKey(deptNote.id, 'frustrations')] ?? ''}
+                                                                                onChange={(html) => handleTempValueChange(deptNote.id, 'frustrations', html)}
+                                                                                placeholder="What challenges or blockers are we facing? (Use formatting toolbar for bullets, bold, etc.)"
+                                                                                rows={4}
+                                                                                isDark={isDark}
+                                                                            />
+                                                                        ) : (
+                                                                            <div 
+                                                                                className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'} ${!editingFields[getFieldKey(deptNote.id, 'frustrations')] ? (isDark ? 'cursor-not-allowed opacity-75' : 'cursor-not-allowed opacity-60') : ''}`}
+                                                                                dangerouslySetInnerHTML={{ __html: deptNote.frustrations || '' }}
+                                                                            />
+                                                                        )}
                                                                     </div>
 
                                                                     {/* Action Items */}

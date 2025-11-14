@@ -1284,200 +1284,58 @@ function doesOpportunityBelongToClient(opportunity, client) {
         e.preventDefault();
         e.stopPropagation();
         
-        console.log('🎯🎯🎯 Pipeline: DROP EVENT TRIGGERED!', { 
-            targetStage, 
-            draggedItem: draggedItem?.id, 
-            draggedType,
-            dragDataRef: dragDataRef.current?.itemId,
-            dataTransferTypes: e?.dataTransfer?.types ? Array.from(e.dataTransfer.types) : [],
-            dropEffect: e?.dataTransfer?.dropEffect,
-            timestamp: new Date().toISOString()
-        });
+        // Simple data retrieval like TaskManagement - this is the key!
+        const itemId = e.dataTransfer.getData('pipelineItemId');
+        const itemType = e.dataTransfer.getData('pipelineItemType');
         
-        if (e?.dataTransfer) {
-            e.dataTransfer.dropEffect = 'move';
-        }
-        
-        // Priority 1: Use state (most reliable if still available)
-        let currentDraggedItem = draggedItem;
-        let currentDraggedType = draggedType;
-        
-        // Priority 2: Use ref (persists even if state was cleared)
-        if ((!currentDraggedItem || !currentDraggedType) && dragDataRef.current) {
-            console.log('📦 Pipeline: Recovering from dragDataRef', { 
-                itemId: dragDataRef.current.itemId,
-                type: dragDataRef.current.type,
-                age: Date.now() - dragDataRef.current.timestamp
-            });
-            currentDraggedItem = dragDataRef.current.item;
-            currentDraggedType = dragDataRef.current.type;
-        }
-        
-        // Priority 3: Try to recover from dataTransfer
-        if ((!currentDraggedItem || !currentDraggedType) && e?.dataTransfer) {
-            const rawPayload = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
-            console.log('📦 Pipeline: Attempting to recover from dataTransfer', { rawPayload });
-            if (rawPayload) {
-                try {
-                    const parsed = JSON.parse(rawPayload);
-                    const fallbackItem = getPipelineItems().find(
-                        (item) => String(item.id) === String(parsed.id) && (!parsed.type || item.type === parsed.type)
-                    );
-                    if (fallbackItem) {
-                        currentDraggedItem = fallbackItem;
-                        currentDraggedType = fallbackItem.type;
-                        console.log('✅ Pipeline: Recovered item from dataTransfer', { item: fallbackItem.name, type: fallbackItem.type });
-                    } else {
-                        console.warn('⚠️ Pipeline: Could not find item in pipeline items', { 
-                            parsed, 
-                            totalItems: getPipelineItems().length,
-                            availableIds: getPipelineItems().slice(0, 5).map(i => ({ id: i.id, type: i.type, name: i.name }))
-                        });
-                    }
-                } catch (error) {
-                    console.warn('⚠️ Pipeline: Failed to parse drag payload', error);
-                }
-            }
-        }
-        
-        // Priority 4: Last resort - try to find by ID from ref if we have it
-        if ((!currentDraggedItem || !currentDraggedType) && dragDataRef.current?.itemId) {
-            console.log('📦 Pipeline: Last resort recovery - searching by ID', { itemId: dragDataRef.current.itemId });
-            const allItems = getPipelineItems();
-            const foundItem = allItems.find(
-                (item) => String(item.id) === String(dragDataRef.current.itemId)
-            );
-            if (foundItem) {
-                currentDraggedItem = foundItem;
-                currentDraggedType = foundItem.type;
-                console.log('✅ Pipeline: Found item by ID', { item: foundItem.name, type: foundItem.type });
-            }
-        }
-
-        if (!currentDraggedItem || !currentDraggedType) {
-            console.warn('⚠️ Pipeline: No dragged item found, aborting drop', { currentDraggedItem, currentDraggedType });
-            setDraggedItem(null);
-            setDraggedType(null);
-            setIsDragging(false);
-            setDraggedOverStage(null);
+        if (!itemId || itemId === '') {
             return;
         }
 
-        if (currentDraggedItem.stage === targetStage) {
-            console.log('ℹ️ Pipeline: Item already in target stage, no change needed');
-            setDraggedItem(null);
-            setDraggedType(null);
-            setIsDragging(false);
-            setDraggedOverStage(null);
+        // Find the item from current data
+        const item = getPipelineItems().find(i => String(i.id) === String(itemId) && i.type === itemType);
+        
+        if (!item) {
             return;
         }
 
-        const token = typeof storage?.getToken === 'function' ? storage.getToken() : null;
-        const originalStage = currentDraggedItem.stage;
-
-        console.log('🔄 Pipeline: Starting stage update', {
-            itemId: currentDraggedItem.id,
-            itemName: currentDraggedItem.name,
-            fromStage: originalStage,
-            toStage: targetStage,
-            type: currentDraggedType
-        });
+        const currentStage = item.stage;
+        if (currentStage === targetStage) {
+            return; // Already in target stage
+        }
 
         try {
-            if (currentDraggedType === 'lead') {
-                console.log('📝 Pipeline: Updating lead stage optimistically');
-                updateLeadStageOptimistically(currentDraggedItem.id, targetStage);
-                // Force immediate re-render
-                setRefreshKey((k) => k + 1);
-
-                let leadPersisted = false;
-
-                if (token && window.DatabaseAPI?.updateLead) {
-                    await window.DatabaseAPI.updateLead(currentDraggedItem.id, { stage: targetStage });
-                    setTimeout(() => setRefreshKey((k) => k + 1), 500);
-                    leadPersisted = true;
-                } else if (token && window.api?.updateLead) {
-                    await window.api.updateLead(currentDraggedItem.id, { stage: targetStage });
-                    setTimeout(() => setRefreshKey((k) => k + 1), 500);
-                    leadPersisted = true;
-                }
-
-                if (!leadPersisted) {
-                    console.log('ℹ️ Pipeline: Lead stage updated locally (no API available)');
-                }
+            // Optimistic UI update
+            if (itemType === 'lead') {
+                updateLeadStageOptimistically(item.id, targetStage);
+            } else if (itemType === 'opportunity') {
+                updateOpportunityStageOptimistically(item.clientId, item.id, targetStage);
             }
+            setRefreshKey((k) => k + 1); // Force immediate re-render
 
-            if (currentDraggedType === 'opportunity') {
-                console.log('📝 Pipeline: Updating opportunity stage optimistically');
-                const updatedClients = updateOpportunityStageOptimistically(
-                    currentDraggedItem.clientId,
-                    currentDraggedItem.id,
-                    targetStage
-                );
-                // Force immediate re-render
-                setRefreshKey((k) => k + 1);
-
-                let refreshDelay = 0;
-                let opportunityPersisted = false;
-
-                if (token && window.api?.updateOpportunity) {
-                    await window.api.updateOpportunity(currentDraggedItem.id, { stage: targetStage });
-                    refreshDelay = 1500;
-                    opportunityPersisted = true;
+            // Persist to database
+            if (itemType === 'lead') {
+                const updateFn = window.api?.updateLeadStage || window.DatabaseAPI?.updateLeadStage;
+                if (updateFn) {
+                    await updateFn(item.id, targetStage);
                 }
-
-                if (!opportunityPersisted && token && window.DatabaseAPI?.updateOpportunity) {
-                    await window.DatabaseAPI.updateOpportunity(currentDraggedItem.id, { stage: targetStage });
-                    refreshDelay = 1500;
-                    opportunityPersisted = true;
-                }
-
-                if (!opportunityPersisted && token && window.DatabaseAPI) {
-                    const clientToUpdate = updatedClients.find((client) => client.id === currentDraggedItem.clientId);
-                    if (clientToUpdate) {
-                        await window.DatabaseAPI.updateClient(currentDraggedItem.clientId, {
-                            opportunities: clientToUpdate.opportunities || []
-                        });
-                        refreshDelay = 500;
-                        opportunityPersisted = true;
-                    }
-                }
-
-                if (!opportunityPersisted) {
-                    console.log('ℹ️ Pipeline: Opportunity stage updated locally (no API available)');
-                }
-
-                if (refreshDelay > 0) {
-                    setTimeout(() => {
-                        if (typeof storage?.setClients === 'function') {
-                            storage.setClients([]);
-                        }
-                        setRefreshKey((k) => k + 1);
-                    }, refreshDelay);
+            } else if (itemType === 'opportunity') {
+                const updateFn = window.api?.updateOpportunityStage || window.DatabaseAPI?.updateOpportunityStage;
+                if (updateFn && item.clientId) {
+                    await updateFn(item.clientId, item.id, targetStage);
                 }
             }
         } catch (error) {
-            console.error('❌ Pipeline: Failed to persist stage change:', error);
-            if (currentDraggedType === 'lead') {
-                updateLeadStageOptimistically(currentDraggedItem.id, originalStage);
-            } else if (currentDraggedType === 'opportunity') {
-                updateOpportunityStageOptimistically(
-                    currentDraggedItem.clientId,
-                    currentDraggedItem.id,
-                    originalStage
-                );
-            }
-            setRefreshKey((k) => k + 1);
-            alert('Failed to save stage change. Please try again.');
+            console.error('❌ Pipeline: Failed to update stage', error);
+            alert('Failed to update stage. Please try again.');
+            setRefreshKey((k) => k + 1); // Revert by refreshing
         } finally {
-            console.log('✅ Pipeline: Drop operation complete, resetting drag state');
             setDraggedItem(null);
             setDraggedType(null);
             setIsDragging(false);
             setDraggedOverStage(null);
             setTouchDragState(null);
             setJustDragged(true);
-            // Clear ref after a delay to allow any pending operations to complete
             setTimeout(() => {
                 dragDataRef.current = null;
                 setJustDragged(false);
@@ -1913,69 +1771,30 @@ function doesOpportunityBelongToClient(opportunity, client) {
     // Render pipeline card
     const PipelineCard = ({ item }) => {
         const age = getDealAge(item.createdDate);
-        const cardRef = React.useRef(null);
-
-        // Use useEffect to attach native event listeners and verify draggable is set
-        React.useEffect(() => {
-            const cardElement = cardRef.current;
-            if (!cardElement) return;
-
-            // Verify draggable is set
-            if (cardElement.draggable !== true) {
-                console.warn('⚠️ Pipeline: Card element draggable not set correctly, fixing...', { 
-                    itemId: item.id, 
-                    currentDraggable: cardElement.draggable,
-                    hasAttribute: cardElement.hasAttribute('draggable')
-                });
-                cardElement.draggable = true;
-            }
-
-            const handleNativeDragStart = (e) => {
-                console.log('🎬 Pipeline: Native drag start', { itemId: item.id, itemName: item.name });
-                handleDragStart(e, item, item.type);
-            };
-
-            const handleNativeDragEnd = (e) => {
-                console.log('🏁 Pipeline: Native drag end', { itemId: item.id, dropEffect: e?.dataTransfer?.dropEffect });
-                handleDragEnd(e);
-            };
-
-            cardElement.addEventListener('dragstart', handleNativeDragStart, true);
-            cardElement.addEventListener('dragend', handleNativeDragEnd, true);
-
-            return () => {
-                cardElement.removeEventListener('dragstart', handleNativeDragStart, true);
-                cardElement.removeEventListener('dragend', handleNativeDragEnd, true);
-            };
-        }, [item.id, item.name, item.type]);
+        const wasDraggedRef = React.useRef(false);
 
         return (
             <div
                 draggable={true}
                 onDragStart={(e) => {
+                    wasDraggedRef.current = false;
                     handleDragStart(e, item, item.type);
                 }}
                 onDragEnd={(e) => {
+                    wasDraggedRef.current = true;
+                    setTimeout(() => {
+                        wasDraggedRef.current = false;
+                    }, 100);
                     handleDragEnd(e);
                 }}
                 onTouchStart={(e) => handleTouchStart(e, item, item.type)}
                 onClick={(e) => {
-                    // Don't open detail if we just completed a drag
-                    if (justDragged || touchDragState) {
+                    // Prevent click event if we just finished dragging (like TaskManagement)
+                    if (wasDraggedRef.current || justDragged || touchDragState) {
                         e.preventDefault();
                         e.stopPropagation();
                         return;
                     }
-
-                    // Don't open detail if we're currently dragging
-                    if (isDragging) {
-                        console.log('⚠️ Pipeline: Click ignored during drag');
-                        setIsDragging(false);
-                        setDraggedItem(null);
-                        setDraggedType(null);
-                        return;
-                    }
-
                     openDealDetail(item);
                 }}
                 className={`bg-white rounded-md border border-gray-200 cursor-move flex flex-col gap-1.5 p-2 touch-none ${
@@ -1988,9 +1807,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     pointerEvents: isDragging && draggedItem?.id === item.id ? 'none' : 'auto',
                     cursor: 'grab',
                     touchAction: 'none'
-                }}
-                onMouseDown={(e) => {
-                    console.log('🖱️ Pipeline: Mouse down on card', { itemId: item.id, draggable: cardRef.current?.draggable });
                 }}
             >
                 <div className="flex items-center justify-between gap-2">
@@ -2018,146 +1834,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
         );
     };
 
-    // Global dragover handler to ensure preventDefault is always called
-    // This is critical for drop events to fire - browsers require preventDefault on dragover
-    // We check dragDataRef.current directly to avoid stale closure issues
-    useEffect(() => {
-        let dragOverCount = 0;
-        let lastLogTime = 0;
-        
-        const globalDragOver = (e) => {
-            // Check if we're dragging a pipeline item (use ref to avoid stale closure)
-            const hasPipelineDrag = dragDataRef.current !== null;
-            
-            if (hasPipelineDrag) {
-                // ALWAYS preventDefault for pipeline drags - this is required for drop to fire
-                e.preventDefault();
-                dragOverCount++;
-                
-                // Log every 100ms to verify it's firing (throttled)
-                const now = Date.now();
-                if (now - lastLogTime > 100) {
-                    console.log('🔄 Pipeline: Global dragover handler firing', { 
-                        count: dragOverCount, 
-                        hasRef: !!dragDataRef.current,
-                        itemId: dragDataRef.current?.itemId,
-                        target: e.target?.tagName,
-                        currentTarget: e.currentTarget?.tagName,
-                        dataTransferTypes: e.dataTransfer?.types ? Array.from(e.dataTransfer.types) : []
-                    });
-                    lastLogTime = now;
-                }
-                // Don't stop propagation - let the stage handlers handle it
-            } else {
-                // Also check if there's any drag data in dataTransfer (fallback)
-                if (e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.length > 0) {
-                    const hasData = Array.from(e.dataTransfer.types).some(type => 
-                        type === 'application/json' || type === 'text/plain'
-                    );
-                    if (hasData) {
-                        e.preventDefault();
-                        console.log('🔄 Pipeline: Global dragover (fallback - dataTransfer has data)', {
-                            types: Array.from(e.dataTransfer.types)
-                        });
-                    }
-                }
-            }
-        };
-        
-        const globalDrop = (e) => {
-            // Log if drop happens at document level (shouldn't normally)
-            if (dragDataRef.current) {
-                console.log('📦 Pipeline: Global drop handler fired (unexpected)', {
-                    target: e.target?.tagName,
-                    hasRef: !!dragDataRef.current,
-                    itemId: dragDataRef.current?.itemId
-                });
-            }
-        };
-        
-        // Use capture phase to catch events early
-        document.addEventListener('dragover', globalDragOver, { passive: false, capture: true });
-        document.addEventListener('drop', globalDrop, { capture: true });
-        
-        return () => {
-            document.removeEventListener('dragover', globalDragOver, { capture: true });
-            document.removeEventListener('drop', globalDrop, { capture: true });
-        };
-    }, []); // Empty deps - we check dragDataRef.current directly
-
-    // Attach native event listeners directly to DOM elements for more reliable drag-and-drop
-    // This bypasses React's synthetic event system which may be interfering
-    useEffect(() => {
-        if (viewMode !== 'kanban' || !dataLoaded) return;
-        
-        const attachNativeListeners = () => {
-            const stages = document.querySelectorAll('[data-pipeline-stage]');
-            
-            stages.forEach(stageEl => {
-                const stageName = stageEl.getAttribute('data-pipeline-stage');
-                if (!stageName) return;
-                
-                // Remove existing listeners if any (cleanup)
-                const existingDragover = stageEl._pipelineDragover;
-                const existingDrop = stageEl._pipelineDrop;
-                
-                if (existingDragover) {
-                    stageEl.removeEventListener('dragover', existingDragover);
-                }
-                if (existingDrop) {
-                    stageEl.removeEventListener('drop', existingDrop);
-                }
-                
-                // Create new native event handlers
-                const nativeDragOver = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (e.dataTransfer) {
-                        e.dataTransfer.dropEffect = 'move';
-                    }
-                    handleDragOver(e, stageName);
-                };
-                
-                const nativeDrop = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log('🎯🎯🎯 Pipeline: NATIVE DROP EVENT on stage!', { 
-                        stage: stageName,
-                        target: e.target?.tagName,
-                        currentTarget: e.currentTarget?.tagName
-                    });
-                    handleDrop(e, stageName);
-                };
-                
-                // Attach native listeners with capture phase
-                stageEl.addEventListener('dragover', nativeDragOver, { passive: false, capture: true });
-                stageEl.addEventListener('drop', nativeDrop, { capture: true });
-                
-                // Store references for cleanup
-                stageEl._pipelineDragover = nativeDragOver;
-                stageEl._pipelineDrop = nativeDrop;
-            });
-            
-            console.log('✅ Pipeline: Native drag-and-drop listeners attached to', stages.length, 'stages');
-        };
-        
-        // Attach after a short delay to ensure DOM is ready
-        const timeoutId = setTimeout(attachNativeListeners, 500);
-        
-        return () => {
-            clearTimeout(timeoutId);
-            // Cleanup native listeners
-            const stages = document.querySelectorAll('[data-pipeline-stage]');
-            stages.forEach(stageEl => {
-                if (stageEl._pipelineDragover) {
-                    stageEl.removeEventListener('dragover', stageEl._pipelineDragover, { capture: true });
-                }
-                if (stageEl._pipelineDrop) {
-                    stageEl.removeEventListener('drop', stageEl._pipelineDrop, { capture: true });
-                }
-            });
-        };
-    }, [viewMode, dataLoaded, filteredItems.length]);
+    // Removed global and native listeners - using simple React synthetic events like TaskManagement
 
     // Diagnostic function to verify drag and drop setup
     useEffect(() => {
@@ -2230,11 +1907,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         onDrop={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            console.log('🎯🎯🎯 Pipeline: DROP EVENT TRIGGERED on stage container!', { 
-                                stage: stage.name,
-                                target: e.target,
-                                currentTarget: e.currentTarget 
-                            });
                             handleDrop(e, stage.name);
                         }}
                     >

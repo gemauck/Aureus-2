@@ -18,12 +18,11 @@ const reactWindowPlugin = () => {
       // Provide the virtual module
       if (id === '\0virtual:react-window') {
         return `
-          // Lazy getter for React - ensures window.React is available
+          // Lazy getter for React - ensures window.React is available at runtime
           const getReact = () => {
             if (typeof window !== 'undefined' && window.React) {
               return window.React;
             }
-            // Wait a bit if React isn't ready yet (shouldn't happen, but safety)
             throw new Error('window.React is not available. Make sure React is loaded before this module.');
           };
           
@@ -34,12 +33,25 @@ const reactWindowPlugin = () => {
             return null;
           };
           
-          // Get React immediately - if it fails, the error will be thrown
-          const React = getReact();
+          // Use Proxy to lazily access React at runtime
+          // This ensures window.React is available when hooks are accessed
+          const React = new Proxy({}, {
+            get(target, prop) {
+              const react = getReact();
+              const value = react[prop];
+              // For functions (hooks, createElement, etc.), return them directly
+              // React's hook system needs direct access to the actual functions
+              return typeof value === 'function' ? value.bind(react) : value;
+            }
+          });
+          
           const ReactDOM = getReactDOM();
           
-          // Export all React APIs
+          // Export React as Proxy - hooks will be accessed lazily through the Proxy
           export default React;
+          
+          // Export hooks directly from the Proxy - they'll be resolved at access time
+          // This ensures React is available when the hooks are actually used
           export const useState = React.useState;
           export const useEffect = React.useEffect;
           export const useRef = React.useRef;

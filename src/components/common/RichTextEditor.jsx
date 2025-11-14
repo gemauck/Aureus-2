@@ -38,30 +38,65 @@ const RichTextEditor = ({
         if (!editorRef.current) return;
         editorRef.current.focus();
         
-        // Special handling for lists
-        if (command === 'insertUnorderedList' || command === 'insertOrderedList') {
-            const selection = window.getSelection();
-            if (selection.rangeCount > 0) {
-                const range = selection.getRangeAt(0);
-                // Check if we're already in a list
-                let node = range.commonAncestorContainer;
-                while (node && node !== editorRef.current) {
-                    if (node.nodeName === 'UL' || node.nodeName === 'OL') {
+        try {
+            // Special handling for lists
+            if (command === 'insertUnorderedList' || command === 'insertOrderedList') {
+                const selection = window.getSelection();
+                if (selection.rangeCount > 0) {
+                    const range = selection.getRangeAt(0);
+                    // Check if we're already in a list
+                    let node = range.commonAncestorContainer;
+                    let inList = false;
+                    while (node && node !== editorRef.current) {
+                        if (node.nodeName === 'UL' || node.nodeName === 'OL') {
+                            inList = true;
+                            break;
+                        }
+                        node = node.parentNode;
+                    }
+                    
+                    if (inList) {
                         // Toggle list off
                         document.execCommand('outdent', false, null);
-                        return;
+                    } else {
+                        // Insert new list
+                        const success = document.execCommand(command, false, null);
+                        if (!success) {
+                            // Fallback: manually create list
+                            if (range.collapsed) {
+                                // Create empty list item
+                                const list = document.createElement(command === 'insertUnorderedList' ? 'ul' : 'ol');
+                                const li = document.createElement('li');
+                                list.appendChild(li);
+                                range.insertNode(list);
+                                // Place cursor in list item
+                                const newRange = document.createRange();
+                                newRange.setStart(li, 0);
+                                newRange.setEnd(li, 0);
+                                selection.removeAllRanges();
+                                selection.addRange(newRange);
+                            } else {
+                                // Wrap selected text in list
+                                const list = document.createElement(command === 'insertUnorderedList' ? 'ul' : 'ol');
+                                const li = document.createElement('li');
+                                li.appendChild(range.extractContents());
+                                list.appendChild(li);
+                                range.insertNode(list);
+                            }
+                        }
                     }
-                    node = node.parentNode;
+                    handleInput();
+                    return;
                 }
-                // Insert new list
-                document.execCommand(command, false, null);
-                return;
             }
-        }
-        
-        try {
-            document.execCommand(command, false, value);
-            handleInput();
+            
+            // For other commands
+            const success = document.execCommand(command, false, value);
+            if (success) {
+                handleInput();
+            } else {
+                console.warn(`Command ${command} was not successful`);
+            }
         } catch (error) {
             console.error(`Error executing command ${command}:`, error);
         }
@@ -103,27 +138,84 @@ const RichTextEditor = ({
                 ref={editorRef}
                 contentEditable
                 onInput={handleInput}
+                onKeyDown={(e) => {
+                    // Handle Enter key for lists
+                    if (e.key === 'Enter') {
+                        const selection = window.getSelection();
+                        if (selection.rangeCount > 0) {
+                            const range = selection.getRangeAt(0);
+                            let node = range.commonAncestorContainer;
+                            
+                            // Check if we're in a list item
+                            while (node && node !== editorRef.current) {
+                                if (node.nodeName === 'LI') {
+                                    // Allow default Enter behavior in lists
+                                    return;
+                                }
+                                node = node.parentNode;
+                            }
+                        }
+                    }
+                }}
                 onPaste={(e) => {
                     e.preventDefault();
                     const text = e.clipboardData.getData('text/plain');
                     document.execCommand('insertText', false, text);
                 }}
-                className={`min-h-[${rows * 1.5}rem] px-3 py-2 text-sm outline-none ${isDark ? 'text-slate-100' : 'text-gray-900'}`}
+                className={`px-3 py-2 text-sm outline-none ${isDark ? 'text-slate-100' : 'text-gray-900'}`}
                 style={{ 
                     minHeight: `${rows * 1.5}rem`,
-                    maxHeight: '300px',
+                    maxHeight: '400px',
                     overflowY: 'auto'
                 }}
                 data-placeholder={placeholder}
                 suppressContentEditableWarning
             />
             
-            {/* Placeholder styling */}
+            {/* Placeholder and list styling */}
             <style>{`
                 [contenteditable][data-placeholder]:empty:before {
                     content: attr(data-placeholder);
                     color: ${isDark ? '#94a3b8' : '#9ca3af'};
                     pointer-events: none;
+                }
+                [contenteditable] ul,
+                [contenteditable] ol {
+                    margin-left: 1.5rem;
+                    margin-top: 0.5rem;
+                    margin-bottom: 0.5rem;
+                    padding-left: 1rem;
+                }
+                [contenteditable] ul {
+                    list-style-type: disc;
+                }
+                [contenteditable] ol {
+                    list-style-type: decimal;
+                }
+                [contenteditable] li {
+                    margin: 0.25rem 0;
+                    line-height: 1.5;
+                }
+                [contenteditable] p {
+                    margin: 0.5rem 0;
+                    line-height: 1.5;
+                }
+                [contenteditable] p:first-child {
+                    margin-top: 0;
+                }
+                [contenteditable] p:last-child {
+                    margin-bottom: 0;
+                }
+                [contenteditable] strong,
+                [contenteditable] b {
+                    font-weight: 600;
+                }
+                [contenteditable] em,
+                [contenteditable] i {
+                    font-style: italic;
+                }
+                [contenteditable] u {
+                    text-decoration: underline;
                 }
             `}</style>
 
