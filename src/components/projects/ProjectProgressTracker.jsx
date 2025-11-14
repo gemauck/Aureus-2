@@ -868,7 +868,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     }
                     return p;
                 }));
-                
+
                 if (field === 'comments') {
                     const safeMonthName = String(month || '');
                     const monthIdx = months.indexOf(safeMonthName);
@@ -927,11 +927,32 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     
     // Handle save from modal
     const handleModalSave = async () => {
-        if (!modalData) return;
+        if (!modalData || saving) return;
         
         const { project, month, field, tempValue } = modalData;
         await saveProgressData(project, month, field, tempValue);
     };
+    
+    // Handle keyboard events for modal
+    useEffect(() => {
+        if (!isModalOpen) return;
+        
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                closeEditModal();
+            } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !saving && modalData) {
+                // Ctrl+Enter or Cmd+Enter to save
+                e.preventDefault();
+                const { project, month, field, tempValue } = modalData;
+                saveProgressData(project, month, field, tempValue);
+            }
+        };
+        
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [isModalOpen, saving, modalData]);
     
     // Render progress cell - clickable display cell that opens modal
     const renderProgressCell = (project, month, field, rowBgColor = '#ffffff', providedKey = null) => {
@@ -1653,7 +1674,104 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     )
                 )
             )
-        )
+        ),
+        // Modal for editing progress data
+        isModalOpen && modalData ? React.createElement('div', {
+            className: 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4',
+            onClick: (e) => {
+                // Close modal when clicking backdrop
+                if (e.target === e.currentTarget) {
+                    closeEditModal();
+                }
+            },
+            style: { zIndex: 9999 }
+        }, React.createElement('div', {
+            className: 'bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-xl',
+            onClick: (e) => e.stopPropagation()
+        },
+            // Modal header
+            React.createElement('div', {
+                className: 'flex justify-between items-center px-6 py-4 border-b border-gray-200 bg-gray-50'
+            },
+                React.createElement('div', null,
+                    React.createElement('h2', {
+                        className: 'text-lg font-semibold text-gray-900'
+                    }, modalData.field === 'comments' ? 'Edit Comments' : modalData.field === 'compliance' ? 'Edit Compliance Link' : 'Edit Data Link'),
+                    React.createElement('p', {
+                        className: 'text-sm text-gray-500 mt-1'
+                    }, `${modalData.project.name} • ${modalData.month} ${safeYear}`)
+                ),
+                React.createElement('button', {
+                    onClick: closeEditModal,
+                    className: 'text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-lg transition-colors',
+                    type: 'button'
+                }, React.createElement('i', { className: 'fas fa-times text-lg' }))
+            ),
+            // Modal body
+            React.createElement('div', {
+                className: 'p-6 overflow-y-auto',
+                style: { maxHeight: 'calc(90vh - 140px)' }
+            },
+                modalData.field === 'comments' ? React.createElement('textarea', {
+                    value: modalData.tempValue || '',
+                    onChange: (e) => handleModalInputChange(e.target.value),
+                    placeholder: 'Add comments...',
+                    rows: 10,
+                    className: 'w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical',
+                    style: {
+                        fontFamily: 'inherit',
+                        lineHeight: '1.5',
+                        minHeight: '200px'
+                    },
+                    autoFocus: true
+                }) : React.createElement('input', {
+                    type: 'text',
+                    value: modalData.tempValue || '',
+                    onChange: (e) => handleModalInputChange(e.target.value),
+                    placeholder: modalData.field === 'compliance' ? 'Enter compliance link...' : 'Enter data link...',
+                    className: 'w-full px-4 py-3 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent',
+                    autoFocus: true
+                }),
+                modalData.field !== 'comments' && modalData.tempValue && modalData.tempValue.trim() ? React.createElement('div', {
+                    className: 'mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg'
+                },
+                    React.createElement('p', {
+                        className: 'text-xs font-medium text-blue-900 mb-2'
+                    }, 'Preview:'),
+                    React.createElement('a', {
+                        href: modalData.tempValue.startsWith('http') ? modalData.tempValue : `https://${modalData.tempValue}`,
+                        target: '_blank',
+                        rel: 'noopener noreferrer',
+                        className: 'text-blue-600 hover:text-blue-800 text-sm break-all'
+                    }, modalData.tempValue)
+                ) : null
+            ),
+            // Modal footer
+            React.createElement('div', {
+                className: 'flex justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50'
+            },
+                React.createElement('button', {
+                    onClick: closeEditModal,
+                    type: 'button',
+                    className: 'px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors',
+                    disabled: saving
+                }, 'Cancel'),
+                React.createElement('button', {
+                    onClick: handleModalSave,
+                    type: 'button',
+                    className: 'px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2',
+                    disabled: saving
+                },
+                    saving ? [
+                        React.createElement('i', { key: 'icon', className: 'fas fa-spinner fa-spin' }),
+                        React.createElement('span', { key: 'text' }, 'Saving...')
+                    ] : [
+                        React.createElement('i', { key: 'icon', className: 'fas fa-save' }),
+                        React.createElement('span', { key: 'text' }, 'Save')
+                    ]
+                )
+            )
+        )) : null
     );
 };
 

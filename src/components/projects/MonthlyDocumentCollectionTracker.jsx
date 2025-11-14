@@ -79,6 +79,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         return [];
     };
     
+    // CRITICAL: Declare refs BEFORE useState that uses them
+    const isInitialMount = useRef(true);
+    const hasInitializedRef = useRef(false);
+    const lastLocalUpdateRef = useRef(Date.now());
+    const isSavingRef = useRef(false);
+    const debouncedSaveTimeoutRef = useRef(null);
+    const previousDocumentSectionsRef = useRef(project?.documentSections);
+    const previousProjectIdRef = useRef(project?.id);
+    
     // ULTRA AGGRESSIVE: Initialize sections from props, but check sessionStorage first to preserve saved sections
     const [sections, setSections] = useState(() => {
         console.log('📋 Initializing sections from project.documentSections:', project.documentSections);
@@ -145,27 +154,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [quickComment, setQuickComment] = useState(''); // For quick comment input
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 }); // Store popup position
     const commentPopupContainerRef = useRef(null); // Ref for comment popup scrollable container
-    
-    // Ref to track if this is the initial mount (prevent save on initial load)
-    const isInitialMount = useRef(true);
-    
-    // Ref to track if component has been initialized (prevents ANY syncing after first load)
-    const hasInitializedRef = useRef(false);
-    
-    // Ref to track when we last updated sections locally (to prevent sync from overwriting)
-    const lastLocalUpdateRef = useRef(Date.now());
-    
-    // Ref to track if we're currently saving to prevent sync during save
-    const isSavingRef = useRef(false);
-
-    // Ref to track pending debounced save timeout
-    const debouncedSaveTimeoutRef = useRef(null);
-    
-    // Ref to track previous documentSections value to avoid unnecessary syncing
-    const previousDocumentSectionsRef = useRef(project?.documentSections);
-    
-    // Track project ID to detect project changes
-    const previousProjectIdRef = useRef(project?.id);
     
     // Helper function to immediately save documentSections to database
     const immediatelySaveDocumentSections = async (sectionsToSave) => {
