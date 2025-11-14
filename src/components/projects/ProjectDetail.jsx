@@ -352,17 +352,25 @@ function initializeProjectDetail() {
     );
     
     // Sync hasDocumentCollectionProcess when project prop changes (e.g., after reloading from database)
+    // But only if it hasn't been explicitly changed by the user recently
     useEffect(() => {
         const normalizedValue = normalizeHasDocumentCollectionProcess(project.hasDocumentCollectionProcess);
         console.log('🔄 Syncing hasDocumentCollectionProcess from project prop:', {
             raw: project.hasDocumentCollectionProcess,
             normalized: normalizedValue,
             currentState: hasDocumentCollectionProcess,
-            projectId: project.id
+            projectId: project.id,
+            wasExplicitlyChanged: hasDocumentCollectionProcessChangedRef.current
         });
-        if (normalizedValue !== hasDocumentCollectionProcess) {
-            console.log('✅ Updating hasDocumentCollectionProcess state from', hasDocumentCollectionProcess, 'to', normalizedValue);
+        
+        // Only sync if:
+        // 1. The value actually changed, AND
+        // 2. It wasn't explicitly changed by the user (to prevent overwriting user changes)
+        if (normalizedValue !== hasDocumentCollectionProcess && !hasDocumentCollectionProcessChangedRef.current) {
+            console.log('✅ Syncing hasDocumentCollectionProcess to:', normalizedValue);
             setHasDocumentCollectionProcess(normalizedValue);
+        } else if (hasDocumentCollectionProcessChangedRef.current) {
+            console.log('⏭️ Skipping sync - hasDocumentCollectionProcess was explicitly changed by user');
         }
     }, [project.hasDocumentCollectionProcess, project.id]);
     
@@ -2234,9 +2242,17 @@ function initializeProjectDetail() {
             console.log('✅ Document Collection Process setup complete and persisted');
             
             // Reset flag after a short delay to allow any pending useEffect to complete
+            // Also reset the changed flag after a longer delay to allow sync to work on next load
             setTimeout(() => {
                 skipNextSaveRef.current = false;
             }, 2000);
+            
+            // Reset the changed flag after a longer delay to allow the value to sync from database on next load
+            // This ensures that when we navigate back, the value from the database will be used
+            setTimeout(() => {
+                hasDocumentCollectionProcessChangedRef.current = false;
+                console.log('🔄 Reset hasDocumentCollectionProcessChangedRef - ready for sync from database');
+            }, 5000);
         } catch (error) {
             console.error('❌ Error saving document collection process:', error);
             alert('Failed to save document collection process: ' + error.message);
