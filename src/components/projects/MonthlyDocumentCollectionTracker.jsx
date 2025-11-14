@@ -1467,6 +1467,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
 
     const handleDeleteComment = async (sectionId, documentId, month, commentId) => {
+        let updatedSections;
         // Get current user info
         const currentUser = getCurrentUser();
         
@@ -1495,7 +1496,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         // Use functional update to avoid race conditions
         setSections(currentSections => {
-            return currentSections.map(s => {
+            updatedSections = currentSections.map(s => {
                 if (s.id === sectionId) {
                     return {
                         ...s,
@@ -1516,58 +1517,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
                 return s;
             });
+            return updatedSections;
         });
 
-        // Save to database
-        try {
-            // Wait for DatabaseAPI if not immediately available
-            const waitForDatabaseAPI = async (maxWait = 5000, retryInterval = 100) => {
-                const startTime = Date.now();
-                while (Date.now() - startTime < maxWait) {
-                    if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
-                        return true;
-                    }
-                    await new Promise(resolve => setTimeout(resolve, retryInterval));
-                }
-                return false;
-            };
-            
-            if (!window.DatabaseAPI || typeof window.DatabaseAPI.updateProject !== 'function') {
-                console.log('⏳ MonthlyDocumentCollectionTracker: Waiting for DatabaseAPI for comment deletion...');
-                const apiAvailable = await waitForDatabaseAPI(5000, 100);
-                if (!apiAvailable) {
-                    throw new Error('DatabaseAPI.updateProject is not available after waiting. Please refresh the page.');
-                }
-                console.log('✅ DatabaseAPI is now available for comment deletion');
-            }
-            
-            const updatePayload = {
-                documentSections: JSON.stringify(updatedSections)
-            };
-            await window.DatabaseAPI.updateProject(project.id, updatePayload);
-            console.log('✅ Comment deletion saved to database');
-            
-            // Clear cache to ensure fresh data is loaded next time
-            if (window.DatabaseAPI && typeof window.DatabaseAPI.clearCache === 'function') {
-                window.DatabaseAPI.clearCache(`/projects/${project.id}`);
-                window.DatabaseAPI.clearCache('/projects');
-                console.log('🗑️ Cleared project cache after comment deletion');
-            }
-            
-            // Dispatch event to notify parent component
-            if (typeof window.dispatchEvent === 'function') {
-                window.dispatchEvent(new CustomEvent('projectUpdated', {
-                    detail: { projectId: project.id, field: 'documentSections' }
-                }));
-            }
-        } catch (error) {
-            console.error('❌ Error saving comment deletion to database:', error);
-            console.error('  - Error details:', {
-                message: error.message,
-                DatabaseAPI: typeof window.DatabaseAPI,
-                updateProject: typeof window.DatabaseAPI?.updateProject
-            });
-            alert('Failed to delete comment: ' + error.message);
+        // Immediately save to database to ensure persistence
+        if (updatedSections) {
+            await immediatelySaveDocumentSections(updatedSections);
         }
 
         // Log to audit trail

@@ -788,7 +788,7 @@ const ProjectsDatabaseFirst = () => {
                 </div>
             </div>
 
-            {/* Projects Grid */}
+            {/* Projects View */}
             <div className="space-y-4">
                 {filteredProjects.length === 0 ? (
                     <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl p-8 text-center`}>
@@ -809,7 +809,141 @@ const ProjectsDatabaseFirst = () => {
                             Add Project
                         </button>
                     </div>
+                ) : viewMode === 'list' ? (
+                    /* List View */
+                    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl overflow-hidden`}>
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead className={`${isDark ? 'bg-gray-700' : 'bg-gray-50'} border-b ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
+                                    <tr>
+                                        {showBulkActions && (
+                                            <th className="px-4 py-3 text-left">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedProjects.length === filteredProjects.length && filteredProjects.length > 0}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) {
+                                                            selectAllProjects();
+                                                        } else {
+                                                            clearSelection();
+                                                        }
+                                                    }}
+                                                    className={`w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 ${
+                                                        isDark ? 'bg-gray-700 border-gray-600' : ''
+                                                    }`}
+                                                />
+                                            </th>
+                                        )}
+                                        <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} uppercase tracking-wider`}>
+                                            Project
+                                        </th>
+                                        <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} uppercase tracking-wider`}>
+                                            Client
+                                        </th>
+                                        <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} uppercase tracking-wider`}>
+                                            Type
+                                        </th>
+                                        <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} uppercase tracking-wider`}>
+                                            Status
+                                        </th>
+                                        <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} uppercase tracking-wider`}>
+                                            Due Date
+                                        </th>
+                                        <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} uppercase tracking-wider`}>
+                                            Assigned To
+                                        </th>
+                                        <th className={`px-6 py-3 text-right text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} uppercase tracking-wider`}>
+                                            Actions
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody className={`${isDark ? 'bg-gray-800' : 'bg-white'} divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
+                                    {filteredProjects.map(project => (
+                                        <tr 
+                                            key={project.id}
+                                            className={`${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'} transition-colors ${
+                                                showBulkActions ? 'cursor-default' : 'cursor-pointer'
+                                            }`}
+                                            onClick={() => {
+                                                if (!showBulkActions) {
+                                                    setSelectedProject(project);
+                                                }
+                                            }}
+                                        >
+                                            {showBulkActions && (
+                                                <td className="px-4 py-4 whitespace-nowrap">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedProjects.includes(project.id)}
+                                                        onChange={(e) => {
+                                                            e.stopPropagation();
+                                                            toggleProjectSelection(project.id);
+                                                        }}
+                                                        className={`w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 ${
+                                                            isDark ? 'bg-gray-700 border-gray-600' : ''
+                                                        }`}
+                                                    />
+                                                </td>
+                                            )}
+                                            <td className={`px-6 py-4 whitespace-nowrap`}>
+                                                <div className={`font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                    {project.name}
+                                                </div>
+                                            </td>
+                                            <td className={`px-6 py-4 whitespace-nowrap`}>
+                                                <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                    {project.client}
+                                                </div>
+                                            </td>
+                                            <td className={`px-6 py-4 whitespace-nowrap`}>
+                                                <div className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                    {project.type}
+                                                </div>
+                                            </td>
+                                            <td className={`px-6 py-4 whitespace-nowrap`}>
+                                                <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                                    project.status === 'Active' ? 'bg-green-100 text-green-800' : 
+                                                    project.status === 'Completed' ? 'bg-blue-100 text-blue-800' :
+                                                    project.status === 'On Hold' ? 'bg-yellow-100 text-yellow-800' :
+                                                    'bg-gray-100 text-gray-800'
+                                                }`}>
+                                                    {project.status}
+                                                </span>
+                                            </td>
+                                            <td className={`px-6 py-4 whitespace-nowrap`}>
+                                                <div className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                    {project.dueDate ? new Date(project.dueDate).toLocaleDateString() : 'No due date'}
+                                                </div>
+                                            </td>
+                                            <td className={`px-6 py-4 whitespace-nowrap`}>
+                                                <div className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                    {project.assignedTo || 'Unassigned'}
+                                                </div>
+                                            </td>
+                                            <td className={`px-6 py-4 whitespace-nowrap text-right text-sm font-medium`}>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDeleteProject(project.id);
+                                                    }}
+                                                    className={`p-1 rounded-full transition-colors ${
+                                                        isDark 
+                                                            ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/20' 
+                                                            : 'text-gray-500 hover:text-red-600 hover:bg-red-50'
+                                                    }`}
+                                                    title="Delete Project"
+                                                >
+                                                    <i className="fas fa-trash text-sm"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 ) : (
+                    /* Grid View */
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {filteredProjects.map(project => (
                             <div 
