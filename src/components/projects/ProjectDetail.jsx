@@ -2179,8 +2179,14 @@ function initializeProjectDetail() {
             };
             
             console.log('💾 Immediately saving document collection process to database...');
+            console.log('📦 Update payload:', updatePayload);
             const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
             console.log('✅ Database save successful:', apiResponse);
+            console.log('🔍 API Response details:', {
+              hasData: !!apiResponse?.data,
+              project: apiResponse?.data?.project || apiResponse?.project || apiResponse?.data,
+              hasDocumentCollectionProcess: (apiResponse?.data?.project || apiResponse?.project || apiResponse?.data)?.hasDocumentCollectionProcess
+            });
             
             // Reload project from database to ensure state is in sync
             if (window.DatabaseAPI && typeof window.DatabaseAPI.getProject === 'function') {

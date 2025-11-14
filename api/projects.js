@@ -414,7 +414,8 @@ async function handler(req, res) {
         console.log('🔍 hasDocumentCollectionProcess in updateData:', {
           raw: body.hasDocumentCollectionProcess,
           processed: updateData.hasDocumentCollectionProcess,
-          type: typeof updateData.hasDocumentCollectionProcess
+          type: typeof updateData.hasDocumentCollectionProcess,
+          inUpdateData: 'hasDocumentCollectionProcess' in updateData
         })
         try {
           const project = await prisma.project.update({ 
@@ -422,6 +423,10 @@ async function handler(req, res) {
             data: updateData 
           })
           console.log('✅ Project updated successfully:', project.id)
+          console.log('🔍 hasDocumentCollectionProcess after update:', {
+            value: project.hasDocumentCollectionProcess,
+            type: typeof project.hasDocumentCollectionProcess
+          })
           return ok(res, { project })
         } catch (dbError) {
           console.error('❌ Database error updating project:', dbError)

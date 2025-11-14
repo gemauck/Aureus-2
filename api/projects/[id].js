@@ -33,7 +33,10 @@ async function handler(req, res) {
         console.log('🔍 Retrieved project from database:', {
           id: project.id,
           hasDocumentCollectionProcess: project.hasDocumentCollectionProcess,
-          type: typeof project.hasDocumentCollectionProcess
+          type: typeof project.hasDocumentCollectionProcess,
+          rawValue: project.hasDocumentCollectionProcess,
+          isTrue: project.hasDocumentCollectionProcess === true,
+          isStringTrue: project.hasDocumentCollectionProcess === 'true'
         })
         
         // Check if user is guest and has access to this project
