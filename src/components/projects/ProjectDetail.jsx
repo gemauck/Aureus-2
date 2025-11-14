@@ -732,7 +732,8 @@ function initializeProjectDetail() {
         nextCustomFieldDefinitions = customFieldDefinitions,
         nextDocuments = documents,
         nextHasDocumentCollectionProcess = hasDocumentCollectionProcess,
-        excludeHasDocumentCollectionProcess = false
+        excludeHasDocumentCollectionProcess = false,
+        excludeDocumentSections = true  // Default to true: don't overwrite documentSections managed by MonthlyDocumentCollectionTracker
     } = {}) => {
         try {
             console.log('💾 ProjectDetail: Saving project data changes...');
@@ -744,9 +745,17 @@ function initializeProjectDetail() {
                 taskLists: JSON.stringify(nextTaskLists),
                 tasksList: JSON.stringify(nextTasks),  // Note: backend uses 'tasksList' not 'tasks'
                 customFieldDefinitions: JSON.stringify(nextCustomFieldDefinitions),
-                documents: JSON.stringify(nextDocuments),
-                documentSections: serializedDocumentSections
+                documents: JSON.stringify(nextDocuments)
             };
+            
+            // Only include documentSections if not excluded
+            // This prevents overwriting changes made by MonthlyDocumentCollectionTracker
+            if (!excludeDocumentSections) {
+                updatePayload.documentSections = serializedDocumentSections;
+                console.log('  - Including documentSections in save');
+            } else {
+                console.log('  - Excluding documentSections from save (managed by MonthlyDocumentCollectionTracker)');
+            }
             
             // Only include hasDocumentCollectionProcess if not excluded
             // This prevents overwriting the database value when we don't want to save it
