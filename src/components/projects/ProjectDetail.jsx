@@ -789,13 +789,38 @@ function initializeProjectDetail() {
             return;
         }
         
-        if (saveTimeoutRef.current) {
-            clearTimeout(saveTimeoutRef.current);
-        }
+        // Don't save hasDocumentCollectionProcess if it matches the project prop
+        // This prevents overwriting the database value when the project is loaded
+        const projectHasProcess = project.hasDocumentCollectionProcess === true || 
+                                  project.hasDocumentCollectionProcess === 'true' ||
+                                  project.hasDocumentCollectionProcess === 1 ||
+                                  (typeof project.hasDocumentCollectionProcess === 'string' && project.hasDocumentCollectionProcess.toLowerCase() === 'true');
         
-        saveTimeoutRef.current = setTimeout(() => {
-            persistProjectData().catch(() => {});
-        }, 1500); // Increased debounce to 1.5 seconds to avoid excessive API calls
+        // Only include hasDocumentCollectionProcess in save if it differs from project prop
+        // This prevents overwriting the database value when navigating back
+        if (hasDocumentCollectionProcess === projectHasProcess) {
+            // If they match, use the project prop value to ensure we don't overwrite
+            // But we still need to save other changes, so we'll use a modified persistProjectData
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+            }
+            
+            saveTimeoutRef.current = setTimeout(() => {
+                // Save without hasDocumentCollectionProcess to avoid overwriting
+                persistProjectData({
+                    nextHasDocumentCollectionProcess: projectHasProcess // Use project prop value, not state
+                }).catch(() => {});
+            }, 1500);
+        } else {
+            // If they differ, save normally (this means user explicitly changed it)
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+            }
+            
+            saveTimeoutRef.current = setTimeout(() => {
+                persistProjectData().catch(() => {});
+            }, 1500);
+        }
         
         return () => {
             if (saveTimeoutRef.current) {
@@ -803,7 +828,7 @@ function initializeProjectDetail() {
                 saveTimeoutRef.current = null;
             }
         };
-    }, [tasks, taskLists, customFieldDefinitions, documents, hasDocumentCollectionProcess, persistProjectData]);
+    }, [tasks, taskLists, customFieldDefinitions, documents, hasDocumentCollectionProcess, project.hasDocumentCollectionProcess, persistProjectData, project]);
 
     // Get document status color
     const getDocumentStatusColor = (status) => {
