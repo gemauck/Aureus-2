@@ -93,6 +93,29 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     });
     const [showSectionModal, setShowSectionModal] = useState(false);
     const [showDocumentModal, setShowDocumentModal] = useState(false);
+
+  // Pause LiveDataSync when modals are open to prevent background refreshes from resetting form state
+  useEffect(() => {
+    const isModalOpen = showSectionModal || showDocumentModal;
+    if (isModalOpen) {
+      console.log('🛑 Pausing LiveDataSync - modal is open');
+      if (window.LiveDataSync && typeof window.LiveDataSync.pause === 'function') {
+        window.LiveDataSync.pause();
+      }
+    } else {
+      console.log('▶️ Resuming LiveDataSync - modal is closed');
+      if (window.LiveDataSync && typeof window.LiveDataSync.resume === 'function') {
+        window.LiveDataSync.resume();
+      }
+    }
+
+    // Cleanup: resume on unmount
+    return () => {
+      if (window.LiveDataSync && typeof window.LiveDataSync.resume === 'function') {
+        window.LiveDataSync.resume();
+      }
+    };
+  }, [showSectionModal, showDocumentModal]);
     const [editingSection, setEditingSection] = useState(null);
     const [editingDocument, setEditingDocument] = useState(null);
     const [editingSectionId, setEditingSectionId] = useState(null);

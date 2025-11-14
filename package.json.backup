@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start": "node server.js",
-    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev": "node server.js",
     "build": "npm run build:jsx && npm run build:css && npx prisma generate",
     "build:jsx": "node build-jsx.js",
     "build:css": "npx tailwindcss -i ./src/styles/main.css -o ./dist/styles.css --minify",
@@ -24,13 +24,7 @@
     "test:manufacturing": "node tests/manufacturing-browser-test.js",
     "predeploy": "npm run test:safety && npm run test",
     "validate:deps": "node scripts/validate-component-deps.js",
-    "precommit": "npm run validate:deps",
-    "dev:frontend": "cd frontend && vite",
-    "dev:backend": "node server.js",
-    "build:new": "cd frontend && vite build",
-    "preview": "cd frontend && vite preview",
-    "old:build": "npm run build:jsx && npm run build:css && npx prisma generate",
-    "old:start": "node server.js"
+    "precommit": "npm run validate:deps"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",
