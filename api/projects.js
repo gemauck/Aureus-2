@@ -401,7 +401,7 @@ async function handler(req, res) {
           comments: typeof body.comments === 'string' ? body.comments : JSON.stringify(body.comments),
           activityLog: typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(body.activityLog),
           notes: body.notes,
-          hasDocumentCollectionProcess: body.hasDocumentCollectionProcess !== undefined ? (body.hasDocumentCollectionProcess === true || body.hasDocumentCollectionProcess === 'true') : undefined,
+          hasDocumentCollectionProcess: body.hasDocumentCollectionProcess !== undefined ? Boolean(body.hasDocumentCollectionProcess === true || body.hasDocumentCollectionProcess === 'true' || body.hasDocumentCollectionProcess === 1) : undefined,
           documentSections: typeof body.documentSections === 'string' ? body.documentSections : JSON.stringify(body.documentSections)
         }
         Object.keys(updateData).forEach(key => {
@@ -411,6 +411,11 @@ async function handler(req, res) {
         })
         
         console.log('🔍 Updating project with data:', updateData)
+        console.log('🔍 hasDocumentCollectionProcess in updateData:', {
+          raw: body.hasDocumentCollectionProcess,
+          processed: updateData.hasDocumentCollectionProcess,
+          type: typeof updateData.hasDocumentCollectionProcess
+        })
         try {
           const project = await prisma.project.update({ 
             where: { id }, 

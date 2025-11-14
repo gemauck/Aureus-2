@@ -30,6 +30,12 @@ async function handler(req, res) {
         const project = await prisma.project.findUnique({ where: { id } })
         if (!project) return notFound(res)
         
+        console.log('🔍 Retrieved project from database:', {
+          id: project.id,
+          hasDocumentCollectionProcess: project.hasDocumentCollectionProcess,
+          type: typeof project.hasDocumentCollectionProcess
+        })
+        
         // Check if user is guest and has access to this project
         const userRole = req.user?.role?.toLowerCase();
         if (userRole === 'guest') {

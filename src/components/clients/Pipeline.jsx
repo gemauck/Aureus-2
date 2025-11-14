@@ -1286,6 +1286,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
     const handleDrop = async (e, targetStage) => {
         e.preventDefault();
+        e.stopPropagation();
         
         if (e?.dataTransfer) {
             e.dataTransfer.dropEffect = 'move';
@@ -1828,8 +1829,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
         return (
             <div
-                draggable
-                onDragStart={(e) => handleDragStart(e, item, item.type)}
+                draggable="true"
+                onDragStart={(e) => {
+                    e.stopPropagation();
+                    handleDragStart(e, item, item.type);
+                }}
                 onDragEnd={handleDragEnd}
                 onTouchStart={(e) => handleTouchStart(e, item, item.type)}
                 onClick={(e) => {
@@ -1853,7 +1857,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 style={{
                     WebkitTouchCallout: 'none',
                     WebkitUserSelect: 'none',
-                    userSelect: 'none'
+                    userSelect: 'none',
+                    pointerEvents: isDragging && draggedItem?.id === item.id ? 'none' : 'auto'
                 }}
             >
                 <div className="flex items-center justify-between gap-2">
@@ -1915,8 +1920,15 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         className={`flex-1 min-w-[240px] bg-gray-50 rounded-lg p-3 ${!isDragging ? 'transition-all' : ''} ${
                             isStageHighlighted ? 'ring-2 ring-blue-500 bg-blue-50' : ''
                         }`}
-                        onDragEnter={(e) => handleDragEnter(e, stage.name)}
-                        onDragOver={(e) => handleDragOver(e, stage.name)}
+                        onDragEnter={(e) => {
+                            e.preventDefault();
+                            handleDragEnter(e, stage.name);
+                        }}
+                        onDragOver={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDragOver(e, stage.name);
+                        }}
                         onDragLeave={(e) => handleDragLeave(e, stage.name)}
                         onDrop={(e) => handleDrop(e, stage.name)}
                     >
@@ -1952,7 +1964,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         <div className="space-y-3">
                             {stageItems.length === 0 ? (
                                 <div className={`text-center py-8 rounded-lg border-2 border-dashed ${!isDragging ? 'transition' : ''} ${
-                                    isDraggedOver ? 'border-primary-400 bg-primary-50' : 'border-gray-300'
+                                    (draggedOverStage === stage.name || (touchDragState && touchDragState.targetStage === stage.name)) ? 'border-primary-400 bg-primary-50' : 'border-gray-300'
                                 }`}>
                                     <i className="fas fa-inbox text-2xl text-gray-300 mb-2"></i>
                                     <p className="text-xs text-gray-400">No deals in this stage</p>

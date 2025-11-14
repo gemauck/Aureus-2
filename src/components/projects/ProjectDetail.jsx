@@ -1855,7 +1855,8 @@ function initializeProjectDetail() {
                     console.log('⚠️ Skipping self-assignment notification - user assigned task to themselves');
                 } else {
                     try {
-                        const projectLink = `/projects/${project.id}`;
+                        // Use hash-based routing format for email links (frontend uses hash routing)
+                        const projectLink = `#/projects/${project.id}`;
                         // Build task-specific link with anchor for direct navigation to task
                         const taskLink = updatedTaskData.id ? `${projectLink}#task-${updatedTaskData.id}` : projectLink;
                         console.log('📤 Sending task assignment notification', {
@@ -1920,7 +1921,8 @@ function initializeProjectDetail() {
                     console.log('⚠️ Skipping self-assignment notification - user assigned task to themselves');
                 } else {
                     try {
-                        const projectLink = `/projects/${project.id}`;
+                        // Use hash-based routing format for email links (frontend uses hash routing)
+                        const projectLink = `#/projects/${project.id}`;
                         // Build task-specific link with anchor for direct navigation to task
                         const taskLink = updatedTaskData.id ? `${projectLink}#task-${updatedTaskData.id}` : projectLink;
                         console.log('📤 Sending new task assignment notification', {

@@ -1,5 +1,6 @@
 // Email service using nodemailer
 import nodemailer from 'nodemailer';
+import { getAppUrl } from './getAppUrl.js';
 
 // Build transporter from environment variables
 // Supported envs:
@@ -470,8 +471,8 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
             .replace(/'/g, '&#039;');
     };
     
-    // Build base URL for comment link (use environment variable or default)
-    const baseUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    // Build base URL for comment link using getAppUrl() for proper production/development handling
+    const baseUrl = getAppUrl();
     // Handle hash-based routing links (starting with #) - they should be appended directly to base URL
     // Regular paths (starting with /) need to be appended with a slash
     let fullCommentLink = null;
