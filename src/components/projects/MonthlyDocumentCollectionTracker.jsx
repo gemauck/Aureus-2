@@ -259,8 +259,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
     };
 
-    // Sync sections from project prop ONLY on the very first mount of this project
-    // NEVER sync after initialization to prevent overwriting user input
+    // ULTRA AGGRESSIVE: Sync sections from project prop ONLY on the very first mount
+    // NEVER sync after initialization - local state is ALWAYS the source of truth
     useEffect(() => {
         // Check if project ID changed (switching to different project)
         const projectIdChanged = previousProjectIdRef.current !== project?.id;
@@ -270,23 +270,26 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             hasInitializedRef.current = false;
             isInitialMount.current = true;
             previousProjectIdRef.current = project?.id;
+            previousDocumentSectionsRef.current = null; // Reset to allow sync for new project
         }
         
-        // If already initialized for this project, NEVER sync - preserve user input
+        // ULTRA AGGRESSIVE: If already initialized, NEVER sync - even if prop changes
+        // Local state is the source of truth after initialization
         if (hasInitializedRef.current) {
-            console.log('⏭️ Component already initialized - NEVER syncing to preserve user input');
+            console.log('🛑 ULTRA AGGRESSIVE: Component initialized - BLOCKING all syncs to preserve user input');
                 return;
             }
             
-        // Only sync on the very first mount when local state is empty
-        if (project && project.documentSections !== undefined && isInitialMount.current) {
+        // Only sync on the very first mount when local state is empty AND we haven't initialized
+        if (project && project.documentSections !== undefined && isInitialMount.current && !hasInitializedRef.current) {
             const parsed = parseSections(project.documentSections);
             
             setSections(currentSections => {
-                // Only sync if local state is empty (initial mount)
+                // ULTRA AGGRESSIVE: Only sync if local state is completely empty
+                // Once we have ANY sections (even if user just added them), never sync again
                 if (currentSections.length === 0 && parsed.length > 0) {
                     console.log('🔄 Initial sync from project prop on first mount:', parsed.length, 'sections');
-                    hasInitializedRef.current = true; // Mark as initialized - never sync again
+                    hasInitializedRef.current = true; // Mark as initialized - NEVER sync again
                         isInitialMount.current = false;
                     lastLocalUpdateRef.current = Date.now();
                     previousDocumentSectionsRef.current = project.documentSections;
@@ -294,12 +297,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 } else if (currentSections.length === 0 && parsed.length === 0) {
                     // Empty state - mark as initialized but don't change state
                     console.log('✅ Component initialized with empty sections');
-                    hasInitializedRef.current = true;
+                    hasInitializedRef.current = true; // Mark as initialized - NEVER sync again
                     isInitialMount.current = false;
                 } else if (currentSections.length > 0) {
-                    // Already have sections (user added them) - mark initialized, don't overwrite
-                    console.log('⏭️ Local sections exist - marking initialized, preserving user input');
-                    hasInitializedRef.current = true;
+                    // ULTRA AGGRESSIVE: If we have ANY sections, mark initialized and NEVER sync
+                    console.log('🛑 ULTRA AGGRESSIVE: Local sections exist - marking initialized, BLOCKING all future syncs');
+                    hasInitializedRef.current = true; // Mark as initialized - NEVER sync again
                     isInitialMount.current = false;
                 }
                 return currentSections;
