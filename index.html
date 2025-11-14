@@ -569,7 +569,12 @@
     <script>
         // Wait for React to be available before loading Vite module
         function loadViteProjectsModule() {
-            if (typeof window.React !== 'undefined' && window.React !== null) {
+            // More robust check - ensure React and its hooks are available
+            if (typeof window.React !== 'undefined' && 
+                window.React !== null && 
+                typeof window.React.useState === 'function' &&
+                typeof window.React.useEffect === 'function' &&
+                typeof window.React.useRef === 'function') {
                 const script = document.createElement('script');
                 script.type = 'module';
                 script.src = './dist/vite-projects/projects-module.js?v=20251114-vite-integration';
