@@ -1,6 +1,6 @@
 // Get dependencies from window
 const React = window.React;
-const { useState, useEffect, useCallback, useMemo } = React;
+const { useState, useEffect, useCallback, useMemo, useRef } = React;
 
 const getWindowStorage = () => {
     if (typeof window === 'undefined') {
@@ -120,6 +120,9 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
     const [fallbackDeal, setFallbackDeal] = useState(null); // { type: 'lead' | 'opportunity', id, data, client }
     const [listSortColumn, setListSortColumn] = useState(null);
     const [listSortDirection, setListSortDirection] = useState('asc');
+    
+    // Use ref to persist drag data across events (survives state clearing)
+    const dragDataRef = useRef(null); // { item, type, itemId }
 
     useEffect(() => {
         try {
@@ -1143,6 +1146,14 @@ function doesOpportunityBelongToClient(opportunity, client) {
     const handleDragStart = (event, item, type) => {
         console.log('🎬 Pipeline: Drag start', { itemId: item.id, itemName: item.name, type, currentStage: item.stage });
         
+        // Store drag data in ref for persistence (survives state clearing)
+        dragDataRef.current = {
+            item: item,
+            type: type,
+            itemId: item.id,
+            timestamp: Date.now()
+        };
+        
         if (event?.dataTransfer) {
             try {
                 const payload = JSON.stringify({ id: item.id, type });
@@ -1292,15 +1303,33 @@ function doesOpportunityBelongToClient(opportunity, client) {
         e.preventDefault();
         e.stopPropagation();
         
-        console.log('🎯 Pipeline: Drop event triggered', { targetStage, draggedItem: draggedItem?.id, draggedType });
+        console.log('🎯 Pipeline: Drop event triggered', { 
+            targetStage, 
+            draggedItem: draggedItem?.id, 
+            draggedType,
+            dragDataRef: dragDataRef.current?.itemId 
+        });
         
         if (e?.dataTransfer) {
             e.dataTransfer.dropEffect = 'move';
         }
         
+        // Priority 1: Use state (most reliable if still available)
         let currentDraggedItem = draggedItem;
         let currentDraggedType = draggedType;
-
+        
+        // Priority 2: Use ref (persists even if state was cleared)
+        if ((!currentDraggedItem || !currentDraggedType) && dragDataRef.current) {
+            console.log('📦 Pipeline: Recovering from dragDataRef', { 
+                itemId: dragDataRef.current.itemId,
+                type: dragDataRef.current.type,
+                age: Date.now() - dragDataRef.current.timestamp
+            });
+            currentDraggedItem = dragDataRef.current.item;
+            currentDraggedType = dragDataRef.current.type;
+        }
+        
+        // Priority 3: Try to recover from dataTransfer
         if ((!currentDraggedItem || !currentDraggedType) && e?.dataTransfer) {
             const rawPayload = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
             console.log('📦 Pipeline: Attempting to recover from dataTransfer', { rawPayload });
@@ -1308,18 +1337,36 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 try {
                     const parsed = JSON.parse(rawPayload);
                     const fallbackItem = getPipelineItems().find(
-                        (item) => item.id === parsed.id && (!parsed.type || item.type === parsed.type)
+                        (item) => String(item.id) === String(parsed.id) && (!parsed.type || item.type === parsed.type)
                     );
                     if (fallbackItem) {
                         currentDraggedItem = fallbackItem;
                         currentDraggedType = fallbackItem.type;
                         console.log('✅ Pipeline: Recovered item from dataTransfer', { item: fallbackItem.name, type: fallbackItem.type });
                     } else {
-                        console.warn('⚠️ Pipeline: Could not find item in pipeline items', { parsed, totalItems: getPipelineItems().length });
+                        console.warn('⚠️ Pipeline: Could not find item in pipeline items', { 
+                            parsed, 
+                            totalItems: getPipelineItems().length,
+                            availableIds: getPipelineItems().slice(0, 5).map(i => ({ id: i.id, type: i.type, name: i.name }))
+                        });
                     }
                 } catch (error) {
                     console.warn('⚠️ Pipeline: Failed to parse drag payload', error);
                 }
+            }
+        }
+        
+        // Priority 4: Last resort - try to find by ID from ref if we have it
+        if ((!currentDraggedItem || !currentDraggedType) && dragDataRef.current?.itemId) {
+            console.log('📦 Pipeline: Last resort recovery - searching by ID', { itemId: dragDataRef.current.itemId });
+            const allItems = getPipelineItems();
+            const foundItem = allItems.find(
+                (item) => String(item.id) === String(dragDataRef.current.itemId)
+            );
+            if (foundItem) {
+                currentDraggedItem = foundItem;
+                currentDraggedType = foundItem.type;
+                console.log('✅ Pipeline: Found item by ID', { item: foundItem.name, type: foundItem.type });
             }
         }
 
@@ -1446,12 +1493,20 @@ function doesOpportunityBelongToClient(opportunity, client) {
             setDraggedOverStage(null);
             setTouchDragState(null);
             setJustDragged(true);
-            setTimeout(() => setJustDragged(false), 300);
+            // Clear ref after a delay to allow any pending operations to complete
+            setTimeout(() => {
+                dragDataRef.current = null;
+                setJustDragged(false);
+            }, 300);
         }
     };
 
     const handleDragEnd = (e) => {
-        console.log('🏁 Pipeline: Drag end', { draggedItem: draggedItem?.id, dropEffect: e?.dataTransfer?.dropEffect });
+        console.log('🏁 Pipeline: Drag end', { 
+            draggedItem: draggedItem?.id, 
+            dropEffect: e?.dataTransfer?.dropEffect,
+            dragDataRef: dragDataRef.current?.itemId
+        });
         // Don't clear state immediately - let the drop handler do it
         // This prevents race conditions where dragEnd fires before drop
         // The drop handler will clear state in its finally block
@@ -1462,6 +1517,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
             setDraggedType(null);
             setIsDragging(false);
             setDraggedOverStage(null);
+            // Keep ref for a bit in case drop fires late
+            setTimeout(() => {
+                dragDataRef.current = null;
+            }, 500);
         }
     };
 
@@ -2010,14 +2069,17 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
                         {/* Cards */}
                         <div 
-                            className="space-y-3"
+                            className="space-y-3 min-h-[100px]"
                             onDragOver={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
+                                // Ensure the parent stage also gets the dragover
+                                handleDragOver(e, stage.name);
                             }}
                             onDrop={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
+                                console.log('🎯 Pipeline: Drop on cards container', { stage: stage.name });
                                 handleDrop(e, stage.name);
                             }}
                         >

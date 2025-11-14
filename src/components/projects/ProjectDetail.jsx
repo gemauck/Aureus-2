@@ -2207,8 +2207,37 @@ function initializeProjectDetail() {
             });
             
             // Reload project from database to ensure state is in sync
+            // Also clear any cache to ensure we get fresh data
             if (window.DatabaseAPI && typeof window.DatabaseAPI.getProject === 'function') {
                 try {
+                    // Clear cache for this project to ensure we get fresh data
+                    if (window.DatabaseAPI._responseCache) {
+                        const cacheKeysToDelete = [];
+                        window.DatabaseAPI._responseCache.forEach((value, key) => {
+                            if (key.includes(`/projects/${project.id}`) || key.includes(`projects/${project.id}`)) {
+                                cacheKeysToDelete.push(key);
+                            }
+                        });
+                        cacheKeysToDelete.forEach(key => {
+                            window.DatabaseAPI._responseCache.delete(key);
+                            console.log('🗑️ Cleared cache for:', key);
+                        });
+                    }
+                    
+                    // Also clear projects list cache to ensure fresh data
+                    if (window.DatabaseAPI._responseCache) {
+                        const projectsListCacheKeys = [];
+                        window.DatabaseAPI._responseCache.forEach((value, key) => {
+                            if (key.includes('/projects') && !key.includes(`/projects/${project.id}`)) {
+                                projectsListCacheKeys.push(key);
+                            }
+                        });
+                        projectsListCacheKeys.forEach(key => {
+                            window.DatabaseAPI._responseCache.delete(key);
+                            console.log('🗑️ Cleared projects list cache:', key);
+                        });
+                    }
+                    
                     const refreshedProject = await window.DatabaseAPI.getProject(project.id);
                     const updatedProject = refreshedProject?.data?.project || refreshedProject?.project || refreshedProject?.data;
                     if (updatedProject) {
