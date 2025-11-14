@@ -89,6 +89,7 @@ async function handler(req, res) {
             updatedAt: true,
             monthlyProgress: true,
             tasksList: true, // Include to count tasks stored in JSON
+            hasDocumentCollectionProcess: true, // Include to show Document Collection tab in list
             _count: {
               select: {
                 tasks: true
