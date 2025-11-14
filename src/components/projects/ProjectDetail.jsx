@@ -1169,9 +1169,9 @@ function initializeProjectDetail() {
         }
 
         const projectLink = project ? `/projects/${project.id}` : '/projects';
-        const taskId = updatedTargetTask.id || taskId;
+        const finalTaskId = updatedTargetTask.id || taskId;
         // Build task-specific link with anchor for direct navigation to task
-        const taskLink = taskId ? `${projectLink}#task-${taskId}` : projectLink;
+        const taskLink = finalTaskId ? `${projectLink}#task-${finalTaskId}` : projectLink;
         const taskTitle = updatedTargetTask.title || originalTask.title || 'Task';
         const projectName = project?.name || 'Project';
 
@@ -1186,7 +1186,7 @@ function initializeProjectDetail() {
                     {
                         projectId: project?.id,
                         projectName,
-                        taskId: taskId,
+                        taskId: finalTaskId,
                         taskTitle
                     }
                 );
@@ -1225,7 +1225,7 @@ function initializeProjectDetail() {
                     message: `${currentUser.name} commented on "${taskTitle}" in project "${projectName}": "${commentText.substring(0, 100)}${commentText.length > 100 ? '...' : ''}"`,
                     link: taskLink, // Use task-specific link
                     metadata: {
-                        taskId: taskId,
+                        taskId: finalTaskId,
                         taskTitle,
                         projectId: project?.id,
                         projectName,
