@@ -36,7 +36,16 @@ async function handler(req, res) {
           type: typeof project.hasDocumentCollectionProcess,
           rawValue: project.hasDocumentCollectionProcess,
           isTrue: project.hasDocumentCollectionProcess === true,
-          isStringTrue: project.hasDocumentCollectionProcess === 'true'
+          isStringTrue: project.hasDocumentCollectionProcess === 'true',
+          isNull: project.hasDocumentCollectionProcess === null,
+          isUndefined: project.hasDocumentCollectionProcess === undefined
+        })
+        // Also log the raw Prisma result to see what's actually in the database
+        console.log('🔍 Raw Prisma project object (hasDocumentCollectionProcess field):', {
+          fieldExists: 'hasDocumentCollectionProcess' in project,
+          value: project.hasDocumentCollectionProcess,
+          valueType: typeof project.hasDocumentCollectionProcess,
+          valueConstructor: project.hasDocumentCollectionProcess?.constructor?.name
         })
         
         // Check if user is guest and has access to this project

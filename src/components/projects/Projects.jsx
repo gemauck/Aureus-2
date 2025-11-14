@@ -1076,7 +1076,17 @@ const Projects = () => {
             console.log('🔍 hasDocumentCollectionProcess value:', {
                 raw: fullProject.hasDocumentCollectionProcess,
                 normalized: normalizedProject.hasDocumentCollectionProcess,
-                type: typeof fullProject.hasDocumentCollectionProcess
+                type: typeof fullProject.hasDocumentCollectionProcess,
+                isTrue: fullProject.hasDocumentCollectionProcess === true,
+                isStringTrue: fullProject.hasDocumentCollectionProcess === 'true',
+                fullProjectKeys: Object.keys(fullProject).filter(k => k.includes('Document') || k.includes('document'))
+            });
+            console.log('🔍 Full API response structure:', {
+                hasData: !!response?.data,
+                hasProject: !!response?.data?.project,
+                responseKeys: Object.keys(response || {}),
+                dataKeys: response?.data ? Object.keys(response.data) : [],
+                projectKeys: response?.data?.project ? Object.keys(response.data.project).filter(k => k.includes('Document') || k.includes('document')) : []
             });
             
             // Expose a function to update viewingProject from child components
