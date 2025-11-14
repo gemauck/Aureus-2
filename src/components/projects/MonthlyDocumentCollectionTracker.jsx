@@ -198,13 +198,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
             }
             
-            // Trigger event to notify parent component
-            if (typeof window.dispatchEvent === 'function') {
-                window.dispatchEvent(new CustomEvent('projectUpdated', {
-                    detail: { projectId: project.id, field: 'documentSections' }
-                }));
-                console.log('📢 Dispatched projectUpdated event');
-            }
+            // DISABLED: Don't dispatch projectUpdated event - it causes parent to refresh
+            // which then triggers sync and overwrites user input
+            console.log('✅ Immediate save completed - parent will get fresh data on next navigation');
             
             // Reset saving flag after a delay
             setTimeout(() => {
