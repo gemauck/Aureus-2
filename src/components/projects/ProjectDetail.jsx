@@ -2214,9 +2214,18 @@ function initializeProjectDetail() {
                     if (updatedProject) {
                         // Update the project prop by triggering a re-render with updated data
                         // This ensures the component has the latest data from the database
-                        console.log('🔄 Reloaded project from database:', updatedProject.hasDocumentCollectionProcess);
-                        // Force update by updating the project state if there's a way to do it
-                        // The useEffect should pick up the change via the project prop
+                        console.log('🔄 Reloaded project from database:', {
+                            hasDocumentCollectionProcess: updatedProject.hasDocumentCollectionProcess,
+                            type: typeof updatedProject.hasDocumentCollectionProcess,
+                            isTrue: updatedProject.hasDocumentCollectionProcess === true
+                        });
+                        
+                        // Try to update parent component's viewingProject state if possible
+                        // This ensures the prop is updated immediately
+                        if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                            console.log('🔄 Updating parent viewingProject state');
+                            window.updateViewingProject(updatedProject);
+                        }
                     }
                 } catch (reloadError) {
                     console.warn('⚠️ Failed to reload project after save:', reloadError);
@@ -2251,18 +2260,20 @@ function initializeProjectDetail() {
             
             console.log('✅ Document Collection Process setup complete and persisted');
             
-            // Reset flag after a short delay to allow any pending useEffect to complete
-            // Also reset the changed flag after a longer delay to allow sync to work on next load
+            // Keep the flag set for longer to prevent any debounced saves from overwriting
+            // Reset flag after a delay to allow any pending useEffect to complete
             setTimeout(() => {
                 skipNextSaveRef.current = false;
-            }, 2000);
+                console.log('🔄 Reset skipNextSaveRef - debounced saves can now proceed');
+            }, 3000);
             
-            // Reset the changed flag after a longer delay to allow the value to sync from database on next load
+            // Keep the changed flag set for even longer to prevent sync from overwriting
             // This ensures that when we navigate back, the value from the database will be used
+            // But we don't want to reset it too early, or the sync might overwrite it
             setTimeout(() => {
                 hasDocumentCollectionProcessChangedRef.current = false;
                 console.log('🔄 Reset hasDocumentCollectionProcessChangedRef - ready for sync from database');
-            }, 5000);
+            }, 10000); // Increased to 10 seconds to ensure navigation completes
         } catch (error) {
             console.error('❌ Error saving document collection process:', error);
             alert('Failed to save document collection process: ' + error.message);

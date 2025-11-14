@@ -1450,11 +1450,19 @@ function doesOpportunityBelongToClient(opportunity, client) {
         }
     };
 
-    const handleDragEnd = () => {
-        setDraggedItem(null);
-        setDraggedType(null);
-        setIsDragging(false);
-        setDraggedOverStage(null);
+    const handleDragEnd = (e) => {
+        console.log('🏁 Pipeline: Drag end', { draggedItem: draggedItem?.id, dropEffect: e?.dataTransfer?.dropEffect });
+        // Don't clear state immediately - let the drop handler do it
+        // This prevents race conditions where dragEnd fires before drop
+        // The drop handler will clear state in its finally block
+        // Only clear if dropEffect indicates the drop was not accepted
+        if (e?.dataTransfer?.dropEffect === 'none') {
+            console.log('⚠️ Pipeline: Drop was rejected, clearing drag state');
+            setDraggedItem(null);
+            setDraggedType(null);
+            setIsDragging(false);
+            setDraggedOverStage(null);
+        }
     };
 
     // Mobile touch drag handlers - use document-level listeners for better mobile support
@@ -1966,7 +1974,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             handleDragOver(e, stage.name);
                         }}
                         onDragLeave={(e) => handleDragLeave(e, stage.name)}
-                        onDrop={(e) => handleDrop(e, stage.name)}
+                        onDrop={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDrop(e, stage.name);
+                        }}
                     >
                         {/* Stage Header */}
                         <div className="mb-2 px-1">
