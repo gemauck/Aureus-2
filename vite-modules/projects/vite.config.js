@@ -74,6 +74,11 @@ const reactWindowPlugin = () => {
             }
           }
           
+          // CRITICAL: Store React instance in a way that persists and can't be garbage collected
+          // We create a closure that always references the React instance
+          // This ensures the hooks always have access to React even if window.React changes
+          const _reactInstance = ReactInstance;
+          
           // Get ReactDOM (optional, may be null)
           function getReactDOM() {
             if (typeof window !== 'undefined' && window.ReactDOM && window.ReactDOM !== null) {
@@ -88,8 +93,10 @@ const reactWindowPlugin = () => {
           // This allows dynamic access for JSX, but hooks MUST be direct references
           const ReactProxy = new Proxy({}, {
             get(target, prop) {
-              // Always get fresh React instance from window
-              const react = typeof window !== 'undefined' && window.React ? window.React : ReactInstance;
+              // Always get fresh React instance from window, fallback to captured instance
+              const react = typeof window !== 'undefined' && window.React && window.React !== null 
+                ? window.React 
+                : _reactInstance;
               return react[prop];
             }
           });
@@ -98,14 +105,15 @@ const reactWindowPlugin = () => {
           // React's hook system tracks hooks by function identity and call order
           // We CANNOT wrap, bind, or modify these functions in any way
           // These must be the exact same functions that React uses internally
-          // index.html ensures React is loaded before this module, so ReactInstance is valid
-          export const useState = ReactInstance.useState;
-          export const useEffect = ReactInstance.useEffect;
-          export const useRef = ReactInstance.useRef;
-          export const useCallback = ReactInstance.useCallback;
-          export const useMemo = ReactInstance.useMemo;
-          export const useLayoutEffect = ReactInstance.useLayoutEffect;
-          export const createElement = ReactInstance.createElement;
+          // We use _reactInstance (captured in closure) to ensure the reference persists
+          // index.html ensures React is loaded before this module, so _reactInstance is valid
+          export const useState = _reactInstance.useState;
+          export const useEffect = _reactInstance.useEffect;
+          export const useRef = _reactInstance.useRef;
+          export const useCallback = _reactInstance.useCallback;
+          export const useMemo = _reactInstance.useMemo;
+          export const useLayoutEffect = _reactInstance.useLayoutEffect;
+          export const createElement = _reactInstance.createElement;
           
           // Export React components and utilities (these are static, can use captured instance)
           export const Fragment = ReactInstance.Fragment;
