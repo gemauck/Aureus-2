@@ -723,7 +723,8 @@ function initializeProjectDetail() {
         nextTaskLists = taskLists,
         nextCustomFieldDefinitions = customFieldDefinitions,
         nextDocuments = documents,
-        nextHasDocumentCollectionProcess = hasDocumentCollectionProcess
+        nextHasDocumentCollectionProcess = hasDocumentCollectionProcess,
+        excludeHasDocumentCollectionProcess = false
     } = {}) => {
         try {
             console.log('💾 ProjectDetail: Saving project data changes...');
@@ -736,9 +737,14 @@ function initializeProjectDetail() {
                 tasksList: JSON.stringify(nextTasks),  // Note: backend uses 'tasksList' not 'tasks'
                 customFieldDefinitions: JSON.stringify(nextCustomFieldDefinitions),
                 documents: JSON.stringify(nextDocuments),
-                hasDocumentCollectionProcess: nextHasDocumentCollectionProcess,
                 documentSections: serializedDocumentSections
             };
+            
+            // Only include hasDocumentCollectionProcess if not excluded
+            // This prevents overwriting the database value when we don't want to save it
+            if (!excludeHasDocumentCollectionProcess) {
+                updatePayload.hasDocumentCollectionProcess = nextHasDocumentCollectionProcess;
+            }
             
             console.log('📡 Sending update to database:', updatePayload);
             
@@ -780,6 +786,9 @@ function initializeProjectDetail() {
         }
     }, [project.id, serializedDocumentSections, documentSectionsArray, tasks, taskLists, customFieldDefinitions, documents, hasDocumentCollectionProcess]);
     
+    // Track if hasDocumentCollectionProcess was explicitly changed by user
+    const hasDocumentCollectionProcessChangedRef = useRef(false);
+    
     // Save back to project whenever they change
     useEffect(() => {
         // Skip save if this was triggered by manual document collection process addition
@@ -795,21 +804,31 @@ function initializeProjectDetail() {
                                   project.hasDocumentCollectionProcess === 1 ||
                                   (typeof project.hasDocumentCollectionProcess === 'string' && project.hasDocumentCollectionProcess.toLowerCase() === 'true');
         
-        // Always use project prop value for hasDocumentCollectionProcess in debounced saves
-        // This prevents overwriting the database value when the project is loaded
-        // Only use state value if it was explicitly changed (different from project prop)
-        const valueToSave = (hasDocumentCollectionProcess !== projectHasProcess) 
-            ? hasDocumentCollectionProcess  // User explicitly changed it
-            : projectHasProcess;           // Use project prop value to avoid overwriting
+        // Only include hasDocumentCollectionProcess in save if:
+        // 1. It was explicitly changed by the user (tracked by ref), OR
+        // 2. It differs from the project prop (meaning user changed it)
+        // Otherwise, exclude it from the save to prevent overwriting the database value
+        const shouldIncludeHasProcess = hasDocumentCollectionProcessChangedRef.current || 
+                                       (hasDocumentCollectionProcess !== projectHasProcess);
         
         if (saveTimeoutRef.current) {
             clearTimeout(saveTimeoutRef.current);
         }
         
         saveTimeoutRef.current = setTimeout(() => {
-            persistProjectData({
-                nextHasDocumentCollectionProcess: valueToSave
-            }).catch(() => {});
+            if (shouldIncludeHasProcess) {
+                // Include hasDocumentCollectionProcess in save
+                persistProjectData({
+                    nextHasDocumentCollectionProcess: hasDocumentCollectionProcess
+                }).catch(() => {});
+                // Reset the flag after saving
+                hasDocumentCollectionProcessChangedRef.current = false;
+            } else {
+                // Exclude hasDocumentCollectionProcess from save to prevent overwriting database value
+                persistProjectData({
+                    excludeHasDocumentCollectionProcess: true
+                }).catch(() => {});
+            }
         }, 1500); // Increased debounce to 1.5 seconds to avoid excessive API calls
         
         return () => {
@@ -2140,6 +2159,8 @@ function initializeProjectDetail() {
         try {
             // Set flag to skip the useEffect save to prevent duplicates
             skipNextSaveRef.current = true;
+            // Mark that hasDocumentCollectionProcess was explicitly changed
+            hasDocumentCollectionProcessChangedRef.current = true;
             
             // Update state first
             setHasDocumentCollectionProcess(true);
