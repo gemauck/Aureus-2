@@ -397,18 +397,106 @@ const MainLayout = () => {
         return () => <div className="text-center py-12 text-gray-500">Projects loading...</div>;
     }, [projectsComponentReady]);
     
+    // Users component loading state
+    const [usersComponentReady, setUsersComponentReady] = React.useState(
+        !!(window.UserManagement || window.Users)
+    );
+    
+    React.useEffect(() => {
+        const checkUsers = () => {
+            const UsersComponent = window.UserManagement || window.Users;
+            const isValidComponent = UsersComponent && typeof UsersComponent === 'function';
+            if (isValidComponent && !usersComponentReady) {
+                console.log('✅ MainLayout: Users component became available');
+                setUsersComponentReady(true);
+                return true;
+            }
+            return false;
+        };
+        
+        if (checkUsers()) return;
+        
+        const interval = setInterval(() => {
+            if (!usersComponentReady) {
+                checkUsers();
+            } else {
+                clearInterval(interval);
+            }
+        }, 500);
+        
+        const timeout = setTimeout(() => {
+            clearInterval(interval);
+            if (!usersComponentReady) {
+                console.warn('⚠️ MainLayout: Users component not loaded after 20 seconds');
+            }
+        }, 20000);
+        
+        return () => {
+            clearInterval(interval);
+            clearTimeout(timeout);
+        };
+    }, [usersComponentReady]);
+    
+    // Manufacturing component loading state
+    const [manufacturingComponentReady, setManufacturingComponentReady] = React.useState(
+        !!(window.Manufacturing && typeof window.Manufacturing === 'function')
+    );
+    
+    React.useEffect(() => {
+        const checkManufacturing = () => {
+            const ManufacturingComponent = window.Manufacturing;
+            const isValidComponent = ManufacturingComponent && typeof ManufacturingComponent === 'function';
+            if (isValidComponent && !manufacturingComponentReady) {
+                console.log('✅ MainLayout: Manufacturing component became available');
+                setManufacturingComponentReady(true);
+                return true;
+            }
+            return false;
+        };
+        
+        if (checkManufacturing()) return;
+        
+        const interval = setInterval(() => {
+            if (!manufacturingComponentReady) {
+                checkManufacturing();
+            } else {
+                clearInterval(interval);
+            }
+        }, 500);
+        
+        const timeout = setTimeout(() => {
+            clearInterval(interval);
+            if (!manufacturingComponentReady) {
+                console.warn('⚠️ MainLayout: Manufacturing component not loaded after 20 seconds');
+            }
+        }, 20000);
+        
+        return () => {
+            clearInterval(interval);
+            clearTimeout(timeout);
+        };
+    }, [manufacturingComponentReady]);
+    
     const Teams = window.Teams || window.TeamsSimple || (() => <div className="text-center py-12 text-gray-500">Teams module loading...</div>);
-    const Users = window.UserManagement || window.Users || (() => {
-        console.warn('⚠️ MainLayout: Users component not found.');
-        return <div className="text-center py-12 text-gray-500">Users component loading...</div>;
-    });
+    
+    const Users = React.useMemo(() => {
+        const UsersComponent = window.UserManagement || window.Users;
+        if (UsersComponent) {
+            return UsersComponent;
+        }
+        return () => <div className="text-center py-12 text-gray-500">Users component loading...</div>;
+    }, [usersComponentReady]);
     
     const PasswordChangeModal = window.PasswordChangeModal;
     const TimeTracking = window.TimeTracking || window.TimeTrackingDatabaseFirst || (() => <div className="text-center py-12 text-gray-500">Time Tracking loading...</div>);
-    const Manufacturing = window.Manufacturing || (() => {
-        console.warn('⚠️ Manufacturing component not loaded yet.');
-        return <div className="text-center py-12 text-gray-500">Manufacturing loading...</div>;
-    });
+    
+    const Manufacturing = React.useMemo(() => {
+        const ManufacturingComponent = window.Manufacturing;
+        if (ManufacturingComponent) {
+            return ManufacturingComponent;
+        }
+        return () => <div className="text-center py-12 text-gray-500">Manufacturing loading...</div>;
+    }, [manufacturingComponentReady]);
     
     const [serviceMaintenanceReady, setServiceMaintenanceReady] = React.useState(
         !!(window.ServiceAndMaintenance && typeof window.ServiceAndMaintenance === 'function')

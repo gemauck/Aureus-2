@@ -309,9 +309,23 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     useEffect(() => {
         // Skip save on initial mount to prevent duplicate saves when component first loads
-        if (isInitialMount.current) {
+        if (isInitialMount.current || !hasInitializedRef.current) {
             console.log('⏭️ MonthlyDocumentCollectionTracker: Skipping save on initial mount');
-            isInitialMount.current = false;
+            if (isInitialMount.current) {
+                isInitialMount.current = false;
+            }
+            return;
+        }
+        
+        // Skip save if any modal is open (user is actively editing)
+        if (showSectionModal || showDocumentModal || editingSection || editingDocument) {
+            console.log('⏭️ MonthlyDocumentCollectionTracker: Skipping save - modal/form is open');
+            return;
+        }
+        
+        // Skip save if sections are empty (unless explicitly saving)
+        if (sections.length === 0) {
+            console.log('⏭️ MonthlyDocumentCollectionTracker: Skipping save - no sections to save');
             return;
         }
         

@@ -2081,6 +2081,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
     // We check dragDataRef.current directly to avoid stale closure issues
     useEffect(() => {
         let dragOverCount = 0;
+        let lastLogTime = 0;
+        
         const globalDragOver = (e) => {
             // Check if we're dragging a pipeline item (use ref to avoid stale closure)
             const hasPipelineDrag = dragDataRef.current !== null;
@@ -2089,16 +2091,34 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 // ALWAYS preventDefault for pipeline drags - this is required for drop to fire
                 e.preventDefault();
                 dragOverCount++;
-                // Log every 50th dragover to verify it's firing
-                if (dragOverCount % 50 === 0) {
+                
+                // Log every 100ms to verify it's firing (throttled)
+                const now = Date.now();
+                if (now - lastLogTime > 100) {
                     console.log('🔄 Pipeline: Global dragover handler firing', { 
                         count: dragOverCount, 
                         hasRef: !!dragDataRef.current,
+                        itemId: dragDataRef.current?.itemId,
                         target: e.target?.tagName,
-                        currentTarget: e.currentTarget?.tagName
+                        currentTarget: e.currentTarget?.tagName,
+                        dataTransferTypes: e.dataTransfer?.types ? Array.from(e.dataTransfer.types) : []
                     });
+                    lastLogTime = now;
                 }
                 // Don't stop propagation - let the stage handlers handle it
+            } else {
+                // Also check if there's any drag data in dataTransfer (fallback)
+                if (e.dataTransfer && e.dataTransfer.types && e.dataTransfer.types.length > 0) {
+                    const hasData = Array.from(e.dataTransfer.types).some(type => 
+                        type === 'application/json' || type === 'text/plain'
+                    );
+                    if (hasData) {
+                        e.preventDefault();
+                        console.log('🔄 Pipeline: Global dragover (fallback - dataTransfer has data)', {
+                            types: Array.from(e.dataTransfer.types)
+                        });
+                    }
+                }
             }
         };
         
@@ -2113,12 +2133,13 @@ function doesOpportunityBelongToClient(opportunity, client) {
             }
         };
         
-        document.addEventListener('dragover', globalDragOver, { passive: false });
-        document.addEventListener('drop', globalDrop);
+        // Use capture phase to catch events early
+        document.addEventListener('dragover', globalDragOver, { passive: false, capture: true });
+        document.addEventListener('drop', globalDrop, { capture: true });
         
         return () => {
-            document.removeEventListener('dragover', globalDragOver);
-            document.removeEventListener('drop', globalDrop);
+            document.removeEventListener('dragover', globalDragOver, { capture: true });
+            document.removeEventListener('drop', globalDrop, { capture: true });
         };
     }, []); // Empty deps - we check dragDataRef.current directly
 
