@@ -60,7 +60,7 @@ const reactWindowPlugin = () => {
           }
           
           // Get React instance - this will throw if React is not available
-          const ReactInstance = ensureReactAvailable();
+          let ReactInstance = ensureReactAvailable();
           
           // Final validation - ensure ReactInstance is valid and has all hooks
           if (!ReactInstance || typeof ReactInstance !== 'object') {
@@ -75,8 +75,19 @@ const reactWindowPlugin = () => {
           }
           
           // CRITICAL: Store React instance in a way that persists and can't be garbage collected
-          // We create a closure that always references the React instance
-          // This ensures the hooks always have access to React even if window.React changes
+          // Create a persistent reference that always points to a valid React instance
+          // If window.React becomes null, we keep our captured instance
+          // If window.React is available, we use it (it's the same instance anyway)
+          const getReactInstance = () => {
+            // Always try to get fresh React from window first
+            if (typeof window !== 'undefined' && window.React && window.React !== null) {
+              return window.React;
+            }
+            // Fallback to captured instance
+            return ReactInstance;
+          };
+          
+          // Store the captured instance for fallback
           const _reactInstance = ReactInstance;
           
           // Get ReactDOM (optional, may be null)
@@ -105,15 +116,33 @@ const reactWindowPlugin = () => {
           // React's hook system tracks hooks by function identity and call order
           // We CANNOT wrap, bind, or modify these functions in any way
           // These must be the exact same functions that React uses internally
-          // We use _reactInstance (captured in closure) to ensure the reference persists
-          // index.html ensures React is loaded before this module, so _reactInstance is valid
-          export const useState = _reactInstance.useState;
-          export const useEffect = _reactInstance.useEffect;
-          export const useRef = _reactInstance.useRef;
-          export const useCallback = _reactInstance.useCallback;
-          export const useMemo = _reactInstance.useMemo;
-          export const useLayoutEffect = _reactInstance.useLayoutEffect;
-          export const createElement = _reactInstance.createElement;
+          // We capture the functions directly from the validated React instance
+          // These function references are stable and will work even if the original
+          // React instance variable is reassigned, because functions are first-class objects
+          const useStateFn = ReactInstance.useState;
+          const useEffectFn = ReactInstance.useEffect;
+          const useRefFn = ReactInstance.useRef;
+          const useCallbackFn = ReactInstance.useCallback;
+          const useMemoFn = ReactInstance.useMemo;
+          const useLayoutEffectFn = ReactInstance.useLayoutEffect;
+          const createElementFn = ReactInstance.createElement;
+          
+          // Verify the functions are valid before exporting
+          if (!useStateFn || typeof useStateFn !== 'function') {
+            throw new Error('useState is not a valid function. Type: ' + typeof useStateFn);
+          }
+          if (!useRefFn || typeof useRefFn !== 'function') {
+            throw new Error('useRef is not a valid function. Type: ' + typeof useRefFn);
+          }
+          
+          // Export the function references directly
+          export const useState = useStateFn;
+          export const useEffect = useEffectFn;
+          export const useRef = useRefFn;
+          export const useCallback = useCallbackFn;
+          export const useMemo = useMemoFn;
+          export const useLayoutEffect = useLayoutEffectFn;
+          export const createElement = createElementFn;
           
           // Export React components and utilities (these are static, can use captured instance)
           export const Fragment = ReactInstance.Fragment;
