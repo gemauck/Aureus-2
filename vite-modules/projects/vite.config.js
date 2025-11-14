@@ -84,66 +84,28 @@ const reactWindowPlugin = () => {
           
           const ReactDOMInstance = getReactDOM();
           
-          // Function to get current React instance dynamically
-          // This ensures we always get the latest React, even if window.React changes
-          function getCurrentReact() {
-            if (typeof window !== 'undefined' && window.React && window.React !== null) {
-              return window.React;
-            }
-            // Fallback to the instance we captured at module load
-            return ReactInstance;
-          }
-          
           // Create Proxy for default React export (used for JSX/React.createElement)
+          // This allows dynamic access for JSX, but hooks MUST be direct references
           const ReactProxy = new Proxy({}, {
             get(target, prop) {
-              return getCurrentReact()[prop];
+              // Always get fresh React instance from window
+              const react = typeof window !== 'undefined' && window.React ? window.React : ReactInstance;
+              return react[prop];
             }
           });
           
-          // CRITICAL: Export hooks as direct references, but ensure they always access current React
-          // We create wrapper functions that maintain the same function identity
-          // but dynamically access React each time they're called
-          // This is necessary because React hooks must be direct function references
-          // but we need to handle cases where window.React might change
-          
-          // Store the original hook functions for reference
-          const originalHooks = {
-            useState: ReactInstance.useState,
-            useEffect: ReactInstance.useEffect,
-            useRef: ReactInstance.useRef,
-            useCallback: ReactInstance.useCallback,
-            useMemo: ReactInstance.useMemo,
-            useLayoutEffect: ReactInstance.useLayoutEffect
-          };
-          
-          // Create hook wrappers that dynamically get React but maintain function identity
-          // We use Object.defineProperty to ensure the functions have stable identities
-          const createHookWrapper = (hookName) => {
-            const wrapper = function(...args) {
-              const react = getCurrentReact();
-              if (!react || !react[hookName]) {
-                throw new Error('React.' + hookName + ' is not available. React: ' + (react ? 'exists' : 'null'));
-              }
-              return react[hookName].apply(react, args);
-            };
-            // Copy function properties to maintain identity
-            Object.setPrototypeOf(wrapper, originalHooks[hookName]);
-            return wrapper;
-          };
-          
-          // Export hooks - these will dynamically access React but maintain function identity
-          export const useState = createHookWrapper('useState');
-          export const useEffect = createHookWrapper('useEffect');
-          export const useRef = createHookWrapper('useRef');
-          export const useCallback = createHookWrapper('useCallback');
-          export const useMemo = createHookWrapper('useMemo');
-          export const useLayoutEffect = createHookWrapper('useLayoutEffect');
-          
-          // createElement can be dynamic
-          export const createElement = function(...args) {
-            return getCurrentReact().createElement.apply(getCurrentReact(), args);
-          };
+          // CRITICAL: Export hooks as DIRECT references to React's actual hook functions
+          // React's hook system tracks hooks by function identity and call order
+          // We CANNOT wrap, bind, or modify these functions in any way
+          // These must be the exact same functions that React uses internally
+          // index.html ensures React is loaded before this module, so ReactInstance is valid
+          export const useState = ReactInstance.useState;
+          export const useEffect = ReactInstance.useEffect;
+          export const useRef = ReactInstance.useRef;
+          export const useCallback = ReactInstance.useCallback;
+          export const useMemo = ReactInstance.useMemo;
+          export const useLayoutEffect = ReactInstance.useLayoutEffect;
+          export const createElement = ReactInstance.createElement;
           
           // Export React components and utilities (these are static, can use captured instance)
           export const Fragment = ReactInstance.Fragment;
