@@ -155,6 +155,21 @@ echo "🏗️  Building frontend..."
 npm run build:jsx || node build-jsx.js || echo "⚠️  JSX build skipped"
 npm run build:css || echo "⚠️  CSS build skipped"
 
+echo "🏗️  Building Vite Projects module..."
+if [ -d "vite-modules/projects" ]; then
+  cd vite-modules/projects
+  if [ -f "package.json" ]; then
+    npm install --silent || echo "⚠️  Vite dependencies install skipped"
+    npm run build || echo "⚠️  Vite build skipped"
+    echo "✅ Vite Projects module built"
+  else
+    echo "⚠️  Vite Projects package.json not found, skipping build"
+  fi
+  cd ../..
+else
+  echo "⚠️  Vite Projects module directory not found, skipping build"
+fi
+
 echo "🧪 Running post-deployment tests..."
 # Run tests against the deployed server
 export TEST_URL="http://localhost:3000"
