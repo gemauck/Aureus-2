@@ -75,31 +75,22 @@ const reactWindowPlugin = () => {
           
           // CRITICAL: React hooks cannot be wrapped - they must be direct references
           // React's hook system tracks hooks by call order and requires direct function references
-          // We must ensure React is available BEFORE exporting hooks
-          // Use a synchronous wait that blocks until React is available
+          // index.html ensures React is available before loading this module, so we can safely access it
+          // But we'll do a quick check and throw a clear error if React isn't available
           
-          // Wait for React synchronously (with timeout) before exporting
-          function waitForReactSync() {
-            let attempts = 0;
-            const maxAttempts = 200; // 2 seconds max wait
-            while (attempts < maxAttempts) {
-              if (typeof window !== 'undefined' && 
-                  window.React && 
-                  window.React !== null &&
-                  typeof window.React.useState === 'function') {
-                return window.React;
-              }
-              // Busy wait 10ms
-              const waitStart = Date.now();
-              while (Date.now() - waitStart < 10) {}
-              attempts++;
-            }
-            // If React still isn't available, throw error
-            throw new Error('window.React is not available after waiting 2 seconds. Make sure React is loaded before the Vite module.');
+          // Get React instance - should be available since index.html waits for it
+          // Do a quick check without blocking
+          let ReactInstance;
+          if (typeof window !== 'undefined' && 
+              window.React && 
+              window.React !== null &&
+              typeof window.React.useState === 'function') {
+            ReactInstance = window.React;
+          } else {
+            // React should be available, but if it's not, throw a clear error
+            throw new Error('window.React is not available when Vite module loads. This should not happen - index.html should ensure React is loaded first.');
           }
           
-          // Get React instance synchronously - this will block until React is available
-          const ReactInstance = waitForReactSync();
           const ReactDOMInstance = getReactDOM();
           
           // Export hooks as direct references - React's hook system requires this
