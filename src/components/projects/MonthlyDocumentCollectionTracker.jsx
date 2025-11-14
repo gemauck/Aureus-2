@@ -1026,6 +1026,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return updatedSections;
         });
 
+        // Immediately save to database to ensure persistence
+        if (updatedSections) {
+            await immediatelySaveDocumentSections(updatedSections);
+        }
+
         // Log to audit trail (using values from closure)
         if (window.AuditLogger) {
             const statusLabel = statusOptions.find(opt => opt.value === status)?.label || status;
@@ -1112,9 +1117,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         // Update timestamp BEFORE state update to prevent sync from overwriting
         lastLocalUpdateRef.current = Date.now();
         
+        let updatedSections;
+        
         // OPTIMISTIC UI UPDATE - Update UI immediately for better UX using functional update
         setSections(currentSections => {
-            return currentSections.map(s => {
+            updatedSections = currentSections.map(s => {
                 if (s.id === sectionId) {
                     return {
                         ...s,
@@ -1135,8 +1142,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
                 return s;
             });
+            return updatedSections;
         });
         setQuickComment(''); // Clear input immediately
+        
+        // Immediately save to database to ensure persistence
+        if (updatedSections) {
+            immediatelySaveDocumentSections(updatedSections).catch(error => {
+                console.error('❌ Error saving comment:', error);
+            });
+        }
 
         // PRIORITY: Process @mentions FIRST (emails must be sent immediately after tagging)
         // This runs in parallel with save but prioritizes mention notifications

@@ -23,6 +23,12 @@ const ProjectsDatabaseFirst = () => {
     const [isProjectDetailLoading, setIsProjectDetailLoading] = useState(false);
     const projectDetailLoadPromiseRef = useRef(null);
     const { isDark } = window.useTheme();
+    
+    // View preference: 'grid' or 'list', loaded from localStorage
+    const [viewMode, setViewMode] = useState(() => {
+        const saved = localStorage.getItem('projectsViewMode');
+        return saved === 'list' ? 'list' : 'grid';
+    });
     // Monitor availability of ProjectDetail component
     useEffect(() => {
         if (projectDetailComponent) {
@@ -641,6 +647,37 @@ const ProjectsDatabaseFirst = () => {
                                 </button>
                             </div>
                         )}
+                        {/* View Toggle */}
+                        <div className={`flex items-center space-x-1 border rounded-lg p-1 ${isDark ? 'border-gray-600' : 'border-gray-300'}`}>
+                            <button
+                                onClick={() => {
+                                    setViewMode('grid');
+                                    localStorage.setItem('projectsViewMode', 'grid');
+                                }}
+                                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                                    viewMode === 'grid'
+                                        ? 'bg-primary-600 text-white'
+                                        : `${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'}`
+                                }`}
+                                title="Grid View"
+                            >
+                                <i className="fas fa-th"></i>
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setViewMode('list');
+                                    localStorage.setItem('projectsViewMode', 'list');
+                                }}
+                                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                                    viewMode === 'list'
+                                        ? 'bg-primary-600 text-white'
+                                        : `${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900'}`
+                                }`}
+                                title="List View"
+                            >
+                                <i className="fas fa-list"></i>
+                            </button>
+                        </div>
                         <button
                             onClick={() => setShowBulkActions(!showBulkActions)}
                             className={`px-3 py-2 rounded-lg font-medium transition-colors text-sm ${

@@ -1178,7 +1178,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
             setDraggedOverStage(stageName);
         }
         if (e?.dataTransfer) {
-            e.dataTransfer.dropEffect = draggedItem ? 'move' : 'none';
+            // Check both state and ref to determine if we have a valid drag
+            const hasDragData = draggedItem || dragDataRef.current;
+            e.dataTransfer.dropEffect = hasDragData ? 'move' : 'none';
         }
     };
 
@@ -1307,7 +1309,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
             targetStage, 
             draggedItem: draggedItem?.id, 
             draggedType,
-            dragDataRef: dragDataRef.current?.itemId 
+            dragDataRef: dragDataRef.current?.itemId,
+            dataTransferTypes: e?.dataTransfer?.types ? Array.from(e.dataTransfer.types) : [],
+            dropEffect: e?.dataTransfer?.dropEffect
         });
         
         if (e?.dataTransfer) {
@@ -1935,21 +1939,29 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 draggable="true"
                 onDragStart={(e) => {
                     e.stopPropagation();
+                    console.log('🎬 Pipeline: Card drag start triggered', { itemId: item.id, itemName: item.name });
                     handleDragStart(e, item, item.type);
                 }}
-                onDragEnd={handleDragEnd}
+                onDragEnd={(e) => {
+                    console.log('🏁 Pipeline: Card drag end triggered', { itemId: item.id, dropEffect: e?.dataTransfer?.dropEffect });
+                    handleDragEnd(e);
+                }}
                 onTouchStart={(e) => handleTouchStart(e, item, item.type)}
                 onClick={(e) => {
+                    // Don't open detail if we just completed a drag
                     if (justDragged || touchDragState) {
                         e.preventDefault();
                         e.stopPropagation();
                         return;
                     }
 
+                    // Don't open detail if we're currently dragging
                     if (isDragging) {
+                        console.log('⚠️ Pipeline: Click ignored during drag');
                         setIsDragging(false);
                         setDraggedItem(null);
                         setDraggedType(null);
+                        return;
                     }
 
                     openDealDetail(item);
@@ -2084,9 +2096,22 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             }}
                         >
                             {stageItems.length === 0 ? (
-                                <div className={`text-center py-8 rounded-lg border-2 border-dashed ${!isDragging ? 'transition' : ''} ${
-                                    (draggedOverStage === stage.name || (touchDragState && touchDragState.targetStage === stage.name)) ? 'border-primary-400 bg-primary-50' : 'border-gray-300'
-                                }`}>
+                                <div 
+                                    className={`text-center py-8 rounded-lg border-2 border-dashed ${!isDragging ? 'transition' : ''} ${
+                                        (draggedOverStage === stage.name || (touchDragState && touchDragState.targetStage === stage.name)) ? 'border-primary-400 bg-primary-50' : 'border-gray-300'
+                                    }`}
+                                    onDragOver={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        handleDragOver(e, stage.name);
+                                    }}
+                                    onDrop={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        console.log('🎯 Pipeline: Drop on empty stage zone', { stage: stage.name });
+                                        handleDrop(e, stage.name);
+                                    }}
+                                >
                                     <i className="fas fa-inbox text-2xl text-gray-300 mb-2"></i>
                                     <p className="text-xs text-gray-400">No deals in this stage</p>
                                     <p className="text-[10px] text-gray-400 mt-1">Drag deals here</p>
