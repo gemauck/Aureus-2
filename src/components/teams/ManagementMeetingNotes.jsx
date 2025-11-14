@@ -176,6 +176,10 @@ const ManagementMeetingNotes = () => {
     const [showCommentModal, setShowCommentModal] = useState(false);
     const [editingActionItem, setEditingActionItem] = useState(null);
     const [commentContext, setCommentContext] = useState(null); // {type: 'monthly'|'department'|'action', id: string}
+    
+    // State for tracking editing status and temporary values for each field
+    const [editingFields, setEditingFields] = useState({}); // { [departmentNotesId-field]: true/false }
+    const [tempFieldValues, setTempFieldValues] = useState({}); // { [departmentNotesId-field]: value }
 
     const weekCardRefs = useRef({});
     
@@ -910,7 +914,76 @@ const ManagementMeetingNotes = () => {
         return null;
     };
 
-    // Update department notes
+    // Helper function to get field key
+    const getFieldKey = (departmentNotesId, field) => {
+        return `${departmentNotesId}-${field}`;
+    };
+
+    // Start editing a field
+    const handleStartEdit = (departmentNotesId, field, currentValue) => {
+        const fieldKey = getFieldKey(departmentNotesId, field);
+        setEditingFields(prev => ({ ...prev, [fieldKey]: true }));
+        setTempFieldValues(prev => ({ ...prev, [fieldKey]: currentValue ?? '' }));
+    };
+
+    // Cancel editing a field
+    const handleCancelEdit = (departmentNotesId, field) => {
+        const fieldKey = getFieldKey(departmentNotesId, field);
+        setEditingFields(prev => {
+            const updated = { ...prev };
+            delete updated[fieldKey];
+            return updated;
+        });
+        setTempFieldValues(prev => {
+            const updated = { ...prev };
+            delete updated[fieldKey];
+            return updated;
+        });
+    };
+
+    // Update temporary value while editing
+    const handleTempValueChange = (departmentNotesId, field, value) => {
+        const fieldKey = getFieldKey(departmentNotesId, field);
+        setTempFieldValues(prev => ({ ...prev, [fieldKey]: value }));
+    };
+
+    // Submit changes to a field
+    const handleSubmitField = async (departmentNotesId, field) => {
+        const fieldKey = getFieldKey(departmentNotesId, field);
+        const value = tempFieldValues[fieldKey] ?? '';
+        
+        // Update local state immediately
+        const monthlyId = currentMonthlyNotes?.id || null;
+        updateDepartmentNotesLocal(departmentNotesId, field, value, monthlyId);
+
+        // Save to database
+        try {
+            await window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value });
+            // Remove editing state after successful save
+            setEditingFields(prev => {
+                const updated = { ...prev };
+                delete updated[fieldKey];
+                return updated;
+            });
+            setTempFieldValues(prev => {
+                const updated = { ...prev };
+                delete updated[fieldKey];
+                return updated;
+            });
+        } catch (error) {
+            console.error('Error updating department notes:', error);
+            if (typeof alert === 'function') {
+                alert('Failed to update department notes.');
+            }
+            // Reload to revert local changes on error
+            if (selectedMonth) {
+                await reloadMonthlyNotes(selectedMonth);
+            }
+            // Keep editing state on error so user can retry
+        }
+    };
+
+    // Update department notes (kept for backwards compatibility, but no longer used for textareas)
     const handleUpdateDepartmentNotes = async (departmentNotesId, field, value) => {
         if (!departmentNotesId) {
             return;
@@ -1500,40 +1573,142 @@ const ManagementMeetingNotes = () => {
                                                                 <div className="space-y-3">
                                                                     {/* Successes */}
                                                                     <div>
-                                                                        <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
-                                                                            Last Week's Successes
-                                                                        </label>
+                                                                        <div className="flex items-center justify-between mb-1">
+                                                                            <label className={`block text-xs font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                                                                Last Week's Successes
+                                                                            </label>
+                                                                            {!editingFields[getFieldKey(deptNote.id, 'successes')] ? (
+                                                                                <button
+                                                                                    onClick={() => handleStartEdit(deptNote.id, 'successes', deptNote.successes)}
+                                                                                    className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                                                    title="Edit"
+                                                                                >
+                                                                                    <i className="fas fa-edit"></i>
+                                                                                    Edit
+                                                                                </button>
+                                                                            ) : (
+                                                                                <div className="flex gap-1">
+                                                                                    <button
+                                                                                        onClick={() => handleSubmitField(deptNote.id, 'successes')}
+                                                                                        className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-green-700 text-green-200 hover:bg-green-600' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
+                                                                                        title="Submit"
+                                                                                    >
+                                                                                        <i className="fas fa-check"></i>
+                                                                                        Submit
+                                                                                    </button>
+                                                                                    <button
+                                                                                        onClick={() => handleCancelEdit(deptNote.id, 'successes')}
+                                                                                        className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-red-900 text-red-200 hover:bg-red-800' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
+                                                                                        title="Cancel"
+                                                                                    >
+                                                                                        <i className="fas fa-times"></i>
+                                                                                        Cancel
+                                                                                    </button>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
                                                                         <textarea
-                                                                            value={deptNote.successes ?? ''}
-                                                                            onChange={(e) => handleUpdateDepartmentNotes(deptNote.id, 'successes', e.target.value)}
+                                                                            value={editingFields[getFieldKey(deptNote.id, 'successes')] 
+                                                                                ? (tempFieldValues[getFieldKey(deptNote.id, 'successes')] ?? '')
+                                                                                : (deptNote.successes ?? '')}
+                                                                            onChange={(e) => handleTempValueChange(deptNote.id, 'successes', e.target.value)}
+                                                                            readOnly={!editingFields[getFieldKey(deptNote.id, 'successes')]}
                                                                             placeholder="What went well this week?"
-                                                                            className={`w-full min-h-[80px] p-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                                                            className={`w-full min-h-[80px] p-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'} ${!editingFields[getFieldKey(deptNote.id, 'successes')] ? (isDark ? 'cursor-not-allowed opacity-75' : 'cursor-not-allowed opacity-60') : ''}`}
                                                                         />
                                                                     </div>
 
                                                                     {/* Week to Follow */}
                                                                     <div>
-                                                                        <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
-                                                                            This Week's Plan
-                                                                        </label>
+                                                                        <div className="flex items-center justify-between mb-1">
+                                                                            <label className={`block text-xs font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                                                                This Week's Plan
+                                                                            </label>
+                                                                            {!editingFields[getFieldKey(deptNote.id, 'weekToFollow')] ? (
+                                                                                <button
+                                                                                    onClick={() => handleStartEdit(deptNote.id, 'weekToFollow', deptNote.weekToFollow)}
+                                                                                    className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                                                    title="Edit"
+                                                                                >
+                                                                                    <i className="fas fa-edit"></i>
+                                                                                    Edit
+                                                                                </button>
+                                                                            ) : (
+                                                                                <div className="flex gap-1">
+                                                                                    <button
+                                                                                        onClick={() => handleSubmitField(deptNote.id, 'weekToFollow')}
+                                                                                        className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-green-700 text-green-200 hover:bg-green-600' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
+                                                                                        title="Submit"
+                                                                                    >
+                                                                                        <i className="fas fa-check"></i>
+                                                                                        Submit
+                                                                                    </button>
+                                                                                    <button
+                                                                                        onClick={() => handleCancelEdit(deptNote.id, 'weekToFollow')}
+                                                                                        className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-red-900 text-red-200 hover:bg-red-800' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
+                                                                                        title="Cancel"
+                                                                                    >
+                                                                                        <i className="fas fa-times"></i>
+                                                                                        Cancel
+                                                                                    </button>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
                                                                         <textarea
-                                                                            value={deptNote.weekToFollow ?? ''}
-                                                                            onChange={(e) => handleUpdateDepartmentNotes(deptNote.id, 'weekToFollow', e.target.value)}
+                                                                            value={editingFields[getFieldKey(deptNote.id, 'weekToFollow')] 
+                                                                                ? (tempFieldValues[getFieldKey(deptNote.id, 'weekToFollow')] ?? '')
+                                                                                : (deptNote.weekToFollow ?? '')}
+                                                                            onChange={(e) => handleTempValueChange(deptNote.id, 'weekToFollow', e.target.value)}
+                                                                            readOnly={!editingFields[getFieldKey(deptNote.id, 'weekToFollow')]}
                                                                             placeholder="What's planned for this week?"
-                                                                            className={`w-full min-h-[80px] p-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                                                            className={`w-full min-h-[80px] p-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'} ${!editingFields[getFieldKey(deptNote.id, 'weekToFollow')] ? (isDark ? 'cursor-not-allowed opacity-75' : 'cursor-not-allowed opacity-60') : ''}`}
                                                                         />
                                                                     </div>
 
                                                                     {/* Frustrations */}
                                                                     <div>
-                                                                        <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
-                                                                            Frustrations/Challenges
-                                                                        </label>
+                                                                        <div className="flex items-center justify-between mb-1">
+                                                                            <label className={`block text-xs font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                                                                Frustrations/Challenges
+                                                                            </label>
+                                                                            {!editingFields[getFieldKey(deptNote.id, 'frustrations')] ? (
+                                                                                <button
+                                                                                    onClick={() => handleStartEdit(deptNote.id, 'frustrations', deptNote.frustrations)}
+                                                                                    className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                                                    title="Edit"
+                                                                                >
+                                                                                    <i className="fas fa-edit"></i>
+                                                                                    Edit
+                                                                                </button>
+                                                                            ) : (
+                                                                                <div className="flex gap-1">
+                                                                                    <button
+                                                                                        onClick={() => handleSubmitField(deptNote.id, 'frustrations')}
+                                                                                        className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-green-700 text-green-200 hover:bg-green-600' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
+                                                                                        title="Submit"
+                                                                                    >
+                                                                                        <i className="fas fa-check"></i>
+                                                                                        Submit
+                                                                                    </button>
+                                                                                    <button
+                                                                                        onClick={() => handleCancelEdit(deptNote.id, 'frustrations')}
+                                                                                        className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-red-900 text-red-200 hover:bg-red-800' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
+                                                                                        title="Cancel"
+                                                                                    >
+                                                                                        <i className="fas fa-times"></i>
+                                                                                        Cancel
+                                                                                    </button>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
                                                                         <textarea
-                                                                            value={deptNote.frustrations ?? ''}
-                                                                            onChange={(e) => handleUpdateDepartmentNotes(deptNote.id, 'frustrations', e.target.value)}
+                                                                            value={editingFields[getFieldKey(deptNote.id, 'frustrations')] 
+                                                                                ? (tempFieldValues[getFieldKey(deptNote.id, 'frustrations')] ?? '')
+                                                                                : (deptNote.frustrations ?? '')}
+                                                                            onChange={(e) => handleTempValueChange(deptNote.id, 'frustrations', e.target.value)}
+                                                                            readOnly={!editingFields[getFieldKey(deptNote.id, 'frustrations')]}
                                                                             placeholder="What challenges or blockers are we facing?"
-                                                                            className={`w-full min-h-[80px] p-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                                                            className={`w-full min-h-[80px] p-2 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'} ${!editingFields[getFieldKey(deptNote.id, 'frustrations')] ? (isDark ? 'cursor-not-allowed opacity-75' : 'cursor-not-allowed opacity-60') : ''}`}
                                                                         />
                                                                     </div>
 

@@ -2175,6 +2175,13 @@ function initializeProjectDetail() {
         console.log('  - Current hasDocumentCollectionProcess:', hasDocumentCollectionProcess);
         
         try {
+            // Cancel any pending debounced saves to prevent overwriting
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
+                console.log('🛑 Cancelled pending debounced save before explicit save');
+            }
+            
             // Set flag to skip the useEffect save to prevent duplicates
             skipNextSaveRef.current = true;
             // Mark that hasDocumentCollectionProcess was explicitly changed

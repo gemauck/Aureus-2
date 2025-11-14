@@ -845,20 +845,6 @@ const ProjectsDatabaseFirst = () => {
                                     </div>
                                     
                                     <div className="flex justify-between text-sm">
-                                        <span className={`${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Progress:</span>
-                                        <span className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                            {project.progress}%
-                                        </span>
-                                    </div>
-                                    
-                                    <div className="w-full bg-gray-200 rounded-full h-2">
-                                        <div 
-                                            className="bg-primary-600 h-2 rounded-full transition-all duration-300" 
-                                            style={{ width: `${project.progress}%` }}
-                                        ></div>
-                                    </div>
-                                    
-                                    <div className="flex justify-between text-sm">
                                         <span className={`${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Due:</span>
                                         <span className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                             {project.dueDate ? new Date(project.dueDate).toLocaleDateString() : 'No due date'}
