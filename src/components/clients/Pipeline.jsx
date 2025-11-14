@@ -121,8 +121,6 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
     const [listSortColumn, setListSortColumn] = useState(null);
     const [listSortDirection, setListSortDirection] = useState('asc');
     
-    // Use ref to persist drag data across events (survives state clearing)
-    const dragDataRef = useRef(null); // { item, type, itemId }
 
     useEffect(() => {
         try {
@@ -1145,13 +1143,13 @@ function doesOpportunityBelongToClient(opportunity, client) {
     // Drag and drop handlers - simplified to match TaskManagement pattern
     const handleDragStart = (event, item, type) => {
         if (event?.dataTransfer) {
-            // Simple string data like TaskManagement - this is the key!
+            // Match TaskManagement exactly - use single key with item ID
+            // Store type in state, not dataTransfer (simpler, more reliable)
             event.dataTransfer.setData('pipelineItemId', String(item.id));
-            event.dataTransfer.setData('pipelineItemType', type);
             event.dataTransfer.effectAllowed = 'move';
         }
         setDraggedItem(item);
-        setDraggedType(type);
+        setDraggedType(type); // Store type in state for recovery
         setIsDragging(true);
     };
 
@@ -1337,7 +1335,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
             setTouchDragState(null);
             setJustDragged(true);
             setTimeout(() => {
-                dragDataRef.current = null;
                 setJustDragged(false);
             }, 300);
         }
@@ -1897,35 +1894,44 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     e.stopPropagation();
                     setDraggedOverStage(null);
                     
+                    // Match TaskManagement exactly - simple getData call
                     const itemId = e.dataTransfer.getData('pipelineItemId');
-                    const itemType = e.dataTransfer.getData('pipelineItemType');
-                    
                     if (!itemId || itemId === '') {
                         return;
                     }
 
-                    const item = getPipelineItems().find(i => String(i.id) === String(itemId) && i.type === itemType);
+                    // Find item by ID (use draggedType from state if available, otherwise search both types)
+                    let item = null;
+                    if (draggedType) {
+                        item = getPipelineItems().find(i => String(i.id) === String(itemId) && i.type === draggedType);
+                    } else {
+                        // Fallback: search both leads and opportunities
+                        item = getPipelineItems().find(i => String(i.id) === String(itemId));
+                    }
                     
                     if (!item || item.stage === stage.name) {
                         return;
                     }
 
+                    // Use draggedType from state, or fallback to item.type
+                    const finalType = draggedType || item.type;
+
                     try {
                         // Optimistic UI update
-                        if (itemType === 'lead') {
+                        if (finalType === 'lead') {
                             updateLeadStageOptimistically(item.id, stage.name);
-                        } else if (itemType === 'opportunity') {
+                        } else if (finalType === 'opportunity') {
                             updateOpportunityStageOptimistically(item.clientId, item.id, stage.name);
                         }
                         setRefreshKey((k) => k + 1);
 
                         // Persist to database
-                        if (itemType === 'lead') {
+                        if (finalType === 'lead') {
                             const updateFn = window.api?.updateLeadStage || window.DatabaseAPI?.updateLeadStage;
                             if (updateFn) {
                                 await updateFn(item.id, stage.name);
                             }
-                        } else if (itemType === 'opportunity') {
+                        } else if (finalType === 'opportunity') {
                             const updateFn = window.api?.updateOpportunityStage || window.DatabaseAPI?.updateOpportunityStage;
                             if (updateFn && item.clientId) {
                                 await updateFn(item.clientId, item.id, stage.name);

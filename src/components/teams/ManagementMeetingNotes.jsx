@@ -162,9 +162,67 @@ const ManagementMeetingNotes = () => {
 
     const [monthlyNotesList, setMonthlyNotesList] = useState([]);
     const [currentMonthlyNotes, setCurrentMonthlyNotes] = useState(null);
-    const [selectedMonth, setSelectedMonth] = useState(null);
-    const [selectedWeek, setSelectedWeek] = useState(null);
+    
+    // Initialize selectedMonth and selectedWeek from URL or default
+    const getMonthFromURL = () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get('month') || null;
+    };
+    
+    const getWeekFromURL = () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get('week') || null;
+    };
+    
+    const [selectedMonth, setSelectedMonth] = useState(getMonthFromURL());
+    const [selectedWeek, setSelectedWeek] = useState(getWeekFromURL());
     const [selectedDepartment, setSelectedDepartment] = useState(null);
+    
+    // Update URL when month or week changes
+    useEffect(() => {
+        const url = new URL(window.location);
+        if (selectedMonth) {
+            url.searchParams.set('month', selectedMonth);
+        } else {
+            url.searchParams.delete('month');
+        }
+        if (selectedWeek) {
+            url.searchParams.set('week', selectedWeek);
+        } else {
+            url.searchParams.delete('week');
+        }
+        // Keep other params
+        if (url.searchParams.get('tab') !== 'meeting-notes') {
+            url.searchParams.set('tab', 'meeting-notes');
+        }
+        if (url.searchParams.get('team') !== 'management') {
+            url.searchParams.set('team', 'management');
+        }
+        window.history.pushState({ month: selectedMonth, week: selectedWeek, tab: 'meeting-notes' }, '', url);
+    }, [selectedMonth, selectedWeek]);
+    
+    // Listen for browser back/forward
+    useEffect(() => {
+        const handlePopState = (event) => {
+            if (event.state) {
+                if (event.state.month) {
+                    setSelectedMonth(event.state.month);
+                }
+                if (event.state.week) {
+                    setSelectedWeek(event.state.week);
+                }
+            } else {
+                // Read from URL
+                const monthFromURL = getMonthFromURL();
+                const weekFromURL = getWeekFromURL();
+                if (monthFromURL) setSelectedMonth(monthFromURL);
+                if (weekFromURL) setSelectedWeek(weekFromURL);
+            }
+        };
+        
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
     const [users, setUsers] = useState([]);
     const [isReady, setIsReady] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -396,17 +454,51 @@ const ManagementMeetingNotes = () => {
 
     const resolvedSelectedWeekIndex = selectedWeekIndex >= 0 ? selectedWeekIndex : -1;
 
-    const nextActiveWeekId = useMemo(() => {
-        if (!Array.isArray(weeks) || weeks.length === 0 || resolvedSelectedWeekIndex < 0) {
+    // Calculate actual current week and next week based on today's date
+    const currentWeekId = useMemo(() => {
+        if (!Array.isArray(weeks) || weeks.length === 0) {
             return null;
         }
-        const nextWeek = weeks[resolvedSelectedWeekIndex + 1];
-        if (!nextWeek) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const currentWeek = weeks.find((week) => {
+            if (!week) return false;
+            const start = week.weekStart ? new Date(week.weekStart) : null;
+            if (!start || Number.isNaN(start.getTime())) return false;
+            const end = week.weekEnd ? new Date(week.weekEnd) : new Date(start);
+            if (Number.isNaN(end.getTime())) return false;
+            
+            const startOfDay = new Date(start);
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date(end);
+            endOfDay.setHours(23, 59, 59, 999);
+            
+            return today >= startOfDay && today <= endOfDay;
+        });
+        
+        if (!currentWeek) return null;
+        const index = weeks.indexOf(currentWeek);
+        const rawIdentifier = getWeekIdentifier(currentWeek);
+        return rawIdentifier || (index >= 0 ? `week-${index}` : null);
+    }, [weeks]);
+
+    const nextWeekId = useMemo(() => {
+        if (!currentWeekId || !Array.isArray(weeks) || weeks.length === 0) {
             return null;
         }
+        const currentIndex = weeks.findIndex((week, index) => {
+            const identifier = getWeekIdentifier(week) || `week-${index}`;
+            return identifier === currentWeekId;
+        });
+        if (currentIndex < 0 || currentIndex >= weeks.length - 1) {
+            return null;
+        }
+        const nextWeek = weeks[currentIndex + 1];
+        if (!nextWeek) return null;
         const rawIdentifier = getWeekIdentifier(nextWeek);
-        return rawIdentifier || `week-${resolvedSelectedWeekIndex + 1}`;
-    }, [weeks, resolvedSelectedWeekIndex]);
+        return rawIdentifier || `week-${currentIndex + 1}`;
+    }, [weeks, currentWeekId]);
 
     useEffect(() => {
         if (!Array.isArray(weeks) || weeks.length === 0) {
@@ -416,15 +508,39 @@ const ManagementMeetingNotes = () => {
             return;
         }
 
+        // Helper function to get week identifier
+        const getWeekId = (week, index) => {
+            if (!week) return null;
+            if (week.weekKey) return week.weekKey;
+            if (week.id) return week.id;
+            return `week-${index}`;
+        };
+
+        // Check if selectedWeek from URL exists in weeks
+        const weekFromURL = getWeekFromURL();
+        if (weekFromURL) {
+            const hasWeekFromURL = weeks.some((week, index) => {
+                const identifier = getWeekId(week, index);
+                return identifier === weekFromURL;
+            });
+            if (hasWeekFromURL && weekFromURL !== selectedWeek) {
+                setSelectedWeek(weekFromURL);
+                return;
+            }
+        }
+
+        // If selectedWeek exists and is valid, keep it
         const hasSelectedWeek = weeks.some((week, index) => {
-            const identifier = getWeekIdentifier(week) || `week-${index}`;
+            const identifier = getWeekId(week, index);
             return identifier === selectedWeek;
         });
         if (hasSelectedWeek && selectedWeek) {
             return;
         }
 
+        // Fallback to current week (based on actual date) or first week
         const today = new Date();
+        today.setHours(0, 0, 0, 0);
         const matchedWeek =
             weeks.find((week) => {
                 if (!week) {
@@ -447,7 +563,7 @@ const ManagementMeetingNotes = () => {
 
         const fallbackWeek = matchedWeek || weeks[0];
         const fallbackIndex = weeks.indexOf(fallbackWeek);
-        const fallbackId = getWeekIdentifier(fallbackWeek) || (fallbackIndex >= 0 ? `week-${fallbackIndex}` : '');
+        const fallbackId = getWeekId(fallbackWeek, fallbackIndex);
         if (fallbackId && fallbackId !== selectedWeek) {
             setSelectedWeek(fallbackId);
         }
@@ -1501,9 +1617,10 @@ const ManagementMeetingNotes = () => {
                                 {weeks.map((week, index) => {
                                     const rawId = getWeekIdentifier(week);
                                     const identifier = rawId || `week-${index}`;
-                                    const isPrimary = identifier === selectedWeek;
-                                    const isNext = identifier === nextActiveWeekId;
-                                    const label = isPrimary ? 'This Week' : isNext ? 'Next Week' : 'View Week';
+                                    const isActualCurrentWeek = identifier === currentWeekId;
+                                    const isActualNextWeek = identifier === nextWeekId;
+                                    const isSelected = identifier === selectedWeek;
+                                    const label = isActualCurrentWeek ? 'This Week' : isActualNextWeek ? 'Next Week' : 'View Week';
                                     return (
                                         <button
                                             key={identifier}
@@ -1511,19 +1628,27 @@ const ManagementMeetingNotes = () => {
                                             onClick={() => {
                                                 setSelectedWeek(identifier);
                                                 scrollToWeekId(identifier);
+                                                // Update URL with week parameter
+                                                const url = new URL(window.location);
+                                                url.searchParams.set('week', identifier);
+                                                window.history.pushState({ week: identifier, month: selectedMonth, tab: 'meeting-notes' }, '', url);
                                             }}
                                             className={`relative whitespace-nowrap px-3 py-2 rounded-lg border text-xs font-medium transition ${
-                                                isPrimary
+                                                isActualCurrentWeek
                                                     ? isDark
                                                         ? 'bg-primary-600/20 border-primary-400 text-primary-200'
                                                         : 'bg-primary-50 border-primary-500 text-primary-700'
-                                                    : isNext
+                                                    : isActualNextWeek
                                                         ? isDark
                                                             ? 'bg-amber-500/20 border-amber-400 text-amber-200'
                                                             : 'bg-amber-50 border-amber-400 text-amber-700'
-                                                        : isDark
-                                                            ? 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-500 hover:text-slate-200'
-                                                            : 'bg-white border-slate-200 text-slate-600 hover:border-slate-400 hover:text-slate-700'
+                                                        : isSelected
+                                                            ? isDark
+                                                                ? 'bg-slate-700 border-slate-600 text-slate-200'
+                                                                : 'bg-slate-100 border-slate-300 text-slate-700'
+                                                            : isDark
+                                                                ? 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-500 hover:text-slate-200'
+                                                                : 'bg-white border-slate-200 text-slate-600 hover:border-slate-400 hover:text-slate-700'
                                             }`}
                                         >
                                             <span className="block text-[10px] uppercase tracking-wide">
@@ -1544,11 +1669,12 @@ const ManagementMeetingNotes = () => {
                             {weeks.map((week, index) => {
                                 const rawId = getWeekIdentifier(week);
                                 const identifier = rawId || `week-${index}`;
-                                const isPrimary = identifier === selectedWeek;
-                                const isNext = identifier === nextActiveWeekId;
+                                const isActualCurrentWeek = identifier === currentWeekId;
+                                const isActualNextWeek = identifier === nextWeekId;
+                                const isSelected = identifier === selectedWeek;
                                 const departmentNotes = Array.isArray(week?.departmentNotes) ? week.departmentNotes : [];
                                 const hasDepartmentNotes = departmentNotes.length > 0;
-                                const isActive = isPrimary || isNext;
+                                const isActive = isActualCurrentWeek || isActualNextWeek || isSelected;
                                 const summary = getWeekSummaryStats(week);
 
                                 return (
@@ -1565,24 +1691,28 @@ const ManagementMeetingNotes = () => {
                                             }
                                         }}
                                         className={`flex-shrink-0 w-full md:w-[520px] xl:w-[560px] rounded-lg border transition-all duration-200 ${
-                                            isPrimary
+                                            isActualCurrentWeek
                                                 ? isDark
                                                     ? 'border-primary-400 shadow-lg shadow-primary-900/40'
                                                     : 'border-primary-500 shadow-lg shadow-primary-200/60'
-                                                : isNext
+                                                : isActualNextWeek
                                                     ? isDark
                                                         ? 'border-amber-400 shadow-md shadow-amber-900/30'
                                                         : 'border-amber-400 shadow-md shadow-amber-100/80'
-                                                    : isDark
-                                                        ? 'border-slate-700'
-                                                        : 'border-gray-200'
+                                                    : isSelected
+                                                        ? isDark
+                                                            ? 'border-slate-600 shadow-md shadow-slate-900/20'
+                                                            : 'border-slate-400 shadow-md shadow-slate-200/40'
+                                                        : isDark
+                                                            ? 'border-slate-700'
+                                                            : 'border-gray-200'
                                         } ${!isActive ? 'opacity-90' : ''}`}
                                     >
                                         <div className={`p-4 h-full flex flex-col ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
                                             <div className="flex items-start justify-between gap-2 mb-3">
                                                 <div>
-                                                    <p className={`text-[11px] uppercase tracking-wide font-semibold ${isPrimary ? (isDark ? 'text-primary-300' : 'text-primary-600') : isNext ? (isDark ? 'text-amber-300' : 'text-amber-600') : isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                                                        {isPrimary ? 'This Week' : isNext ? 'Next Week' : 'Week Overview'}
+                                                    <p className={`text-[11px] uppercase tracking-wide font-semibold ${isActualCurrentWeek ? (isDark ? 'text-primary-300' : 'text-primary-600') : isActualNextWeek ? (isDark ? 'text-amber-300' : 'text-amber-600') : isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                                        {isActualCurrentWeek ? 'This Week' : isActualNextWeek ? 'Next Week' : 'Week Overview'}
                                                     </p>
                                 <h3 className={`text-sm font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
                                     <i className="fas fa-calendar-week mr-2 text-primary-600"></i>
@@ -1590,12 +1720,16 @@ const ManagementMeetingNotes = () => {
                                 </h3>
                                                 </div>
                                 <div className="flex items-center gap-2">
-                                                    {!isPrimary && (
+                                                    {!isSelected && (
                                     <button
                                                             type="button"
                                                             onClick={() => {
                                                                 setSelectedWeek(identifier);
                                                                 scrollToWeekId(identifier);
+                                                                // Update URL with week parameter
+                                                                const url = new URL(window.location);
+                                                                url.searchParams.set('week', identifier);
+                                                                window.history.pushState({ week: identifier, month: selectedMonth, tab: 'meeting-notes' }, '', url);
                                                             }}
                                                             className={`text-[11px] px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                                                         >

@@ -257,8 +257,62 @@ const Teams = () => {
         }
     }
     const isDark = themeResult?.isDark || false;
-    const [activeTab, setActiveTab] = useState('overview');
+    
+    // Initialize activeTab from URL or default to 'overview'
+    const getTabFromURL = () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get('tab') || 'overview';
+    };
+    
+    const [activeTab, setActiveTab] = useState(getTabFromURL());
     const [selectedTeam, setSelectedTeam] = useState(null);
+    
+    // Update URL when tab changes
+    useEffect(() => {
+        if (selectedTeam?.id === 'management' && activeTab === 'meeting-notes') {
+            const url = new URL(window.location);
+            url.searchParams.set('tab', 'meeting-notes');
+            if (url.searchParams.get('team') !== 'management') {
+                url.searchParams.set('team', 'management');
+            }
+            window.history.pushState({ tab: activeTab, team: selectedTeam.id }, '', url);
+        } else if (activeTab !== 'overview') {
+            const url = new URL(window.location);
+            url.searchParams.set('tab', activeTab);
+            if (selectedTeam?.id) {
+                url.searchParams.set('team', selectedTeam.id);
+            }
+            window.history.pushState({ tab: activeTab, team: selectedTeam?.id }, '', url);
+        } else {
+            // Remove tab param for overview
+            const url = new URL(window.location);
+            url.searchParams.delete('tab');
+            if (selectedTeam?.id) {
+                url.searchParams.set('team', selectedTeam.id);
+            } else {
+                url.searchParams.delete('team');
+            }
+            window.history.pushState({ tab: activeTab, team: selectedTeam?.id }, '', url);
+        }
+    }, [activeTab, selectedTeam]);
+    
+    // Listen for browser back/forward
+    useEffect(() => {
+        const handlePopState = (event) => {
+            if (event.state && event.state.tab) {
+                setActiveTab(event.state.tab);
+            } else {
+                setActiveTab(getTabFromURL());
+            }
+            if (event.state && event.state.team) {
+                const team = TEAMS.find(t => t.id === event.state.team);
+                if (team) setSelectedTeam(team);
+            }
+        };
+        
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
     const [searchTerm, setSearchTerm] = useState('');
     const [isReady, setIsReady] = useState(false);
     

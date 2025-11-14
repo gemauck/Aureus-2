@@ -18,11 +18,20 @@ const reactWindowPlugin = () => {
       // Provide the virtual module
       if (id === '\0virtual:react-window') {
         return `
-          // Wait for React to be available before exporting anything
-          // This is critical - React must be available when exports are evaluated
-          function waitForReact(maxWait = 5000) {
-            const start = Date.now();
-            while (Date.now() - start < maxWait) {
+          // Get React dynamically - checks window.React every time it's accessed
+          // This ensures React is available when hooks are actually called, not just at module load
+          function getReact() {
+            if (typeof window !== 'undefined' && 
+                window.React && 
+                window.React !== null &&
+                typeof window.React.useState === 'function') {
+              return window.React;
+            }
+            // If React isn't available, wait a bit and try again
+            // This handles cases where React loads after the module
+            let attempts = 0;
+            const maxAttempts = 100; // 1 second max wait
+            while (attempts < maxAttempts) {
               if (typeof window !== 'undefined' && 
                   window.React && 
                   window.React !== null &&
@@ -32,21 +41,50 @@ const reactWindowPlugin = () => {
               // Busy wait 10ms
               const waitStart = Date.now();
               while (Date.now() - waitStart < 10) {}
+              attempts++;
             }
-            throw new Error('window.React is not available after waiting ' + maxWait + 'ms. Make sure React is loaded before this module.');
+            throw new Error('window.React is not available. Make sure React is loaded before using this module.');
           }
           
-          // Get React immediately - wait if needed
-          const ReactInstance = waitForReact();
-          const ReactDOMInstance = (typeof window !== 'undefined' && window.ReactDOM && window.ReactDOM !== null) 
-            ? window.ReactDOM 
-            : null;
+          function getReactDOM() {
+            if (typeof window !== 'undefined' && window.ReactDOM && window.ReactDOM !== null) {
+              return window.ReactDOM;
+            }
+            return null;
+          }
           
-          // Export React directly - it's now guaranteed to be available
-          export default ReactInstance;
+          // Create a Proxy for React that accesses window.React dynamically
+          // This ensures React is always available when hooks are called
+          const ReactProxy = new Proxy({}, {
+            get(target, prop) {
+              const react = getReact();
+              const value = react[prop];
+              // For functions (hooks, createElement, etc.), bind them to React
+              // This ensures they work correctly with React's internal system
+              return typeof value === 'function' ? value.bind(react) : value;
+            }
+          });
           
-          // Export all React APIs directly from the instance
-          // These are the actual React functions, not proxies
+          // Export the Proxy as default React
+          export default ReactProxy;
+          
+          // Export hooks - they'll access React dynamically through the Proxy
+          // But we need to export them as direct references for React's hook system
+          // So we'll create getters that access React at call time
+          const ReactGetter = () => getReact();
+          
+          // CRITICAL: React hooks cannot be wrapped - they must be direct references
+          // So we get React once and export hooks directly, but ensure React is available
+          // The Proxy approach for default export ensures React is accessed dynamically
+          // For named exports of hooks, we need direct references but accessed through Proxy
+          
+          // Wait for React to be definitely available before exporting hooks
+          const ReactInstance = getReact();
+          const ReactDOMInstance = getReactDOM();
+          
+          // Export hooks as direct references - React's hook system requires this
+          // But we access them through getReact() to ensure React is available
+          // Note: These will be evaluated once, so React must be available at module load
           export const useState = ReactInstance.useState;
           export const useEffect = ReactInstance.useEffect;
           export const useRef = ReactInstance.useRef;
@@ -62,7 +100,7 @@ const reactWindowPlugin = () => {
           export const lazy = ReactInstance.lazy;
           export const Suspense = ReactInstance.Suspense;
           export const StrictMode = ReactInstance.StrictMode;
-          export const React = ReactInstance;
+          export const React = ReactProxy;
           export const ReactDOM = ReactDOMInstance;
         `;
       }
