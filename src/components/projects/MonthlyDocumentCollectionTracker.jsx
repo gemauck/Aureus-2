@@ -507,6 +507,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             setSections(currentSections => {
                 updatedSections = [...currentSections, newSection];
                 console.log('➕ Adding new section:', sectionData.name, 'Total sections:', updatedSections.length);
+                // ULTRA AGGRESSIVE: Mark as initialized IMMEDIATELY when adding section
+                hasInitializedRef.current = true;
+                console.log('🛑 ULTRA AGGRESSIVE: Marked initialized on section add - BLOCKING all future syncs');
                 return updatedSections;
             });
             
