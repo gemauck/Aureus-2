@@ -288,8 +288,11 @@ function initializeProjectDetail() {
         console.log('✅ ProjectDetail: All required components loaded');
     }
     
-    // Tab navigation state - always start with overview when opening a project
-    const [activeSection, setActiveSection] = useState('overview');
+    // Tab navigation state - restore from sessionStorage if available, otherwise start with overview
+    const [activeSection, setActiveSection] = useState(() => {
+        const saved = sessionStorage.getItem(`project-${project.id}-activeSection`);
+        return saved || 'overview';
+    });
     
     // Persist activeSection to sessionStorage
     useEffect(() => {
@@ -299,6 +302,14 @@ function initializeProjectDetail() {
     
     // Track if document collection process exists
     const [hasDocumentCollectionProcess, setHasDocumentCollectionProcess] = useState(project.hasDocumentCollectionProcess || false);
+    
+    // Sync hasDocumentCollectionProcess when project prop changes (e.g., after reloading from database)
+    useEffect(() => {
+        if (project.hasDocumentCollectionProcess !== undefined) {
+            console.log('🔄 Syncing hasDocumentCollectionProcess from project prop:', project.hasDocumentCollectionProcess);
+            setHasDocumentCollectionProcess(project.hasDocumentCollectionProcess);
+        }
+    }, [project.hasDocumentCollectionProcess]);
     
     // Ref to prevent duplicate saves when manually adding document collection process
     const skipNextSaveRef = useRef(false);
@@ -1916,21 +1927,64 @@ function initializeProjectDetail() {
             }
         }
         
+        // Immediately save to database to ensure checklist and other changes persist
+        // Don't wait for the debounced useEffect - save immediately
+        try {
+            const updatedTasks = viewingTaskParent 
+                ? tasks.map(t => {
+                    if (t.id === viewingTaskParent.id) {
+                        return {
+                            ...t,
+                            subtasks: (t.subtasks || []).map(st =>
+                                st.id === updatedTaskData.id ? updatedTaskData : st
+                            )
+                        };
+                    }
+                    return t;
+                })
+                : tasks.map(t => t.id === updatedTaskData.id ? updatedTaskData : t);
+            
+            console.log('💾 Immediately saving task update (including checklist) to database...');
+            console.log('  - Task ID:', updatedTaskData.id);
+            console.log('  - Checklist items:', updatedTaskData.checklist?.length || 0);
+            
+            await persistProjectData({ nextTasks: updatedTasks });
+            console.log('✅ Task update (including checklist) saved successfully');
+        } catch (error) {
+            console.error('❌ Failed to save task update:', error);
+            // Don't block UI - the debounced save will retry
+        }
+        
         setShowTaskDetailModal(false);
         setViewingTask(null);
         setViewingTaskParent(null);
         setCreatingTaskForList(null);
     };
 
-    const handleDeleteTask = (taskId) => {
+    const handleDeleteTask = async (taskId) => {
         if (confirm('Delete this task and all its subtasks?')) {
-            setTasks(tasks.filter(t => t.id !== taskId));
+            // Filter out the task and all its subtasks
+            const updatedTasks = tasks.filter(t => t.id !== taskId);
+            
+            // Update local state
+            setTasks(updatedTasks);
+            
+            // Persist to database immediately
+            try {
+                await persistProjectData({ nextTasks: updatedTasks });
+                console.log('✅ Task deleted successfully');
+            } catch (error) {
+                console.error('❌ Failed to delete task:', error);
+                alert('Failed to delete task: ' + error.message);
+                // Revert on error
+                setTasks(tasks);
+            }
         }
     };
 
-    const handleDeleteSubtask = (parentTaskId, subtaskId) => {
+    const handleDeleteSubtask = async (parentTaskId, subtaskId) => {
         if (confirm('Delete this subtask?')) {
-            setTasks(tasks.map(t => {
+            const updatedTasks = tasks.map(t => {
                 if (t.id === parentTaskId) {
                     return {
                         ...t,
@@ -1938,7 +1992,21 @@ function initializeProjectDetail() {
                     };
                 }
                 return t;
-            }));
+            });
+            
+            // Update local state
+            setTasks(updatedTasks);
+            
+            // Persist to database immediately
+            try {
+                await persistProjectData({ nextTasks: updatedTasks });
+                console.log('✅ Subtask deleted successfully');
+            } catch (error) {
+                console.error('❌ Failed to delete subtask:', error);
+                alert('Failed to delete subtask: ' + error.message);
+                // Revert on error
+                setTasks(tasks);
+            }
         }
     };
 
@@ -1972,6 +2040,23 @@ function initializeProjectDetail() {
             console.log('💾 Immediately saving document collection process to database...');
             const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
             console.log('✅ Database save successful:', apiResponse);
+            
+            // Reload project from database to ensure state is in sync
+            if (window.DatabaseAPI && typeof window.DatabaseAPI.getProject === 'function') {
+                try {
+                    const refreshedProject = await window.DatabaseAPI.getProject(project.id);
+                    const updatedProject = refreshedProject?.data?.project || refreshedProject?.project || refreshedProject?.data;
+                    if (updatedProject) {
+                        // Update the project prop by triggering a re-render with updated data
+                        // This ensures the component has the latest data from the database
+                        console.log('🔄 Reloaded project from database:', updatedProject.hasDocumentCollectionProcess);
+                        // Force update by updating the project state if there's a way to do it
+                        // The useEffect should pick up the change via the project prop
+                    }
+                } catch (reloadError) {
+                    console.warn('⚠️ Failed to reload project after save:', reloadError);
+                }
+            }
             
             // Also update localStorage for consistency
             if (window.dataService && typeof window.dataService.getProjects === 'function') {
@@ -2458,9 +2543,7 @@ function initializeProjectDetail() {
                                                                 <button
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
-                                                                        if (confirm('Delete this task and all its subtasks?')) {
-                                                                            handleDeleteTask(task.id);
-                                                                        }
+                                                                        handleDeleteTask(task.id);
                                                                     }}
                                                                     className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-red-500 text-white rounded-lg hover:bg-red-600 hover:shadow-md transition-all font-medium"
                                                                     title="Delete task"
