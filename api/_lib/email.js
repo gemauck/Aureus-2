@@ -472,7 +472,21 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
     
     // Build base URL for comment link (use environment variable or default)
     const baseUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    const fullCommentLink = commentLink ? `${baseUrl}${commentLink.startsWith('/') ? commentLink : '/' + commentLink}` : null;
+    // Handle hash-based routing links (starting with #) - they should be appended directly to base URL
+    // Regular paths (starting with /) need to be appended with a slash
+    let fullCommentLink = null;
+    if (commentLink) {
+        if (commentLink.startsWith('#')) {
+            // Hash-based routing - append directly to base URL
+            fullCommentLink = `${baseUrl}${commentLink}`;
+        } else if (commentLink.startsWith('/')) {
+            // Regular path - append with slash
+            fullCommentLink = `${baseUrl}${commentLink}`;
+        } else {
+            // Relative path - add leading slash
+            fullCommentLink = `${baseUrl}/${commentLink}`;
+        }
+    }
     
     // Build project information section HTML (shown at bottom after message)
     // Always show link button when there's project context, even if no additional info

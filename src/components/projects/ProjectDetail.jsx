@@ -319,7 +319,7 @@ function initializeProjectDetail() {
     // This ensures we restore the correct tab even if project data loads asynchronously
     useEffect(() => {
         const saved = sessionStorage.getItem(`project-${project.id}-activeSection`);
-        if (saved && saved !== activeSection) {
+        if (saved) {
             // Normalize hasDocumentCollectionProcess to check if it's enabled
             const hasProcess = project.hasDocumentCollectionProcess === true || 
                               project.hasDocumentCollectionProcess === 'true' ||
@@ -328,12 +328,13 @@ function initializeProjectDetail() {
             
             // Only restore if valid
             if (saved === 'documentCollection' && !hasProcess) {
-                console.log('🔄 Project prop changed: Document Collection not enabled, keeping current section');
+                console.log('🔄 Project prop changed: Document Collection not enabled, defaulting to overview');
+                setActiveSection('overview');
                 return;
             }
             
-            // Restore saved section if it's different from current
-            console.log('🔄 Project prop changed: Restoring saved section from sessionStorage:', saved);
+            // Restore saved section
+            console.log('🔄 Project prop changed: Restoring saved section from sessionStorage:', saved, 'current:', activeSection);
             setActiveSection(saved);
         }
     }, [project.id, project.hasDocumentCollectionProcess]); // Only run when project ID or hasDocumentCollectionProcess changes
