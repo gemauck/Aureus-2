@@ -257,9 +257,19 @@ export function Projects({ onProjectClick }) {
                 }
                 
                 console.log('✅ DatabaseAPI.getProjects is available, making request...');
+                
+                // Add timeout to prevent infinite loading (10 seconds)
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error('Request timeout: Projects API took too long to respond')), 10000);
+                });
+                
                 let response;
                 try {
-                    response = await window.DatabaseAPI.getProjects();
+                    // Race between API call and timeout
+                    response = await Promise.race([
+                        window.DatabaseAPI.getProjects(),
+                        timeoutPromise
+                    ]);
                     
                     // Validate response exists
                     if (!response) {
@@ -408,12 +418,39 @@ export function Projects({ onProjectClick }) {
                     response: error.response,
                     status: error.status
                 });
+                
+                // Try to load from cache/localStorage as fallback
+                let cachedProjects = [];
+                try {
+                    const cached = window.storage?.getProjects?.();
+                    if (cached && Array.isArray(cached) && cached.length > 0) {
+                        cachedProjects = cached;
+                        console.log('📦 Using cached projects as fallback:', cachedProjects.length);
+                    }
+                } catch (cacheError) {
+                    console.warn('⚠️ Failed to load cached projects:', cacheError);
+                }
+                
                 if (isMounted) {
-                    setProjects([]);
+                    // Use cached projects if available, otherwise empty array
+                    setProjects(cachedProjects);
                     setIsLoading(false);
                     
                     // Set user-friendly error message with retry guidance
-                    if (error.message.includes('401') || error.message.includes('Authentication')) {
+                    if (error.message.includes('timeout') || error.message.includes('Request timeout')) {
+                        setLoadError(cachedProjects.length > 0 
+                            ? `Projects loaded from cache (${cachedProjects.length} projects). Server is slow - refreshing in background...`
+                            : 'Server is taking too long to respond. Please try refreshing the page.');
+                        // Auto-retry after showing cached data
+                        setTimeout(() => {
+                            if (isMounted) {
+                                setIsLoading(true);
+                                setLoadError(null);
+                                // Trigger a retry by calling fetchProjects again
+                                window.location.reload();
+                            }
+                        }, 3000);
+                    } else if (error.message.includes('401') || error.message.includes('Authentication')) {
                         console.warn('⚠️ Authentication error - redirecting to login');
                         setLoadError('Authentication expired. Redirecting to login...');
                         setTimeout(() => {
@@ -424,9 +461,13 @@ export function Projects({ onProjectClick }) {
                     } else if (error.message.includes('500') || error.message.includes('Server')) {
                         setLoadError('Server error loading projects. Please try again later.');
                     } else if (error.message.includes('Network') || error.message.includes('Unable to connect') || error.message.includes('fetch')) {
-                        setLoadError('Network error: Unable to connect to server. The request was retried automatically. Please check your internet connection and refresh the page if the problem persists.');
+                        setLoadError(cachedProjects.length > 0
+                            ? `Network error. Showing cached projects (${cachedProjects.length}). Please check your connection.`
+                            : 'Network error: Unable to connect to server. Please check your internet connection and refresh the page.');
                     } else {
-                        setLoadError(`Failed to load projects: ${error.message}. Please try refreshing the page.`);
+                        setLoadError(cachedProjects.length > 0
+                            ? `Error loading from server. Showing cached projects (${cachedProjects.length}). ${error.message}`
+                            : `Failed to load projects: ${error.message}. Please try refreshing the page.`);
                     }
                 }
             }
