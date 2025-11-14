@@ -242,19 +242,6 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             console.warn('⚠️ ProjectProgressTracker: Initial user preload failed:', error);
         });
     }, []);
-    
-    // Cleanup: Save any pending changes and clear timers on unmount
-    useEffect(() => {
-        return () => {
-            // Clear all pending timers
-            Object.keys(saveTimersRef.current).forEach(cellKey => {
-                if (saveTimersRef.current[cellKey]) {
-                    clearTimeout(saveTimersRef.current[cellKey]);
-                }
-            });
-            saveTimersRef.current = {};
-        };
-    }, []);
 
     useEffect(() => {
         if (!focusProjectIdProp) {
@@ -882,17 +869,6 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     return p;
                 }));
                 
-                // Clear editing state only after successful save
-                setEditingCell(null);
-                const cellKey = `${project.id}-${month}-${field}`;
-                // Clear both state and ref
-                delete cellValuesRef.current[cellKey];
-                setCellValues(prev => {
-                    const updated = { ...prev };
-                    delete updated[cellKey];
-                    return updated;
-                });
-
                 if (field === 'comments') {
                     const safeMonthName = String(month || '');
                     const monthIdx = months.indexOf(safeMonthName);
@@ -905,28 +881,59 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         field
                     );
                 }
+                
+                // Close modal after successful save
+                setIsModalOpen(false);
+                setModalData(null);
             }
         } catch (e) {
             console.error('❌ ProjectProgressTracker: Error saving progress data:', e);
             const errorMessage = e.message || 'Failed to save. Please try again.';
             alert(`Save failed: ${errorMessage}`);
-            
-            // Reset cell value to original on error
-            const cellKey = `${project.id}-${month}-${field}`;
-            const originalValue = getProgressData(project, month, field);
-            // Reset both state and ref to original value
-            cellValuesRef.current[cellKey] = originalValue;
-            setCellValues(prev => {
-                const updated = { ...prev };
-                updated[cellKey] = originalValue;
-                return updated;
-            });
+            // Don't close modal on error - let user retry or cancel
         } finally {
             setSaving(false);
         }
     };
     
-    // Render progress cell - editable input fields
+    // Open modal for editing a cell
+    const openEditModal = (project, month, field) => {
+        const currentValue = getProgressData(project, month, field);
+        setModalData({
+            project: project,
+            month: month,
+            field: field,
+            currentValue: currentValue || '',
+            tempValue: currentValue || ''
+        });
+        setIsModalOpen(true);
+    };
+    
+    // Close modal without saving
+    const closeEditModal = () => {
+        setIsModalOpen(false);
+        setModalData(null);
+    };
+    
+    // Handle modal input change
+    const handleModalInputChange = (value) => {
+        if (modalData) {
+            setModalData({
+                ...modalData,
+                tempValue: value
+            });
+        }
+    };
+    
+    // Handle save from modal
+    const handleModalSave = async () => {
+        if (!modalData) return;
+        
+        const { project, month, field, tempValue } = modalData;
+        await saveProgressData(project, month, field, tempValue);
+    };
+    
+    // Render progress cell - clickable display cell that opens modal
     const renderProgressCell = (project, month, field, rowBgColor = '#ffffff', providedKey = null) => {
         // Validate inputs
         if (!project || !project.id || !month || !field) {
@@ -946,140 +953,15 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         const cellKey = `${project.id}-${safeMonth}-${field}`;
         const cellIdentifier = providedKey || cellKey;
         const isFocusedCell = focusedCellKey === cellIdentifier;
-        const isEditing = editingCell && editingCell.projectId === project.id && editingCell.month === safeMonth && editingCell.field === field;
         
         // Get current value from project data
         const currentValue = getProgressData(project, safeMonth, field);
-        // Check both state and ref for the value - ref persists across re-renders and is always up-to-date
-        const stateValue = (cellKey in cellValues) ? cellValues[cellKey] : null;
-        const refValue = (cellKey in cellValuesRef.current) ? cellValuesRef.current[cellKey] : null;
-        // Prefer ref value (synchronous, always latest), then state value, then current value
-        // Ref is updated synchronously in handleChange, so it's always the most recent
-        const displayValue = refValue !== null ? refValue : (stateValue !== null ? stateValue : currentValue);
+        const displayValue = currentValue || '';
+        const hasValue = displayValue && displayValue.trim().length > 0;
         
-        // Handle edit start
-        const handleStartEdit = () => {
-            setEditingCell({ projectId: project.id, month: safeMonth, field: field });
-            // Initialize both state and ref with current value if not already set
-            if (!(cellKey in cellValuesRef.current)) {
-                cellValuesRef.current[cellKey] = currentValue;
-            }
-            setCellValues(prev => {
-                if (cellKey in prev) {
-                    return prev; // Already initialized
-                }
-                return { ...prev, [cellKey]: currentValue };
-            });
-        };
-        
-        // Handle input change - update both state and ref immediately
-        const handleChange = (e) => {
-            const newValue = e.target.value;
-            // Update ref immediately (synchronous) to persist across re-renders
-            cellValuesRef.current[cellKey] = newValue;
-            // Also update state for React reactivity
-            setCellValues(prev => {
-                return { ...prev, [cellKey]: newValue };
-            });
-            
-            // Clear existing timer for this cell
-            if (saveTimersRef.current[cellKey]) {
-                clearTimeout(saveTimersRef.current[cellKey]);
-            }
-            
-            // Set up debounced auto-save (1 second after user stops typing)
-            saveTimersRef.current[cellKey] = setTimeout(async () => {
-                // Get the latest value from ref (most up-to-date)
-                const currentRefValue = cellValuesRef.current[cellKey];
-                const latestValue = currentRefValue !== null && currentRefValue !== undefined ? currentRefValue : currentValue;
-                const normalizedLatest = String(latestValue || '').trim();
-                const normalizedCurrent = String(currentValue || '').trim();
-                
-                if (normalizedLatest !== normalizedCurrent && normalizedLatest !== '') {
-                    console.log('💾 ProjectProgressTracker: Auto-saving after debounce:', {
-                        cellKey,
-                        latestValue: normalizedLatest,
-                        currentValue: normalizedCurrent
-                    });
-                    try {
-                        await saveProgressData(project, safeMonth, field, latestValue);
-                        console.log('✅ ProjectProgressTracker: Auto-save completed');
-                    } catch (error) {
-                        console.error('❌ ProjectProgressTracker: Auto-save failed:', error);
-                    }
-                }
-                delete saveTimersRef.current[cellKey];
-            }, 1000); // 1 second debounce
-        };
-        
-        // Handle save - capture the latest value from both state and ref
-        const handleBlur = async () => {
-            // Clear any pending debounced save for this cell
-            if (saveTimersRef.current[cellKey]) {
-                clearTimeout(saveTimersRef.current[cellKey]);
-                delete saveTimersRef.current[cellKey];
-            }
-            
-            // Get the latest value - prefer ref (synchronous, always latest), then state, then current
-            const refVal = (cellKey in cellValuesRef.current) ? cellValuesRef.current[cellKey] : null;
-            const stateVal = (cellKey in cellValues) ? cellValues[cellKey] : null;
-            // Ref is updated synchronously, so it's always the most recent value
-            const latestValue = refVal !== null ? refVal : (stateVal !== null ? stateVal : currentValue);
-            
-            // Normalize values for comparison (trim whitespace, handle null/undefined)
-            const normalizedLatest = String(latestValue || '').trim();
-            const normalizedCurrent = String(currentValue || '').trim();
-            
-            console.log('🔍 ProjectProgressTracker: handleBlur triggered:', {
-                cellKey,
-                refVal,
-                stateVal,
-                currentValue,
-                latestValue,
-                normalizedLatest,
-                normalizedCurrent,
-                hasChanged: normalizedLatest !== normalizedCurrent
-            });
-            
-            // Only save if value actually changed (after normalization)
-            if (normalizedLatest !== normalizedCurrent) {
-                // Save the data - saveProgressData will clear both state and ref after successful save
-                try {
-                    await saveProgressData(project, safeMonth, field, latestValue);
-                    console.log('✅ ProjectProgressTracker: Save completed successfully');
-                } catch (error) {
-                    console.error('❌ ProjectProgressTracker: Save failed in handleBlur:', error);
-                    // Error is already handled in saveProgressData with alert
-                }
-            } else {
-                console.log('ℹ️ ProjectProgressTracker: No change detected, skipping save');
-                // No change, just clear editing state, state, and ref
-                setEditingCell(null);
-                delete cellValuesRef.current[cellKey];
-                setCellValues(prev => {
-                    const updated = { ...prev };
-                    delete updated[cellKey];
-                    return updated;
-                });
-            }
-        };
-        
-        // Handle key press
-        const handleKeyDown = (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleBlur();
-            } else if (e.key === 'Escape') {
-                // Cancel editing - restore original value
-                const originalValue = getProgressData(project, safeMonth, field);
-                cellValuesRef.current[cellKey] = originalValue;
-                setEditingCell(null);
-                setCellValues(prev => {
-                    const updated = { ...prev };
-                    updated[cellKey] = originalValue;
-                    return updated;
-                });
-            }
+        // Handle cell click - open modal
+        const handleCellClick = () => {
+            openEditModal(project, safeMonth, field);
         };
         
         // Modern cell styling with enhanced visual design
@@ -1101,10 +983,18 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             transition: 'all 0.2s ease',
             position: 'relative',
             boxShadow: isFocusedCell ? '0 0 0 2px rgba(59, 130, 246, 0.35)' : 'none',
-            borderRadius: '10px'
+            borderRadius: '10px',
+            cursor: 'pointer'
         };
         
-        // Modern input styling with better UX
+        // Placeholder text based on field type
+        const placeholderText = field === 'comments' 
+            ? 'Add comments...' 
+            : field === 'compliance' 
+                ? 'Enter link...' 
+                : 'Enter link...';
+        
+        // Render clickable display cell
         if (field === 'comments') {
             return React.createElement('td', {
                 key: cellIdentifier,
@@ -1114,34 +1004,34 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 'data-project-id': project.id,
                 'data-month-name': safeMonth,
                 'data-month-index': monthIdx >= 0 ? String(monthIdx) : '',
-                'data-field': field
-            }, React.createElement('textarea', {
-                value: displayValue || '',
-                onChange: handleChange,
-                onFocus: handleStartEdit,
-                onBlur: handleBlur,
-                onKeyDown: handleKeyDown,
-                placeholder: 'Add comments...',
+                'data-field': field,
+                onClick: handleCellClick
+            }, React.createElement('div', {
                 style: {
                     width: '100%',
-                    height: '100%',
                     minHeight: '44px',
                     padding: '8px 12px',
                     fontSize: '12px',
                     fontFamily: 'inherit',
-                    border: isEditing ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                    border: '1px solid #e5e7eb',
                     borderRadius: '8px',
-                    outline: 'none',
-                    backgroundColor: isEditing ? '#ffffff' : 'transparent',
-                    resize: 'vertical',
+                    backgroundColor: '#ffffff',
+                    color: hasValue ? '#111827' : '#9ca3af',
                     lineHeight: '1.5',
                     transition: 'all 0.2s ease',
-                    boxShadow: isEditing ? '0 0 0 3px rgba(59, 130, 246, 0.1)' : 'none'
+                    whiteSpace: 'pre-wrap',
+                    wordWrap: 'break-word',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical'
                 },
-                className: isEditing ? '' : 'hover:border-blue-300 hover:bg-blue-50'
-            }));
+                className: 'hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm',
+                title: hasValue ? displayValue : 'Click to ' + placeholderText.toLowerCase()
+            }, hasValue ? displayValue : React.createElement('span', { style: { fontStyle: 'italic' } }, placeholderText)));
         } else {
-            // Modern input for compliance and data fields
+            // Clickable display cell for compliance and data fields
             return React.createElement('td', {
                 key: cellIdentifier,
                 style: cellStyle,
@@ -1150,33 +1040,39 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 'data-project-id': project.id,
                 'data-month-name': safeMonth,
                 'data-month-index': monthIdx >= 0 ? String(monthIdx) : '',
-                'data-field': field
-            }, React.createElement('div', { style: { position: 'relative', width: '100%' } },
-                React.createElement('input', {
-                    type: 'text',
-                    value: displayValue || '',
-                    onChange: handleChange,
-                    onFocus: handleStartEdit,
-                    onBlur: handleBlur,
-                    onKeyDown: handleKeyDown,
-                    placeholder: field === 'compliance' ? 'Enter link...' : 'Enter link...',
+                'data-field': field,
+                onClick: handleCellClick
+            }, React.createElement('div', { 
+                style: { 
+                    position: 'relative', 
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                } 
+            },
+                React.createElement('div', {
                     style: {
                         width: '100%',
                         height: '36px',
                         padding: '8px 12px',
-                        paddingRight: displayValue ? '32px' : '12px',
+                        paddingRight: hasValue ? '32px' : '12px',
                         fontSize: '12px',
                         fontFamily: 'inherit',
-                        border: isEditing ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                        border: '1px solid #e5e7eb',
                         borderRadius: '8px',
-                        outline: 'none',
-                        backgroundColor: isEditing ? '#ffffff' : 'transparent',
+                        backgroundColor: '#ffffff',
+                        color: hasValue ? '#111827' : '#9ca3af',
                         transition: 'all 0.2s ease',
-                        boxShadow: isEditing ? '0 0 0 3px rgba(59, 130, 246, 0.1)' : 'none'
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        flex: 1
                     },
-                    className: isEditing ? '' : 'hover:border-blue-300 hover:bg-blue-50'
-                }),
-                displayValue && displayValue.trim() ? React.createElement('a', {
+                    className: 'hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm',
+                    title: hasValue ? displayValue : 'Click to ' + placeholderText.toLowerCase()
+                }, hasValue ? displayValue : React.createElement('span', { style: { fontStyle: 'italic' } }, placeholderText)),
+                hasValue && displayValue.trim() ? React.createElement('a', {
                     href: displayValue.startsWith('http') ? displayValue : `https://${displayValue}`,
                     target: '_blank',
                     rel: 'noopener noreferrer',
@@ -1190,10 +1086,13 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         textDecoration: 'none',
                         padding: '4px',
                         borderRadius: '4px',
-                        transition: 'all 0.2s ease'
+                        transition: 'all 0.2s ease',
+                        zIndex: 10
                     },
                     className: 'hover:bg-blue-100',
-                    onClick: (e) => e.stopPropagation()
+                    onClick: (e) => {
+                        e.stopPropagation(); // Prevent opening modal when clicking link
+                    }
                 }, React.createElement('i', { className: 'fas fa-external-link-alt' })) : null
             ));
         }
