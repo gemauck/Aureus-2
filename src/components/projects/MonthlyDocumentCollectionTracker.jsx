@@ -107,6 +107,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // Ref to track if we're currently saving to prevent sync during save
     const isSavingRef = useRef(false);
     
+    // Ref to track pending debounced save timeout
+    const debouncedSaveTimeoutRef = useRef(null);
+    
     // Reset initial mount flag when component remounts - this allows sync to work on remount
     // But don't reset if we just saved (prevent overwriting fresh saves)
     useEffect(() => {
@@ -115,6 +118,101 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             isInitialMount.current = true;
         }
     }, []); // Only run on mount
+    
+    // Helper function to immediately save documentSections to database
+    const immediatelySaveDocumentSections = async (sectionsToSave) => {
+        try {
+            // Cancel any pending debounced saves to prevent overwriting
+            if (debouncedSaveTimeoutRef.current) {
+                clearTimeout(debouncedSaveTimeoutRef.current);
+                debouncedSaveTimeoutRef.current = null;
+                console.log('🛑 Cancelled pending debounced save before immediate save');
+            }
+            
+            isSavingRef.current = true;
+            lastLocalUpdateRef.current = Date.now();
+            
+            console.log('💾 Immediately saving document sections to database...');
+            console.log('  - Project ID:', project.id);
+            console.log('  - Sections count:', sectionsToSave.length);
+            
+            if (!window.DatabaseAPI || typeof window.DatabaseAPI.updateProject !== 'function') {
+                throw new Error('DatabaseAPI.updateProject is not available');
+            }
+            
+            const updatePayload = {
+                documentSections: JSON.stringify(sectionsToSave)
+            };
+            
+            console.log('📦 Update payload:', updatePayload);
+            const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
+            console.log('✅ Database save successful:', apiResponse);
+            
+            // Clear cache to ensure fresh data on reload
+            if (window.DatabaseAPI._responseCache) {
+                const cacheKeysToDelete = [];
+                window.DatabaseAPI._responseCache.forEach((value, key) => {
+                    if (key.includes(`/projects/${project.id}`) || key.includes(`projects/${project.id}`)) {
+                        cacheKeysToDelete.push(key);
+                    }
+                });
+                cacheKeysToDelete.forEach(key => {
+                    window.DatabaseAPI._responseCache.delete(key);
+                    console.log('🗑️ Cleared cache for:', key);
+                });
+                
+                // Also clear projects list cache
+                const projectsListCacheKeys = [];
+                window.DatabaseAPI._responseCache.forEach((value, key) => {
+                    if (key.includes('/projects') && !key.includes(`/projects/${project.id}`)) {
+                        projectsListCacheKeys.push(key);
+                    }
+                });
+                projectsListCacheKeys.forEach(key => {
+                    window.DatabaseAPI._responseCache.delete(key);
+                    console.log('🗑️ Cleared projects list cache:', key);
+                });
+            }
+            
+            // Update localStorage for consistency
+            if (window.dataService && typeof window.dataService.getProjects === 'function') {
+                const savedProjects = await window.dataService.getProjects();
+                if (savedProjects) {
+                    const updatedProjects = savedProjects.map(p => {
+                        if (p.id === project.id) {
+                            return { ...p, documentSections: sectionsToSave };
+                        }
+                        return p;
+                    });
+                    if (window.dataService && typeof window.dataService.setProjects === 'function') {
+                        try {
+                            await window.dataService.setProjects(updatedProjects);
+                            console.log('✅ localStorage updated for consistency');
+                        } catch (saveError) {
+                            console.warn('Failed to save projects to dataService:', saveError);
+                        }
+                    }
+                }
+            }
+            
+            // Trigger event to notify parent component
+            if (typeof window.dispatchEvent === 'function') {
+                window.dispatchEvent(new CustomEvent('projectUpdated', {
+                    detail: { projectId: project.id, field: 'documentSections' }
+                }));
+                console.log('📢 Dispatched projectUpdated event');
+            }
+            
+            // Reset saving flag after a delay
+            setTimeout(() => {
+                isSavingRef.current = false;
+            }, 1000);
+        } catch (error) {
+            console.error('❌ Error immediately saving document sections:', error);
+            isSavingRef.current = false;
+            alert('Failed to save document sections: ' + error.message);
+        }
+    };
 
     // Generate year options (current year ± 5 years)
     const yearOptions = [];
@@ -588,21 +686,23 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         setShowSectionModal(true);
     };
 
-    const handleSaveSection = (sectionData) => {
+    const handleSaveSection = async (sectionData) => {
         // Get current user info
         const currentUser = getCurrentUser();
 
         // Update timestamp BEFORE state update to prevent sync from overwriting
         lastLocalUpdateRef.current = Date.now();
 
+        let updatedSections;
+        
         if (editingSection) {
             // Use functional update to avoid race conditions
             setSections(currentSections => {
-                const updated = currentSections.map(s => 
+                updatedSections = currentSections.map(s => 
                     s.id === editingSection.id ? { ...s, ...sectionData } : s
                 );
-                console.log('📝 Updating section:', sectionData.name, 'Total sections:', updated.length);
-                return updated;
+                console.log('📝 Updating section:', sectionData.name, 'Total sections:', updatedSections.length);
+                return updatedSections;
             });
             
             // Log to audit trail
@@ -628,9 +728,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             };
             // Use functional update to avoid race conditions
             setSections(currentSections => {
-                const updated = [...currentSections, newSection];
-                console.log('➕ Adding new section:', sectionData.name, 'Total sections:', updated.length);
-                return updated;
+                updatedSections = [...currentSections, newSection];
+                console.log('➕ Adding new section:', sectionData.name, 'Total sections:', updatedSections.length);
+                return updatedSections;
             });
             
             // Log to audit trail
@@ -648,13 +748,21 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 );
             }
         }
+        
         setShowSectionModal(false);
         setEditingSection(null);
+        
+        // Immediately save to database to ensure persistence
+        if (updatedSections) {
+            await immediatelySaveDocumentSections(updatedSections);
+        }
     };
 
-    const handleDeleteSection = (sectionId) => {
+    const handleDeleteSection = async (sectionId) => {
         // Get current user info
         const currentUser = getCurrentUser();
+        
+        let updatedSections;
         
         // Use functional update to get current section
         setSections(currentSections => {
@@ -665,8 +773,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 // Update timestamp to prevent sync from overwriting
                 lastLocalUpdateRef.current = Date.now();
                 
-                const updated = currentSections.filter(s => s.id !== sectionId);
-                console.log('🗑️ Deleting section:', section.name, 'Remaining sections:', updated.length);
+                updatedSections = currentSections.filter(s => s.id !== sectionId);
+                console.log('🗑️ Deleting section:', section.name, 'Remaining sections:', updatedSections.length);
                 
                 // Log to audit trail
                 if (window.AuditLogger) {
@@ -684,10 +792,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     );
                 }
                 
-                return updated;
+                return updatedSections;
             }
             return currentSections;
         });
+        
+        // Immediately save to database to ensure persistence
+        if (updatedSections) {
+            await immediatelySaveDocumentSections(updatedSections);
+        }
     };
 
     const handleAddDocument = (sectionId) => {
@@ -702,18 +815,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         setShowDocumentModal(true);
     };
 
-    const handleSaveDocument = (documentData) => {
+    const handleSaveDocument = async (documentData) => {
         // Get current user info
         const currentUser = getCurrentUser();
         
         // Update timestamp BEFORE state update to prevent sync from overwriting
         lastLocalUpdateRef.current = Date.now();
         
+        let updatedSections;
+        
         // Use functional update to avoid race conditions
         setSections(currentSections => {
             const section = currentSections.find(s => s.id === editingSectionId);
             
-            return currentSections.map(s => {
+            updatedSections = currentSections.map(s => {
                 if (s.id === editingSectionId) {
                     if (editingDocument) {
                         // Update existing document - preserve ALL existing fields and merge new data
@@ -800,15 +915,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
                 return s;
             });
+            
+            return updatedSections;
         });
+        
         setShowDocumentModal(false);
         setEditingDocument(null);
         setEditingSectionId(null);
+        
+        // Immediately save to database to ensure persistence
+        if (updatedSections) {
+            await immediatelySaveDocumentSections(updatedSections);
+        }
     };
 
-    const handleDeleteDocument = (sectionId, documentId) => {
+    const handleDeleteDocument = async (sectionId, documentId) => {
         // Get current user info
         const currentUser = getCurrentUser();
+        
+        let updatedSections;
         
         // Use functional update to avoid race conditions
         setSections(currentSections => {
@@ -821,7 +946,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 // Update timestamp to prevent sync from overwriting
                 lastLocalUpdateRef.current = Date.now();
                 
-                const updated = currentSections.map(s => {
+                updatedSections = currentSections.map(s => {
                     if (s.id === sectionId) {
                         return {
                             ...s,
@@ -849,18 +974,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     );
                 }
                 
-                return updated;
+                return updatedSections;
             }
             return currentSections;
         });
+        
+        // Immediately save to database to ensure persistence
+        if (updatedSections) {
+            await immediatelySaveDocumentSections(updatedSections);
+        }
     };
 
-    const handleUpdateStatus = (sectionId, documentId, month, status) => {
+    const handleUpdateStatus = async (sectionId, documentId, month, status) => {
         // Get current user info
         const currentUser = getCurrentUser();
 
         // Update timestamp BEFORE state update to prevent sync from overwriting
         lastLocalUpdateRef.current = Date.now();
+
+        let updatedSections;
 
         // Use functional update to avoid race conditions
         setSections(currentSections => {
@@ -869,7 +1001,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             const document = section?.documents.find(d => d.id === documentId);
             const oldStatus = document?.collectionStatus?.[`${month}-${selectedYear}`];
 
-            return currentSections.map(s => {
+            updatedSections = currentSections.map(s => {
                 if (s.id === sectionId) {
                     return {
                         ...s,
@@ -890,6 +1022,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
                 return s;
             });
+            
+            return updatedSections;
         });
 
         // Log to audit trail (using values from closure)
