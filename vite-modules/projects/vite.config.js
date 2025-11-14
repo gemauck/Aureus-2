@@ -110,20 +110,21 @@ const reactWindowPlugin = () => {
           const ReactDOMInstance = getReactDOM();
           
           // Export hooks as direct references - React's hook system requires this
+          // CRITICAL: Do NOT bind hooks - React tracks hooks by their function identity
           // These are captured once when the module loads, after ensuring React is available
-          export const useState = ReactInstance.useState.bind(ReactInstance);
-          export const useEffect = ReactInstance.useEffect.bind(ReactInstance);
-          export const useRef = ReactInstance.useRef.bind(ReactInstance);
-          export const useCallback = ReactInstance.useCallback.bind(ReactInstance);
-          export const useMemo = ReactInstance.useMemo.bind(ReactInstance);
-          export const useLayoutEffect = ReactInstance.useLayoutEffect.bind(ReactInstance);
-          export const createElement = ReactInstance.createElement.bind(ReactInstance);
+          export const useState = ReactInstance.useState;
+          export const useEffect = ReactInstance.useEffect;
+          export const useRef = ReactInstance.useRef;
+          export const useCallback = ReactInstance.useCallback;
+          export const useMemo = ReactInstance.useMemo;
+          export const useLayoutEffect = ReactInstance.useLayoutEffect;
+          export const createElement = ReactInstance.createElement;
           export const Fragment = ReactInstance.Fragment;
           export const Component = ReactInstance.Component;
           export const PureComponent = ReactInstance.PureComponent;
-          export const memo = ReactInstance.memo.bind(ReactInstance);
-          export const forwardRef = ReactInstance.forwardRef.bind(ReactInstance);
-          export const lazy = ReactInstance.lazy.bind(ReactInstance);
+          export const memo = ReactInstance.memo;
+          export const forwardRef = ReactInstance.forwardRef;
+          export const lazy = ReactInstance.lazy;
           export const Suspense = ReactInstance.Suspense;
           export const StrictMode = ReactInstance.StrictMode;
           export const React = ReactProxy;
