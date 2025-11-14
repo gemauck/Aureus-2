@@ -314,8 +314,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // This ensures that when the project data is reloaded from the database, the sections state is updated
     // BUT: Only sync if we haven't made recent local changes (to prevent overwriting user edits)
     // OPTIMIZED: Only sync when project.documentSections actually changes (not on every render)
-    const previousDocumentSectionsRef = useRef(project?.documentSections);
-    
     useEffect(() => {
         // Skip if documentSections hasn't actually changed
         const currentDocumentSections = project?.documentSections;

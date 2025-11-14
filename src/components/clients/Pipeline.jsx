@@ -1973,7 +1973,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     WebkitTouchCallout: 'none',
                     WebkitUserSelect: 'none',
                     userSelect: 'none',
-                    pointerEvents: isDragging && draggedItem?.id === item.id ? 'none' : 'auto'
+                    pointerEvents: isDragging && draggedItem?.id === item.id ? 'none' : 'auto',
+                    cursor: 'grab'
+                }}
+                onMouseDown={(e) => {
+                    // Ensure drag can start - don't prevent default on mousedown
+                    console.log('🖱️ Pipeline: Mouse down on card', { itemId: item.id });
                 }}
             >
                 <div className="flex items-center justify-between gap-2">
