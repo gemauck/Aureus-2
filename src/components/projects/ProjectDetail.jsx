@@ -288,8 +288,8 @@ function initializeProjectDetail() {
         console.log('✅ ProjectDetail: All required components loaded');
     }
     
-    // Tab navigation state - always start with overview when opening a project
-    // Only restore 'documentCollection' if explicitly set AND the process is enabled
+    // Tab navigation state - restore from sessionStorage if available, otherwise start with overview
+    // Only restore 'documentCollection' if the project has the Document Collection process enabled
     const [activeSection, setActiveSection] = useState(() => {
         const saved = sessionStorage.getItem(`project-${project.id}-activeSection`);
         // Normalize hasDocumentCollectionProcess to check if it's enabled
@@ -298,21 +298,14 @@ function initializeProjectDetail() {
                           project.hasDocumentCollectionProcess === 1 ||
                           (typeof project.hasDocumentCollectionProcess === 'string' && project.hasDocumentCollectionProcess.toLowerCase() === 'true');
         
-        // Always default to 'overview' when opening a project
-        // Only restore 'documentCollection' if process is enabled AND it was explicitly saved
-        // This prevents auto-opening to Document Collection when navigating back
-        if (saved === 'documentCollection') {
-            if (!hasProcess) {
-                console.log('🔄 Document Collection tab saved but process not enabled, defaulting to overview');
-                return 'overview';
-            }
-            // Only restore if it was explicitly set (not auto-opened)
-            // For now, always default to overview to prevent auto-opening
-            console.log('🔄 Restoring saved section but defaulting to overview for better UX');
+        // If saved section is 'documentCollection' but process is not enabled, default to 'overview'
+        if (saved === 'documentCollection' && !hasProcess) {
+            console.log('🔄 Document Collection tab saved but process not enabled, defaulting to overview');
             return 'overview';
         }
         
-        // For other sections (overview, tasks), restore them
+        // Restore the saved section if valid, otherwise default to 'overview'
+        // This allows Document Collection to persist if user explicitly navigated to it
         return saved || 'overview';
     });
     
