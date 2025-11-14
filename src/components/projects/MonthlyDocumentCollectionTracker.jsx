@@ -275,9 +275,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         // If already initialized for this project, NEVER sync - preserve user input
         if (hasInitializedRef.current) {
             console.log('⏭️ Component already initialized - NEVER syncing to preserve user input');
-            return;
-        }
-        
+                return;
+            }
+            
         // Only sync on the very first mount when local state is empty
         if (project && project.documentSections !== undefined && isInitialMount.current) {
             const parsed = parseSections(project.documentSections);
@@ -287,10 +287,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 if (currentSections.length === 0 && parsed.length > 0) {
                     console.log('🔄 Initial sync from project prop on first mount:', parsed.length, 'sections');
                     hasInitializedRef.current = true; // Mark as initialized - never sync again
-                    isInitialMount.current = false;
+                        isInitialMount.current = false;
                     lastLocalUpdateRef.current = Date.now();
                     previousDocumentSectionsRef.current = project.documentSections;
-                    return parsed;
+                        return parsed;
                 } else if (currentSections.length === 0 && parsed.length === 0) {
                     // Empty state - mark as initialized but don't change state
                     console.log('✅ Component initialized with empty sections');
@@ -307,163 +307,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
     }, [project?.id]); // ONLY run when project ID changes (switching projects)
 
-    useEffect(() => {
-        // Skip save on initial mount to prevent duplicate saves when component first loads
-        if (isInitialMount.current || !hasInitializedRef.current) {
-            console.log('⏭️ MonthlyDocumentCollectionTracker: Skipping save on initial mount');
-            if (isInitialMount.current) {
-                isInitialMount.current = false;
-            }
-            return;
-        }
-        
-        // Skip save if any modal is open (user is actively editing)
-        if (showSectionModal || showDocumentModal || editingSection || editingDocument) {
-            console.log('⏭️ MonthlyDocumentCollectionTracker: Skipping save - modal/form is open');
-            return;
-        }
-        
-        // Skip save if sections are empty (unless explicitly saving)
-        if (sections.length === 0) {
-            console.log('⏭️ MonthlyDocumentCollectionTracker: Skipping save - no sections to save');
-            return;
-        }
-        
-        // Wait for DatabaseAPI to be available (with retry)
-        const waitForDatabaseAPI = async (maxWait = 5000, retryInterval = 100) => {
-            const startTime = Date.now();
-            while (Date.now() - startTime < maxWait) {
-                if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
-                    return true;
-                }
-                await new Promise(resolve => setTimeout(resolve, retryInterval));
-            }
-            return false;
-        };
-        
-        // Save sections to project whenever they change
-        const saveProjectData = async () => {
-            try {
-                // Wait for DatabaseAPI if not immediately available
-                if (!window.DatabaseAPI || typeof window.DatabaseAPI.updateProject !== 'function') {
-                    console.log('⏳ MonthlyDocumentCollectionTracker: Waiting for DatabaseAPI...');
-                    const apiAvailable = await waitForDatabaseAPI(5000, 100);
-                    if (!apiAvailable) {
-                        throw new Error('DatabaseAPI.updateProject is not available after waiting. Please refresh the page.');
-                    }
-                    console.log('✅ DatabaseAPI is now available');
-                }
-                
-                isSavingRef.current = true;
-                console.log('💾 MonthlyDocumentCollectionTracker: Saving sections...');
-                console.log('  - Project ID:', project.id);
-                console.log('  - Sections count:', sections.length);
-                
-                // Double-check DatabaseAPI is still available
-                if (!window.DatabaseAPI || typeof window.DatabaseAPI.updateProject !== 'function') {
-                    throw new Error('DatabaseAPI.updateProject is not available');
-                }
-                
-                // Prepare the update payload - ensure ALL content is included
-                const updatePayload = {
-                    documentSections: JSON.stringify(sections)
-                };
-                
-                // Verify all content types are included
-                const contentSummary = {
-                    sections: sections.length,
-                    totalDocuments: sections.reduce((sum, s) => sum + (s.documents?.length || 0), 0),
-                    documentsWithAttachments: sections.reduce((sum, s) => 
-                        sum + (s.documents?.filter(d => d.attachments && d.attachments.length > 0).length || 0), 0
-                    ),
-                    documentsWithComments: sections.reduce((sum, s) => 
-                        sum + (s.documents?.filter(d => d.comments && Object.keys(d.comments).length > 0).length || 0), 0
-                    ),
-                    documentsWithStatus: sections.reduce((sum, s) => 
-                        sum + (s.documents?.filter(d => d.collectionStatus && Object.keys(d.collectionStatus).length > 0).length || 0), 0
-                    )
-                };
-                
-                console.log('📡 Sending sections update to database');
-                console.log('  - Content summary:', contentSummary);
-                console.log('  - Payload size:', JSON.stringify(sections).length, 'characters');
-                
-                // Save to database first (server-first approach)
-                console.log('📤 Calling DatabaseAPI.updateProject...');
-                const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
-                console.log('✅ Database API call completed:', apiResponse);
-                
-                // Verify the response indicates success
-                if (!apiResponse || (apiResponse.error && !apiResponse.success)) {
-                    throw new Error('Database update returned error: ' + (apiResponse?.error || 'Unknown error'));
-                }
-                
-                // Update the timestamp IMMEDIATELY to prevent sync from overwriting
-                lastLocalUpdateRef.current = Date.now();
-                console.log('⏰ Updated lastLocalUpdateRef timestamp');
-                
-                // Clear cache to ensure fresh data is loaded next time (but don't fetch immediately)
-                if (window.DatabaseAPI && typeof window.DatabaseAPI.clearCache === 'function') {
-                    window.DatabaseAPI.clearCache(`/projects/${project.id}`);
-                    window.DatabaseAPI.clearCache('/projects');
-                    console.log('🗑️ Cleared project cache');
-                }
-                
-                // DISABLED: Verification step removed to prevent unnecessary refreshes
-                // The save response is sufficient confirmation
-                console.log('✅ Save completed -', sections.length, 'sections saved');
-                
-                // Then update localStorage for consistency
-                if (window.dataService && typeof window.dataService.getProjects === 'function') {
-                    const savedProjects = await window.dataService.getProjects();
-                    if (savedProjects) {
-                        const updatedProjects = savedProjects.map(p => {
-                            if (p.id === project.id) {
-                                // Preserve all existing project data and only update documentSections
-                                return { ...p, documentSections: sections };
-                            }
-                            return p;
-                        });
-                        if (window.dataService && typeof window.dataService.setProjects === 'function') {
-                            try {
-                                await window.dataService.setProjects(updatedProjects);
-                                console.log('✅ localStorage updated for document sections');
-                            } catch (saveError) {
-                                console.warn('Failed to save projects to dataService:', saveError);
-                            }
-                        }
-                    }
-                }
-                
-                // DISABLED: Don't dispatch projectUpdated event - it causes parent to refresh
-                // which then triggers sync and overwrites user input
-                // The save is sufficient - parent will get updated data on next navigation
-                console.log('✅ Save completed - parent will get fresh data on next navigation');
-            } catch (error) {
-                console.error('❌ Error saving document sections:', error);
-                console.error('  - Error stack:', error.stack);
-                console.error('  - Error details:', {
-                    message: error.message,
-                    name: error.name,
-                    DatabaseAPI: typeof window.DatabaseAPI,
-                    updateProject: typeof window.DatabaseAPI?.updateProject
-                });
-                alert('Failed to save document collection changes: ' + error.message);
-            } finally {
-                // Reset saving flag after a short delay to allow sync to see the update
-                setTimeout(() => {
-                    isSavingRef.current = false;
-                }, 1000);
-            }
-        };
-        
-        // Debounce saves - increased to 1.5 seconds to avoid conflicts
-        const timeoutId = setTimeout(() => {
-            saveProjectData();
-        }, 1500);
-        
-        return () => clearTimeout(timeoutId);
-    }, [sections, project.id]);
+    // REMOVED: Debounced auto-save effect
+    // NEW METHODOLOGY: Only save explicitly when user adds/edits/deletes sections or documents
+    // No automatic saves - prevents refreshes and overwriting user input
+    // Data only refreshes on mount or when navigating back to the page
 
     // Auto-scroll to last comment when comment popup opens
     useEffect(() => {
