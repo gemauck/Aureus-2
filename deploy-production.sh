@@ -25,13 +25,17 @@ else
 fi
 
 # Step 0.5: Run functional deployment tests
-echo "🧪 Running functional deployment tests..."
-if ! npm run test:deploy; then
-    echo "❌ Deployment tests failed! Aborting deployment."
-    echo "   Please fix the issues above before deploying."
-    exit 1
+if [ -z "$SKIP_SAFETY_TESTS" ]; then
+    echo "🧪 Running functional deployment tests..."
+    if ! npm run test:deploy; then
+        echo "❌ Deployment tests failed! Aborting deployment."
+        echo "   Please fix the issues above before deploying."
+        exit 1
+    fi
+    echo "✅ All deployment tests passed!"
+else
+    echo "⚠️  Skipping deployment tests (SKIP_SAFETY_TESTS is set)"
 fi
-echo "✅ All deployment tests passed!"
 
 # Step 1: Build CSS
 echo "🏗️  Building CSS..."

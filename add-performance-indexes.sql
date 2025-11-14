@@ -17,3 +17,9 @@ CREATE INDEX IF NOT EXISTS "Project_createdAt_idx" ON "Project"("createdAt");
 CREATE INDEX IF NOT EXISTS "Opportunity_clientId_idx" ON "Opportunity"("clientId");
 CREATE INDEX IF NOT EXISTS "Opportunity_createdAt_idx" ON "Opportunity"("createdAt");
 
+-- User table indexes (CRITICAL for users page performance)
+CREATE INDEX IF NOT EXISTS "User_status_idx" ON "User"("status");
+CREATE INDEX IF NOT EXISTS "User_createdAt_idx" ON "User"("createdAt");
+CREATE INDEX IF NOT EXISTS "User_name_idx" ON "User"("name");
+CREATE INDEX IF NOT EXISTS "User_role_idx" ON "User"("role");
+

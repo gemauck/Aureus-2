@@ -57,6 +57,21 @@ async function applyIndexes() {
     await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "Opportunity_createdAt_idx" ON "Opportunity"("createdAt")`
     console.log('  ✅ Opportunity_createdAt_idx')
     
+    // User table indexes (CRITICAL for users page performance)
+    console.log('')
+    console.log('📊 Creating User table indexes...')
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "User_status_idx" ON "User"("status")`
+    console.log('  ✅ User_status_idx (CRITICAL for filtering active/inactive users)')
+    
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "User_createdAt_idx" ON "User"("createdAt")`
+    console.log('  ✅ User_createdAt_idx (CRITICAL for sorting by date)')
+    
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "User_name_idx" ON "User"("name")`
+    console.log('  ✅ User_name_idx (for sorting by name)')
+    
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "User_role_idx" ON "User"("role")`
+    console.log('  ✅ User_role_idx (for filtering by role)')
+    
     // Verify indexes were created
     console.log('')
     console.log('🔍 Verifying indexes...')
@@ -81,6 +96,13 @@ async function applyIndexes() {
       ORDER BY indexname
     `
     
+    const userIndexes = await prisma.$queryRaw`
+      SELECT indexname 
+      FROM pg_indexes 
+      WHERE tablename = 'User' AND indexname LIKE 'User_%'
+      ORDER BY indexname
+    `
+    
     console.log('')
     console.log(`✅ Successfully created ${clientIndexes.length} Client indexes:`)
     clientIndexes.forEach(idx => console.log(`   - ${idx.indexname}`))
@@ -94,8 +116,12 @@ async function applyIndexes() {
     opportunityIndexes.forEach(idx => console.log(`   - ${idx.indexname}`))
     
     console.log('')
+    console.log(`✅ Successfully created ${userIndexes.length} User indexes:`)
+    userIndexes.forEach(idx => console.log(`   - ${idx.indexname}`))
+    
+    console.log('')
     console.log('✨ Performance indexes applied successfully!')
-    console.log('   Your Clients page should now load much faster.')
+    console.log('   Your Clients and Users pages should now load much faster.')
     
     process.exit(0)
   } catch (error) {

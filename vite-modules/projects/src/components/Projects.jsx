@@ -258,9 +258,26 @@ export function Projects({ onProjectClick }) {
                 
                 console.log('✅ DatabaseAPI.getProjects is available, making request...');
                 
-                // Add timeout to prevent infinite loading (10 seconds)
+                // Try to load from cache first as a fallback
+                let cachedProjects = [];
+                try {
+                    const cached = window.storage?.getProjects?.();
+                    if (cached && Array.isArray(cached) && cached.length > 0) {
+                        cachedProjects = cached;
+                        console.log('📦 Found cached projects:', cachedProjects.length);
+                        // Show cached projects immediately while loading fresh data
+                        if (isMounted && cachedProjects.length > 0) {
+                            setProjects(cachedProjects);
+                            setIsLoading(false);
+                        }
+                    }
+                } catch (cacheError) {
+                    console.warn('⚠️ Failed to load cached projects:', cacheError);
+                }
+                
+                // Add timeout to prevent infinite loading (8 seconds)
                 const timeoutPromise = new Promise((_, reject) => {
-                    setTimeout(() => reject(new Error('Request timeout: Projects API took too long to respond')), 10000);
+                    setTimeout(() => reject(new Error('Request timeout: Projects API took too long to respond')), 8000);
                 });
                 
                 let response;

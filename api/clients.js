@@ -302,13 +302,8 @@ async function handler(req, res) {
         // Don't block creation if duplicate check fails
       }
 
-      // Ensure type and services columns exist in database
-      try {
-        await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "type" TEXT`
-        await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "services" TEXT DEFAULT '[]'`
-        } catch (error) {
-        // Column may already exist
-      }
+      // Schema modifications should be handled by migrations, not in request handlers
+      // The type and services columns are defined in Prisma schema and should already exist
 
       // Verify user exists before setting ownerId
       const userEmail = req.user?.email || 'unknown'
