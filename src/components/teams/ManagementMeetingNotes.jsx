@@ -1046,14 +1046,23 @@ const ManagementMeetingNotes = () => {
         try {
             setLoading(true);
             let response;
-            if (editingActionItem) {
+            // Check if we're updating (has id) or creating (no id)
+            if (editingActionItem?.id) {
+                // Update existing action item
                 response = await window.DatabaseAPI.updateActionItem(editingActionItem.id, actionItemData);
             } else {
+                // Create new action item
                 response = await window.DatabaseAPI.createActionItem(actionItemData);
             }
             
-            if (response.data?.actionItem) {
+            if (response?.data?.actionItem || response?.actionItem) {
                 // Reload current month's notes
+                const monthResponse = await window.DatabaseAPI.getMeetingNotes(selectedMonth);
+                setCurrentMonthlyNotes(monthResponse.data?.monthlyNotes);
+                setShowActionItemModal(false);
+                setEditingActionItem(null);
+            } else {
+                // Even if response structure is different, reload to get updated data
                 const monthResponse = await window.DatabaseAPI.getMeetingNotes(selectedMonth);
                 setCurrentMonthlyNotes(monthResponse.data?.monthlyNotes);
                 setShowActionItemModal(false);
@@ -1061,7 +1070,7 @@ const ManagementMeetingNotes = () => {
             }
         } catch (error) {
             console.error('Error saving action item:', error);
-            alert('Failed to save action item');
+            alert('Failed to save action item: ' + (error.message || 'Unknown error'));
         } finally {
             setLoading(false);
         }

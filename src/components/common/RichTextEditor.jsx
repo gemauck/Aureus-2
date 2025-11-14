@@ -13,8 +13,22 @@ const RichTextEditor = ({
 }) => {
     const editorRef = useRef(null);
     const [html, setHtml] = useState(value || '');
+    const isInternalUpdateRef = useRef(false);
 
+    // Initialize editor content on mount
     useEffect(() => {
+        if (editorRef.current && !editorRef.current.innerHTML && value) {
+            editorRef.current.innerHTML = value;
+            setHtml(value);
+        }
+    }, []);
+
+    // Update editor when value prop changes (external updates)
+    useEffect(() => {
+        if (isInternalUpdateRef.current) {
+            isInternalUpdateRef.current = false;
+            return;
+        }
         if (value !== html && editorRef.current) {
             const currentHtml = editorRef.current.innerHTML || '';
             // Only update if the value has actually changed (not from user input)
@@ -28,6 +42,7 @@ const RichTextEditor = ({
     const handleInput = () => {
         if (!editorRef.current) return;
         const newHtml = editorRef.current.innerHTML;
+        isInternalUpdateRef.current = true;
         setHtml(newHtml);
         if (onChange) {
             onChange(newHtml);
