@@ -418,13 +418,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     }
                 }
                 
-                // Trigger a custom event to notify parent component to refresh project data
-                if (typeof window.dispatchEvent === 'function') {
-                    window.dispatchEvent(new CustomEvent('projectUpdated', {
-                        detail: { projectId: project.id, field: 'documentSections' }
-                    }));
-                    console.log('📢 Dispatched projectUpdated event to refresh parent component');
-                }
+                // DISABLED: Don't dispatch projectUpdated event - it causes parent to refresh
+                // which then triggers sync and overwrites user input
+                // The save is sufficient - parent will get updated data on next navigation
+                console.log('✅ Save completed - parent will get fresh data on next navigation');
             } catch (error) {
                 console.error('❌ Error saving document sections:', error);
                 console.error('  - Error stack:', error.stack);
