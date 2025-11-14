@@ -273,7 +273,16 @@ const TaskManagement = () => {
         }
     };
 
-    const handleQuickStatusToggle = async (task, newStatus) => {
+    const handleQuickStatusToggle = async (task, newStatus, optimistic = false) => {
+        // Optimistic update: immediately update UI
+        if (optimistic) {
+            setTasks(prevTasks => 
+                prevTasks.map(t => 
+                    t.id === task.id ? { ...t, status: newStatus } : t
+                )
+            );
+        }
+
         try {
             const token = storage?.getToken?.();
             if (!token) return;
@@ -290,12 +299,48 @@ const TaskManagement = () => {
             });
 
             if (response.ok) {
-                loadTasks();
+                // Only reload if not using optimistic update
+                if (!optimistic) {
+                    loadTasks();
+                } else {
+                    // Update stats optimistically
+                    setStats(prevStats => {
+                        const newStats = { ...prevStats };
+                        // Decrement old status count
+                        if (task.status === 'todo') newStats.todo = Math.max(0, newStats.todo - 1);
+                        if (task.status === 'in-progress') newStats.inProgress = Math.max(0, newStats.inProgress - 1);
+                        if (task.status === 'completed') newStats.completed = Math.max(0, newStats.completed - 1);
+                        if (task.status === 'cancelled') newStats.total = Math.max(0, newStats.total - 1);
+                        
+                        // Increment new status count
+                        if (newStatus === 'todo') newStats.todo = (newStats.todo || 0) + 1;
+                        if (newStatus === 'in-progress') newStats.inProgress = (newStats.inProgress || 0) + 1;
+                        if (newStatus === 'completed') newStats.completed = (newStats.completed || 0) + 1;
+                        
+                        return newStats;
+                    });
+                }
             } else {
+                // Revert optimistic update on error
+                if (optimistic) {
+                    setTasks(prevTasks => 
+                        prevTasks.map(t => 
+                            t.id === task.id ? { ...t, status: task.status } : t
+                        )
+                    );
+                }
                 const error = await response.json();
                 alert(error.error?.message || 'Failed to update task status');
             }
         } catch (error) {
+            // Revert optimistic update on error
+            if (optimistic) {
+                setTasks(prevTasks => 
+                    prevTasks.map(t => 
+                        t.id === task.id ? { ...t, status: task.status } : t
+                    )
+                );
+            }
             console.error('Error updating task status:', error);
             alert('Error updating task: ' + error.message);
         }
@@ -579,7 +624,8 @@ const TaskManagement = () => {
                             if (taskId && taskId !== '') {
                                 const task = tasks.find(t => String(t.id) === String(taskId));
                                 if (task && task.status !== status) {
-                                    handleQuickStatusToggle(task, status);
+                                    // Use optimistic update for smooth UI
+                                    handleQuickStatusToggle(task, status, true);
                                 }
                             }
                         };
@@ -596,24 +642,25 @@ const TaskManagement = () => {
                                 <h3 className={`font-semibold mb-4 capitalize ${isDark ? 'text-white' : 'text-gray-900'}`}>
                                     {status.replace('-', ' ')} ({kanbanTasks[status]?.length || 0})
                                 </h3>
-                                <div className="space-y-2 min-h-[200px]">
+                                <div className="space-y-2 min-h-[200px] transition-all duration-200">
                                     {kanbanTasks[status]?.map(task => (
-                                        <TaskCard
-                                            key={task.id}
-                                            task={task}
-                                            isDark={isDark}
-                                            onEdit={handleEditTask}
-                                            onDelete={handleDeleteTask}
-                                            onQuickStatusToggle={handleQuickStatusToggle}
-                                            clients={clients}
-                                            projects={projects}
-                                            tags={tags}
-                                            getPriorityColor={getPriorityColor}
-                                            getPriorityTextColor={getPriorityTextColor}
-                                            getStatusColor={getStatusColor}
-                                            compact
-                                            draggable
-                                        />
+                                        <div key={task.id} className="transition-all duration-200 ease-in-out">
+                                            <TaskCard
+                                                task={task}
+                                                isDark={isDark}
+                                                onEdit={handleEditTask}
+                                                onDelete={handleDeleteTask}
+                                                onQuickStatusToggle={handleQuickStatusToggle}
+                                                clients={clients}
+                                                projects={projects}
+                                                tags={tags}
+                                                getPriorityColor={getPriorityColor}
+                                                getPriorityTextColor={getPriorityTextColor}
+                                                getStatusColor={getStatusColor}
+                                                compact
+                                                draggable
+                                            />
+                                        </div>
                                     ))}
                                 </div>
                             </div>
@@ -680,19 +727,20 @@ const TaskCard = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clients
         }
     };
 
+    const [isDragging, setIsDragging] = React.useState(false);
+
     const handleDragStart = (e) => {
         if (draggable) {
             wasDraggedRef.current = false;
+            setIsDragging(true);
             e.dataTransfer.setData('taskId', String(task.id));
             e.dataTransfer.effectAllowed = 'move';
-            // Add visual feedback
-            e.currentTarget.style.opacity = '0.5';
         }
     };
 
     const handleDragEnd = (e) => {
         if (draggable) {
-            e.currentTarget.style.opacity = '1';
+            setIsDragging(false);
             // Mark that we dragged, and clear after a short delay to prevent click
             wasDraggedRef.current = true;
             setTimeout(() => {
