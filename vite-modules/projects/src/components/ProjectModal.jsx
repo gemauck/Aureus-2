@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from '../react-window.js';
 
 // For now, we'll still use window dependencies until we migrate services
 const storage = typeof window !== 'undefined' ? window.storage : null;

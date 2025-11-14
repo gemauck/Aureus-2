@@ -1,4 +1,4 @@
-import React from 'react';
+import React from './react-window.js';
 import Projects from './components/Projects';
 import ProjectDetail from './components/ProjectDetail';
 import ProjectModal from './components/ProjectModal';
