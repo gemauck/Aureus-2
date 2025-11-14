@@ -18,12 +18,28 @@ const reactWindowPlugin = () => {
       // Provide the virtual module
       if (id === '\0virtual:react-window') {
         return `
-          // Lazy getter for React - ensures window.React is available at runtime
+          // Lazy getter for React - waits for window.React to be available
+          // This handles the case where the module loads before React is fully ready
           const getReact = () => {
             if (typeof window !== 'undefined' && window.React) {
               return window.React;
             }
-            throw new Error('window.React is not available. Make sure React is loaded before this module.');
+            // If React isn't available yet, wait a bit and try again
+            // This handles race conditions where module loads before React script completes
+            let attempts = 0;
+            const maxAttempts = 50; // 5 seconds max wait
+            while (attempts < maxAttempts) {
+              if (typeof window !== 'undefined' && window.React) {
+                return window.React;
+              }
+              // Synchronous wait (blocks, but only briefly)
+              const start = Date.now();
+              while (Date.now() - start < 100) {
+                // Busy wait 100ms
+              }
+              attempts++;
+            }
+            throw new Error('window.React is not available after waiting. Make sure React is loaded before this module.');
           };
           
           const getReactDOM = () => {
@@ -33,41 +49,53 @@ const reactWindowPlugin = () => {
             return null;
           };
           
-          // Use Proxy to lazily access React at runtime
-          // This ensures window.React is available when hooks are accessed
-          const React = new Proxy({}, {
-            get(target, prop) {
-              const react = getReact();
-              const value = react[prop];
-              // For functions (hooks, createElement, etc.), return them directly
-              // React's hook system needs direct access to the actual functions
-              return typeof value === 'function' ? value.bind(react) : value;
-            }
-          });
+          // Create a lazy React object using Proxy
+          // This ensures window.React is accessed at runtime, not at module evaluation time
+          const createLazyReact = () => {
+            return new Proxy({}, {
+              get(target, prop) {
+                const react = getReact();
+                const value = react[prop];
+                // For functions (hooks, createElement, etc.), return them directly
+                // React's hook system needs direct access to the actual functions
+                return typeof value === 'function' ? value.bind(react) : value;
+              }
+            });
+          };
           
+          // Create React Proxy - will be accessed lazily
+          const React = createLazyReact();
           const ReactDOM = getReactDOM();
           
           // Export React as Proxy - hooks will be accessed lazily through the Proxy
           export default React;
           
-          // Export hooks directly from the Proxy - they'll be resolved at access time
-          // This ensures React is available when the hooks are actually used
-          export const useState = React.useState;
-          export const useEffect = React.useEffect;
-          export const useRef = React.useRef;
-          export const useCallback = React.useCallback;
-          export const useMemo = React.useMemo;
-          export const useLayoutEffect = React.useLayoutEffect;
-          export const createElement = React.createElement;
-          export const Fragment = React.Fragment;
-          export const Component = React.Component;
-          export const PureComponent = React.PureComponent;
-          export const memo = React.memo;
-          export const forwardRef = React.forwardRef;
-          export const lazy = React.lazy;
-          export const Suspense = React.Suspense;
-          export const StrictMode = React.StrictMode;
-          export { React, ReactDOM };
+          // Get React once at module load - wait for it if needed
+          // This ensures React is available for all exports
+          const ReactInstance = getReact();
+          const ReactDOMInstance = getReactDOM();
+          
+          // Export React directly - it's now guaranteed to be available
+          export default ReactInstance;
+          
+          // Export all React APIs directly from the instance
+          export const useState = ReactInstance.useState;
+          export const useEffect = ReactInstance.useEffect;
+          export const useRef = ReactInstance.useRef;
+          export const useCallback = ReactInstance.useCallback;
+          export const useMemo = ReactInstance.useMemo;
+          export const useLayoutEffect = ReactInstance.useLayoutEffect;
+          export const createElement = ReactInstance.createElement;
+          export const Fragment = ReactInstance.Fragment;
+          export const Component = ReactInstance.Component;
+          export const PureComponent = ReactInstance.PureComponent;
+          export const memo = ReactInstance.memo;
+          export const forwardRef = ReactInstance.forwardRef;
+          export const lazy = ReactInstance.lazy;
+          export const Suspense = ReactInstance.Suspense;
+          export const StrictMode = ReactInstance.StrictMode;
+          export const React = ReactInstance;
+          export const ReactDOM = ReactDOMInstance;
         `;
       }
       return null;
