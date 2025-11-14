@@ -1062,7 +1062,13 @@ const Projects = () => {
                 documents: typeof fullProject.documents === 'string' ? JSON.parse(fullProject.documents || '[]') : (fullProject.documents || []),
                 comments: typeof fullProject.comments === 'string' ? JSON.parse(fullProject.comments || '[]') : (fullProject.comments || []),
                 activityLog: typeof fullProject.activityLog === 'string' ? JSON.parse(fullProject.activityLog || '[]') : (fullProject.activityLog || []),
-                team: typeof fullProject.team === 'string' ? JSON.parse(fullProject.team || '[]') : (fullProject.team || [])
+                team: typeof fullProject.team === 'string' ? JSON.parse(fullProject.team || '[]') : (fullProject.team || []),
+                // Ensure hasDocumentCollectionProcess is properly included (boolean from database)
+                // Handle both boolean and string values from database
+                hasDocumentCollectionProcess: fullProject.hasDocumentCollectionProcess === true || 
+                                             fullProject.hasDocumentCollectionProcess === 'true' ||
+                                             fullProject.hasDocumentCollectionProcess === 1 ||
+                                             (typeof fullProject.hasDocumentCollectionProcess === 'string' && fullProject.hasDocumentCollectionProcess.toLowerCase() === 'true')
             };
             console.log('Normalized project for ProjectDetail:', normalizedProject);
             

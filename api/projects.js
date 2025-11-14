@@ -401,7 +401,7 @@ async function handler(req, res) {
           comments: typeof body.comments === 'string' ? body.comments : JSON.stringify(body.comments),
           activityLog: typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(body.activityLog),
           notes: body.notes,
-          hasDocumentCollectionProcess: body.hasDocumentCollectionProcess !== undefined ? body.hasDocumentCollectionProcess : undefined,
+          hasDocumentCollectionProcess: body.hasDocumentCollectionProcess !== undefined ? (body.hasDocumentCollectionProcess === true || body.hasDocumentCollectionProcess === 'true') : undefined,
           documentSections: typeof body.documentSections === 'string' ? body.documentSections : JSON.stringify(body.documentSections)
         }
         Object.keys(updateData).forEach(key => {

@@ -1169,6 +1169,9 @@ function initializeProjectDetail() {
         }
 
         const projectLink = project ? `/projects/${project.id}` : '/projects';
+        const taskId = updatedTargetTask.id || taskId;
+        // Build task-specific link with anchor for direct navigation to task
+        const taskLink = taskId ? `${projectLink}#task-${taskId}` : projectLink;
         const taskTitle = updatedTargetTask.title || originalTask.title || 'Task';
         const projectName = project?.name || 'Project';
 
@@ -1177,13 +1180,13 @@ function initializeProjectDetail() {
                 await window.MentionHelper.processMentions(
                     commentText,
                     `Task: ${taskTitle}`,
-                    projectLink,
+                    taskLink, // Use task-specific link
                     currentUser.name,
                     users,
                     {
                         projectId: project?.id,
                         projectName,
-                        taskId: updatedTargetTask.id || taskId,
+                        taskId: taskId,
                         taskTitle
                     }
                 );
@@ -1220,9 +1223,9 @@ function initializeProjectDetail() {
                     type: 'comment',
                     title: `New comment on task: ${taskTitle}`,
                     message: `${currentUser.name} commented on "${taskTitle}" in project "${projectName}": "${commentText.substring(0, 100)}${commentText.length > 100 ? '...' : ''}"`,
-                    link: projectLink,
+                    link: taskLink, // Use task-specific link
                     metadata: {
-                        taskId: updatedTargetTask.id || taskId,
+                        taskId: taskId,
                         taskTitle,
                         projectId: project?.id,
                         projectName,
@@ -1773,6 +1776,8 @@ function initializeProjectDetail() {
                 } else {
                     try {
                         const projectLink = `/projects/${project.id}`;
+                        // Build task-specific link with anchor for direct navigation to task
+                        const taskLink = updatedTaskData.id ? `${projectLink}#task-${updatedTaskData.id}` : projectLink;
                         console.log('📤 Sending task assignment notification', {
                             userId: assigneeUser.id,
                             userName: assigneeUser.name,
@@ -1787,7 +1792,7 @@ function initializeProjectDetail() {
                                 type: 'task',
                                 title: `Task assigned: ${updatedTaskData.title || 'Untitled Task'}`,
                                 message: `${currentUser.name} assigned you to "${updatedTaskData.title || 'Untitled Task'}" in project "${project.name}"`,
-                                link: projectLink,
+                                link: taskLink, // Use task-specific link
                                 metadata: {
                                     taskId: updatedTaskData.id,
                                     taskTitle: updatedTaskData.title,
@@ -1836,6 +1841,8 @@ function initializeProjectDetail() {
                 } else {
                     try {
                         const projectLink = `/projects/${project.id}`;
+                        // Build task-specific link with anchor for direct navigation to task
+                        const taskLink = updatedTaskData.id ? `${projectLink}#task-${updatedTaskData.id}` : projectLink;
                         console.log('📤 Sending new task assignment notification', {
                             userId: assigneeUser.id,
                             userName: assigneeUser.name,
@@ -1850,7 +1857,7 @@ function initializeProjectDetail() {
                                 type: 'task',
                                 title: `Task assigned: ${updatedTaskData.title || 'Untitled Task'}`,
                                 message: `${currentUser.name} assigned you to "${updatedTaskData.title || 'Untitled Task'}" in project "${project.name}"`,
-                                link: projectLink,
+                                link: taskLink, // Use task-specific link
                                 metadata: {
                                     taskId: updatedTaskData.id,
                                     taskTitle: updatedTaskData.title,
