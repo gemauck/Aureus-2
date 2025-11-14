@@ -2168,9 +2168,14 @@ function initializeProjectDetail() {
             setShowDocumentProcessDropdown(false);
             
             // Immediately save to database to ensure persistence
+            // Ensure documentSections is properly serialized
+            const sectionsToSave = documentSectionsArray && documentSectionsArray.length > 0 
+                ? JSON.stringify(documentSectionsArray) 
+                : '[]';
+            
             const updatePayload = {
                 hasDocumentCollectionProcess: true,
-                documentSections: serializedDocumentSections
+                documentSections: sectionsToSave
             };
             
             console.log('💾 Immediately saving document collection process to database...');
