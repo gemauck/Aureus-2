@@ -29,6 +29,10 @@ const ProjectsDatabaseFirst = () => {
         const saved = localStorage.getItem('projectsViewMode');
         return saved === 'list' ? 'list' : 'grid';
     });
+    
+    // Sort state for list view
+    const [sortColumn, setSortColumn] = useState('name'); // Default sort by name
+    const [sortDirection, setSortDirection] = useState('asc'); // 'asc' or 'desc'
     // Monitor availability of ProjectDetail component
     useEffect(() => {
         if (projectDetailComponent) {
@@ -460,21 +464,74 @@ const ProjectsDatabaseFirst = () => {
         setSelectedProjects([]);
     };
 
+    // Handle column sorting
+    const handleSort = (column) => {
+        if (sortColumn === column) {
+            // Toggle direction if clicking the same column
+            setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+        } else {
+            // Set new column and default to ascending
+            setSortColumn(column);
+            setSortDirection('asc');
+        }
+    };
+
+    // Sort function
+    const sortProjects = (a, b) => {
+        let aValue, bValue;
+        
+        switch (sortColumn) {
+            case 'name':
+                aValue = (a.name || '').toLowerCase();
+                bValue = (b.name || '').toLowerCase();
+                break;
+            case 'client':
+                aValue = (a.client || '').toLowerCase();
+                bValue = (b.client || '').toLowerCase();
+                break;
+            case 'type':
+                aValue = (a.type || '').toLowerCase();
+                bValue = (b.type || '').toLowerCase();
+                break;
+            case 'status':
+                aValue = (a.status || '').toLowerCase();
+                bValue = (b.status || '').toLowerCase();
+                break;
+            case 'dueDate':
+                aValue = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+                bValue = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+                break;
+            case 'assignedTo':
+                aValue = (a.assignedTo || 'Unassigned').toLowerCase();
+                bValue = (b.assignedTo || 'Unassigned').toLowerCase();
+                break;
+            default:
+                aValue = (a.name || '').toLowerCase();
+                bValue = (b.name || '').toLowerCase();
+        }
+        
+        let comparison = 0;
+        if (sortColumn === 'dueDate') {
+            // Numeric comparison for dates
+            comparison = aValue - bValue;
+        } else {
+            // String comparison
+            comparison = aValue.localeCompare(bValue);
+        }
+        
+        return sortDirection === 'asc' ? comparison : -comparison;
+    };
+
     // Filter and search
     const filteredProjects = projects
         .filter(project => {
-            const matchesSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                project.client.toLowerCase().includes(searchTerm.toLowerCase());
-            const matchesStatus = filterStatus === 'All Status' || project.status === filterStatus;
-            const matchesType = filterType === 'All Types' || project.type === filterType;
-            return matchesSearch && matchesStatus && matchesType;
+        const matchesSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            project.client.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesStatus = filterStatus === 'All Status' || project.status === filterStatus;
+        const matchesType = filterType === 'All Types' || project.type === filterType;
+        return matchesSearch && matchesStatus && matchesType;
         })
-        .sort((a, b) => {
-            // Sort alphabetically by project name (case-insensitive)
-            const nameA = (a.name || '').toLowerCase();
-            const nameB = (b.name || '').toLowerCase();
-            return nameA.localeCompare(nameB);
-        });
+        .sort(sortProjects);
 
     // Load data on mount
     useEffect(() => {
@@ -841,23 +898,89 @@ const ProjectsDatabaseFirst = () => {
                                                 />
                                             </th>
                                         )}
-                                        <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} uppercase tracking-wider`}>
-                                            Project
+                                        <th 
+                                            className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300 hover:bg-gray-600' : 'text-gray-700 hover:bg-gray-100'} uppercase tracking-wider cursor-pointer transition-colors select-none`}
+                                            onClick={() => handleSort('name')}
+                                        >
+                                            <div className="flex items-center space-x-1">
+                                                <span>Project</span>
+                                                {sortColumn === 'name' && (
+                                                    <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600`}></i>
+                                                )}
+                                                {sortColumn !== 'name' && (
+                                                    <i className={`fas fa-sort text-gray-400 opacity-50`}></i>
+                                                )}
+                                            </div>
                                         </th>
-                                        <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} uppercase tracking-wider`}>
-                                            Client
+                                        <th 
+                                            className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300 hover:bg-gray-600' : 'text-gray-700 hover:bg-gray-100'} uppercase tracking-wider cursor-pointer transition-colors select-none`}
+                                            onClick={() => handleSort('client')}
+                                        >
+                                            <div className="flex items-center space-x-1">
+                                                <span>Client</span>
+                                                {sortColumn === 'client' && (
+                                                    <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600`}></i>
+                                                )}
+                                                {sortColumn !== 'client' && (
+                                                    <i className={`fas fa-sort text-gray-400 opacity-50`}></i>
+                                                )}
+                                            </div>
                                         </th>
-                                        <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} uppercase tracking-wider`}>
-                                            Type
+                                        <th 
+                                            className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300 hover:bg-gray-600' : 'text-gray-700 hover:bg-gray-100'} uppercase tracking-wider cursor-pointer transition-colors select-none`}
+                                            onClick={() => handleSort('type')}
+                                        >
+                                            <div className="flex items-center space-x-1">
+                                                <span>Type</span>
+                                                {sortColumn === 'type' && (
+                                                    <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600`}></i>
+                                                )}
+                                                {sortColumn !== 'type' && (
+                                                    <i className={`fas fa-sort text-gray-400 opacity-50`}></i>
+                                                )}
+                                            </div>
                                         </th>
-                                        <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} uppercase tracking-wider`}>
-                                            Status
+                                        <th 
+                                            className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300 hover:bg-gray-600' : 'text-gray-700 hover:bg-gray-100'} uppercase tracking-wider cursor-pointer transition-colors select-none`}
+                                            onClick={() => handleSort('status')}
+                                        >
+                                            <div className="flex items-center space-x-1">
+                                                <span>Status</span>
+                                                {sortColumn === 'status' && (
+                                                    <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600`}></i>
+                                                )}
+                                                {sortColumn !== 'status' && (
+                                                    <i className={`fas fa-sort text-gray-400 opacity-50`}></i>
+                                                )}
+                                            </div>
                                         </th>
-                                        <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} uppercase tracking-wider`}>
-                                            Due Date
+                                        <th 
+                                            className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300 hover:bg-gray-600' : 'text-gray-700 hover:bg-gray-100'} uppercase tracking-wider cursor-pointer transition-colors select-none`}
+                                            onClick={() => handleSort('dueDate')}
+                                        >
+                                            <div className="flex items-center space-x-1">
+                                                <span>Due Date</span>
+                                                {sortColumn === 'dueDate' && (
+                                                    <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600`}></i>
+                                                )}
+                                                {sortColumn !== 'dueDate' && (
+                                                    <i className={`fas fa-sort text-gray-400 opacity-50`}></i>
+                                                )}
+                                            </div>
                                         </th>
-                                        <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} uppercase tracking-wider`}>
-                                            Assigned To
+                                        <th 
+                                            className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300 hover:bg-gray-600' : 'text-gray-700 hover:bg-gray-100'} uppercase tracking-wider cursor-pointer transition-colors select-none`}
+                                            onClick={() => handleSort('assignedTo')}
+                                        >
+                                            <div className="flex items-center space-x-1">
+                                                <span>Assigned To</span>
+                                                {sortColumn === 'assignedTo' && (
+                                                    <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600`}></i>
+                                                )}
+                                                {sortColumn !== 'assignedTo' && (
+                                                    <i className={`fas fa-sort text-gray-400 opacity-50`}></i>
+                                                )}
+                                            </div>
                                         </th>
                                         <th className={`px-6 py-3 text-right text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} uppercase tracking-wider`}>
                                             Actions

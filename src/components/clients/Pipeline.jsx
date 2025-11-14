@@ -1200,9 +1200,14 @@ function doesOpportunityBelongToClient(opportunity, client) {
             // Check both state and ref to determine if we have a valid drag
             const hasDragData = draggedItem || dragDataRef.current;
             e.dataTransfer.dropEffect = hasDragData ? 'move' : 'none';
-            // Log occasionally to verify dragover is firing (throttled)
-            if (Math.random() < 0.01) { // 1% of the time
-                console.log('🔄 Pipeline: DragOver firing', { stageName, hasDragData: !!hasDragData });
+            // Log more frequently to verify dragover is firing
+            if (Math.random() < 0.1) { // 10% of the time
+                console.log('🔄 Pipeline: Stage DragOver firing', { 
+                    stageName, 
+                    hasDragData: !!hasDragData,
+                    dropEffect: e.dataTransfer.dropEffect,
+                    target: e.target?.tagName 
+                });
             }
         }
     };
@@ -2073,21 +2078,49 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
     // Global dragover handler to ensure preventDefault is always called
     // This is critical for drop events to fire - browsers require preventDefault on dragover
+    // We check dragDataRef.current directly to avoid stale closure issues
     useEffect(() => {
+        let dragOverCount = 0;
         const globalDragOver = (e) => {
-            // Only prevent default if we're dragging something from the pipeline
-            if (isDragging || dragDataRef.current) {
+            // Check if we're dragging a pipeline item (use ref to avoid stale closure)
+            const hasPipelineDrag = dragDataRef.current !== null;
+            
+            if (hasPipelineDrag) {
+                // ALWAYS preventDefault for pipeline drags - this is required for drop to fire
                 e.preventDefault();
+                dragOverCount++;
+                // Log every 50th dragover to verify it's firing
+                if (dragOverCount % 50 === 0) {
+                    console.log('🔄 Pipeline: Global dragover handler firing', { 
+                        count: dragOverCount, 
+                        hasRef: !!dragDataRef.current,
+                        target: e.target?.tagName,
+                        currentTarget: e.currentTarget?.tagName
+                    });
+                }
                 // Don't stop propagation - let the stage handlers handle it
             }
         };
         
+        const globalDrop = (e) => {
+            // Log if drop happens at document level (shouldn't normally)
+            if (dragDataRef.current) {
+                console.log('📦 Pipeline: Global drop handler fired (unexpected)', {
+                    target: e.target?.tagName,
+                    hasRef: !!dragDataRef.current,
+                    itemId: dragDataRef.current?.itemId
+                });
+            }
+        };
+        
         document.addEventListener('dragover', globalDragOver, { passive: false });
+        document.addEventListener('drop', globalDrop);
         
         return () => {
             document.removeEventListener('dragover', globalDragOver);
+            document.removeEventListener('drop', globalDrop);
         };
-    }, [isDragging]);
+    }, []); // Empty deps - we check dragDataRef.current directly
 
     // Diagnostic function to verify drag and drop setup
     useEffect(() => {

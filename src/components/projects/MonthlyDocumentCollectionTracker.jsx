@@ -101,6 +101,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // Ref to track if this is the initial mount (prevent save on initial load)
     const isInitialMount = useRef(true);
     
+    // Ref to track if component has been initialized (prevents ANY syncing after first load)
+    const hasInitializedRef = useRef(false);
+    
     // Ref to track when we last updated sections locally (to prevent sync from overwriting)
     const lastLocalUpdateRef = useRef(Date.now());
     
@@ -111,16 +114,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const debouncedSaveTimeoutRef = useRef(null);
     
     // Ref to track previous documentSections value to avoid unnecessary syncing
-    const previousDocumentSectionsRef = useRef(null);
+    const previousDocumentSectionsRef = useRef(project?.documentSections);
     
-    // Reset initial mount flag when component remounts - this allows sync to work on remount
-    // But don't reset if we just saved (prevent overwriting fresh saves)
-    useEffect(() => {
-        const timeSinceLastUpdate = Date.now() - lastLocalUpdateRef.current;
-        if (timeSinceLastUpdate > 10000) { // Only reset if no recent saves (10 seconds)
-            isInitialMount.current = true;
-        }
-    }, []); // Only run on mount
+    // Track project ID to detect project changes
+    const previousProjectIdRef = useRef(project?.id);
     
     // Helper function to immediately save documentSections to database
     const immediatelySaveDocumentSections = async (sectionsToSave) => {
