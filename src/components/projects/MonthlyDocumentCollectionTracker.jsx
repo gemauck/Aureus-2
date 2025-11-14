@@ -231,56 +231,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         { value: 'unavailable', label: 'Unavailable', color: 'bg-gray-100 text-gray-800', cellColor: 'bg-gray-50' }
     ];
 
-    // Refresh project data when component mounts ONLY if we don't have sections
-    // This prevents unnecessary refreshes when data is already available
-    useEffect(() => {
-        // Only refresh if we don't have sections or if project.documentSections is empty/undefined
-        const hasSections = sections.length > 0;
-        const projectHasSections = project.documentSections && 
-                                   (Array.isArray(project.documentSections) ? project.documentSections.length > 0 : 
-                                    typeof project.documentSections === 'string' ? project.documentSections.trim() !== '' && project.documentSections !== '[]' : false);
-        
-        if (hasSections || projectHasSections) {
-            console.log('⏭️ Skipping refresh - sections already available');
-            return;
-        }
-        
-        // On mount, refresh project data ONLY if we don't have sections
-        const refreshProjectData = async () => {
-            try {
-                if (window.DatabaseAPI && typeof window.DatabaseAPI.getProject === 'function') {
-                    console.log('🔄 Refreshing project data on mount (no sections available)...');
-                    // Clear cache first to force fresh fetch
-                    if (window.DatabaseAPI.clearCache) {
-                        window.DatabaseAPI.clearCache(`/projects/${project.id}`);
-                    }
-                    const response = await window.DatabaseAPI.getProject(project.id);
-                    const freshProject = response?.data?.project || response?.project || response?.data;
-                    if (freshProject && freshProject.documentSections !== undefined) {
-                        const freshSections = parseSections(freshProject.documentSections);
-                        
-                        // Only update if we got sections and don't have any
-                        if (freshSections.length > 0) {
-                            setSections(currentSections => {
-                                if (currentSections.length === 0) {
-                                    console.log('🔄 Updating sections from fresh database data:', freshSections.length, 'sections');
-                                    // Mark that we just refreshed so sync doesn't overwrite
-                                    lastLocalUpdateRef.current = Date.now();
-                                    return freshSections;
-                                }
-                                return currentSections;
-                            });
-                        }
-                    }
-                }
-            } catch (error) {
-                console.warn('⚠️ Failed to refresh project data on mount:', error);
-            }
-        };
-        
-        // Only refresh if we don't have sections
-        refreshProjectData();
-    }, [project.id]); // Only run when project ID changes (component remounts)
+    // DISABLED: No automatic refresh on mount - only use data from props
+    // This prevents overwriting user input and unnecessary API calls
+    // Data will be loaded from props when component mounts or project changes
     
     useEffect(() => {
         // Scroll to working months after sections load and when year changes
@@ -313,10 +266,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
     };
 
-    // Sync sections from project prop when it changes (e.g., after refresh or reload)
-    // This ensures that when the project data is reloaded from the database, the sections state is updated
-    // BUT: Only sync if we haven't made recent local changes (to prevent overwriting user edits)
-    // OPTIMIZED: Only sync when project.documentSections actually changes (not on every render)
+    // Sync sections from project prop ONLY on initial mount or when project ID changes
+    // DISABLED automatic syncing to prevent overwriting user input
+    // Only sync when component first mounts or when switching to a different project
     useEffect(() => {
         // Skip if documentSections hasn't actually changed
         const currentDocumentSections = project?.documentSections;
@@ -327,60 +279,30 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         // Update ref for next comparison
         previousDocumentSectionsRef.current = currentDocumentSections;
         
-        if (project && project.documentSections !== undefined) {
-            // Don't sync if we're currently saving or just made a local update (within last 5 seconds)
-            // Increased from 3 to 5 seconds to prevent race conditions with slow saves
-            const timeSinceLastUpdate = Date.now() - lastLocalUpdateRef.current;
-            if (isSavingRef.current || timeSinceLastUpdate < 5000) {
-                console.log('⏭️ Skipping sync - recent local changes or save in progress', {
-                    isSaving: isSavingRef.current,
-                    timeSinceLastUpdate: Math.round(timeSinceLastUpdate / 1000) + 's'
-                });
-                return;
-            }
-            
+        // ONLY sync on initial mount - never sync after that to prevent overwriting user input
+        if (project && project.documentSections !== undefined && isInitialMount.current) {
             const parsed = parseSections(project.documentSections);
             
-            // Use functional update to access current sections state and avoid stale closures
             setSections(currentSections => {
-                // Only update if the parsed data is different from current sections
-                // This prevents infinite loops and unnecessary updates
-                const currentSectionsStr = JSON.stringify(currentSections);
-                const parsedSectionsStr = JSON.stringify(parsed);
-                
-                if (currentSectionsStr !== parsedSectionsStr) {
-                    // If component just mounted (isInitialMount is true), always sync from prop
-                    // This ensures fresh data is loaded when navigating back
-                    if (isInitialMount.current) {
-                        console.log('🔄 Syncing sections on initial mount from project prop:', parsed.length, 'sections');
-                        isInitialMount.current = false;
-                        return parsed;
-                    }
-                    
-                    // Only sync if the prop data has more sections OR if local state is empty
-                    // This prevents stale prop data from overwriting newer local changes
-                    // Also check if local state was recently modified (more than 5 seconds ago)
-                    const localHasRecentChanges = timeSinceLastUpdate < 10000; // 10 seconds
-                    
-                    if (parsed.length > currentSections.length || (currentSections.length === 0 && !localHasRecentChanges)) {
-                        console.log('🔄 Syncing sections from project prop:', parsed.length, 'sections');
-                        console.log('  - Previous sections:', currentSections.length);
-                        console.log('  - New sections:', parsed.length);
-                        return parsed;
-                    } else {
-                        console.log('⏭️ Skipping sync - local state has more sections or recent changes', {
-                            parsedLength: parsed.length,
-                            currentLength: currentSections.length,
-                            localHasRecentChanges
-                        });
-                    }
+                // Only sync if local state is empty (initial mount)
+                if (currentSections.length === 0 && parsed.length > 0) {
+                    console.log('🔄 Initial sync from project prop on mount:', parsed.length, 'sections');
+                    isInitialMount.current = false;
+                    lastLocalUpdateRef.current = Date.now();
+                    return parsed;
                 }
-                
-                // Return current state if no change (prevents unnecessary re-renders)
+                // If we already have sections, don't overwrite them
+                if (currentSections.length > 0) {
+                    console.log('⏭️ Skipping sync - local sections exist, not overwriting');
+                    isInitialMount.current = false;
+                }
                 return currentSections;
             });
+        } else if (project && project.documentSections !== undefined && !isInitialMount.current) {
+            // After initial mount, NEVER sync from props - user input takes priority
+            console.log('⏭️ Skipping sync - component already initialized, preserving user input');
         }
-    }, [project?.documentSections, project?.id]);
+    }, [project?.id]); // ONLY run when project ID changes (switching projects)
 
     useEffect(() => {
         // Skip save on initial mount to prevent duplicate saves when component first loads

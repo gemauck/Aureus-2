@@ -1188,15 +1188,22 @@ function doesOpportunityBelongToClient(opportunity, client) {
     };
 
     const handleDragOver = (e, stageName = null) => {
+        // CRITICAL: preventDefault MUST be called for drop to work
         e.preventDefault();
         e.stopPropagation();
+        
         if (stageName) {
             setDraggedOverStage(stageName);
         }
+        
         if (e?.dataTransfer) {
             // Check both state and ref to determine if we have a valid drag
             const hasDragData = draggedItem || dragDataRef.current;
             e.dataTransfer.dropEffect = hasDragData ? 'move' : 'none';
+            // Log occasionally to verify dragover is firing (throttled)
+            if (Math.random() < 0.01) { // 1% of the time
+                console.log('🔄 Pipeline: DragOver firing', { stageName, hasDragData: !!hasDragData });
+            }
         }
     };
 
@@ -1321,13 +1328,14 @@ function doesOpportunityBelongToClient(opportunity, client) {
         e.preventDefault();
         e.stopPropagation();
         
-        console.log('🎯 Pipeline: Drop event triggered', { 
+        console.log('🎯🎯🎯 Pipeline: DROP EVENT TRIGGERED!', { 
             targetStage, 
             draggedItem: draggedItem?.id, 
             draggedType,
             dragDataRef: dragDataRef.current?.itemId,
             dataTransferTypes: e?.dataTransfer?.types ? Array.from(e.dataTransfer.types) : [],
-            dropEffect: e?.dataTransfer?.dropEffect
+            dropEffect: e?.dataTransfer?.dropEffect,
+            timestamp: new Date().toISOString()
         });
         
         if (e?.dataTransfer) {
@@ -1949,13 +1957,48 @@ function doesOpportunityBelongToClient(opportunity, client) {
     // Render pipeline card
     const PipelineCard = ({ item }) => {
         const age = getDealAge(item.createdDate);
+        const cardRef = React.useRef(null);
+
+        // Use useEffect to attach native event listeners and verify draggable is set
+        React.useEffect(() => {
+            const cardElement = cardRef.current;
+            if (!cardElement) return;
+
+            // Verify draggable is set
+            if (cardElement.draggable !== true) {
+                console.warn('⚠️ Pipeline: Card element draggable not set correctly, fixing...', { 
+                    itemId: item.id, 
+                    currentDraggable: cardElement.draggable,
+                    hasAttribute: cardElement.hasAttribute('draggable')
+                });
+                cardElement.draggable = true;
+            }
+
+            const handleNativeDragStart = (e) => {
+                console.log('🎬 Pipeline: Native drag start', { itemId: item.id, itemName: item.name });
+                handleDragStart(e, item, item.type);
+            };
+
+            const handleNativeDragEnd = (e) => {
+                console.log('🏁 Pipeline: Native drag end', { itemId: item.id, dropEffect: e?.dataTransfer?.dropEffect });
+                handleDragEnd(e);
+            };
+
+            cardElement.addEventListener('dragstart', handleNativeDragStart, true);
+            cardElement.addEventListener('dragend', handleNativeDragEnd, true);
+
+            return () => {
+                cardElement.removeEventListener('dragstart', handleNativeDragStart, true);
+                cardElement.removeEventListener('dragend', handleNativeDragEnd, true);
+            };
+        }, [item.id, item.name, item.type]);
 
         return (
             <div
+                ref={cardRef}
                 draggable={true}
                 onDragStart={(e) => {
-                    console.log('🎬 Pipeline: Card drag start triggered', { itemId: item.id, itemName: item.name, event: e.type });
-                    e.stopPropagation();
+                    console.log('🎬 Pipeline: React drag start', { itemId: item.id, itemName: item.name, event: e.type });
                     handleDragStart(e, item, item.type);
                 }}
                 onDrag={(e) => {
@@ -1965,7 +2008,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     }
                 }}
                 onDragEnd={(e) => {
-                    console.log('🏁 Pipeline: Card drag end triggered', { itemId: item.id, dropEffect: e?.dataTransfer?.dropEffect });
+                    console.log('🏁 Pipeline: React drag end', { itemId: item.id, dropEffect: e?.dataTransfer?.dropEffect });
                     handleDragEnd(e);
                 }}
                 onTouchStart={(e) => handleTouchStart(e, item, item.type)}
@@ -1996,11 +2039,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     WebkitUserSelect: 'none',
                     userSelect: 'none',
                     pointerEvents: isDragging && draggedItem?.id === item.id ? 'none' : 'auto',
-                    cursor: 'grab'
+                    cursor: 'grab',
+                    touchAction: 'none'
                 }}
                 onMouseDown={(e) => {
-                    // Ensure drag can start - don't prevent default on mousedown
-                    console.log('🖱️ Pipeline: Mouse down on card', { itemId: item.id });
+                    console.log('🖱️ Pipeline: Mouse down on card', { itemId: item.id, draggable: cardRef.current?.draggable });
                 }}
             >
                 <div className="flex items-center justify-between gap-2">
@@ -2027,6 +2070,27 @@ function doesOpportunityBelongToClient(opportunity, client) {
             </div>
         );
     };
+
+    // Diagnostic function to verify drag and drop setup
+    useEffect(() => {
+        if (viewMode === 'kanban' && dataLoaded) {
+            setTimeout(() => {
+                const cards = document.querySelectorAll('[data-pipeline-stage] [draggable="true"]');
+                const stages = document.querySelectorAll('[data-pipeline-stage]');
+                console.log('🔍 Pipeline: Drag and drop diagnostic', {
+                    cardsFound: cards.length,
+                    stagesFound: stages.length,
+                    cardsWithDraggable: Array.from(cards).filter(c => c.draggable === true).length,
+                    sampleCard: cards[0] ? {
+                        draggable: cards[0].draggable,
+                        hasDragStart: cards[0].ondragstart !== null,
+                        pointerEvents: window.getComputedStyle(cards[0]).pointerEvents,
+                        userSelect: window.getComputedStyle(cards[0]).userSelect
+                    } : null
+                });
+            }, 1000);
+        }
+    }, [viewMode, dataLoaded, filteredItems.length]);
 
     // Kanban Board View
     const KanbanView = () => (

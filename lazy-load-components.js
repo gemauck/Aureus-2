@@ -231,7 +231,19 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
 
             // Use timestamp-based version for components that require fresh load each time
             // Note: Check both .jsx (source) and .js (compiled) paths since lazy-loader converts paths
-            if (scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || scriptSrc.includes('UserManagement') || scriptSrc.includes('ProjectProgressTracker') || scriptSrc.includes('TaskManagement') || scriptSrc.includes('MonthlyDocumentCollectionTracker') || scriptSrc.includes('Projects.jsx') || scriptSrc.includes('Projects.js') || scriptSrc.includes('/projects/Projects') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            // Also check the original src path to catch components before path conversion
+            const needsCacheBusting = src.includes('DailyNotes') || src.includes('Manufacturing') || 
+                                     src.includes('UserManagement') || src.includes('ProjectProgressTracker') || 
+                                     src.includes('TaskManagement') || src.includes('MonthlyDocumentCollectionTracker') || 
+                                     src.includes('Projects.jsx') || src.includes('Projects.js') || 
+                                     scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || 
+                                     scriptSrc.includes('UserManagement') || scriptSrc.includes('ProjectProgressTracker') || 
+                                     scriptSrc.includes('TaskManagement') || scriptSrc.includes('MonthlyDocumentCollectionTracker') || 
+                                     scriptSrc.includes('Projects.jsx') || scriptSrc.includes('Projects.js') || 
+                                     scriptSrc.includes('/projects/Projects') || 
+                                     window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            
+            if (needsCacheBusting) {
                 const separator = scriptSrc.includes('?') ? '&' : '?';
                 scriptSrc = scriptSrc + separator + 'v=20251112-list-view-' + Date.now();
                 console.log(`🔄 Cache-busting applied to: ${scriptSrc}`);

@@ -461,13 +461,20 @@ const ProjectsDatabaseFirst = () => {
     };
 
     // Filter and search
-    const filteredProjects = projects.filter(project => {
-        const matchesSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            project.client.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesStatus = filterStatus === 'All Status' || project.status === filterStatus;
-        const matchesType = filterType === 'All Types' || project.type === filterType;
-        return matchesSearch && matchesStatus && matchesType;
-    });
+    const filteredProjects = projects
+        .filter(project => {
+            const matchesSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                project.client.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesStatus = filterStatus === 'All Status' || project.status === filterStatus;
+            const matchesType = filterType === 'All Types' || project.type === filterType;
+            return matchesSearch && matchesStatus && matchesType;
+        })
+        .sort((a, b) => {
+            // Sort alphabetically by project name (case-insensitive)
+            const nameA = (a.name || '').toLowerCase();
+            const nameB = (b.name || '').toLowerCase();
+            return nameA.localeCompare(nameB);
+        });
 
     // Load data on mount
     useEffect(() => {
