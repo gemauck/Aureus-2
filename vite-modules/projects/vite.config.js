@@ -79,35 +79,51 @@ const reactWindowPlugin = () => {
           // But we'll do a quick check and throw a clear error if React isn't available
           
           // Get React instance - should be available since index.html waits for it
-          // Do a quick check without blocking
-          let ReactInstance;
-          if (typeof window !== 'undefined' && 
-              window.React && 
-              window.React !== null &&
-              typeof window.React.useState === 'function') {
-            ReactInstance = window.React;
-          } else {
-            // React should be available, but if it's not, throw a clear error
-            throw new Error('window.React is not available when Vite module loads. This should not happen - index.html should ensure React is loaded first.');
+          // Do a robust check with multiple attempts (non-blocking, just retries)
+          function getReactInstance() {
+            // Try multiple times in case of race conditions
+            for (let i = 0; i < 10; i++) {
+              if (typeof window !== 'undefined' && 
+                  window.React && 
+                  window.React !== null &&
+                  typeof window.React.useState === 'function' &&
+                  typeof window.React.useRef === 'function') {
+                return window.React;
+              }
+              // Small delay between attempts (non-blocking)
+              if (i < 9) {
+                const start = Date.now();
+                while (Date.now() - start < 5) {} // 5ms delay
+              }
+            }
+            // If still not available, throw a clear error
+            throw new Error('window.React is not available when Vite module loads. React hooks are not accessible. Please ensure React is loaded before the Vite module.');
+          }
+          
+          const ReactInstance = getReactInstance();
+          
+          // Validate ReactInstance is not null before using it
+          if (!ReactInstance || !ReactInstance.useState || !ReactInstance.useRef) {
+            throw new Error('React instance is invalid. useState: ' + typeof ReactInstance?.useState + ', useRef: ' + typeof ReactInstance?.useRef);
           }
           
           const ReactDOMInstance = getReactDOM();
           
           // Export hooks as direct references - React's hook system requires this
           // These are captured once when the module loads, after ensuring React is available
-          export const useState = ReactInstance.useState;
-          export const useEffect = ReactInstance.useEffect;
-          export const useRef = ReactInstance.useRef;
-          export const useCallback = ReactInstance.useCallback;
-          export const useMemo = ReactInstance.useMemo;
-          export const useLayoutEffect = ReactInstance.useLayoutEffect;
-          export const createElement = ReactInstance.createElement;
+          export const useState = ReactInstance.useState.bind(ReactInstance);
+          export const useEffect = ReactInstance.useEffect.bind(ReactInstance);
+          export const useRef = ReactInstance.useRef.bind(ReactInstance);
+          export const useCallback = ReactInstance.useCallback.bind(ReactInstance);
+          export const useMemo = ReactInstance.useMemo.bind(ReactInstance);
+          export const useLayoutEffect = ReactInstance.useLayoutEffect.bind(ReactInstance);
+          export const createElement = ReactInstance.createElement.bind(ReactInstance);
           export const Fragment = ReactInstance.Fragment;
           export const Component = ReactInstance.Component;
           export const PureComponent = ReactInstance.PureComponent;
-          export const memo = ReactInstance.memo;
-          export const forwardRef = ReactInstance.forwardRef;
-          export const lazy = ReactInstance.lazy;
+          export const memo = ReactInstance.memo.bind(ReactInstance);
+          export const forwardRef = ReactInstance.forwardRef.bind(ReactInstance);
+          export const lazy = ReactInstance.lazy.bind(ReactInstance);
           export const Suspense = ReactInstance.Suspense;
           export const StrictMode = ReactInstance.StrictMode;
           export const React = ReactProxy;
