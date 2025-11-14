@@ -1,8 +1,9 @@
-// Get React hooks from window
-const { useState, useEffect, useRef } = React;
-const storage = window.storage;
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
-const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
+// For now, we'll still use window dependencies until we migrate services
+const storage = typeof window !== 'undefined' ? window.storage : null;
+
+export function MonthlyDocumentCollectionTracker({ project, onBack }) {
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth(); // 0-11
     
@@ -79,30 +80,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         return [];
     };
     
-    // ULTRA AGGRESSIVE: Initialize sections from props, but check sessionStorage first to preserve saved sections
+    // ULTRA AGGRESSIVE: Initialize sections from props, but mark initialized immediately if we have sections
     const [sections, setSections] = useState(() => {
         console.log('📋 Initializing sections from project.documentSections:', project.documentSections);
-        
-        // CRITICAL: Check sessionStorage first - if we have saved sections, use them instead of stale prop data
-        const storageKey = `documentSections_${project?.id}`;
-        try {
-            const savedSections = sessionStorage.getItem(storageKey);
-            if (savedSections) {
-                const parsed = JSON.parse(savedSections);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    console.log('🛡️ Using saved sections from sessionStorage:', parsed.length, 'sections');
-                    hasInitializedRef.current = true;
-                    console.log('🛑 ULTRA AGGRESSIVE: Initialized with saved sections - BLOCKING all future syncs');
-                    return parsed;
-                }
-            }
-        } catch (e) {
-            console.warn('Failed to load sections from sessionStorage:', e);
-        }
-        
-        // Fallback to prop data
         const parsed = parseSections(project.documentSections);
-        console.log('📋 Parsed sections from props:', parsed.length, 'sections');
+        console.log('📋 Parsed sections:', parsed.length, 'sections');
         // ULTRA AGGRESSIVE: Mark as initialized immediately if we have sections
         if (parsed.length > 0) {
             hasInitializedRef.current = true;
@@ -222,35 +204,26 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 });
             }
             
-                // CRITICAL: Save to sessionStorage to preserve across remounts
-                const storageKey = `documentSections_${project.id}`;
-                try {
-                    sessionStorage.setItem(storageKey, JSON.stringify(sectionsToSave));
-                    console.log('🛡️ Saved sections to sessionStorage for persistence across remounts');
-                } catch (e) {
-                    console.warn('Failed to save sections to sessionStorage:', e);
-                }
-                
-                // Update localStorage for consistency
-                if (window.dataService && typeof window.dataService.getProjects === 'function') {
-                    const savedProjects = await window.dataService.getProjects();
-                    if (savedProjects) {
-                        const updatedProjects = savedProjects.map(p => {
-                            if (p.id === project.id) {
-                                return { ...p, documentSections: sectionsToSave };
-                            }
-                            return p;
-                        });
-                        if (window.dataService && typeof window.dataService.setProjects === 'function') {
-                            try {
-                                await window.dataService.setProjects(updatedProjects);
-                                console.log('✅ localStorage updated for consistency');
-                            } catch (saveError) {
-                                console.warn('Failed to save projects to dataService:', saveError);
-                            }
+            // Update localStorage for consistency
+            if (window.dataService && typeof window.dataService.getProjects === 'function') {
+                const savedProjects = await window.dataService.getProjects();
+                if (savedProjects) {
+                    const updatedProjects = savedProjects.map(p => {
+                        if (p.id === project.id) {
+                            return { ...p, documentSections: sectionsToSave };
+                        }
+                        return p;
+                    });
+                    if (window.dataService && typeof window.dataService.setProjects === 'function') {
+                        try {
+                            await window.dataService.setProjects(updatedProjects);
+                            console.log('✅ localStorage updated for consistency');
+                        } catch (saveError) {
+                            console.warn('Failed to save projects to dataService:', saveError);
                         }
                     }
                 }
+            }
             
             // DISABLED: Don't dispatch projectUpdated event - it causes parent to refresh
             // which then triggers sync and overwrites user input
@@ -2465,9 +2438,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             {showDocumentModal && <DocumentModal />}
         </div>
     );
-};
+}
 
 // Make available globally
-window.MonthlyDocumentCollectionTracker = MonthlyDocumentCollectionTracker;
-console.log('✅ MonthlyDocumentCollectionTracker component loaded and registered globally');
 
+export default MonthlyDocumentCollectionTracker;

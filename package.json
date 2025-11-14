@@ -30,7 +30,10 @@
     "build:new": "cd frontend && vite build",
     "preview": "cd frontend && vite preview",
     "old:build": "npm run build:jsx && npm run build:css && npx prisma generate",
-    "old:start": "node server.js"
+    "old:start": "node server.js",
+    "dev:vite-projects": "cd vite-modules/projects && vite",
+    "build:vite-projects": "cd vite-modules/projects && vite build",
+    "preview:vite-projects": "cd vite-modules/projects && vite preview"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",

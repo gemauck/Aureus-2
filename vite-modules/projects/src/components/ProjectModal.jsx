@@ -1,0 +1,315 @@
+import React, { useState, useEffect, useRef } from 'react';
+
+// For now, we'll still use window dependencies until we migrate services
+const storage = typeof window !== 'undefined' ? window.storage : null;
+
+export function ProjectModal({ project, onSave, onClose, onDelete }) {
+    const [formData, setFormData] = useState(() => {
+        if (project) {
+            // Ensure all values are strings, not null
+            return {
+                name: project.name || '',
+                client: project.client || '',
+                type: project.type || 'Monthly Review',
+                startDate: project.startDate || '',
+                dueDate: project.dueDate || '',
+                assignedTo: project.assignedTo || '',
+                description: project.description || '',
+                status: project.status || 'Active',
+                manager: project.manager || ''
+            };
+        }
+        return {
+            name: '',
+            client: '',
+            type: 'Monthly Review',
+            startDate: '',
+            dueDate: '',
+            assignedTo: '',
+            description: '',
+            status: 'Active',
+            manager: ''
+        };
+    });
+
+    const [clients, setClients] = useState([]);
+    const [showNewClientInput, setShowNewClientInput] = useState(false);
+    const [newClientName, setNewClientName] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
+
+    useEffect(() => {
+        // Load clients from dataService
+        const loadClients = async () => {
+            try {
+                if (window.dataService && typeof window.dataService.getClients === 'function') {
+                    console.log('🔍 ProjectModal: Loading clients from dataService');
+                    const savedClients = await window.dataService.getClients() || [];
+                    console.log('📋 ProjectModal: Clients loaded:', savedClients.length, savedClients);
+                    setClients(savedClients);
+                } else {
+                    console.warn('DataService not available for loading clients');
+                    setClients([]);
+                }
+            } catch (error) {
+                console.error('Error loading clients:', error);
+                setClients([]);
+            }
+        };
+        loadClients();
+    }, []);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        
+        // Prevent multiple submissions
+        if (isSaving) {
+            console.warn('⚠️ Already saving, ignoring duplicate submission');
+            return;
+        }
+        
+        // Validate name field
+        if (!formData.name || formData.name.trim() === '') {
+            console.error('❌ Project name is required but empty');
+            alert('Please enter a project name');
+            return;
+        }
+        
+        setIsSaving(true);
+        console.log('💾 Saving project data:');
+        console.log('  - name:', formData.name);
+        console.log('  - client:', formData.client);
+        console.log('  - type:', formData.type);
+        console.log('  - hasName:', !!formData.name);
+        console.log('  - nameLength:', formData.name?.length);
+        console.log('  - full formData:', JSON.stringify(formData, null, 2));
+        
+        try {
+            // If user is entering a new client name
+            if (showNewClientInput && newClientName.trim()) {
+                const dataToSave = {...formData, client: newClientName.trim()};
+                console.log('💾 Saving with new client:', dataToSave);
+                await onSave(dataToSave);
+            } else {
+                console.log('💾 Saving with existing client:', formData);
+                await onSave(formData);
+            }
+        } catch (error) {
+            console.error('❌ Error in handleSubmit:', error);
+            alert('Failed to save project: ' + error.message);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleClientChange = (e) => {
+        const value = e.target.value;
+        console.log('🔍 Client changed:', value);
+        if (value === '__new__') {
+            setShowNewClientInput(true);
+            setNewClientName('');
+        } else {
+            setShowNewClientInput(false);
+            console.log('📝 Setting formData.client to:', value);
+            setFormData({...formData, client: value});
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-4 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-3">
+                    <h2 className="text-lg font-semibold text-gray-900">
+                        {project ? 'Edit Project' : 'Create New Project'}
+                    </h2>
+                    <div className="flex items-center gap-2">
+                        {project && typeof onDelete === 'function' && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (confirm('Delete this project? This cannot be undone.')) {
+                                        onDelete(project.id);
+                                    }
+                                }}
+                                className="px-2 py-1 text-xs text-white bg-red-600 hover:bg-red-700 rounded transition-colors font-medium"
+                                title="Delete Project"
+                            >
+                                <i className="fas fa-trash mr-1 text-[10px]"></i>
+                                Delete
+                            </button>
+                        )}
+                        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded transition-colors">
+                            <i className="fas fa-times text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+                <form onSubmit={handleSubmit} className="space-y-3">
+                    <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">Project Name</label>
+                        <input 
+                            type="text" 
+                            value={formData.name}
+                            onChange={(e) => setFormData({...formData, name: e.target.value})}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
+                            placeholder="Enter project name"
+                            required
+                        />
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Client</label>
+                            {!showNewClientInput ? (
+                                <select 
+                                    value={formData.client}
+                                    onChange={handleClientChange}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                    required
+                                >
+                                    <option value="">Select Client</option>
+                                    {clients && Array.isArray(clients) && clients.length > 0 ? (
+                                        clients
+                                            .filter(client => client && client.name && client.id)
+                                            .sort((a, b) => a.name.localeCompare(b.name))
+                                            .map(client => (
+                                                <option key={client.id} value={client.name}>
+                                                    {client.name}
+                                                </option>
+                                            ))
+                                    ) : null}
+                                    <option value="__new__">+ Add New Client</option>
+                                </select>
+                            ) : (
+                                <div className="space-y-1.5">
+                                    <input
+                                        type="text"
+                                        value={newClientName}
+                                        onChange={(e) => setNewClientName(e.target.value)}
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                        placeholder="Enter new client name"
+                                        required
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowNewClientInput(false);
+                                            setNewClientName('');
+                                        }}
+                                        className="text-xs text-gray-600 hover:text-gray-800"
+                                    >
+                                        <i className="fas fa-arrow-left mr-1"></i>
+                                        Back to client list
+                                    </button>
+                                </div>
+                            )}
+                            {(!clients || clients.length === 0) && !showNewClientInput && (
+                                <p className="text-[10px] text-gray-500 mt-1">
+                                    {typeof clients === 'undefined' ? 'Loading clients...' : 'No clients found. Add clients in the Clients section first, or enter a new client name.'}
+                                </p>
+                            )}
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Project Type</label>
+                            <select 
+                                value={formData.type}
+                                onChange={(e) => setFormData({...formData, type: e.target.value})}
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            >
+                                <option>Monthly Review</option>
+                                <option>Audit</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Start Date</label>
+                            <input 
+                                type="date" 
+                                value={formData.startDate}
+                                onChange={(e) => setFormData({...formData, startDate: e.target.value})}
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Due Date</label>
+                            <input 
+                                type="date"
+                                value={formData.dueDate}
+                                onChange={(e) => setFormData({...formData, dueDate: e.target.value})}
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
+                            />
+                        </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Project Manager</label>
+                            <select 
+                                value={formData.manager}
+                                onChange={(e) => setFormData({...formData, manager: e.target.value})}
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            >
+                                <option value="">Select Manager</option>
+                                <option>Gareth Mauck</option>
+                                <option>David Buttemer</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Assign To</label>
+                            <select 
+                                value={formData.assignedTo}
+                                onChange={(e) => setFormData({...formData, assignedTo: e.target.value})}
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            >
+                                <option value="">Select Team Member</option>
+                                <option>Gareth Mauck</option>
+                                <option>David Buttemer</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">Status</label>
+                        <select 
+                            value={formData.status}
+                            onChange={(e) => setFormData({...formData, status: e.target.value})}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        >
+                            <option value="Active">Active</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="On Hold">On Hold</option>
+                            <option value="Completed">Completed</option>
+                            <option value="Cancelled">Cancelled</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">Description</label>
+                        <textarea 
+                            value={formData.description}
+                            onChange={(e) => setFormData({...formData, description: e.target.value})}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
+                            rows="3" 
+                            placeholder="Project description and objectives"
+                        ></textarea>
+                    </div>
+                    
+                    <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-200">
+                            <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium">
+                                Cancel
+                            </button>
+                            <button 
+                                type="submit" 
+                                disabled={isSaving}
+                                className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isSaving ? 'Saving...' : (project ? 'Update Project' : 'Create Project')}
+                            </button>
+                        </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+
+export default ProjectModal;

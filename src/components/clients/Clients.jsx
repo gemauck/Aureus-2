@@ -2142,6 +2142,7 @@ const Clients = React.memo(() => {
             console.log('📝 Contacts in comprehensive client:', comprehensiveClient.contacts);
             console.log('📝 Sites in comprehensive client:', comprehensiveClient.sites);
             console.log('📝 Opportunities in comprehensive client:', comprehensiveClient.opportunities);
+            console.log('📝 Services in comprehensive client:', comprehensiveClient.services);
             
             // Don't save to localStorage YET - wait for API to succeed
             // This ensures database is the source of truth
@@ -2204,6 +2205,7 @@ const Clients = React.memo(() => {
                         console.log('🚀 Calling updateClient API with ID:', selectedClient.id);
                         console.log('📦 Update data payload:', JSON.stringify(apiUpdateData, null, 2));
                         console.log('📝 Notes being sent:', apiUpdateData.notes?.substring(0, 50) || 'empty');
+                        console.log('📝 Services being sent:', apiUpdateData.services);
                         try {
                             apiResponse = await window.api.updateClient(selectedClient.id, apiUpdateData);
                             console.log('✅ Client updated via API with ALL data');

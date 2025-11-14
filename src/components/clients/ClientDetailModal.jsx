@@ -2529,6 +2529,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                             : [...current, option];
                                                         setFormData({ ...formData, services: next });
                                                         hasUserEditedForm.current = true;
+                                                        userEditedFieldsRef.current.add('services'); // Track that user has edited services
+                                                        console.log('✅ Services updated:', next);
                                                     }}
                                                     className={`px-3 py-1.5 text-xs rounded-full border transition ${
                                                         isSelected

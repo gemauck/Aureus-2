@@ -505,6 +505,13 @@ async function handler(req, res) {
           // Don't block update if duplicate check fails
         }
         
+        // Ensure services is always included, even if not provided in body
+        const servicesValue = body.services !== undefined 
+          ? (typeof body.services === 'string' ? body.services : JSON.stringify(Array.isArray(body.services) ? body.services : []))
+          : JSON.stringify([])
+        
+        console.log('🔧 PATCH /api/clients/[id] - Services in body:', body.services, 'Processed:', servicesValue)
+        
         const updateData = {
           name: body.name,
           type: body.type || 'client', // Default to 'client' to prevent null types
@@ -524,7 +531,7 @@ async function handler(req, res) {
           sites: typeof body.sites === 'string' ? body.sites : JSON.stringify(Array.isArray(body.sites) ? body.sites : []),
           contracts: typeof body.contracts === 'string' ? body.contracts : JSON.stringify(Array.isArray(body.contracts) ? body.contracts : []),
           activityLog: typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : []),
-          services: typeof body.services === 'string' ? body.services : JSON.stringify(Array.isArray(body.services) ? body.services : []),
+          services: servicesValue, // Always include services
           billingTerms: typeof body.billingTerms === 'string' ? body.billingTerms : JSON.stringify(typeof body.billingTerms === 'object' && body.billingTerms !== null ? body.billingTerms : {})
         }
         Object.keys(updateData).forEach(key => {
