@@ -110,6 +110,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // Ref to track pending debounced save timeout
     const debouncedSaveTimeoutRef = useRef(null);
     
+    // Ref to track previous documentSections value to avoid unnecessary syncing
+    const previousDocumentSectionsRef = useRef(null);
+    
     // Reset initial mount flag when component remounts - this allows sync to work on remount
     // But don't reset if we just saved (prevent overwriting fresh saves)
     useEffect(() => {
