@@ -63,13 +63,6 @@ const reactWindowPlugin = () => {
             });
           };
           
-          // Create React Proxy - will be accessed lazily
-          const React = createLazyReact();
-          const ReactDOM = getReactDOM();
-          
-          // Export React as Proxy - hooks will be accessed lazily through the Proxy
-          export default React;
-          
           // Get React once at module load - wait for it if needed
           // This ensures React is available for all exports
           const ReactInstance = getReact();
