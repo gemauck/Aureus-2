@@ -62,9 +62,11 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     const [projects, setProjects] = useState(() => []);
     const [selectedYear, setSelectedYear] = useState(currentYear);
     const [loadError, setLoadError] = useState(null);
-    const [editingCell, setEditingCell] = useState(null); // {projectId, month, field}
-    const [cellValues, setCellValues] = useState({}); // {[projectId-month-field]: value}
     const [saving, setSaving] = useState(false);
+    
+    // Modal state for editing progress data
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [modalData, setModalData] = useState(null); // {project, month, field, currentValue, tempValue}
     
     // Refs
     const tableRef = useRef(null);
@@ -74,10 +76,6 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     const usersLoadPromiseRef = useRef(null);
     const focusRequestRef = useRef(null);
     const pendingFocusRef = useRef(false);
-    // Ref to store input values to persist across re-renders
-    const cellValuesRef = useRef({});
-    // Ref to store debounce timers for auto-save
-    const saveTimersRef = useRef({});
     
     // Auto focus on highlighted month columns when data loads
     useEffect(() => {

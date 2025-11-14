@@ -158,6 +158,37 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
     
     function loadComponent(src) {
         return new Promise((resolve, reject) => {
+            // CRITICAL: Check if Vite components are already available
+            // Vite Projects module loads before lazy-loader, so check first
+            if (src.includes('Projects.jsx') || src.includes('Projects.js')) {
+                if (window.Projects && typeof window.Projects === 'function') {
+                    console.log('✅ Projects component already available from Vite module - skipping lazy load');
+                    resolve();
+                    return;
+                }
+            }
+            if (src.includes('ProjectDetail.jsx') || src.includes('ProjectDetail.js')) {
+                if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
+                    console.log('✅ ProjectDetail component already available from Vite module - skipping lazy load');
+                    resolve();
+                    return;
+                }
+            }
+            if (src.includes('ProjectModal.jsx') || src.includes('ProjectModal.js')) {
+                if (window.ProjectModal && typeof window.ProjectModal === 'function') {
+                    console.log('✅ ProjectModal component already available from Vite module - skipping lazy load');
+                    resolve();
+                    return;
+                }
+            }
+            if (src.includes('MonthlyDocumentCollectionTracker.jsx') || src.includes('MonthlyDocumentCollectionTracker.js')) {
+                if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                    console.log('✅ MonthlyDocumentCollectionTracker component already available from Vite module - skipping lazy load');
+                    resolve();
+                    return;
+                }
+            }
+            
             // CRITICAL: NEVER load LeadDetailModal or ClientDetailModal from lazy-loader
             // They are loaded early in index.html and must NOT be overwritten
             // ProjectDetail CAN be loaded via lazy-loader (it has robust dependency checking)
