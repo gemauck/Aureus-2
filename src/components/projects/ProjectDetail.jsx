@@ -800,9 +800,10 @@ function initializeProjectDetail() {
     // Save back to project whenever they change
     useEffect(() => {
         // Skip save if this was triggered by manual document collection process addition
+        // This prevents the debounced save from overwriting an explicit save
         if (skipNextSaveRef.current) {
-            console.log('⏭️ Skipping save - manual document collection process save in progress');
-            skipNextSaveRef.current = false;
+            console.log('⏭️ Skipping debounced save - manual document collection process save in progress');
+            // Don't reset skipNextSaveRef here - it will be reset by the explicit save handler
             return;
         }
         
