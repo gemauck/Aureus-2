@@ -1160,10 +1160,26 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 event.dataTransfer.setData('application/json', payload);
                 event.dataTransfer.setData('text/plain', payload);
                 event.dataTransfer.effectAllowed = 'move';
-                console.log('✅ Pipeline: Drag data set', { payload });
+                
+                // Set drag image to the card element for better visual feedback
+                const dragElement = event.currentTarget;
+                if (dragElement && dragElement.nodeType === 1) {
+                    // Create a clone for the drag image
+                    const dragImage = dragElement.cloneNode(true);
+                    dragImage.style.opacity = '0.5';
+                    document.body.appendChild(dragImage);
+                    dragImage.style.position = 'absolute';
+                    dragImage.style.top = '-1000px';
+                    event.dataTransfer.setDragImage(dragImage, event.offsetX || 0, event.offsetY || 0);
+                    setTimeout(() => document.body.removeChild(dragImage), 0);
+                }
+                
+                console.log('✅ Pipeline: Drag data set', { payload, effectAllowed: event.dataTransfer.effectAllowed });
             } catch (error) {
                 console.warn('⚠️ Pipeline: Unable to serialise drag payload', error);
             }
+        } else {
+            console.error('❌ Pipeline: No dataTransfer object in drag start event!');
         }
         
         setDraggedItem(item);
@@ -1936,11 +1952,17 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
         return (
             <div
-                draggable="true"
+                draggable={true}
                 onDragStart={(e) => {
+                    console.log('🎬 Pipeline: Card drag start triggered', { itemId: item.id, itemName: item.name, event: e.type });
                     e.stopPropagation();
-                    console.log('🎬 Pipeline: Card drag start triggered', { itemId: item.id, itemName: item.name });
                     handleDragStart(e, item, item.type);
+                }}
+                onDrag={(e) => {
+                    // Keep drag active
+                    if (e?.dataTransfer) {
+                        e.dataTransfer.dropEffect = 'move';
+                    }
                 }}
                 onDragEnd={(e) => {
                     console.log('🏁 Pipeline: Card drag end triggered', { itemId: item.id, dropEffect: e?.dataTransfer?.dropEffect });
