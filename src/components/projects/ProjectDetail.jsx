@@ -824,15 +824,25 @@ function initializeProjectDetail() {
         }
         
         saveTimeoutRef.current = setTimeout(() => {
-            if (shouldIncludeHasProcess) {
+            // Double-check that hasDocumentCollectionProcess wasn't explicitly changed
+            // This prevents race conditions where the flag might have been reset
+            if (shouldIncludeHasProcess && hasDocumentCollectionProcessChangedRef.current) {
                 // Include hasDocumentCollectionProcess in save
+                console.log('💾 Debounced save: Including hasDocumentCollectionProcess:', hasDocumentCollectionProcess);
                 persistProjectData({
                     nextHasDocumentCollectionProcess: hasDocumentCollectionProcess
                 }).catch(() => {});
                 // Reset the flag after saving
                 hasDocumentCollectionProcessChangedRef.current = false;
-            } else {
+            } else if (!shouldIncludeHasProcess) {
                 // Exclude hasDocumentCollectionProcess from save to prevent overwriting database value
+                console.log('⏭️ Debounced save: Excluding hasDocumentCollectionProcess to prevent overwrite');
+                persistProjectData({
+                    excludeHasDocumentCollectionProcess: true
+                }).catch(() => {});
+            } else {
+                // Flag was reset but we thought we should include it - skip to be safe
+                console.log('⏭️ Debounced save: Skipping hasDocumentCollectionProcess - flag was reset');
                 persistProjectData({
                     excludeHasDocumentCollectionProcess: true
                 }).catch(() => {});

@@ -1141,12 +1141,15 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
     // Drag and drop handlers
     const handleDragStart = (event, item, type) => {
+        console.log('🎬 Pipeline: Drag start', { itemId: item.id, itemName: item.name, type, currentStage: item.stage });
+        
         if (event?.dataTransfer) {
             try {
                 const payload = JSON.stringify({ id: item.id, type });
                 event.dataTransfer.setData('application/json', payload);
                 event.dataTransfer.setData('text/plain', payload);
                 event.dataTransfer.effectAllowed = 'move';
+                console.log('✅ Pipeline: Drag data set', { payload });
             } catch (error) {
                 console.warn('⚠️ Pipeline: Unable to serialise drag payload', error);
             }
@@ -1159,6 +1162,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
     const handleDragOver = (e, stageName = null) => {
         e.preventDefault();
+        e.stopPropagation();
         if (stageName) {
             setDraggedOverStage(stageName);
         }
@@ -1288,6 +1292,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
         e.preventDefault();
         e.stopPropagation();
         
+        console.log('🎯 Pipeline: Drop event triggered', { targetStage, draggedItem: draggedItem?.id, draggedType });
+        
         if (e?.dataTransfer) {
             e.dataTransfer.dropEffect = 'move';
         }
@@ -1297,6 +1303,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
         if ((!currentDraggedItem || !currentDraggedType) && e?.dataTransfer) {
             const rawPayload = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
+            console.log('📦 Pipeline: Attempting to recover from dataTransfer', { rawPayload });
             if (rawPayload) {
                 try {
                     const parsed = JSON.parse(rawPayload);
@@ -1306,6 +1313,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     if (fallbackItem) {
                         currentDraggedItem = fallbackItem;
                         currentDraggedType = fallbackItem.type;
+                        console.log('✅ Pipeline: Recovered item from dataTransfer', { item: fallbackItem.name, type: fallbackItem.type });
+                    } else {
+                        console.warn('⚠️ Pipeline: Could not find item in pipeline items', { parsed, totalItems: getPipelineItems().length });
                     }
                 } catch (error) {
                     console.warn('⚠️ Pipeline: Failed to parse drag payload', error);
@@ -1313,7 +1323,17 @@ function doesOpportunityBelongToClient(opportunity, client) {
             }
         }
 
-        if (!currentDraggedItem || !currentDraggedType || currentDraggedItem.stage === targetStage) {
+        if (!currentDraggedItem || !currentDraggedType) {
+            console.warn('⚠️ Pipeline: No dragged item found, aborting drop', { currentDraggedItem, currentDraggedType });
+            setDraggedItem(null);
+            setDraggedType(null);
+            setIsDragging(false);
+            setDraggedOverStage(null);
+            return;
+        }
+
+        if (currentDraggedItem.stage === targetStage) {
+            console.log('ℹ️ Pipeline: Item already in target stage, no change needed');
             setDraggedItem(null);
             setDraggedType(null);
             setIsDragging(false);
@@ -1324,9 +1344,20 @@ function doesOpportunityBelongToClient(opportunity, client) {
         const token = typeof storage?.getToken === 'function' ? storage.getToken() : null;
         const originalStage = currentDraggedItem.stage;
 
+        console.log('🔄 Pipeline: Starting stage update', {
+            itemId: currentDraggedItem.id,
+            itemName: currentDraggedItem.name,
+            fromStage: originalStage,
+            toStage: targetStage,
+            type: currentDraggedType
+        });
+
         try {
             if (currentDraggedType === 'lead') {
+                console.log('📝 Pipeline: Updating lead stage optimistically');
                 updateLeadStageOptimistically(currentDraggedItem.id, targetStage);
+                // Force immediate re-render
+                setRefreshKey((k) => k + 1);
 
                 let leadPersisted = false;
 
@@ -1346,11 +1377,14 @@ function doesOpportunityBelongToClient(opportunity, client) {
             }
 
             if (currentDraggedType === 'opportunity') {
+                console.log('📝 Pipeline: Updating opportunity stage optimistically');
                 const updatedClients = updateOpportunityStageOptimistically(
                     currentDraggedItem.clientId,
                     currentDraggedItem.id,
                     targetStage
                 );
+                // Force immediate re-render
+                setRefreshKey((k) => k + 1);
 
                 let refreshDelay = 0;
                 let opportunityPersisted = false;
@@ -1402,8 +1436,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     originalStage
                 );
             }
+            setRefreshKey((k) => k + 1);
             alert('Failed to save stage change. Please try again.');
         } finally {
+            console.log('✅ Pipeline: Drop operation complete, resetting drag state');
             setDraggedItem(null);
             setDraggedType(null);
             setIsDragging(false);
@@ -1961,7 +1997,18 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         </div>
 
                         {/* Cards */}
-                        <div className="space-y-3">
+                        <div 
+                            className="space-y-3"
+                            onDragOver={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                            }}
+                            onDrop={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleDrop(e, stage.name);
+                            }}
+                        >
                             {stageItems.length === 0 ? (
                                 <div className={`text-center py-8 rounded-lg border-2 border-dashed ${!isDragging ? 'transition' : ''} ${
                                     (draggedOverStage === stage.name || (touchDragState && touchDragState.targetStage === stage.name)) ? 'border-primary-400 bg-primary-50' : 'border-gray-300'
