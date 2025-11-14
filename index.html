@@ -564,6 +564,10 @@
     </script>
 
     <!-- Lazy Load Non-Critical Components -->
+    <!-- Vite Projects Module - Load before lazy-load-components so components are available -->
+    <script type="module" src="./dist/vite-projects/projects-module.js?v=20251114-vite-integration"></script>
+    <link rel="stylesheet" href="./dist/vite-projects/projects-index.css?v=20251114-vite-integration">
+    
     <script defer src="./lazy-load-components.js?v=20251114-doc-collection-fix"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->

@@ -56,8 +56,7 @@ const parseDocumentSections = (data) => {
 
     const serializeDocumentSections = (data) => JSON.stringify(parseDocumentSections(data));
 
-    
-export function ProjectDetail(({ project, onBack, onDelete }) => {
+export function ProjectDetail({ project, onBack, onDelete }) {
         console.log('ProjectDetail rendering with project:', project);
         const ReactHooks = window.React;
         if (!ReactHooks || typeof ReactHooks.useState !== 'function') {
@@ -3084,95 +3083,5 @@ export function ProjectDetail(({ project, onBack, onDelete }) => {
         </div>
     );
 }
-
-    // Make available globally - INSIDE initializeProjectDetail function
-    console.log('🔵 ProjectDetail.jsx: About to register on window.ProjectDetail...');
-    
-    // Validate component before registering
-    const validateComponent = () => {
-        if (!ProjectDetail) {
-            throw new Error('ProjectDetail component is undefined');
-        }
-        
-        if (typeof ProjectDetail !== 'function') {
-            throw new Error(`ProjectDetail is not a function, got: ${typeof ProjectDetail}`);
-        }
-        
-        // Check if it's a valid React component (could be function, memo, forwardRef, etc.)
-        const isValidReactComponent = 
-            typeof ProjectDetail === 'function' ||
-            (typeof ProjectDetail === 'object' && (ProjectDetail.$$typeof || ProjectDetail.type));
-        
-        if (!isValidReactComponent) {
-            console.warn('⚠️ ProjectDetail may not be a valid React component');
-        }
-        
-        return true;
-    };
-    
-    try {
-        // Validate first
-        validateComponent();
-        
-        // Register component
-        window.ProjectDetail = ProjectDetail;
-        console.log('✅ ProjectDetail component registered on window.ProjectDetail');
-        console.log('✅ ProjectDetail type:', typeof ProjectDetail);
-        
-        // Health check: Verify it's actually registered and callable
-        if (!window.ProjectDetail) {
-            throw new Error('Registration failed: window.ProjectDetail is still undefined');
-        }
-        
-        if (typeof window.ProjectDetail !== 'function') {
-            throw new Error(`Registration failed: window.ProjectDetail is not a function, got: ${typeof window.ProjectDetail}`);
-        }
-        
-        console.log('✅ ProjectDetail health check passed: Component is registered and callable');
-        
-        // Clear initialization flag
-        window._projectDetailInitializing = false;
-        
-        // Dispatch event to notify that ProjectDetail is loaded
-        try {
-            window.dispatchEvent(new CustomEvent('componentLoaded', { 
-                detail: { component: 'ProjectDetail' } 
-            }));
-            console.log('✅ ProjectDetail component registered and event dispatched');
-        } catch (error) {
-            console.warn('⚠️ Failed to dispatch componentLoaded event:', error);
-        }
-        
-        // Set up periodic health check (every 5 seconds for first 30 seconds)
-        let healthCheckCount = 0;
-        const maxHealthChecks = 6; // 6 checks * 5 seconds = 30 seconds
-        const healthCheckInterval = setInterval(() => {
-            healthCheckCount++;
-            if (!window.ProjectDetail) {
-                console.error(`❌ ProjectDetail health check ${healthCheckCount}: Component disappeared!`);
-                console.error('❌ Attempting to re-register...');
-                window.ProjectDetail = ProjectDetail;
-            } else if (typeof window.ProjectDetail !== 'function') {
-                console.error(`❌ ProjectDetail health check ${healthCheckCount}: Component corrupted!`);
-                console.error('❌ Attempting to re-register...');
-                window.ProjectDetail = ProjectDetail;
-            } else {
-                console.log(`✅ ProjectDetail health check ${healthCheckCount}/${maxHealthChecks}: Component healthy`);
-            }
-            
-            if (healthCheckCount >= maxHealthChecks) {
-                clearInterval(healthCheckInterval);
-                console.log('✅ ProjectDetail health monitoring complete');
-            }
-        }, 5000);
-        
-    } catch (error) {
-        console.error('❌ CRITICAL: Failed to register ProjectDetail on window:', error);
-        console.error('❌ Error details:', error.message, error.stack);
-        window._projectDetailInitializing = false;
-        
-        // Try to register anyway if possible
-        try {
-            if (typeof ProjectDetail !== 'undefined') {
 
 export default ProjectDetail;

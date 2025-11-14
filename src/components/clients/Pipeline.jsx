@@ -2143,6 +2143,80 @@ function doesOpportunityBelongToClient(opportunity, client) {
         };
     }, []); // Empty deps - we check dragDataRef.current directly
 
+    // Attach native event listeners directly to DOM elements for more reliable drag-and-drop
+    // This bypasses React's synthetic event system which may be interfering
+    useEffect(() => {
+        if (viewMode !== 'kanban' || !dataLoaded) return;
+        
+        const attachNativeListeners = () => {
+            const stages = document.querySelectorAll('[data-pipeline-stage]');
+            
+            stages.forEach(stageEl => {
+                const stageName = stageEl.getAttribute('data-pipeline-stage');
+                if (!stageName) return;
+                
+                // Remove existing listeners if any (cleanup)
+                const existingDragover = stageEl._pipelineDragover;
+                const existingDrop = stageEl._pipelineDrop;
+                
+                if (existingDragover) {
+                    stageEl.removeEventListener('dragover', existingDragover);
+                }
+                if (existingDrop) {
+                    stageEl.removeEventListener('drop', existingDrop);
+                }
+                
+                // Create new native event handlers
+                const nativeDragOver = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (e.dataTransfer) {
+                        e.dataTransfer.dropEffect = 'move';
+                    }
+                    handleDragOver(e, stageName);
+                };
+                
+                const nativeDrop = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('🎯🎯🎯 Pipeline: NATIVE DROP EVENT on stage!', { 
+                        stage: stageName,
+                        target: e.target?.tagName,
+                        currentTarget: e.currentTarget?.tagName
+                    });
+                    handleDrop(e, stageName);
+                };
+                
+                // Attach native listeners with capture phase
+                stageEl.addEventListener('dragover', nativeDragOver, { passive: false, capture: true });
+                stageEl.addEventListener('drop', nativeDrop, { capture: true });
+                
+                // Store references for cleanup
+                stageEl._pipelineDragover = nativeDragOver;
+                stageEl._pipelineDrop = nativeDrop;
+            });
+            
+            console.log('✅ Pipeline: Native drag-and-drop listeners attached to', stages.length, 'stages');
+        };
+        
+        // Attach after a short delay to ensure DOM is ready
+        const timeoutId = setTimeout(attachNativeListeners, 500);
+        
+        return () => {
+            clearTimeout(timeoutId);
+            // Cleanup native listeners
+            const stages = document.querySelectorAll('[data-pipeline-stage]');
+            stages.forEach(stageEl => {
+                if (stageEl._pipelineDragover) {
+                    stageEl.removeEventListener('dragover', stageEl._pipelineDragover, { capture: true });
+                }
+                if (stageEl._pipelineDrop) {
+                    stageEl.removeEventListener('drop', stageEl._pipelineDrop, { capture: true });
+                }
+            });
+        };
+    }, [viewMode, dataLoaded, filteredItems.length]);
+
     // Diagnostic function to verify drag and drop setup
     useEffect(() => {
         if (viewMode === 'kanban' && dataLoaded) {
@@ -2153,6 +2227,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     cardsFound: cards.length,
                     stagesFound: stages.length,
                     cardsWithDraggable: Array.from(cards).filter(c => c.draggable === true).length,
+                    stagesWithNativeListeners: Array.from(stages).filter(s => s._pipelineDragover && s._pipelineDrop).length,
                     sampleCard: cards[0] ? {
                         draggable: cards[0].draggable,
                         hasDragStart: cards[0].ondragstart !== null,
@@ -2195,9 +2270,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     <div 
                         key={stage.id} 
                         data-pipeline-stage={stage.name}
+                        data-stage-name={stage.name}
                         className={`flex-1 min-w-[240px] bg-gray-50 rounded-lg p-3 ${!isDragging ? 'transition-all' : ''} ${
                             isStageHighlighted ? 'ring-2 ring-blue-500 bg-blue-50' : ''
                         }`}
+                        style={{ position: 'relative', zIndex: 1 }}
                         onDragEnter={(e) => {
                             e.preventDefault();
                             handleDragEnter(e, stage.name);
@@ -2211,6 +2288,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         onDrop={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
+                            console.log('🎯🎯🎯 Pipeline: DROP EVENT TRIGGERED on stage container!', { 
+                                stage: stage.name,
+                                target: e.target,
+                                currentTarget: e.currentTarget 
+                            });
                             handleDrop(e, stage.name);
                         }}
                     >

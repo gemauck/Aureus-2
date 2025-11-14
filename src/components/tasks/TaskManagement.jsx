@@ -548,32 +548,77 @@ const TaskManagement = () => {
 
             {view === 'kanban' && (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    {['todo', 'in-progress', 'completed', 'cancelled'].map(status => (
-                        <div key={status} className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-4`}>
-                            <h3 className={`font-semibold mb-4 capitalize ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                {status.replace('-', ' ')} ({kanbanTasks[status]?.length || 0})
-                            </h3>
-                            <div className="space-y-2">
-                                {kanbanTasks[status]?.map(task => (
-                                    <TaskCard
-                                        key={task.id}
-                                        task={task}
-                                        isDark={isDark}
-                                        onEdit={handleEditTask}
-                                        onDelete={handleDeleteTask}
-                                        onQuickStatusToggle={handleQuickStatusToggle}
-                                        clients={clients}
-                                        projects={projects}
-                                        tags={tags}
-                                        getPriorityColor={getPriorityColor}
-                                        getPriorityTextColor={getPriorityTextColor}
-                                        getStatusColor={getStatusColor}
-                                        compact
-                                    />
-                                ))}
+                    {['todo', 'in-progress', 'completed', 'cancelled'].map(status => {
+                        const handleDragOver = (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            e.currentTarget.classList.add('ring-2', 'ring-blue-500', 'ring-opacity-50');
+                            if (isDark) {
+                                e.currentTarget.classList.add('bg-blue-900', 'bg-opacity-20');
+                            } else {
+                                e.currentTarget.classList.add('bg-blue-50');
+                            }
+                        };
+
+                        const handleDragLeave = (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            // Only remove highlight if we're actually leaving the column (not just moving to a child)
+                            const relatedTarget = e.relatedTarget;
+                            if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
+                                e.currentTarget.classList.remove('ring-2', 'ring-blue-500', 'ring-opacity-50', 'bg-blue-50', 'bg-blue-900', 'bg-opacity-20');
+                            }
+                        };
+
+                        const handleDrop = (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            e.currentTarget.classList.remove('ring-2', 'ring-blue-500', 'ring-opacity-50', 'bg-blue-50', 'bg-blue-900', 'bg-opacity-20');
+                            
+                            const taskId = e.dataTransfer.getData('taskId');
+                            if (taskId && taskId !== '') {
+                                const task = tasks.find(t => String(t.id) === String(taskId));
+                                if (task && task.status !== status) {
+                                    handleQuickStatusToggle(task, status);
+                                }
+                            }
+                        };
+
+                        return (
+                            <div 
+                                key={status}
+                                data-column={status}
+                                className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-4 transition-all`}
+                                onDragOver={handleDragOver}
+                                onDragLeave={handleDragLeave}
+                                onDrop={handleDrop}
+                            >
+                                <h3 className={`font-semibold mb-4 capitalize ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                    {status.replace('-', ' ')} ({kanbanTasks[status]?.length || 0})
+                                </h3>
+                                <div className="space-y-2 min-h-[200px]">
+                                    {kanbanTasks[status]?.map(task => (
+                                        <TaskCard
+                                            key={task.id}
+                                            task={task}
+                                            isDark={isDark}
+                                            onEdit={handleEditTask}
+                                            onDelete={handleDeleteTask}
+                                            onQuickStatusToggle={handleQuickStatusToggle}
+                                            clients={clients}
+                                            projects={projects}
+                                            tags={tags}
+                                            getPriorityColor={getPriorityColor}
+                                            getPriorityTextColor={getPriorityTextColor}
+                                            getStatusColor={getStatusColor}
+                                            compact
+                                            draggable
+                                        />
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
 
@@ -614,10 +659,11 @@ const TaskManagement = () => {
 };
 
 // Task Card Component
-const TaskCard = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clients, projects, tags, getPriorityColor, getPriorityTextColor, getStatusColor, compact = false }) => {
+const TaskCard = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clients, projects, tags, getPriorityColor, getPriorityTextColor, getStatusColor, compact = false, draggable = false }) => {
     const client = clients.find(c => c.id === task.clientId);
     const project = projects.find(p => p.id === task.projectId);
     const taskTags = task.tags || [];
+    const wasDraggedRef = React.useRef(false);
 
     const handleStatusClick = (e) => {
         e.stopPropagation();
@@ -634,10 +680,44 @@ const TaskCard = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clients
         }
     };
 
+    const handleDragStart = (e) => {
+        if (draggable) {
+            wasDraggedRef.current = false;
+            e.dataTransfer.setData('taskId', String(task.id));
+            e.dataTransfer.effectAllowed = 'move';
+            // Add visual feedback
+            e.currentTarget.style.opacity = '0.5';
+        }
+    };
+
+    const handleDragEnd = (e) => {
+        if (draggable) {
+            e.currentTarget.style.opacity = '1';
+            // Mark that we dragged, and clear after a short delay to prevent click
+            wasDraggedRef.current = true;
+            setTimeout(() => {
+                wasDraggedRef.current = false;
+            }, 100);
+        }
+    };
+
+    const handleClick = (e) => {
+        // Prevent click event if we just finished dragging
+        if (wasDraggedRef.current) {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+        onEdit(task);
+    };
+
     return (
         <div
-            className={`${isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'} rounded-lg border p-3 cursor-pointer transition-colors ${compact ? '' : 'mb-2'}`}
-            onClick={() => onEdit(task)}
+            draggable={draggable}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            className={`${isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'} rounded-lg border p-3 cursor-pointer transition-colors ${compact ? '' : 'mb-2'} ${draggable ? 'cursor-move' : ''}`}
+            onClick={handleClick}
         >
             <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
