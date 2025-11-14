@@ -228,14 +228,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         { value: 'unavailable', label: 'Unavailable', color: 'bg-gray-100 text-gray-800', cellColor: 'bg-gray-50' }
     ];
 
-    // Refresh project data when component mounts to ensure we have latest data
-    // This runs FIRST before sync to ensure we have fresh data
+    // Refresh project data when component mounts ONLY if we don't have sections
+    // This prevents unnecessary refreshes when data is already available
     useEffect(() => {
-        // On mount, ALWAYS refresh project data to get latest from database
+        // Only refresh if we don't have sections or if project.documentSections is empty/undefined
+        const hasSections = sections.length > 0;
+        const projectHasSections = project.documentSections && 
+                                   (Array.isArray(project.documentSections) ? project.documentSections.length > 0 : 
+                                    typeof project.documentSections === 'string' ? project.documentSections.trim() !== '' && project.documentSections !== '[]' : false);
+        
+        if (hasSections || projectHasSections) {
+            console.log('⏭️ Skipping refresh - sections already available');
+            return;
+        }
+        
+        // On mount, refresh project data ONLY if we don't have sections
         const refreshProjectData = async () => {
             try {
                 if (window.DatabaseAPI && typeof window.DatabaseAPI.getProject === 'function') {
-                    console.log('🔄 Refreshing project data on mount to ensure latest documentSections...');
+                    console.log('🔄 Refreshing project data on mount (no sections available)...');
                     // Clear cache first to force fresh fetch
                     if (window.DatabaseAPI.clearCache) {
                         window.DatabaseAPI.clearCache(`/projects/${project.id}`);
@@ -245,28 +256,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     if (freshProject && freshProject.documentSections !== undefined) {
                         const freshSections = parseSections(freshProject.documentSections);
                         
-                        // Use functional update to compare with current state
-                        setSections(currentSections => {
-                            const currentSectionsStr = JSON.stringify(currentSections);
-                            const freshSectionsStr = JSON.stringify(freshSections);
-                            
-                            // Always update if data is different (database is source of truth on mount)
-                            if (currentSectionsStr !== freshSectionsStr) {
-                                console.log('🔄 Updating sections from fresh database data:', freshSections.length, 'sections (was', currentSections.length, ')');
-                                // Mark that we just refreshed so sync doesn't overwrite
-                                lastLocalUpdateRef.current = Date.now();
-                                // Update project prop if parent component supports it
-                                if (window.dispatchEvent) {
-                                    window.dispatchEvent(new CustomEvent('projectDataRefreshed', {
-                                        detail: { project: freshProject }
-                                    }));
+                        // Only update if we got sections and don't have any
+                        if (freshSections.length > 0) {
+                            setSections(currentSections => {
+                                if (currentSections.length === 0) {
+                                    console.log('🔄 Updating sections from fresh database data:', freshSections.length, 'sections');
+                                    // Mark that we just refreshed so sync doesn't overwrite
+                                    lastLocalUpdateRef.current = Date.now();
+                                    return freshSections;
                                 }
-                                return freshSections;
-                            } else {
-                                console.log('✅ Local sections already match database');
-                            }
-                            return currentSections;
-                        });
+                                return currentSections;
+                            });
+                        }
                     }
                 }
             } catch (error) {
@@ -274,7 +275,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             }
         };
         
-        // Always refresh on mount (component remounts when navigating back)
+        // Only refresh if we don't have sections
         refreshProjectData();
     }, [project.id]); // Only run when project ID changes (component remounts)
     
@@ -312,7 +313,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // Sync sections from project prop when it changes (e.g., after refresh or reload)
     // This ensures that when the project data is reloaded from the database, the sections state is updated
     // BUT: Only sync if we haven't made recent local changes (to prevent overwriting user edits)
+    // OPTIMIZED: Only sync when project.documentSections actually changes (not on every render)
+    const previousDocumentSectionsRef = useRef(project?.documentSections);
+    
     useEffect(() => {
+        // Skip if documentSections hasn't actually changed
+        const currentDocumentSections = project?.documentSections;
+        if (currentDocumentSections === previousDocumentSectionsRef.current) {
+            return; // No change, skip sync
+        }
+        
+        // Update ref for next comparison
+        previousDocumentSectionsRef.current = currentDocumentSections;
+        
         if (project && project.documentSections !== undefined) {
             // Don't sync if we're currently saving or just made a local update (within last 5 seconds)
             // Increased from 3 to 5 seconds to prevent race conditions with slow saves
