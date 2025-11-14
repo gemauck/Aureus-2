@@ -262,41 +262,51 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
     };
 
-    // Sync sections from project prop ONLY on initial mount or when project ID changes
-    // DISABLED automatic syncing to prevent overwriting user input
-    // Only sync when component first mounts or when switching to a different project
+    // Sync sections from project prop ONLY on the very first mount of this project
+    // NEVER sync after initialization to prevent overwriting user input
     useEffect(() => {
-        // Skip if documentSections hasn't actually changed
-        const currentDocumentSections = project?.documentSections;
-        if (currentDocumentSections === previousDocumentSectionsRef.current) {
-            return; // No change, skip sync
+        // Check if project ID changed (switching to different project)
+        const projectIdChanged = previousProjectIdRef.current !== project?.id;
+        if (projectIdChanged) {
+            // Project changed - reset initialization flags for new project
+            console.log('🔄 Project ID changed, resetting for new project');
+            hasInitializedRef.current = false;
+            isInitialMount.current = true;
+            previousProjectIdRef.current = project?.id;
         }
         
-        // Update ref for next comparison
-        previousDocumentSectionsRef.current = currentDocumentSections;
+        // If already initialized for this project, NEVER sync - preserve user input
+        if (hasInitializedRef.current) {
+            console.log('⏭️ Component already initialized - NEVER syncing to preserve user input');
+            return;
+        }
         
-        // ONLY sync on initial mount - never sync after that to prevent overwriting user input
+        // Only sync on the very first mount when local state is empty
         if (project && project.documentSections !== undefined && isInitialMount.current) {
             const parsed = parseSections(project.documentSections);
             
             setSections(currentSections => {
                 // Only sync if local state is empty (initial mount)
                 if (currentSections.length === 0 && parsed.length > 0) {
-                    console.log('🔄 Initial sync from project prop on mount:', parsed.length, 'sections');
-                        isInitialMount.current = false;
+                    console.log('🔄 Initial sync from project prop on first mount:', parsed.length, 'sections');
+                    hasInitializedRef.current = true; // Mark as initialized - never sync again
+                    isInitialMount.current = false;
                     lastLocalUpdateRef.current = Date.now();
-                        return parsed;
-                    }
-                // If we already have sections, don't overwrite them
-                if (currentSections.length > 0) {
-                    console.log('⏭️ Skipping sync - local sections exist, not overwriting');
+                    previousDocumentSectionsRef.current = project.documentSections;
+                    return parsed;
+                } else if (currentSections.length === 0 && parsed.length === 0) {
+                    // Empty state - mark as initialized but don't change state
+                    console.log('✅ Component initialized with empty sections');
+                    hasInitializedRef.current = true;
+                    isInitialMount.current = false;
+                } else if (currentSections.length > 0) {
+                    // Already have sections (user added them) - mark initialized, don't overwrite
+                    console.log('⏭️ Local sections exist - marking initialized, preserving user input');
+                    hasInitializedRef.current = true;
                     isInitialMount.current = false;
                 }
                 return currentSections;
             });
-        } else if (project && project.documentSections !== undefined && !isInitialMount.current) {
-            // After initial mount, NEVER sync from props - user input takes priority
-            console.log('⏭️ Skipping sync - component already initialized, preserving user input');
         }
     }, [project?.id]); // ONLY run when project ID changes (switching projects)
 
