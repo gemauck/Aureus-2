@@ -1044,7 +1044,25 @@ const ManagementMeetingNotes = () => {
     // Create/Update action item
     const handleSaveActionItem = async (actionItemData) => {
         try {
+            // Validate required fields
+            if (!actionItemData.title || !actionItemData.title.trim()) {
+                alert('Please enter a title for the action item');
+                return;
+            }
+
+            // Ensure monthlyNotesId is set if not provided
+            if (!actionItemData.monthlyNotesId && currentMonthlyNotes?.id) {
+                actionItemData.monthlyNotesId = currentMonthlyNotes.id;
+            }
+
             setLoading(true);
+            console.log('💾 Saving action item:', {
+                isUpdate: !!editingActionItem?.id,
+                hasId: !!editingActionItem?.id,
+                actionItemData,
+                editingActionItem
+            });
+
             let response;
             // Check if we're updating (has id) or creating (no id)
             if (editingActionItem?.id) {
@@ -1055,7 +1073,9 @@ const ManagementMeetingNotes = () => {
                 response = await window.DatabaseAPI.createActionItem(actionItemData);
             }
             
-            if (response?.data?.actionItem || response?.actionItem) {
+            console.log('✅ Action item response:', response);
+            
+            if (response?.data?.actionItem || response?.actionItem || response?.success) {
                 // Reload current month's notes
                 const monthResponse = await window.DatabaseAPI.getMeetingNotes(selectedMonth);
                 setCurrentMonthlyNotes(monthResponse.data?.monthlyNotes);
@@ -1063,13 +1083,20 @@ const ManagementMeetingNotes = () => {
                 setEditingActionItem(null);
             } else {
                 // Even if response structure is different, reload to get updated data
+                console.warn('⚠️ Unexpected response structure, reloading anyway:', response);
                 const monthResponse = await window.DatabaseAPI.getMeetingNotes(selectedMonth);
                 setCurrentMonthlyNotes(monthResponse.data?.monthlyNotes);
                 setShowActionItemModal(false);
                 setEditingActionItem(null);
             }
         } catch (error) {
-            console.error('Error saving action item:', error);
+            console.error('❌ Error saving action item:', error);
+            console.error('❌ Error details:', {
+                message: error.message,
+                stack: error.stack,
+                response: error.response,
+                data: error.data
+            });
             alert('Failed to save action item: ' + (error.message || 'Unknown error'));
         } finally {
             setLoading(false);
@@ -1882,7 +1909,11 @@ const ManagementMeetingNotes = () => {
                                                                     {/* Add Action Item Button */}
                                                                     <button
                                                                         onClick={() => {
-                                                                            setEditingActionItem({ weeklyNotesId: week.id, departmentNotesId: deptNote.id });
+                                                                            setEditingActionItem({ 
+                                                                                monthlyNotesId: currentMonthlyNotes?.id,
+                                                                                weeklyNotesId: week.id, 
+                                                                                departmentNotesId: deptNote.id 
+                                                                            });
                                                                             setShowActionItemModal(true);
                                                                         }}
                                                                         className={`w-full text-xs px-3 py-2 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}

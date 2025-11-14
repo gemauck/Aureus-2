@@ -1344,26 +1344,14 @@ function doesOpportunityBelongToClient(opportunity, client) {
     };
 
     const handleDragEnd = (e) => {
-        console.log('🏁 Pipeline: Drag end', { 
-            draggedItem: draggedItem?.id, 
-            dropEffect: e?.dataTransfer?.dropEffect,
-            dragDataRef: dragDataRef.current?.itemId
-        });
-        // Don't clear state immediately - let the drop handler do it
-        // This prevents race conditions where dragEnd fires before drop
-        // The drop handler will clear state in its finally block
-        // Only clear if dropEffect indicates the drop was not accepted
+        // Simple handler like TaskManagement - just clear drag state if drop was rejected
         if (e?.dataTransfer?.dropEffect === 'none') {
-            console.log('⚠️ Pipeline: Drop was rejected, clearing drag state');
             setDraggedItem(null);
             setDraggedType(null);
             setIsDragging(false);
             setDraggedOverStage(null);
-            // Keep ref for a bit in case drop fires late
-            setTimeout(() => {
-                dragDataRef.current = null;
-            }, 500);
         }
+        // Otherwise, let the drop handler clear state in its finally block
     };
 
     // Mobile touch drag handlers - use document-level listeners for better mobile support
@@ -1885,30 +1873,90 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     draggedOverStage === stage.name ||
                     (touchDragState && touchDragState.targetStage === stage.name);
                 
+                // Define handlers inline like TaskManagement - this ensures proper closure
+                const handleDragOver = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDraggedOverStage(stage.name);
+                    if (e.dataTransfer) {
+                        e.dataTransfer.dropEffect = 'move';
+                    }
+                };
+
+                const handleDragLeave = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const relatedTarget = e.relatedTarget;
+                    if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
+                        setDraggedOverStage((prev) => (prev === stage.name ? null : prev));
+                    }
+                };
+
+                const handleDrop = async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setDraggedOverStage(null);
+                    
+                    const itemId = e.dataTransfer.getData('pipelineItemId');
+                    const itemType = e.dataTransfer.getData('pipelineItemType');
+                    
+                    if (!itemId || itemId === '') {
+                        return;
+                    }
+
+                    const item = getPipelineItems().find(i => String(i.id) === String(itemId) && i.type === itemType);
+                    
+                    if (!item || item.stage === stage.name) {
+                        return;
+                    }
+
+                    try {
+                        // Optimistic UI update
+                        if (itemType === 'lead') {
+                            updateLeadStageOptimistically(item.id, stage.name);
+                        } else if (itemType === 'opportunity') {
+                            updateOpportunityStageOptimistically(item.clientId, item.id, stage.name);
+                        }
+                        setRefreshKey((k) => k + 1);
+
+                        // Persist to database
+                        if (itemType === 'lead') {
+                            const updateFn = window.api?.updateLeadStage || window.DatabaseAPI?.updateLeadStage;
+                            if (updateFn) {
+                                await updateFn(item.id, stage.name);
+                            }
+                        } else if (itemType === 'opportunity') {
+                            const updateFn = window.api?.updateOpportunityStage || window.DatabaseAPI?.updateOpportunityStage;
+                            if (updateFn && item.clientId) {
+                                await updateFn(item.clientId, item.id, stage.name);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('❌ Pipeline: Failed to update stage', error);
+                        alert('Failed to update stage. Please try again.');
+                        setRefreshKey((k) => k + 1);
+                    } finally {
+                        setDraggedItem(null);
+                        setDraggedType(null);
+                        setIsDragging(false);
+                        setTouchDragState(null);
+                        setJustDragged(true);
+                        setTimeout(() => {
+                            setJustDragged(false);
+                        }, 300);
+                    }
+                };
+
                 return (
                     <div 
                         key={stage.id} 
                         data-pipeline-stage={stage.name}
-                        data-stage-name={stage.name}
                         className={`flex-1 min-w-[240px] bg-gray-50 rounded-lg p-3 ${!isDragging ? 'transition-all' : ''} ${
                             isStageHighlighted ? 'ring-2 ring-blue-500 bg-blue-50' : ''
                         }`}
-                        style={{ position: 'relative', zIndex: 1 }}
-                        onDragEnter={(e) => {
-                            e.preventDefault();
-                            handleDragEnter(e, stage.name);
-                        }}
-                        onDragOver={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleDragOver(e, stage.name);
-                        }}
-                        onDragLeave={(e) => handleDragLeave(e, stage.name)}
-                        onDrop={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            handleDrop(e, stage.name);
-                        }}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
                     >
                         {/* Stage Header */}
                         <div className="mb-2 px-1">
@@ -1941,35 +1989,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         {/* Cards */}
                         <div 
                             className="space-y-3 min-h-[100px]"
-                            onDragOver={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                // Ensure the parent stage also gets the dragover
-                                handleDragOver(e, stage.name);
-                            }}
-                            onDrop={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                console.log('🎯 Pipeline: Drop on cards container', { stage: stage.name });
-                                handleDrop(e, stage.name);
-                            }}
                         >
                             {stageItems.length === 0 ? (
                                 <div 
                                     className={`text-center py-8 rounded-lg border-2 border-dashed ${!isDragging ? 'transition' : ''} ${
                                         (draggedOverStage === stage.name || (touchDragState && touchDragState.targetStage === stage.name)) ? 'border-primary-400 bg-primary-50' : 'border-gray-300'
                                     }`}
-                                    onDragOver={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        handleDragOver(e, stage.name);
-                                    }}
-                                    onDrop={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        console.log('🎯 Pipeline: Drop on empty stage zone', { stage: stage.name });
-                                        handleDrop(e, stage.name);
-                                    }}
                                 >
                                     <i className="fas fa-inbox text-2xl text-gray-300 mb-2"></i>
                                     <p className="text-xs text-gray-400">No deals in this stage</p>
