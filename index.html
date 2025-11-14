@@ -565,8 +565,35 @@
 
     <!-- Lazy Load Non-Critical Components -->
     <!-- Vite Projects Module - Load before lazy-load-components so components are available -->
-    <script type="module" src="./dist/vite-projects/projects-module.js?v=20251114-vite-integration"></script>
-    <link rel="stylesheet" href="./dist/vite-projects/projects-index.css?v=20251114-vite-integration">
+    <!-- Vite Projects Module - Load after React is confirmed available -->
+    <script>
+        // Wait for React to be available before loading Vite module
+        function loadViteProjectsModule() {
+            if (typeof window.React !== 'undefined' && window.React !== null) {
+                const script = document.createElement('script');
+                script.type = 'module';
+                script.src = './dist/vite-projects/projects-module.js?v=20251114-vite-integration';
+                script.onerror = () => console.error('❌ Failed to load Vite Projects module');
+                document.head.appendChild(script);
+                
+                const link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = './dist/vite-projects/projects-index.css?v=20251114-vite-integration';
+                document.head.appendChild(link);
+                console.log('✅ Vite Projects module loading...');
+            } else {
+                // Retry after a short delay
+                setTimeout(loadViteProjectsModule, 50);
+            }
+        }
+        
+        // Start loading when React is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', loadViteProjectsModule);
+        } else {
+            loadViteProjectsModule();
+        }
+    </script>
     
     <script defer src="./lazy-load-components.js?v=20251114-doc-collection-fix"></script>
     

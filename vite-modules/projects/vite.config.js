@@ -18,9 +18,27 @@ const reactWindowPlugin = () => {
       // Provide the virtual module
       if (id === '\0virtual:react-window') {
         return `
-          const React = typeof window !== 'undefined' ? window.React : null;
-          const ReactDOM = typeof window !== 'undefined' ? window.ReactDOM : null;
-          if (!React) throw new Error('window.React is not available');
+          // Lazy getter for React - ensures window.React is available
+          const getReact = () => {
+            if (typeof window !== 'undefined' && window.React) {
+              return window.React;
+            }
+            // Wait a bit if React isn't ready yet (shouldn't happen, but safety)
+            throw new Error('window.React is not available. Make sure React is loaded before this module.');
+          };
+          
+          const getReactDOM = () => {
+            if (typeof window !== 'undefined' && window.ReactDOM) {
+              return window.ReactDOM;
+            }
+            return null;
+          };
+          
+          // Get React immediately - if it fails, the error will be thrown
+          const React = getReact();
+          const ReactDOM = getReactDOM();
+          
+          // Export all React APIs
           export default React;
           export const useState = React.useState;
           export const useEffect = React.useEffect;
@@ -37,7 +55,7 @@ const reactWindowPlugin = () => {
           export const lazy = React.lazy;
           export const Suspense = React.Suspense;
           export const StrictMode = React.StrictMode;
-          export { ReactDOM };
+          export { React, ReactDOM };
         `;
       }
       return null;

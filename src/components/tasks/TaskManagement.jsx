@@ -9,15 +9,7 @@ const TaskManagement = () => {
     const [clients, setClients] = useState([]);
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
-    // Load view preference from localStorage, default to 'list'
-    const [view, setView] = useState(() => {
-        try {
-            const savedView = localStorage.getItem('taskManagementView');
-            return savedView && ['list', 'kanban', 'calendar'].includes(savedView) ? savedView : 'list';
-        } catch (e) {
-            return 'list';
-        }
-    });
+    const [view, setView] = useState('list'); // Default to 'list', will be updated from localStorage
     const [filterStatus, setFilterStatus] = useState('all');
     const [filterCategory, setFilterCategory] = useState('all');
     const [filterTag, setFilterTag] = useState('all');
@@ -38,10 +30,27 @@ const TaskManagement = () => {
         setView(newView);
         try {
             localStorage.setItem('taskManagementView', newView);
+            console.log('View preference saved:', newView);
         } catch (e) {
             console.warn('Failed to save view preference to localStorage:', e);
         }
     };
+
+    // Load view preference from localStorage on mount
+    useEffect(() => {
+        try {
+            const savedView = localStorage.getItem('taskManagementView');
+            console.log('Loading view preference from localStorage:', savedView);
+            if (savedView && ['list', 'kanban', 'calendar'].includes(savedView)) {
+                setView(savedView);
+                console.log('View preference loaded:', savedView);
+            } else {
+                console.log('No valid view preference found, using default: list');
+            }
+        } catch (e) {
+            console.warn('Failed to load view preference from localStorage:', e);
+        }
+    }, []);
 
     // Load data
     useEffect(() => {

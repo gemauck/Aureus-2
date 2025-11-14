@@ -1142,73 +1142,27 @@ function doesOpportunityBelongToClient(opportunity, client) {
         return items;
     };
 
-    // Drag and drop handlers
+    // Drag and drop handlers - simplified to match TaskManagement pattern
     const handleDragStart = (event, item, type) => {
-        console.log('🎬 Pipeline: Drag start', { itemId: item.id, itemName: item.name, type, currentStage: item.stage });
-        
-        // Store drag data in ref for persistence (survives state clearing)
-        dragDataRef.current = {
-            item: item,
-            type: type,
-            itemId: item.id,
-            timestamp: Date.now()
-        };
-        
         if (event?.dataTransfer) {
-            try {
-                const payload = JSON.stringify({ id: item.id, type });
-                event.dataTransfer.setData('application/json', payload);
-                event.dataTransfer.setData('text/plain', payload);
-                event.dataTransfer.effectAllowed = 'move';
-                
-                // Set drag image to the card element for better visual feedback
-                const dragElement = event.currentTarget;
-                if (dragElement && dragElement.nodeType === 1) {
-                    // Create a clone for the drag image
-                    const dragImage = dragElement.cloneNode(true);
-                    dragImage.style.opacity = '0.5';
-                    document.body.appendChild(dragImage);
-                    dragImage.style.position = 'absolute';
-                    dragImage.style.top = '-1000px';
-                    event.dataTransfer.setDragImage(dragImage, event.offsetX || 0, event.offsetY || 0);
-                    setTimeout(() => document.body.removeChild(dragImage), 0);
-                }
-                
-                console.log('✅ Pipeline: Drag data set', { payload, effectAllowed: event.dataTransfer.effectAllowed });
-            } catch (error) {
-                console.warn('⚠️ Pipeline: Unable to serialise drag payload', error);
-            }
-        } else {
-            console.error('❌ Pipeline: No dataTransfer object in drag start event!');
+            // Simple string data like TaskManagement - this is the key!
+            event.dataTransfer.setData('pipelineItemId', String(item.id));
+            event.dataTransfer.setData('pipelineItemType', type);
+            event.dataTransfer.effectAllowed = 'move';
         }
-        
         setDraggedItem(item);
         setDraggedType(type);
         setIsDragging(true);
     };
 
     const handleDragOver = (e, stageName = null) => {
-        // CRITICAL: preventDefault MUST be called for drop to work
         e.preventDefault();
         e.stopPropagation();
-        
         if (stageName) {
             setDraggedOverStage(stageName);
         }
-        
         if (e?.dataTransfer) {
-            // Check both state and ref to determine if we have a valid drag
-            const hasDragData = draggedItem || dragDataRef.current;
-            e.dataTransfer.dropEffect = hasDragData ? 'move' : 'none';
-            // Log more frequently to verify dragover is firing
-            if (Math.random() < 0.1) { // 10% of the time
-                console.log('🔄 Pipeline: Stage DragOver firing', { 
-                    stageName, 
-                    hasDragData: !!hasDragData,
-                    dropEffect: e.dataTransfer.dropEffect,
-                    target: e.target?.tagName 
-                });
-            }
+            e.dataTransfer.dropEffect = 'move';
         }
     };
 
@@ -1220,16 +1174,13 @@ function doesOpportunityBelongToClient(opportunity, client) {
     };
 
     const handleDragLeave = (e, stageName) => {
-        if (!stageName) {
-            return;
+        e.preventDefault();
+        e.stopPropagation();
+        // Only remove highlight if we're actually leaving the column (not just moving to a child)
+        const relatedTarget = e.relatedTarget;
+        if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
+            setDraggedOverStage((prev) => (prev === stageName ? null : prev));
         }
-        if (e?.currentTarget) {
-            const relatedTarget = e.relatedTarget;
-            if (relatedTarget && e.currentTarget.contains(relatedTarget)) {
-                return;
-            }
-        }
-        setDraggedOverStage((prev) => (prev === stageName ? null : prev));
     };
 
     const updateLeadStageOptimistically = (leadId, newStage) => {
@@ -2000,20 +1951,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
         return (
             <div
-                ref={cardRef}
                 draggable={true}
                 onDragStart={(e) => {
-                    console.log('🎬 Pipeline: React drag start', { itemId: item.id, itemName: item.name, event: e.type });
                     handleDragStart(e, item, item.type);
                 }}
-                onDrag={(e) => {
-                    // Keep drag active
-                    if (e?.dataTransfer) {
-                        e.dataTransfer.dropEffect = 'move';
-                    }
-                }}
                 onDragEnd={(e) => {
-                    console.log('🏁 Pipeline: React drag end', { itemId: item.id, dropEffect: e?.dataTransfer?.dropEffect });
                     handleDragEnd(e);
                 }}
                 onTouchStart={(e) => handleTouchStart(e, item, item.type)}
