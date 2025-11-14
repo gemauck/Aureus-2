@@ -140,6 +140,10 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
         './src/components/tools/HandwritingToWord.jsx',
         './src/components/tools/Tools.jsx',
         
+        // Common components
+        './src/components/common/CommentInputWithMentions.jsx',
+        './src/components/common/RichTextEditor.jsx',
+        
         // Utils and integrations
         './src/utils/permissions.js',
         './src/utils/whatsapp.js',

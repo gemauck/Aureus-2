@@ -9,7 +9,15 @@ const TaskManagement = () => {
     const [clients, setClients] = useState([]);
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [view, setView] = useState('list'); // list, kanban, calendar
+    // Load view preference from localStorage, default to 'list'
+    const [view, setView] = useState(() => {
+        try {
+            const savedView = localStorage.getItem('taskManagementView');
+            return savedView && ['list', 'kanban', 'calendar'].includes(savedView) ? savedView : 'list';
+        } catch (e) {
+            return 'list';
+        }
+    });
     const [filterStatus, setFilterStatus] = useState('all');
     const [filterCategory, setFilterCategory] = useState('all');
     const [filterTag, setFilterTag] = useState('all');
@@ -24,6 +32,16 @@ const TaskManagement = () => {
     const [inlineQuickDescription, setInlineQuickDescription] = useState('');
     const [isInlineAdding, setIsInlineAdding] = useState(false);
     const [inlineQuickError, setInlineQuickError] = useState('');
+
+    // Function to update view and save to localStorage
+    const updateView = (newView) => {
+        setView(newView);
+        try {
+            localStorage.setItem('taskManagementView', newView);
+        } catch (e) {
+            console.warn('Failed to save view preference to localStorage:', e);
+        }
+    };
 
     // Load data
     useEffect(() => {
@@ -475,19 +493,19 @@ const TaskManagement = () => {
                     {/* View Toggle */}
                     <div className="flex gap-2">
                         <button
-                            onClick={() => setView('list')}
+                            onClick={() => updateView('list')}
                             className={`px-4 py-2 rounded-lg transition-colors ${view === 'list' ? 'bg-blue-600 text-white' : isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
                         >
                             <i className="fas fa-list mr-2"></i>List
                         </button>
                         <button
-                            onClick={() => setView('kanban')}
+                            onClick={() => updateView('kanban')}
                             className={`px-4 py-2 rounded-lg transition-colors ${view === 'kanban' ? 'bg-blue-600 text-white' : isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
                         >
                             <i className="fas fa-columns mr-2"></i>Kanban
                         </button>
                         <button
-                            onClick={() => setView('calendar')}
+                            onClick={() => updateView('calendar')}
                             className={`px-4 py-2 rounded-lg transition-colors ${view === 'calendar' ? 'bg-blue-600 text-white' : isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-700'}`}
                         >
                             <i className="fas fa-calendar mr-2"></i>Calendar

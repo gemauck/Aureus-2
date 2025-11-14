@@ -881,6 +881,42 @@ const ManagementMeetingNotes = () => {
                 weekDetails.weekEnd.toISOString()
             );
 
+            // Send notifications to all users in the monthly notes
+            if (window.DatabaseAPI && targetMonth?.userAllocations && targetMonth.userAllocations.length > 0) {
+                const currentUser = window.storage?.getUserInfo() || {};
+                const authorName = currentUser.name || currentUser.email || 'System';
+                const weekStartStr = weekDetails.weekStart.toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' });
+                const weekEndStr = weekDetails.weekEnd.toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' });
+                
+                // Get unique user IDs from allocations
+                const userIds = [...new Set(targetMonth.userAllocations.map(a => a.userId))];
+                
+                // Send notifications asynchronously (don't wait)
+                userIds.forEach(userId => {
+                    if (userId && userId !== currentUser.id) {
+                        const notificationPayload = {
+                            userId: userId,
+                            type: 'system',
+                            title: 'New Week Generated',
+                            message: `${authorName} created a new week (${weekStartStr} - ${weekEndStr}) for ${formatMonth(weekDetails.monthKey)}`,
+                            link: `/teams?month=${weekDetails.monthKey}&week=${weekDetails.weekKey}`,
+                            metadata: {
+                                type: 'week_created',
+                                monthKey: weekDetails.monthKey,
+                                weekKey: weekDetails.weekKey,
+                                weekStart: weekDetails.weekStart.toISOString(),
+                                weekEnd: weekDetails.weekEnd.toISOString()
+                            }
+                        };
+                        
+                        window.DatabaseAPI.makeRequest('/notifications', {
+                            method: 'POST',
+                            body: JSON.stringify(notificationPayload)
+                        }).catch(err => console.error('Error sending week notification:', err));
+                    }
+                });
+            }
+
             await reloadMonthlyNotes(weekDetails.monthKey);
             setSelectedWeek(weekDetails.weekKey);
             setNewWeekStartInput('');
@@ -1049,7 +1085,7 @@ const ManagementMeetingNotes = () => {
         }
     };
 
-    // Create comment
+    // Create comment with mention processing
     const handleCreateComment = async (content) => {
         if (!commentContext) return;
         
@@ -1063,6 +1099,34 @@ const ManagementMeetingNotes = () => {
             };
             
             await window.DatabaseAPI.createComment(commentData);
+            
+            // Process mentions and send notifications
+            if (window.MentionHelper && window.MentionHelper.hasMentions(content)) {
+                const currentUser = window.storage?.getUserInfo() || {};
+                const authorName = currentUser.name || currentUser.email || 'Unknown';
+                
+                // Build context title and link
+                let contextTitle = 'Meeting Notes';
+                let contextLink = '/teams';
+                
+                if (commentContext.type === 'department') {
+                    const department = DEPARTMENTS.find(d => d.id === commentContext.departmentId);
+                    contextTitle = `${department?.name || 'Department'} Weekly Notes`;
+                    contextLink = `/teams?month=${selectedMonth}&week=${selectedWeek}&department=${commentContext.departmentId}`;
+                } else if (commentContext.type === 'monthly') {
+                    contextTitle = `Monthly Meeting Notes - ${selectedMonth}`;
+                    contextLink = `/teams?month=${selectedMonth}`;
+                }
+                
+                // Process mentions asynchronously (don't wait for notifications)
+                window.MentionHelper.processMentions(
+                    content,
+                    contextTitle,
+                    contextLink,
+                    authorName,
+                    users
+                ).catch(err => console.error('Error processing mentions:', err));
+            }
             
             // Reload current month's notes
             const monthResponse = await window.DatabaseAPI.getMeetingNotes(selectedMonth);
@@ -1751,14 +1815,25 @@ const ManagementMeetingNotes = () => {
                                                                                 Comments
                                                                             </label>
                                                                             <div className="space-y-2">
-                                                                                {deptNote.comments.map((comment) => (
-                                                                                    <div key={comment.id} className={`p-2 rounded ${isDark ? 'bg-slate-700' : 'bg-gray-50'}`}>
-                                                                                        <p className={`text-xs ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{comment.content}</p>
-                                                                                        <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                                                                                            {comment.author ? (comment.author.name || comment.author.email) : 'Unknown'} • {new Date(comment.createdAt).toLocaleDateString()}
-                                                                                        </p>
-                                                                                    </div>
-                                                                                ))}
+                                                                                {deptNote.comments.map((comment) => {
+                                                                                    // Highlight mentions in comment content
+                                                                                    let displayContent = comment.content || '';
+                                                                                    if (window.MentionHelper && displayContent) {
+                                                                                        displayContent = window.MentionHelper.highlightMentions(displayContent, isDark);
+                                                                                    }
+                                                                                    
+                                                                                    return (
+                                                                                        <div key={comment.id} className={`p-2 rounded ${isDark ? 'bg-slate-700' : 'bg-gray-50'}`}>
+                                                                                            <p 
+                                                                                                className={`text-xs ${isDark ? 'text-slate-100' : 'text-gray-900'}`}
+                                                                                                dangerouslySetInnerHTML={{ __html: displayContent }}
+                                                                                            />
+                                                                                            <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                                                                                                {comment.author ? (comment.author.name || comment.author.email) : 'Unknown'} • {new Date(comment.createdAt).toLocaleDateString()}
+                                                                                            </p>
+                                                                                        </div>
+                                                                                    );
+                                                                                })}
                                                                             </div>
                                                                         </div>
                                                                     )}
@@ -1766,7 +1841,12 @@ const ManagementMeetingNotes = () => {
                                                                     {/* Add Comment Button */}
                                                                     <button
                                                                         onClick={() => {
-                                                                            setCommentContext({ type: 'department', id: deptNote.id });
+                                                                            setCommentContext({ 
+                                                                                type: 'department', 
+                                                                                id: deptNote.id,
+                                                                                departmentId: deptNote.departmentId,
+                                                                                title: `${DEPARTMENTS.find(d => d.id === deptNote.departmentId)?.name || 'Department'} Weekly Notes`
+                                                                            });
                                                                             setShowCommentModal(true);
                                                                         }}
                                                                         className={`w-full text-xs px-3 py-2 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
@@ -1944,7 +2024,25 @@ const ManagementMeetingNotes = () => {
                         </div>
                         <CommentForm
                             isDark={isDark}
+                            commentContext={commentContext}
+                            users={users}
                             onSubmit={handleCreateComment}
+                            onCreateActionItem={(actionItemData) => {
+                                // Close comment modal and open action item modal
+                                setShowCommentModal(false);
+                                setCommentContext(null);
+                                
+                                // Merge action item data with comment context
+                                const newActionItem = {
+                                    ...actionItemData,
+                                    monthlyNotesId: currentMonthlyNotes?.id,
+                                    weeklyNotesId: commentContext.type === 'department' ? selectedWeek : null,
+                                    departmentNotesId: commentContext.type === 'department' ? commentContext.id : null
+                                };
+                                
+                                setEditingActionItem(newActionItem);
+                                setShowActionItemModal(true);
+                            }}
                             onCancel={() => {
                                 setShowCommentModal(false);
                                 setCommentContext(null);
@@ -1957,7 +2055,7 @@ const ManagementMeetingNotes = () => {
     );
 };
 
-// Action Item Form Component
+// Action Item Form Component with rich text support
 const ActionItemForm = ({ actionItem, monthlyNotesId, users, isDark, onSave, onCancel }) => {
     const [title, setTitle] = useState(actionItem?.title || '');
     const [description, setDescription] = useState(actionItem?.description || '');
@@ -1965,6 +2063,14 @@ const ActionItemForm = ({ actionItem, monthlyNotesId, users, isDark, onSave, onC
     const [priority, setPriority] = useState(actionItem?.priority || 'medium');
     const [assignedUserId, setAssignedUserId] = useState(actionItem?.assignedUserId || '');
     const [dueDate, setDueDate] = useState(actionItem?.dueDate ? new Date(actionItem.dueDate).toISOString().split('T')[0] : '');
+
+    // Handle initial values from comment
+    useEffect(() => {
+        if (actionItem?.fromComment && actionItem?.title && actionItem?.description) {
+            setTitle(actionItem.title);
+            setDescription(actionItem.description);
+        }
+    }, [actionItem]);
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -1981,6 +2087,8 @@ const ActionItemForm = ({ actionItem, monthlyNotesId, users, isDark, onSave, onC
         });
     };
 
+    const RichTextEditor = window.RichTextEditor || null;
+
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -1994,13 +2102,26 @@ const ActionItemForm = ({ actionItem, monthlyNotesId, users, isDark, onSave, onC
                 />
             </div>
             <div>
-                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Description</label>
-                <textarea
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
-                    rows="3"
-                />
+                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                    Description <span className="text-xs opacity-70">(supports rich text formatting)</span>
+                </label>
+                {RichTextEditor ? (
+                    <RichTextEditor
+                        value={description}
+                        onChange={(html) => setDescription(html)}
+                        placeholder="Enter description with formatting (bold, bullets, etc.)"
+                        rows={4}
+                        isDark={isDark}
+                    />
+                ) : (
+                    <textarea
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                        rows="4"
+                        placeholder="Enter description..."
+                    />
+                )}
             </div>
             <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -2073,31 +2194,112 @@ const ActionItemForm = ({ actionItem, monthlyNotesId, users, isDark, onSave, onC
     );
 };
 
-// Comment Form Component
-const CommentForm = ({ isDark, onSubmit, onCancel }) => {
+// Comment Form Component with mention support and action item creation
+const CommentForm = ({ isDark, onSubmit, onCancel, commentContext, onCreateActionItem, users = [] }) => {
     const [content, setContent] = useState('');
+    const textareaRef = useRef(null);
 
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        if (content.trim()) {
-            onSubmit(content);
+    const handleSubmit = (commentText) => {
+        if (commentText && commentText.trim()) {
+            onSubmit(commentText);
             setContent('');
         }
     };
 
+    const handleTextareaChange = (e) => {
+        setContent(e.target.value);
+    };
+
+    const handleCreateActionItemFromComment = () => {
+        const textContent = textareaRef.current?.value || content;
+        if (textContent.trim() && onCreateActionItem) {
+            // Extract first line as title, rest as description
+            const lines = textContent.split('\n').filter(l => l.trim());
+            const title = lines[0]?.trim() || 'Action Item from Comment';
+            const description = lines.slice(1).join('\n').trim() || textContent.trim();
+            
+            onCreateActionItem({
+                title,
+                description,
+                fromComment: true,
+                commentText: textContent
+            });
+            setContent('');
+        }
+    };
+
+    // Use CommentInputWithMentions if available, otherwise fallback to regular textarea
+    const CommentInput = window.CommentInputWithMentions || null;
+
+    if (CommentInput) {
+        // Use CommentInputWithMentions component
+        return (
+            <div className="space-y-4">
+                <div>
+                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                        Comment <span className="text-xs opacity-70">(@mention users to notify them)</span>
+                    </label>
+                    <CommentInput
+                        onSubmit={handleSubmit}
+                        placeholder="Add a comment... (@mention users, Shift+Enter for new line, Enter to send)"
+                        rows={4}
+                        taskTitle={commentContext?.title || 'Meeting Notes'}
+                        taskLink="/teams"
+                        showButton={true}
+                    />
+                </div>
+                
+                <div className="flex gap-2 justify-end">
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        className={`px-4 py-2 text-sm rounded-lg ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                    >
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // Fallback to regular textarea with action item creation
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={(e) => { e.preventDefault(); handleSubmit(content); }} className="space-y-4">
             <div>
-                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Comment</label>
+                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                    Comment <span className="text-xs opacity-70">(@mention users to notify them)</span>
+                </label>
                 <textarea
+                    ref={textareaRef}
                     value={content}
-                    onChange={(e) => setContent(e.target.value)}
+                    onChange={handleTextareaChange}
                     required
                     className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
                     rows="4"
-                    placeholder="Enter your comment..."
+                    placeholder="Enter your comment... (@mention users to notify them)"
                 />
             </div>
+            
+            {/* Quick Action Item Creation */}
+            {content.trim() && onCreateActionItem && (
+                <div className={`p-2 rounded ${isDark ? 'bg-blue-900/30 border border-blue-700' : 'bg-blue-50 border border-blue-200'}`}>
+                    <div className="flex items-center justify-between">
+                        <p className={`text-xs ${isDark ? 'text-blue-200' : 'text-blue-800'}`}>
+                            <i className="fas fa-lightbulb mr-1"></i>
+                            Create action item from this comment?
+                        </p>
+                        <button
+                            type="button"
+                            onClick={handleCreateActionItemFromComment}
+                            className={`px-3 py-1 text-xs rounded ${isDark ? 'bg-blue-700 text-blue-100 hover:bg-blue-600' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                        >
+                            <i className="fas fa-plus mr-1"></i>
+                            Create Action Item
+                        </button>
+                    </div>
+                </div>
+            )}
+
             <div className="flex gap-2 justify-end">
                 <button
                     type="button"
@@ -2108,8 +2310,10 @@ const CommentForm = ({ isDark, onSubmit, onCancel }) => {
                 </button>
                 <button
                     type="submit"
-                    className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                    disabled={!content.trim()}
+                    className={`px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed`}
                 >
+                    <i className="fas fa-paper-plane mr-1"></i>
                     Post Comment
                 </button>
             </div>

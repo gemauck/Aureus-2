@@ -1,5 +1,4 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import React, { ReactDOM } from 'react';
 import ProjectsModule, { Projects, ProjectDetail, ProjectModal, MonthlyDocumentCollectionTracker } from './ProjectsModule';
 import '../../../src/styles/main.css';  // Use existing Tailwind
 
