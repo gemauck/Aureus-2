@@ -2071,6 +2071,24 @@ function doesOpportunityBelongToClient(opportunity, client) {
         );
     };
 
+    // Global dragover handler to ensure preventDefault is always called
+    // This is critical for drop events to fire - browsers require preventDefault on dragover
+    useEffect(() => {
+        const globalDragOver = (e) => {
+            // Only prevent default if we're dragging something from the pipeline
+            if (isDragging || dragDataRef.current) {
+                e.preventDefault();
+                // Don't stop propagation - let the stage handlers handle it
+            }
+        };
+        
+        document.addEventListener('dragover', globalDragOver, { passive: false });
+        
+        return () => {
+            document.removeEventListener('dragover', globalDragOver);
+        };
+    }, [isDragging]);
+
     // Diagnostic function to verify drag and drop setup
     useEffect(() => {
         if (viewMode === 'kanban' && dataLoaded) {

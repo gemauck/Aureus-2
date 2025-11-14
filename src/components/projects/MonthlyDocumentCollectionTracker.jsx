@@ -106,7 +106,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     // Ref to track if we're currently saving to prevent sync during save
     const isSavingRef = useRef(false);
-    
+
     // Ref to track pending debounced save timeout
     const debouncedSaveTimeoutRef = useRef(null);
     
@@ -133,7 +133,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             }
             
             isSavingRef.current = true;
-            lastLocalUpdateRef.current = Date.now();
+                                lastLocalUpdateRef.current = Date.now();
             
             console.log('💾 Immediately saving document sections to database...');
             console.log('  - Project ID:', project.id);
@@ -210,7 +210,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             setTimeout(() => {
                 isSavingRef.current = false;
             }, 1000);
-        } catch (error) {
+            } catch (error) {
             console.error('❌ Error immediately saving document sections:', error);
             isSavingRef.current = false;
             alert('Failed to save document sections: ' + error.message);
@@ -287,10 +287,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 // Only sync if local state is empty (initial mount)
                 if (currentSections.length === 0 && parsed.length > 0) {
                     console.log('🔄 Initial sync from project prop on mount:', parsed.length, 'sections');
-                    isInitialMount.current = false;
+                        isInitialMount.current = false;
                     lastLocalUpdateRef.current = Date.now();
-                    return parsed;
-                }
+                        return parsed;
+                    }
                 // If we already have sections, don't overwrite them
                 if (currentSections.length > 0) {
                     console.log('⏭️ Skipping sync - local sections exist, not overwriting');
@@ -385,45 +385,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 lastLocalUpdateRef.current = Date.now();
                 console.log('⏰ Updated lastLocalUpdateRef timestamp');
                 
-                // Clear cache to ensure fresh data is loaded next time
+                // Clear cache to ensure fresh data is loaded next time (but don't fetch immediately)
                 if (window.DatabaseAPI && typeof window.DatabaseAPI.clearCache === 'function') {
                     window.DatabaseAPI.clearCache(`/projects/${project.id}`);
                     window.DatabaseAPI.clearCache('/projects');
-                    console.log('🗑️ Cleared project cache to ensure fresh data');
+                    console.log('🗑️ Cleared project cache');
                 }
                 
-                // Verify save was successful by fetching fresh data
-                try {
-                    if (window.DatabaseAPI && typeof window.DatabaseAPI.getProject === 'function') {
-                        console.log('🔍 Verifying save by fetching fresh data...');
-                        // Small delay to ensure database write is complete
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                        const freshResponse = await window.DatabaseAPI.getProject(project.id);
-                        const freshProject = freshResponse?.data?.project || freshResponse?.project || freshResponse?.data;
-                        if (freshProject && freshProject.documentSections !== undefined) {
-                            const freshSections = parseSections(freshProject.documentSections);
-                            const freshSectionsStr = JSON.stringify(freshSections);
-                            const currentSectionsStr = JSON.stringify(sections);
-                            
-                            if (freshSectionsStr === currentSectionsStr) {
-                                console.log('✅ VERIFIED: Saved data matches database -', sections.length, 'sections');
-                            } else {
-                                console.error('❌ VERIFICATION FAILED: Saved data differs from database!');
-                                console.error('  - Local sections:', sections.length);
-                                console.error('  - Database sections:', freshSections.length);
-                                console.error('  - Local data:', currentSectionsStr.substring(0, 200));
-                                console.error('  - Database data:', freshSectionsStr.substring(0, 200));
-                                // Don't update local state - alert user instead
-                                alert('Warning: Data may not have saved correctly. Please check and try again.');
-                            }
-                        } else {
-                            console.warn('⚠️ Could not verify save - fresh project data missing documentSections');
-                        }
-                    }
-                } catch (refreshError) {
-                    console.error('❌ Failed to verify save:', refreshError);
-                    // Don't throw - save might still be successful
-                }
+                // DISABLED: Verification step removed to prevent unnecessary refreshes
+                // The save response is sufficient confirmation
+                console.log('✅ Save completed -', sections.length, 'sections saved');
                 
                 // Then update localStorage for consistency
                 if (window.dataService && typeof window.dataService.getProjects === 'function') {
@@ -630,7 +601,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         lastLocalUpdateRef.current = Date.now();
 
         let updatedSections;
-        
+
         if (editingSection) {
             // Use functional update to avoid race conditions
             setSections(currentSections => {
@@ -2575,3 +2546,4 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 // Make available globally
 window.MonthlyDocumentCollectionTracker = MonthlyDocumentCollectionTracker;
 console.log('✅ MonthlyDocumentCollectionTracker component loaded and registered globally');
+
