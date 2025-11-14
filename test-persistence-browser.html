@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Progress Tracker Persistence Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test-section {
+            border: 1px solid #ddd;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        .success {
+            color: green;
+            font-weight: bold;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+        .log {
+            background: #f5f5f5;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        input, select {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Progress Tracker Persistence Test</h1>
+    
+    <div class="test-section">
+        <h2>Step 1: Get Projects</h2>
+        <button onclick="loadProjects()">Load Projects</button>
+        <div id="projects-list"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Step 2: Test Save</h2>
+        <label>Project ID: <input type="text" id="projectId" placeholder="Enter project ID"></label><br>
+        <label>Month: 
+            <select id="month">
+                <option>January</option>
+                <option>February</option>
+                <option>March</option>
+                <option>April</option>
+                <option>May</option>
+                <option>June</option>
+                <option>July</option>
+                <option>August</option>
+                <option>September</option>
+                <option>October</option>
+                <option>November</option>
+                <option>December</option>
+            </select>
+        </label>
+        <label>Year: <input type="number" id="year" value="2025"></label><br>
+        <label>Comments: <input type="text" id="comments" value="Test comment - "></label><br>
+        <button onclick="saveTestData()">Save Test Data</button>
+        <div id="save-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Step 3: Verify Persistence</h2>
+        <button onclick="verifyData()">Verify Saved Data</button>
+        <div id="verify-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Logs</h2>
+        <div id="logs" class="log"></div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let projects = [];
+        let savedProjectId = null;
+
+        function log(message, type = 'info') {
+            const logs = document.getElementById('logs');
+            const time = new Date().toLocaleTimeString();
+            const color = type === 'error' ? 'red' : type === 'success' ? 'green' : 'black';
+            logs.innerHTML += `<div style="color: ${color}">[${time}] ${message}</div>`;
+            logs.scrollTop = logs.scrollHeight;
+            console.log(message);
+        }
+
+        async function getToken() {
+            // Try to get token from localStorage
+            if (window.storage && window.storage.getToken) {
+                return window.storage.getToken();
+            }
+            // Fallback to localStorage directly
+            const token = localStorage.getItem('token') || localStorage.getItem('accessToken');
+            if (!token) {
+                log('❌ No authentication token found. Please log in first.', 'error');
+                return null;
+            }
+            return token;
+        }
+
+        async function loadProjects() {
+            try {
+                log('📡 Loading projects...');
+                const token = await getToken();
+                if (!token) return;
+
+                const response = await fetch(`${API_BASE}/api/projects`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                projects = data?.data?.projects || data?.projects || data?.data || [];
+                
+                log(`✅ Loaded ${projects.length} projects`, 'success');
+                
+                const listDiv = document.getElementById('projects-list');
+                if (projects.length === 0) {
+                    listDiv.innerHTML = '<p class="error">No projects found</p>';
+                } else {
+                    let html = '<p><strong>Select a project:</strong></p>';
+                    projects.forEach(p => {
+                        html += `<div>
+                            <button onclick="selectProject('${p.id}')">Select</button>
+                            <strong>${p.name}</strong> (${p.clientName || 'No client'}) - ID: ${p.id}
+                        </div>`;
+                    });
+                    listDiv.innerHTML = html;
+                }
+            } catch (error) {
+                log(`❌ Error loading projects: ${error.message}`, 'error');
+            }
+        }
+
+        function selectProject(id) {
+            document.getElementById('projectId').value = id;
+            savedProjectId = id;
+            log(`✅ Selected project: ${id}`, 'success');
+        }
+
+        async function saveTestData() {
+            try {
+                const projectId = document.getElementById('projectId').value;
+                const month = document.getElementById('month').value;
+                const year = document.getElementById('year').value;
+                const comments = document.getElementById('comments').value + new Date().toISOString();
+
+                if (!projectId) {
+                    log('❌ Please enter a project ID', 'error');
+                    return;
+                }
+
+                log(`💾 Saving data for project ${projectId}...`);
+                log(`   Month: ${month}, Year: ${year}`);
+                log(`   Comments: ${comments}`);
+
+                const token = await getToken();
+                if (!token) return;
+
+                // First, get current project data
+                const getResponse = await fetch(`${API_BASE}/api/projects/${projectId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!getResponse.ok) {
+                    throw new Error(`Failed to get project: HTTP ${getResponse.status}`);
+                }
+
+                const projectData = await getResponse.json();
+                const project = projectData?.data?.project || projectData?.project || projectData?.data;
+
+                log(`📋 Current monthlyProgress type: ${typeof project.monthlyProgress}`);
+
+                // Parse existing monthlyProgress
+                let monthlyProgress = {};
+                if (project.monthlyProgress) {
+                    try {
+                        monthlyProgress = typeof project.monthlyProgress === 'string' 
+                            ? JSON.parse(project.monthlyProgress)
+                            : project.monthlyProgress;
+                    } catch (e) {
+                        log(`⚠️ Failed to parse existing monthlyProgress: ${e.message}`);
+                        monthlyProgress = {};
+                    }
+                }
+
+                // Update the specific month
+                const key = `${month}-${year}`;
+                monthlyProgress[key] = {
+                    ...(monthlyProgress[key] || {}),
+                    comments: comments
+                };
+
+                log(`📝 Updated monthlyProgress structure:`);
+                log(`   Key: ${key}`);
+                log(`   Full object keys: ${Object.keys(monthlyProgress).join(', ')}`);
+
+                // Save back to database
+                const updateResponse = await fetch(`${API_BASE}/api/projects/${projectId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        monthlyProgress: JSON.stringify(monthlyProgress)
+                    })
+                });
+
+                if (!updateResponse.ok) {
+                    const errorText = await updateResponse.text();
+                    throw new Error(`Failed to save: HTTP ${updateResponse.status} - ${errorText}`);
+                }
+
+                const updateData = await updateResponse.json();
+                log(`✅ Save successful!`, 'success');
+                
+                const resultDiv = document.getElementById('save-result');
+                resultDiv.innerHTML = `
+                    <p class="success">✅ Data saved successfully!</p>
+                    <p>Project ID: ${projectId}</p>
+                    <p>Month-Year: ${key}</p>
+                    <p>Comments: ${comments}</p>
+                `;
+
+                savedProjectId = projectId;
+            } catch (error) {
+                log(`❌ Error saving: ${error.message}`, 'error');
+                document.getElementById('save-result').innerHTML = 
+                    `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        }
+
+        async function verifyData() {
+            try {
+                const projectId = savedProjectId || document.getElementById('projectId').value;
+                if (!projectId) {
+                    log('❌ Please save data first or enter a project ID', 'error');
+                    return;
+                }
+
+                log(`🔍 Verifying data for project ${projectId}...`);
+
+                const token = await getToken();
+                if (!token) return;
+
+                const response = await fetch(`${API_BASE}/api/projects/${projectId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                const project = data?.data?.project || data?.project || data?.data;
+
+                let monthlyProgress = {};
+                if (project.monthlyProgress) {
+                    try {
+                        monthlyProgress = typeof project.monthlyProgress === 'string' 
+                            ? JSON.parse(project.monthlyProgress)
+                            : project.monthlyProgress;
+                    } catch (e) {
+                        log(`⚠️ Failed to parse monthlyProgress: ${e.message}`);
+                    }
+                }
+
+                log(`📋 Found ${Object.keys(monthlyProgress).length} month entries in database`, 'success');
+                
+                const verifyDiv = document.getElementById('verify-result');
+                let html = '<h3>Verification Results:</h3>';
+                html += `<p><strong>Project:</strong> ${project.name}</p>`;
+                html += `<p><strong>Monthly Progress Keys:</strong> ${Object.keys(monthlyProgress).join(', ') || 'None'}</p>`;
+                
+                if (Object.keys(monthlyProgress).length > 0) {
+                    html += '<h4>Month Data:</h4><pre>' + JSON.stringify(monthlyProgress, null, 2) + '</pre>';
+                    html += '<p class="success">✅ Data persisted successfully!</p>';
+                } else {
+                    html += '<p class="error">❌ No monthly progress data found</p>';
+                }
+
+                verifyDiv.innerHTML = html;
+            } catch (error) {
+                log(`❌ Error verifying: ${error.message}`, 'error');
+                document.getElementById('verify-result').innerHTML = 
+                    `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        }
+
+        // Auto-load projects on page load
+        window.addEventListener('load', () => {
+            log('🚀 Test page loaded');
+            log('📝 Instructions:');
+            log('1. Make sure you are logged in to the main app');
+            log('2. Click "Load Projects" to see available projects');
+            log('3. Select a project and enter test data');
+            log('4. Click "Save Test Data"');
+            log('5. Click "Verify Saved Data" to confirm persistence');
+        });
+    </script>
+</body>
+</html>
+

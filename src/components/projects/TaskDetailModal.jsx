@@ -300,14 +300,17 @@ const TaskDetailModal = ({
             
             // Send notifications
             try {
+                const taskId = editedTask.id || task?.id;
                 const projectLink = project ? `/projects/${project.id}` : '/projects';
+                // Build task-specific link with anchor for direct navigation to task
+                const taskLink = taskId ? `${projectLink}#task-${taskId}` : projectLink;
                 const taskTitle = editedTask.title || task?.title || 'Untitled Task';
                 const projectName = project?.name || 'Project';
                 
                 // Send notifications to mentioned users using MentionHelper
                 if (window.MentionHelper && mentionedUsers.length > 0) {
                     const contextTitle = `Task: ${taskTitle}`;
-                    const contextLink = projectLink;
+                    const contextLink = taskLink; // Use task-specific link
                     // Pass project information for email notifications
                     await window.MentionHelper.processMentions(
                         newComment,
@@ -318,7 +321,7 @@ const TaskDetailModal = ({
                         {
                             projectId: project?.id,
                             projectName: projectName,
-                            taskId: editedTask.id || task?.id,
+                            taskId: taskId,
                             taskTitle: taskTitle
                         }
                     );
@@ -340,9 +343,9 @@ const TaskDetailModal = ({
                                 type: 'comment',
                                 title: `New comment on task: ${taskTitle}`,
                                 message: `${currentUser.name} commented on "${taskTitle}" in project "${projectName}": "${newComment.substring(0, 100)}${newComment.length > 100 ? '...' : ''}"`,
-                                link: projectLink,
+                                link: taskLink, // Use task-specific link
                                 metadata: {
-                                    taskId: editedTask.id || task?.id,
+                                    taskId: taskId,
                                     taskTitle: taskTitle,
                                     projectId: project?.id,
                                     projectName: projectName,
@@ -373,9 +376,9 @@ const TaskDetailModal = ({
                                     type: 'comment',
                                     title: `New comment on task: ${taskTitle}`,
                                     message: `${currentUser.name} commented on "${taskTitle}" in project "${projectName}": "${newComment.substring(0, 100)}${newComment.length > 100 ? '...' : ''}"`,
-                                    link: projectLink,
+                                    link: taskLink, // Use task-specific link
                                     metadata: {
-                                        taskId: editedTask.id || task?.id,
+                                        taskId: taskId,
                                         taskTitle: taskTitle,
                                         projectId: project?.id,
                                         projectName: projectName,

@@ -1064,18 +1064,26 @@ const Projects = () => {
                 activityLog: typeof fullProject.activityLog === 'string' ? JSON.parse(fullProject.activityLog || '[]') : (fullProject.activityLog || []),
                 team: typeof fullProject.team === 'string' ? JSON.parse(fullProject.team || '[]') : (fullProject.team || []),
                 // Ensure hasDocumentCollectionProcess is properly included (boolean from database)
-                // Handle both boolean and string values from database
-                hasDocumentCollectionProcess: fullProject.hasDocumentCollectionProcess === true || 
-                                             fullProject.hasDocumentCollectionProcess === 'true' ||
-                                             fullProject.hasDocumentCollectionProcess === 1 ||
-                                             (typeof fullProject.hasDocumentCollectionProcess === 'string' && fullProject.hasDocumentCollectionProcess.toLowerCase() === 'true')
+                // Handle both boolean and string values from database - normalize to boolean
+                hasDocumentCollectionProcess: (() => {
+                    const value = fullProject.hasDocumentCollectionProcess;
+                    if (value === true || value === 'true' || value === 1) return true;
+                    if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+                    return false;
+                })()
             };
             console.log('Normalized project for ProjectDetail:', normalizedProject);
+            console.log('🔍 hasDocumentCollectionProcess value:', {
+                raw: fullProject.hasDocumentCollectionProcess,
+                normalized: normalizedProject.hasDocumentCollectionProcess,
+                type: typeof fullProject.hasDocumentCollectionProcess
+            });
             
             // Only set viewingProject if ProjectDetail is available
             if (window.ProjectDetail) {
                 console.log('✅ ProjectDetail is available, setting viewingProject');
-                setViewingProject(normalizedProject);
+                // Create a new object reference to ensure React detects the change
+                setViewingProject({ ...normalizedProject });
             } else {
                 console.error('❌ ProjectDetail still not available after loading attempt');
                 console.error('🔍 Debug info:', {

@@ -323,10 +323,13 @@ async function handler(req, res) {
                                         }
                                     }
                                     
-                                    // Build comment link - include task ID if available
+                                    // Build comment link - include task ID if available for direct navigation
                                     if (metadataObj?.taskId) {
-                                        commentLink = `${link || `/projects/${projectId}`}#task-${metadataObj.taskId}`;
+                                        // Build task-specific link with anchor
+                                        const baseLink = link || `/projects/${projectId}`;
+                                        commentLink = `${baseLink}#task-${metadataObj.taskId}`;
                                     } else {
+                                        // For project-level notifications, use project link
                                         commentLink = link || `/projects/${projectId}`;
                                     }
                                 }

@@ -301,15 +301,43 @@ function initializeProjectDetail() {
     }, [activeSection, project.id]);
     
     // Track if document collection process exists
-    const [hasDocumentCollectionProcess, setHasDocumentCollectionProcess] = useState(project.hasDocumentCollectionProcess || false);
+    // Normalize the value from project prop (handle boolean, string, number, undefined)
+    const normalizeHasDocumentCollectionProcess = (value) => {
+        if (value === true || value === 'true' || value === 1) return true;
+        if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+        return false;
+    };
+    
+    const [hasDocumentCollectionProcess, setHasDocumentCollectionProcess] = useState(() => 
+        normalizeHasDocumentCollectionProcess(project.hasDocumentCollectionProcess)
+    );
     
     // Sync hasDocumentCollectionProcess when project prop changes (e.g., after reloading from database)
     useEffect(() => {
-        if (project.hasDocumentCollectionProcess !== undefined) {
-            console.log('🔄 Syncing hasDocumentCollectionProcess from project prop:', project.hasDocumentCollectionProcess);
-            setHasDocumentCollectionProcess(project.hasDocumentCollectionProcess);
+        const normalizedValue = normalizeHasDocumentCollectionProcess(project.hasDocumentCollectionProcess);
+        console.log('🔄 Syncing hasDocumentCollectionProcess from project prop:', {
+            raw: project.hasDocumentCollectionProcess,
+            normalized: normalizedValue,
+            currentState: hasDocumentCollectionProcess,
+            projectId: project.id
+        });
+        if (normalizedValue !== hasDocumentCollectionProcess) {
+            console.log('✅ Updating hasDocumentCollectionProcess state from', hasDocumentCollectionProcess, 'to', normalizedValue);
+            setHasDocumentCollectionProcess(normalizedValue);
         }
-    }, [project.hasDocumentCollectionProcess]);
+    }, [project.hasDocumentCollectionProcess, project.id]);
+    
+    // Also sync on mount to ensure we have the latest value
+    useEffect(() => {
+        const normalizedValue = normalizeHasDocumentCollectionProcess(project.hasDocumentCollectionProcess);
+        console.log('🔄 Mount/Project change: Syncing hasDocumentCollectionProcess:', {
+            projectId: project.id,
+            raw: project.hasDocumentCollectionProcess,
+            normalized: normalizedValue,
+            currentState: hasDocumentCollectionProcess
+        });
+        setHasDocumentCollectionProcess(normalizedValue);
+    }, [project.id]); // Re-sync whenever we switch to a different project
     
     // Ref to prevent duplicate saves when manually adding document collection process
     const skipNextSaveRef = useRef(false);

@@ -475,28 +475,37 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
     const fullCommentLink = commentLink ? `${baseUrl}${commentLink.startsWith('/') ? commentLink : '/' + commentLink}` : null;
     
     // Build project information section HTML (shown at bottom after message)
+    // Always show link button when there's project context, even if no additional info
     let projectInfoHtml = '';
-    if (isProjectRelated && (projectDescription || clientDescription)) {
+    if (isProjectRelated) {
+        // Determine link text based on context
+        let linkText = 'View in Project';
+        if (taskTitle) {
+            linkText = 'View Task';
+        }
+        
         projectInfoHtml = `
             <div style="background: #f8f9fa; border-left: 4px solid #007bff; padding: 15px; margin: 20px 0; border-radius: 4px;">
-                <h3 style="color: #333; margin-top: 0; margin-bottom: 15px; font-size: 16px;">📋 Additional Information</h3>
-                ${clientDescription ? `
-                    <div style="margin-bottom: 12px;">
-                        <strong style="color: #555; display: block; margin-bottom: 5px;">Client Notes:</strong>
-                        <p style="color: #666; margin: 0; line-height: 1.5;">${escapeHtml(clientDescription)}</p>
-                    </div>
-                ` : ''}
-                ${projectDescription ? `
-                    <div style="margin-bottom: 12px;">
-                        <strong style="color: #555; display: block; margin-bottom: 5px;">Project Description:</strong>
-                        <p style="color: #666; margin: 0; line-height: 1.5;">${escapeHtml(projectDescription)}</p>
-                    </div>
+                ${(projectDescription || clientDescription) ? `
+                    <h3 style="color: #333; margin-top: 0; margin-bottom: 15px; font-size: 16px;">📋 Additional Information</h3>
+                    ${clientDescription ? `
+                        <div style="margin-bottom: 12px;">
+                            <strong style="color: #555; display: block; margin-bottom: 5px;">Client Notes:</strong>
+                            <p style="color: #666; margin: 0; line-height: 1.5;">${escapeHtml(clientDescription)}</p>
+                        </div>
+                    ` : ''}
+                    ${projectDescription ? `
+                        <div style="margin-bottom: 12px;">
+                            <strong style="color: #555; display: block; margin-bottom: 5px;">Project Description:</strong>
+                            <p style="color: #666; margin: 0; line-height: 1.5;">${escapeHtml(projectDescription)}</p>
+                        </div>
+                    ` : ''}
                 ` : ''}
                 ${fullCommentLink ? `
-                    <div style="margin-top: 15px;">
+                    <div style="margin-top: ${(projectDescription || clientDescription) ? '15px' : '0'};">
                         <a href="${fullCommentLink}" 
                            style="background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
-                            View in Project
+                            ${linkText}
                         </a>
                     </div>
                 ` : ''}
