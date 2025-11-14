@@ -324,13 +324,25 @@ async function handler(req, res) {
                                     }
                                     
                                     // Build comment link - include task ID if available for direct navigation
+                                    // Check if link already has a task anchor to avoid duplication
                                     if (metadataObj?.taskId) {
-                                        // Build task-specific link with anchor
-                                        const baseLink = link || `/projects/${projectId}`;
-                                        commentLink = `${baseLink}#task-${metadataObj.taskId}`;
+                                        // If link is already provided and contains task anchor, use it as-is
+                                        if (link && link.includes('#task-')) {
+                                            commentLink = link;
+                                        } else {
+                                            // Build task-specific link with anchor
+                                            // Use hash-based routing format for frontend navigation
+                                            const baseLink = link || `#/projects/${projectId}`;
+                                            // Only add task anchor if not already present
+                                            if (baseLink.includes('#task-')) {
+                                                commentLink = baseLink;
+                                            } else {
+                                                commentLink = `${baseLink}#task-${metadataObj.taskId}`;
+                                            }
+                                        }
                                     } else {
-                                        // For project-level notifications, use project link
-                                        commentLink = link || `/projects/${projectId}`;
+                                        // For project-level notifications, use project link with hash routing
+                                        commentLink = link || `#/projects/${projectId}`;
                                     }
                                 }
                             }

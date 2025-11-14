@@ -315,6 +315,29 @@ function initializeProjectDetail() {
         console.log('🟢 Active section changed to:', activeSection);
     }, [activeSection, project.id]);
     
+    // Sync activeSection when project prop changes (e.g., after reloading from database)
+    // This ensures we restore the correct tab even if project data loads asynchronously
+    useEffect(() => {
+        const saved = sessionStorage.getItem(`project-${project.id}-activeSection`);
+        if (saved && saved !== activeSection) {
+            // Normalize hasDocumentCollectionProcess to check if it's enabled
+            const hasProcess = project.hasDocumentCollectionProcess === true || 
+                              project.hasDocumentCollectionProcess === 'true' ||
+                              project.hasDocumentCollectionProcess === 1 ||
+                              (typeof project.hasDocumentCollectionProcess === 'string' && project.hasDocumentCollectionProcess.toLowerCase() === 'true');
+            
+            // Only restore if valid
+            if (saved === 'documentCollection' && !hasProcess) {
+                console.log('🔄 Project prop changed: Document Collection not enabled, keeping current section');
+                return;
+            }
+            
+            // Restore saved section if it's different from current
+            console.log('🔄 Project prop changed: Restoring saved section from sessionStorage:', saved);
+            setActiveSection(saved);
+        }
+    }, [project.id, project.hasDocumentCollectionProcess]); // Only run when project ID or hasDocumentCollectionProcess changes
+    
     // Track if document collection process exists
     // Normalize the value from project prop (handle boolean, string, number, undefined)
     const normalizeHasDocumentCollectionProcess = (value) => {
@@ -1223,7 +1246,8 @@ function initializeProjectDetail() {
             }, 500);
         }
 
-        const projectLink = project ? `/projects/${project.id}` : '/projects';
+        // Use hash-based routing format for email links (frontend uses hash routing)
+        const projectLink = project ? `#/projects/${project.id}` : '#/projects';
         const finalTaskId = updatedTargetTask.id || taskId;
         // Build task-specific link with anchor for direct navigation to task
         const taskLink = finalTaskId ? `${projectLink}#task-${finalTaskId}` : projectLink;
