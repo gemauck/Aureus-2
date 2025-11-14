@@ -640,7 +640,8 @@ const TaskManagement = () => {
                                 onDrop={handleDrop}
                             >
                                 <h3 className={`font-semibold mb-4 capitalize ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                    {status.replace('-', ' ')} ({kanbanTasks[status]?.length || 0})
+                                    <span>{status.replace('-', ' ')}</span>
+                                    <span className="ml-2 transition-all duration-200 inline-block">({kanbanTasks[status]?.length || 0})</span>
                                 </h3>
                                 <div className="space-y-2 min-h-[200px] transition-all duration-200">
                                     {kanbanTasks[status]?.map(task => (
@@ -764,7 +765,7 @@ const TaskCard = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clients
             draggable={draggable}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
-            className={`${isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'} rounded-lg border p-3 cursor-pointer transition-colors ${compact ? '' : 'mb-2'} ${draggable ? 'cursor-move' : ''}`}
+            className={`${isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'} rounded-lg border p-3 cursor-pointer transition-all duration-200 ease-in-out ${compact ? '' : 'mb-2'} ${draggable ? 'cursor-move' : ''} ${isDragging ? 'opacity-50 scale-95' : 'opacity-100 scale-100'}`}
             onClick={handleClick}
         >
             <div className="flex items-start justify-between gap-2">
