@@ -1079,6 +1079,34 @@ const Projects = () => {
                 type: typeof fullProject.hasDocumentCollectionProcess
             });
             
+            // Expose a function to update viewingProject from child components
+            // This allows ProjectDetail to refresh the project data after saving
+            window.updateViewingProject = (updatedProject) => {
+                console.log('🔄 Updating viewingProject from child component:', {
+                    id: updatedProject.id,
+                    hasDocumentCollectionProcess: updatedProject.hasDocumentCollectionProcess
+                });
+                // Normalize the project the same way we do in handleViewProject
+                const normalized = {
+                    ...updatedProject,
+                    client: updatedProject.clientName || updatedProject.client || '',
+                    taskLists: typeof updatedProject.taskLists === 'string' ? JSON.parse(updatedProject.taskLists || '[]') : (updatedProject.taskLists || []),
+                    tasks: typeof updatedProject.tasksList === 'string' ? JSON.parse(updatedProject.tasksList || '[]') : (updatedProject.tasks || updatedProject.tasksList || []),
+                    customFieldDefinitions: typeof updatedProject.customFieldDefinitions === 'string' ? JSON.parse(updatedProject.customFieldDefinitions || '[]') : (updatedProject.customFieldDefinitions || []),
+                    documents: typeof updatedProject.documents === 'string' ? JSON.parse(updatedProject.documents || '[]') : (updatedProject.documents || []),
+                    comments: typeof updatedProject.comments === 'string' ? JSON.parse(updatedProject.comments || '[]') : (updatedProject.comments || []),
+                    activityLog: typeof updatedProject.activityLog === 'string' ? JSON.parse(updatedProject.activityLog || '[]') : (updatedProject.activityLog || []),
+                    team: typeof updatedProject.team === 'string' ? JSON.parse(updatedProject.team || '[]') : (updatedProject.team || []),
+                    hasDocumentCollectionProcess: (() => {
+                        const value = updatedProject.hasDocumentCollectionProcess;
+                        if (value === true || value === 'true' || value === 1) return true;
+                        if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+                        return false;
+                    })()
+                };
+                setViewingProject(normalized);
+            };
+            
             // Only set viewingProject if ProjectDetail is available
             if (window.ProjectDetail) {
                 console.log('✅ ProjectDetail is available, setting viewingProject');
