@@ -18,34 +18,63 @@ const reactWindowPlugin = () => {
       // Provide the virtual module
       if (id === '\0virtual:react-window') {
         return `
-          // Get React dynamically - checks window.React every time it's accessed
-          // This ensures React is available when hooks are actually called, not just at module load
-          function getReact() {
-            if (typeof window !== 'undefined' && 
-                window.React && 
-                window.React !== null &&
-                typeof window.React.useState === 'function') {
-              return window.React;
-            }
-            // If React isn't available, wait a bit and try again
-            // This handles cases where React loads after the module
-            let attempts = 0;
-            const maxAttempts = 100; // 1 second max wait
-            while (attempts < maxAttempts) {
+          // COMPREHENSIVE FIX: Ensure React is available and export hooks correctly
+          // This module replaces 'react' imports with window.React access
+          
+          // Wait for React to be fully available with all required hooks
+          // index.html ensures React loads before this module, but we validate anyway
+          function ensureReactAvailable() {
+            const requiredHooks = ['useState', 'useEffect', 'useRef', 'useCallback', 'useMemo'];
+            const maxAttempts = 20; // 200ms total (20 * 10ms)
+            
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
               if (typeof window !== 'undefined' && 
                   window.React && 
                   window.React !== null &&
-                  typeof window.React.useState === 'function') {
-                return window.React;
+                  typeof window.React.useState === 'function' &&
+                  typeof window.React.useEffect === 'function' &&
+                  typeof window.React.useRef === 'function') {
+                // Verify all required hooks exist
+                const allHooksPresent = requiredHooks.every(hook => 
+                  typeof window.React[hook] === 'function'
+                );
+                
+                if (allHooksPresent) {
+                  return window.React;
+                }
               }
-              // Busy wait 10ms
-              const waitStart = Date.now();
-              while (Date.now() - waitStart < 10) {}
-              attempts++;
+              
+              // Small non-blocking delay between attempts
+              if (attempt < maxAttempts - 1) {
+                const start = Date.now();
+                while (Date.now() - start < 10) {} // 10ms delay
+              }
             }
-            throw new Error('window.React is not available. Make sure React is loaded before using this module.');
+            
+            // If we get here, React is not available
+            const errorMsg = 'window.React is not available when Vite module loads. ' +
+              'Required hooks: ' + requiredHooks.join(', ') + '. ' +
+              'React available: ' + (typeof window !== 'undefined' && window.React ? 'yes' : 'no') + '. ' +
+              'Please ensure React is loaded before the Vite module.';
+            throw new Error(errorMsg);
           }
           
+          // Get React instance - this will throw if React is not available
+          const ReactInstance = ensureReactAvailable();
+          
+          // Final validation - ensure ReactInstance is valid and has all hooks
+          if (!ReactInstance || typeof ReactInstance !== 'object') {
+            throw new Error('ReactInstance is invalid: ' + typeof ReactInstance);
+          }
+          
+          const requiredHooks = ['useState', 'useEffect', 'useRef', 'useCallback', 'useMemo', 'useLayoutEffect'];
+          for (const hook of requiredHooks) {
+            if (typeof ReactInstance[hook] !== 'function') {
+              throw new Error('React hook ' + hook + ' is not a function. Type: ' + typeof ReactInstance[hook]);
+            }
+          }
+          
+          // Get ReactDOM (optional, may be null)
           function getReactDOM() {
             if (typeof window !== 'undefined' && window.ReactDOM && window.ReactDOM !== null) {
               return window.ReactDOM;
@@ -53,65 +82,22 @@ const reactWindowPlugin = () => {
             return null;
           }
           
-          // Create a Proxy for React that accesses window.React dynamically
-          // This ensures React is always available when hooks are called
+          const ReactDOMInstance = getReactDOM();
+          
+          // Create Proxy for default React export (used for JSX/React.createElement)
+          // This allows dynamic access but hooks are exported directly
           const ReactProxy = new Proxy({}, {
             get(target, prop) {
-              const react = getReact();
-              const value = react[prop];
-              // For functions (hooks, createElement, etc.), bind them to React
-              // This ensures they work correctly with React's internal system
-              return typeof value === 'function' ? value.bind(react) : value;
+              // Always get fresh React instance to handle edge cases
+              const react = typeof window !== 'undefined' && window.React ? window.React : ReactInstance;
+              return react[prop];
             }
           });
           
-          // Export the Proxy as default React
-          export default ReactProxy;
-          
-          // Export hooks - they'll access React dynamically through the Proxy
-          // But we need to export them as direct references for React's hook system
-          // So we'll create getters that access React at call time
-          const ReactGetter = () => getReact();
-          
-          // CRITICAL: React hooks cannot be wrapped - they must be direct references
-          // React's hook system tracks hooks by call order and requires direct function references
-          // index.html ensures React is available before loading this module, so we can safely access it
-          // But we'll do a quick check and throw a clear error if React isn't available
-          
-          // Get React instance - should be available since index.html waits for it
-          // Do a robust check with multiple attempts (non-blocking, just retries)
-          function getReactInstance() {
-            // Try multiple times in case of race conditions
-            for (let i = 0; i < 10; i++) {
-              if (typeof window !== 'undefined' && 
-                  window.React && 
-                  window.React !== null &&
-                  typeof window.React.useState === 'function' &&
-                  typeof window.React.useRef === 'function') {
-                return window.React;
-              }
-              // Small delay between attempts (non-blocking)
-              if (i < 9) {
-                const start = Date.now();
-                while (Date.now() - start < 5) {} // 5ms delay
-              }
-            }
-            // If still not available, throw a clear error
-            throw new Error('window.React is not available when Vite module loads. React hooks are not accessible. Please ensure React is loaded before the Vite module.');
-          }
-          
-          const ReactInstance = getReactInstance();
-          
-          // Validate ReactInstance is not null before using it
-          if (!ReactInstance || !ReactInstance.useState || !ReactInstance.useRef) {
-            throw new Error('React instance is invalid. useState: ' + typeof ReactInstance?.useState + ', useRef: ' + typeof ReactInstance?.useRef);
-          }
-          
-          const ReactDOMInstance = getReactDOM();
-          
-          // Export hooks as direct references - React's hook system requires this
-          // CRITICAL: Do NOT bind hooks - React tracks hooks by their function identity
-          // These are captured once when the module loads, after ensuring React is available
+          // CRITICAL: Export hooks as DIRECT references to React's actual hook functions
+          // React's hook system tracks hooks by function identity and call order
+          // We CANNOT wrap, bind, or modify these functions in any way
+          // These must be the exact same functions that React uses internally
           export const useState = ReactInstance.useState;
           export const useEffect = ReactInstance.useEffect;
           export const useRef = ReactInstance.useRef;
@@ -119,6 +105,8 @@ const reactWindowPlugin = () => {
           export const useMemo = ReactInstance.useMemo;
           export const useLayoutEffect = ReactInstance.useLayoutEffect;
           export const createElement = ReactInstance.createElement;
+          
+          // Export React components and utilities
           export const Fragment = ReactInstance.Fragment;
           export const Component = ReactInstance.Component;
           export const PureComponent = ReactInstance.PureComponent;
@@ -127,8 +115,13 @@ const reactWindowPlugin = () => {
           export const lazy = ReactInstance.lazy;
           export const Suspense = ReactInstance.Suspense;
           export const StrictMode = ReactInstance.StrictMode;
+          
+          // Export React and ReactDOM
           export const React = ReactProxy;
           export const ReactDOM = ReactDOMInstance;
+          
+          // Default export is the Proxy (for JSX)
+          export default ReactProxy;
         `;
       }
       return null;
