@@ -73,35 +73,99 @@ const reactWindowPlugin = () => {
           // So we'll create getters that access React at call time
           const ReactGetter = () => getReact();
           
-          // CRITICAL: React hooks cannot be wrapped - they must be direct references
-          // So we get React once and export hooks directly, but ensure React is available
-          // The Proxy approach for default export ensures React is accessed dynamically
-          // For named exports of hooks, we need direct references but accessed through Proxy
+          // CRITICAL: React hooks must access React dynamically every time they're called
+          // This ensures React is available even if it loads after the module
+          // We create wrapper functions that call getReact() on each invocation
+          // React's hook system will work correctly as long as we call the actual React hooks
           
-          // Wait for React to be definitely available before exporting hooks
-          const ReactInstance = getReact();
-          const ReactDOMInstance = getReactDOM();
+          // Export hooks as functions that dynamically access React
+          // This ensures React is available every time a hook is called
+          export const useState = (...args) => {
+            const react = getReact();
+            return react.useState(...args);
+          };
+          export const useEffect = (...args) => {
+            const react = getReact();
+            return react.useEffect(...args);
+          };
+          export const useRef = (...args) => {
+            const react = getReact();
+            return react.useRef(...args);
+          };
+          export const useCallback = (...args) => {
+            const react = getReact();
+            return react.useCallback(...args);
+          };
+          export const useMemo = (...args) => {
+            const react = getReact();
+            return react.useMemo(...args);
+          };
+          export const useLayoutEffect = (...args) => {
+            const react = getReact();
+            return react.useLayoutEffect(...args);
+          };
+          export const createElement = (...args) => {
+            const react = getReact();
+            return react.createElement(...args);
+          };
           
-          // Export hooks as direct references - React's hook system requires this
-          // But we access them through getReact() to ensure React is available
-          // Note: These will be evaluated once, so React must be available at module load
-          export const useState = ReactInstance.useState;
-          export const useEffect = ReactInstance.useEffect;
-          export const useRef = ReactInstance.useRef;
-          export const useCallback = ReactInstance.useCallback;
-          export const useMemo = ReactInstance.useMemo;
-          export const useLayoutEffect = ReactInstance.useLayoutEffect;
-          export const createElement = ReactInstance.createElement;
-          export const Fragment = ReactInstance.Fragment;
-          export const Component = ReactInstance.Component;
-          export const PureComponent = ReactInstance.PureComponent;
-          export const memo = ReactInstance.memo;
-          export const forwardRef = ReactInstance.forwardRef;
-          export const lazy = ReactInstance.lazy;
-          export const Suspense = ReactInstance.Suspense;
-          export const StrictMode = ReactInstance.StrictMode;
+          // These can be accessed through the Proxy, but export them for convenience
+          export const Fragment = (() => {
+            try {
+              return getReact().Fragment;
+            } catch {
+              return Symbol.for('react.fragment');
+            }
+          })();
+          export const Component = (() => {
+            try {
+              return getReact().Component;
+            } catch {
+              return class Component {};
+            }
+          })();
+          export const PureComponent = (() => {
+            try {
+              return getReact().PureComponent;
+            } catch {
+              return class PureComponent {};
+            }
+          })();
+          export const memo = (...args) => {
+            const react = getReact();
+            return react.memo(...args);
+          };
+          export const forwardRef = (...args) => {
+            const react = getReact();
+            return react.forwardRef(...args);
+          };
+          export const lazy = (...args) => {
+            const react = getReact();
+            return react.lazy(...args);
+          };
+          export const Suspense = (() => {
+            try {
+              return getReact().Suspense;
+            } catch {
+              return ({ children }) => children;
+            }
+          })();
+          export const StrictMode = (() => {
+            try {
+              return getReact().StrictMode;
+            } catch {
+              return ({ children }) => children;
+            }
+          })();
+          
           export const React = ReactProxy;
-          export const ReactDOM = ReactDOMInstance;
+          export const ReactDOM = (() => {
+            try {
+              return getReactDOM();
+            } catch {
+              return null;
+            }
+          })();
         `;
       }
       return null;
