@@ -18,6 +18,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     const tableRef = useRef(null);
     const monthRefs = useRef({});
+    const hasInitialScrolled = useRef(false);
 
     const months = [
         'January', 'February', 'March', 'April', 'May', 'June',
@@ -264,10 +265,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     // Status options with color progression from red to green
     const statusOptions = [
-        { value: 'not-collected', label: 'Not Collected', color: 'bg-red-100 text-red-800', cellColor: 'bg-red-50' },
-        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-yellow-100 text-yellow-800', cellColor: 'bg-yellow-50' },
-        { value: 'collected', label: 'Collected', color: 'bg-green-100 text-green-800', cellColor: 'bg-green-50' },
-        { value: 'unavailable', label: 'Unavailable', color: 'bg-gray-100 text-gray-800', cellColor: 'bg-gray-50' }
+        { value: 'not-collected', label: 'Not Collected', color: 'bg-red-200 text-red-900', cellColor: 'bg-red-200 border-l-2 border-red-500' },
+        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-yellow-200 text-yellow-900', cellColor: 'bg-yellow-200 border-l-2 border-yellow-500' },
+        { value: 'collected', label: 'Collected', color: 'bg-green-200 text-green-900', cellColor: 'bg-green-200 border-l-2 border-green-500' },
+        { value: 'unavailable', label: 'Unavailable', color: 'bg-gray-200 text-gray-900', cellColor: 'bg-gray-200 border-l-2 border-gray-500' }
     ];
 
     // DISABLED: No automatic refresh on mount - only use data from props
@@ -275,10 +276,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // Data will be loaded from props when component mounts or project changes
     
     useEffect(() => {
-        // Scroll to working months after sections load and when year changes
-        if (sections.length > 0 && tableRef.current && selectedYear === currentYear) {
+        // Scroll to working months only on initial load
+        if (!hasInitialScrolled.current && sections.length > 0 && tableRef.current && selectedYear === currentYear) {
             setTimeout(() => {
                 scrollToWorkingMonths();
+                hasInitialScrolled.current = true;
             }, 100);
         }
     }, [sections, selectedYear]);

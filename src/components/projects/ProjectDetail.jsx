@@ -2721,10 +2721,10 @@ function initializeProjectDetail() {
                                                 <article
                                                     key={task.id}
                                                     onClick={() => handleViewTaskDetail(task)}
-                                                    className="py-1 px-3 hover:bg-primary-50/40 transition-colors cursor-pointer"
+                                                    className="py-1 px-3 hover:bg-primary-50/40 transition-colors cursor-pointer border-b border-gray-100"
                                                 >
-                                                    <div className="flex items-center gap-2 py-1">
-                                                        <div className="flex-shrink-0 w-[200px] min-w-0">
+                                                    <div className="grid grid-cols-[200px_80px_120px_80px_120px_50px_80px_1fr] gap-2 items-center">
+                                                        <div className="min-w-0">
                                                             <h4 className="text-xs font-semibold text-gray-900 truncate">
                                                                 {task.title || 'Untitled task'}
                                                             </h4>
@@ -2751,36 +2751,34 @@ function initializeProjectDetail() {
                                                                 </div>
                                                             )}
                                                         </div>
-                                                        <div className="flex-shrink-0">
+                                                        <div>
                                                             <span className={`px-1 py-0.5 text-[9px] font-semibold rounded-full ${getStatusColor(task.status || 'To Do')}`}>
                                                                 {task.status || 'To Do'}
                                                             </span>
                                                         </div>
-                                                        <div className="flex-shrink-0 w-[120px] min-w-0">
-                                                            <div className="text-[9px] text-gray-500 truncate">
-                                                                {task.assignee ? (
-                                                                    <span className="inline-flex items-center gap-0.5 truncate">
-                                                                        <i className="fas fa-user text-[8px] text-gray-400"></i>
-                                                                        <span className="truncate">{task.assignee}</span>
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="text-gray-400">—</span>
-                                                                )}
-                                                            </div>
+                                                        <div className="min-w-0">
+                                                            {task.assignee ? (
+                                                                <span className="inline-flex items-center gap-0.5 text-[9px] text-gray-500 truncate">
+                                                                    <i className="fas fa-user text-[8px] text-gray-400"></i>
+                                                                    <span className="truncate">{task.assignee}</span>
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-[9px] text-gray-400">—</span>
+                                                            )}
                                                         </div>
-                                                        <div className="flex-shrink-0">
+                                                        <div>
                                                             <span className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[9px] font-medium ${getPriorityColor(task.priority || 'Medium')}`}>
                                                                 <i className="fas fa-bolt text-[8px]"></i>
                                                                 {task.priority || 'Medium'}
                                                             </span>
                                                         </div>
-                                                        <div className="flex-shrink-0">
+                                                        <div>
                                                             <span className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[9px] font-medium ${dueMeta.pillClass}`}>
                                                                 <i className="fas fa-calendar-alt text-[8px]"></i>
                                                                 {dueMeta.label}
                                                             </span>
                                                         </div>
-                                                        <div className="flex-shrink-0 w-[40px] text-center">
+                                                        <div className="text-center">
                                                             {task.comments?.length > 0 ? (
                                                                 <span className="inline-flex items-center gap-0.5 text-[9px] text-gray-500">
                                                                     <i className="fas fa-comments text-[8px] text-gray-400"></i>
@@ -2790,34 +2788,34 @@ function initializeProjectDetail() {
                                                                 <span className="text-[9px] text-gray-400">—</span>
                                                             )}
                                                         </div>
-                                                        {((task.customFields && customFieldDefinitions.length > 0) || (task.checklist && task.checklist.length > 0)) && (
-                                                            <div className="flex-shrink-0 w-[80px] min-w-0">
-                                                                {task.customFields && customFieldDefinitions.length > 0 ? (
-                                                                    <div className="flex items-center gap-1">
-                                                                        {customFieldDefinitions.slice(0, 1).map(field => {
+                                                        <div className="min-w-0">
+                                                            {((task.customFields && customFieldDefinitions.length > 0) || (task.checklist && task.checklist.length > 0)) && (
+                                                                <>
+                                                                    {task.customFields && customFieldDefinitions.length > 0 ? (
+                                                                        customFieldDefinitions.slice(0, 1).map(field => {
                                                                             const value = task.customFields?.[field.name];
                                                                             if (!value) return null;
                                                                             return (
-                                                                                <span key={field.name} className="px-1 py-0.5 text-[8px] bg-gray-100 text-gray-600 rounded truncate max-w-[70px]" title={`${field.name}: ${value}`}>
+                                                                                <span key={field.name} className="px-1 py-0.5 text-[8px] bg-gray-100 text-gray-600 rounded truncate block" title={`${field.name}: ${value}`}>
                                                                                     {value}
                                                                                 </span>
                                                                             );
-                                                                        })}
-                                                                    </div>
-                                                                ) : task.checklist && task.checklist.length > 0 ? (
-                                                                    <div className="flex items-center gap-0.5">
-                                                                        <div className="w-12 h-1 bg-gray-200 rounded-full overflow-hidden">
-                                                                            <div
-                                                                                className="h-full bg-primary-500"
-                                                                                style={{ width: `${checklistMeta.percent}%` }}
-                                                                            ></div>
+                                                                        })
+                                                                    ) : task.checklist && task.checklist.length > 0 ? (
+                                                                        <div className="flex items-center gap-0.5">
+                                                                            <div className="w-12 h-1 bg-gray-200 rounded-full overflow-hidden">
+                                                                                <div
+                                                                                    className="h-full bg-primary-500"
+                                                                                    style={{ width: `${checklistMeta.percent}%` }}
+                                                                                ></div>
+                                                                            </div>
+                                                                            <span className="text-[8px] text-gray-500">{checklistMeta.percent}%</span>
                                                                         </div>
-                                                                        <span className="text-[8px] text-gray-500">{checklistMeta.percent}%</span>
-                                                                    </div>
-                                                                ) : null}
-                                                            </div>
-                                                        )}
-                                                        <div className="flex-shrink-0 flex items-center justify-end gap-0.5 ml-auto">
+                                                                    ) : <span className="text-[9px] text-gray-400">—</span>}
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex items-center justify-end gap-0.5">
                                                             <button
                                                                 onClick={(e) => openTaskComments(e, task)}
                                                                 className="inline-flex items-center gap-0.5 px-1 py-0.5 text-[9px] bg-primary-500 text-white rounded hover:bg-primary-600 transition-all font-medium"
