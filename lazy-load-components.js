@@ -121,7 +121,8 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
         './src/components/reports/Reports.jsx',
         './src/components/reports/SystemReports.jsx',
         
-        // Leave Platform
+        // Leave Platform - Load EmployeeDetail BEFORE LeavePlatform since it depends on it
+        './src/components/leave-platform/EmployeeDetail.jsx',
         './src/components/leave-platform/LeavePlatform.jsx',
         
         // Account & Settings
