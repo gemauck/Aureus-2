@@ -1937,10 +1937,10 @@ const Projects = () => {
                 </div>
                 <div className="flex gap-2">
                     {/* View Toggle */}
-                    <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
+                    <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden shrink-0">
                         <button
                             onClick={() => setViewMode('grid')}
-                            className={`px-2.5 py-1.5 text-sm font-medium transition-colors ${
+                            className={`px-3 py-2 text-sm font-medium transition-colors shrink-0 ${
                                 viewMode === 'grid'
                                     ? 'bg-primary-600 text-white'
                                     : 'bg-white text-gray-600 hover:bg-gray-50'
@@ -1951,7 +1951,7 @@ const Projects = () => {
                         </button>
                         <button
                             onClick={() => setViewMode('list')}
-                            className={`px-2.5 py-1.5 text-sm font-medium transition-colors border-l border-gray-300 ${
+                            className={`px-3 py-2 text-sm font-medium transition-colors border-l border-gray-300 shrink-0 ${
                                 viewMode === 'list'
                                     ? 'bg-primary-600 text-white'
                                     : 'bg-white text-gray-600 hover:bg-gray-50'
