@@ -1192,13 +1192,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         
         // Save follow-up changes and activity log immediately - stay in edit mode
         isAutoSavingRef.current = true;
-        onSave(finalFormData, true);
-        
-        // Clear the flag after a delay to allow API response to propagate
-        setTimeout(() => {
+        onSave(finalFormData, true).finally(() => {
             isAutoSavingRef.current = false;
-            console.log('✅ Auto-save completed, re-enabling formData updates');
-        }, 3000);
+        });
         
         setNewFollowUp({
             date: '',
@@ -1225,18 +1221,16 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             
             // Save follow-up toggle and activity log immediately - stay in edit mode
             isAutoSavingRef.current = true;
-            onSave(finalFormData, true);
+            onSave(finalFormData, true).finally(() => {
+                isAutoSavingRef.current = false;
+            });
         } else {
             // Just save the follow-up toggle (no activity log needed for uncompleting)
             isAutoSavingRef.current = true;
-            onSave(updatedFormData, true);
+            onSave(updatedFormData, true).finally(() => {
+                isAutoSavingRef.current = false;
+            });
         }
-        
-        // Clear the flag after a delay to allow API response to propagate
-        setTimeout(() => {
-            isAutoSavingRef.current = false;
-            console.log('✅ Auto-save completed, re-enabling formData updates');
-        }, 3000);
     };
 
     const handleDeleteFollowUp = (followUpId) => {
@@ -1253,13 +1247,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             
             // Save follow-up deletion and activity log immediately - stay in edit mode
             isAutoSavingRef.current = true;
-            onSave(finalFormData, true);
-            
-            // Clear the flag after a delay to allow API response to propagate
-            setTimeout(() => {
+            onSave(finalFormData, true).finally(() => {
                 isAutoSavingRef.current = false;
-                console.log('✅ Auto-save completed, re-enabling formData updates');
-            }, 3000);
+            });
         }
     };
 
@@ -1888,13 +1878,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         // Auto-save activity log to database if enabled (default: true)
         if (autoSave && client && onSave) {
             isAutoSavingRef.current = true;
-            onSave(updatedFormData, true);
-            
-            // Clear the flag after a delay to allow API response to propagate
-            setTimeout(() => {
+            // Don't await - let it run in background to avoid blocking UI
+            onSave(updatedFormData, true).finally(() => {
+                // Clear flag immediately after save completes (no artificial delay)
                 isAutoSavingRef.current = false;
-                console.log('✅ Activity log auto-save completed');
-            }, 3000);
+            });
         }
         
         // Return updated formData so callers can use it if needed

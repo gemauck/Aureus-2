@@ -2228,21 +2228,14 @@ const Clients = React.memo(() => {
                             console.log('📥 API Response:', apiResponse);
                             console.log('📝 Notes in API response:', apiResponse?.data?.client?.notes?.substring(0, 50) || apiResponse?.client?.notes?.substring(0, 50) || 'none');
                             
-                            // Clear all caches to ensure updates appear immediately
-                            if (window.ClientCache?.clearCache) {
-                                window.ClientCache.clearCache();
-                            }
-                            if (window.DatabaseAPI?.clearCache) {
-                                window.DatabaseAPI.clearCache('/clients');
-                            }
+                            // Clear caches in background (non-blocking)
+                            Promise.all([
+                                window.ClientCache?.clearCache?.(),
+                                window.DatabaseAPI?.clearCache?.('/clients')
+                            ]).catch(() => {});
                             
-                            // Trigger immediate LiveDataSync to ensure all users see the change
-                            if (window.LiveDataSync?.forceSync) {
-                                console.log('🔄 Triggering immediate sync for all users...');
-                                window.LiveDataSync.forceSync().catch(err => {
-                                    console.warn('⚠️ Force sync failed (will sync automatically):', err);
-                                });
-                            }
+                            // Trigger background sync (non-blocking)
+                            window.LiveDataSync?.forceSync?.().catch(() => {});
                         } catch (apiCallError) {
                             console.error('❌ API call failed with error:', apiCallError);
                             console.error('Error details:', apiCallError.message);
@@ -2289,97 +2282,53 @@ const Clients = React.memo(() => {
                         // Also immediately refresh clients list to show new client without waiting for sync
                         console.log('🔄 Triggering immediate sync and refresh for all users...');
                         
-                        // Clear all caches first
-                        if (window.ClientCache?.clearCache) {
-                            window.ClientCache.clearCache();
-                            console.log('🗑️ Cleared ClientCache after client save');
-                        }
-                        if (window.DatabaseAPI?.clearCache) {
-                            window.DatabaseAPI.clearCache('/clients');
-                            window.DatabaseAPI.clearCache('/leads'); // Also clear leads since they're related
-                            console.log('🗑️ Cleared DatabaseAPI cache after client save');
-                        }
+                        // Batch cache clearing operations (non-blocking, don't wait)
+                        Promise.all([
+                            window.ClientCache?.clearCache?.(),
+                            window.DatabaseAPI?.clearCache?.('/clients'),
+                            window.DatabaseAPI?.clearCache?.('/leads'),
+                            window.dataManager?.invalidate?.('clients')
+                        ]).catch(() => {}); // Ignore errors, these are non-critical
                         
-                        // Clear localStorage to prevent stale data
-                        if (window.storage?.removeClients) {
-                            window.storage.removeClients();
-                            console.log('🗑️ Cleared localStorage clients after client save');
-                        }
-                        if (window.storage?.removeLeads) {
-                            window.storage.removeLeads();
-                            console.log('🗑️ Cleared localStorage leads after client save');
-                        }
-                        
-                        if (window.dataManager?.invalidate) {
-                            window.dataManager.invalidate('clients');
-                        }
-                        
-                        // Force refresh immediately and trigger sync
-                        setTimeout(async () => {
-                            // First, force refresh clients immediately
-                            await loadClients(true); // Force refresh bypasses cache
-                            
-                            // Then trigger sync for other users
-                            if (window.LiveDataSync?.forceSync) {
-                                window.LiveDataSync.forceSync().catch(err => {
-                                    console.warn('⚠️ Force sync failed (will sync automatically):', err);
-                                });
-                            }
-                        }, 300); // 300ms delay to ensure DB commit
+                        // Trigger background refresh and sync (non-blocking)
+                        // Use requestIdleCallback or setTimeout(0) to avoid blocking the UI
+                        (window.requestIdleCallback || setTimeout)(async () => {
+                            await loadClients(true).catch(() => {}); // Force refresh
+                            window.LiveDataSync?.forceSync?.().catch(() => {}); // Background sync
+                        }, 0);
                     }
                     
-                    // Always save comprehensive data to localStorage regardless of API success
-                    console.log('Saving comprehensive data to localStorage after API success');
-                    console.log('Current clients before localStorage save:', clients.length);
+                    // Prepare saved client with merged data from API response and comprehensiveClient
+                    // CRITICAL: Always merge notes from comprehensiveClient to ensure latest typed notes are preserved
+                    const savedClient = apiResponse?.data?.client || apiResponse?.client || comprehensiveClient;
+                    if (savedClient && comprehensiveClient.notes !== undefined && comprehensiveClient.notes !== null) {
+                        savedClient.notes = comprehensiveClient.notes;
+                    }
+                    // Merge all comprehensiveClient data to ensure nothing is lost
+                    const finalClient = { ...savedClient, ...comprehensiveClient };
                     
+                    // Batch all state updates together to prevent multiple renders
                     if (selectedClient) {
-                        const updated = clients.map(c => c.id === selectedClient.id ? comprehensiveClient : c);
-                        console.log('Before API update - clients count:', clients.length, 'updated count:', updated.length);
+                        const updated = clients.map(c => c.id === selectedClient.id ? finalClient : c);
                         if (updated.length !== clients.length) {
                             console.error('❌ CRITICAL: Client count changed during API update!');
-                            console.log('Original clients:', clients);
-                            console.log('Updated clients:', updated);
-                            // Don't update if count changed
                             return;
                         }
+                        // Single batched update - React 18+ will batch these automatically
                         setClients(updated);
                         safeStorage.setClients(updated);
-                        // Update selectedClient with API response if available (includes notes), otherwise use comprehensiveClient
-                        // CRITICAL: Always merge notes from comprehensiveClient to ensure latest typed notes are preserved
-                        const savedClient = apiResponse?.data?.client || apiResponse?.client || comprehensiveClient;
-                        // CRITICAL: ALWAYS preserve notes from comprehensiveClient - API response might not have them yet
-                        if (savedClient && comprehensiveClient.notes !== undefined && comprehensiveClient.notes !== null) {
-                            // Always use comprehensiveClient notes if they exist (even if empty string - user might have cleared it)
-                            savedClient.notes = comprehensiveClient.notes;
-                            console.log('🛡️ Preserved notes from comprehensiveClient in savedClient:', {
-                                notesLength: comprehensiveClient.notes.length,
-                                notesPreview: comprehensiveClient.notes.substring(0, 50)
-                            });
-                        }
-                        // CRITICAL: Delay updating ref to prevent useEffect from running before save completes
-                        // This ensures isAutoSavingRef is still set when useEffect runs
-                        setTimeout(() => {
-                            selectedClientRef.current = savedClient; // Update ref to show new data
-                            console.log('✅ Updated selectedClientRef after delay, notes:', savedClient.notes?.substring(0, 50) || 'none');
-                        }, 100); // Small delay to ensure save flags are still set
-                        console.log('✅ Updated client in localStorage after API success, new count:', updated.length);
-                        console.log('📝 Saved client notes:', savedClient.notes?.substring(0, 50) || 'none');
+                        selectedClientRef.current = finalClient; // Update ref immediately (no delay needed)
                     } else {
-                        const newClients = [...clients, comprehensiveClient];
-                        console.log('Before API add - clients count:', clients.length, 'new count:', newClients.length);
+                        const newClients = [...clients, finalClient];
                         if (newClients.length !== clients.length + 1) {
                             console.error('❌ CRITICAL: Client count not increased by 1 during API add!');
-                            console.log('Original clients:', clients);
-                            console.log('New clients:', newClients);
-                            // Don't update if count is wrong
                             return;
                         }
+                        // Single batched update
                         setClients(newClients);
                         safeStorage.setClients(newClients);
-                        selectedClientRef.current = comprehensiveClient; // Update ref to show new data
-                        console.log('✅ Added new client to localStorage after API success, new count:', newClients.length);
+                        selectedClientRef.current = finalClient; // Update ref immediately
                     }
-                    console.log('✅ Comprehensive client data saved to localStorage');
                     
                 } catch (apiError) {
                     console.error('API error saving client:', apiError);
@@ -2430,14 +2379,21 @@ const Clients = React.memo(() => {
                 }
             }
             
-            // Return the saved client (with notes from API response if available)
+            // Return the saved client (merge API response with comprehensiveClient to ensure all data is present)
             const savedClient = apiResponse?.data?.client || apiResponse?.client || comprehensiveClient;
-            console.log('📤 Returning saved client from handleSaveClient:', {
-                id: savedClient.id,
-                notesLength: savedClient.notes?.length || 0,
-                notesPreview: savedClient.notes?.substring(0, 50) || 'none'
-            });
-            return savedClient;
+            // Ensure comprehensiveClient data is preserved (especially notes)
+            const finalSavedClient = { ...savedClient, ...comprehensiveClient };
+            
+            // Handle post-save actions (only if not staying in edit mode)
+            if (!stayInEditMode) {
+                setRefreshKey(k => k + 1);
+                handlePauseSync(false);
+                if (window.LiveDataSync && window.LiveDataSync.start) {
+                    window.LiveDataSync.start();
+                }
+            }
+            
+            return finalSavedClient;
             
         } catch (error) {
             console.error('Failed to save client:', error);
@@ -2465,16 +2421,6 @@ const Clients = React.memo(() => {
                 };
             }
             return comprehensiveClient;
-        }
-        
-        if (!stayInEditMode) {
-            setRefreshKey(k => k + 1);
-            // CRITICAL: Restart LiveDataSync ONLY when form explicitly closes after save
-            handlePauseSync(false);
-            if (window.LiveDataSync && window.LiveDataSync.start) {
-                window.LiveDataSync.start();
-                console.log('▶️ ClientDetailModal saved - restarting LiveDataSync');
-            }
         }
     };
     
@@ -4868,7 +4814,7 @@ const Clients = React.memo(() => {
 
     return (
         <div className="flex flex-col h-full w-full max-w-full overflow-hidden" style={{ width: '100%', maxWidth: '100%', minWidth: '100%', height: '100%', minHeight: '100%' }}>
-            <div className="flex-shrink-0 space-y-5 sm:space-y-8 pl-8 sm:pl-12 pr-4 sm:pr-6 pt-5 sm:pt-6 pb-2 w-full max-w-full" style={{ width: '100%', maxWidth: '100%' }}>
+            <div className="flex-shrink-0 space-y-5 sm:space-y-8 pl-10 sm:pl-16 pr-4 sm:pr-6 pt-5 sm:pt-6 pb-2 w-full max-w-full" style={{ width: '100%', maxWidth: '100%' }}>
             {/* Modern Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 pb-2">
                 <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
@@ -5145,7 +5091,7 @@ const Clients = React.memo(() => {
             </div>
 
             {/* Content based on view mode */}
-            <div className="flex-1 overflow-hidden pl-8 sm:pl-12 pr-4 sm:pr-6 pb-5 sm:pb-6 pt-2 min-h-0">
+            <div className="flex-1 overflow-hidden pl-10 sm:pl-16 pr-4 sm:pr-6 pb-5 sm:pb-6 pt-2 min-h-0">
             {viewMode === 'clients' && <ClientsListView />}
             {viewMode === 'leads' && <LeadsListView />}
             {viewMode === 'pipeline' && (
