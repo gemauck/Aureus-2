@@ -243,9 +243,29 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                 }
             }
             
+            // CRITICAL: Update parent's viewingProject state so the project prop stays in sync
+            // This ensures that when ProjectDetail preserves project.documentSections,
+            // it preserves the correct, up-to-date sections (not stale data)
+            // We use window.updateViewingProject instead of dispatching projectUpdated event
+            // to avoid triggering unnecessary refreshes
+            if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                try {
+                    // Create updated project object with saved sections
+                    const updatedProject = {
+                        ...project,
+                        documentSections: JSON.stringify(sectionsToSave)
+                    };
+                    window.updateViewingProject(updatedProject);
+                    console.log('🔄 Updated parent viewingProject with saved sections');
+                } catch (updateError) {
+                    console.warn('Failed to update parent viewingProject:', updateError);
+                }
+            }
+            
             // DISABLED: Don't dispatch projectUpdated event - it causes parent to refresh
             // which then triggers sync and overwrites user input
-            console.log('✅ Immediate save completed - parent will get fresh data on next navigation');
+            // Instead, we use window.updateViewingProject to update parent state directly
+            console.log('✅ Immediate save completed - parent viewingProject updated');
             
             // Reset saving flag after a delay
             setTimeout(() => {
@@ -1118,12 +1138,56 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                     console.log('🗑️ Cleared project cache after comment save');
                 }
                 
-                // Dispatch event to notify parent component
-                if (typeof window.dispatchEvent === 'function') {
-                    window.dispatchEvent(new CustomEvent('projectUpdated', {
-                        detail: { projectId: project.id, field: 'documentSections' }
-                    }));
+                // Update localStorage for consistency
+                if (window.dataService && typeof window.dataService.getProjects === 'function') {
+                    const savedProjects = await window.dataService.getProjects();
+                    if (savedProjects) {
+                        const updatedProjects = savedProjects.map(p => {
+                            if (p.id === project.id) {
+                                return { ...p, documentSections: updatedSections };
+                            }
+                            return p;
+                        });
+                        if (window.dataService && typeof window.dataService.setProjects === 'function') {
+                            try {
+                                await window.dataService.setProjects(updatedProjects);
+                                console.log('✅ localStorage updated for consistency');
+                            } catch (saveError) {
+                                console.warn('Failed to save projects to dataService:', saveError);
+                            }
+                        }
+                    }
                 }
+                
+                // CRITICAL: Update parent's viewingProject state so the project prop stays in sync
+                // This ensures that when ProjectDetail preserves project.documentSections,
+                // it preserves the correct, up-to-date sections (not stale data)
+                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                    try {
+                        // Create updated project object with saved sections
+                        const updatedProject = {
+                            ...project,
+                            documentSections: JSON.stringify(updatedSections)
+                        };
+                        window.updateViewingProject(updatedProject);
+                        console.log('🔄 Updated parent viewingProject with saved sections (comment save)');
+                    } catch (updateError) {
+                        console.warn('Failed to update parent viewingProject:', updateError);
+                    }
+                }
+                
+                // Save to sessionStorage for persistence
+                const storageKey = `documentSections_${project.id}`;
+                try {
+                    sessionStorage.setItem(storageKey, JSON.stringify(updatedSections));
+                    console.log('💾 Saved sections to sessionStorage (comment save):', updatedSections.length, 'sections');
+                } catch (e) {
+                    console.warn('Failed to save sections to sessionStorage:', e);
+                }
+                
+                // DISABLED: Don't dispatch projectUpdated event - it causes parent to refresh
+                // which then triggers sync and overwrites user input
+                // Instead, we use window.updateViewingProject to update parent state directly
             } catch (error) {
                 console.error('❌ Error saving comment to database:', error);
                 console.error('  - Error details:', {

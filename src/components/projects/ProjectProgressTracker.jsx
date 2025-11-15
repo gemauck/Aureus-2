@@ -882,6 +882,69 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     );
                 }
                 
+                // CRITICAL: Reload projects from database after successful save to ensure persistence
+                // This ensures that when the component remounts or user navigates away and back, data is there
+                try {
+                    console.log('🔄 ProjectProgressTracker: Reloading projects from database after save...');
+                    if (window.DatabaseAPI && window.DatabaseAPI.getProjects) {
+                        const reloadResponse = await window.DatabaseAPI.getProjects();
+                        let reloadedProjs = [];
+                        
+                        if (reloadResponse?.data?.projects && Array.isArray(reloadResponse.data.projects)) {
+                            reloadedProjs = reloadResponse.data.projects;
+                        } else if (reloadResponse?.data?.data?.projects && Array.isArray(reloadResponse.data.data.projects)) {
+                            reloadedProjs = reloadResponse.data.data.projects;
+                        } else if (reloadResponse?.projects && Array.isArray(reloadResponse.projects)) {
+                            reloadedProjs = reloadResponse.projects;
+                        } else if (Array.isArray(reloadResponse?.data)) {
+                            reloadedProjs = reloadResponse.data;
+                        } else if (Array.isArray(reloadResponse)) {
+                            reloadedProjs = reloadResponse;
+                        }
+                        
+                        // Normalize and filter projects
+                        const normalizedReloaded = (Array.isArray(reloadedProjs) ? reloadedProjs : []).map(p => {
+                            let monthlyProgress = p.monthlyProgress;
+                            if (typeof monthlyProgress === 'string' && monthlyProgress.trim()) {
+                                try {
+                                    monthlyProgress = JSON.parse(monthlyProgress);
+                                } catch (e) {
+                                    monthlyProgress = {};
+                                }
+                            }
+                            return {
+                                ...p,
+                                client: p.clientName || p.client || '',
+                                monthlyProgress: monthlyProgress && typeof monthlyProgress === 'object' && !Array.isArray(monthlyProgress) ? monthlyProgress : {}
+                            };
+                        });
+                        
+                        const monthlyReloaded = normalizedReloaded.filter(p => {
+                            if (!p || typeof p !== 'object') return false;
+                            if (p.monthlyProgress && typeof p.monthlyProgress === 'object' && Object.keys(p.monthlyProgress).length > 0) {
+                                return true;
+                            }
+                            const rawType = p.type;
+                            if (rawType !== null && rawType !== undefined) {
+                                try {
+                                    const projectType = String(rawType || '').toUpperCase().trim();
+                                    if (projectType.length > 0 && projectType.startsWith('MONTHLY')) {
+                                        return true;
+                                    }
+                                } catch (e) {}
+                            }
+                            return false;
+                        });
+                        
+                        // Update state with reloaded data
+                        setProjects(Array.isArray(monthlyReloaded) ? monthlyReloaded : []);
+                        console.log('✅ ProjectProgressTracker: Successfully reloaded projects from database, count:', monthlyReloaded.length);
+                    }
+                } catch (reloadErr) {
+                    console.warn('⚠️ ProjectProgressTracker: Failed to reload projects after save (non-critical):', reloadErr);
+                    // Don't fail the save if reload fails - the local state update above should be sufficient
+                }
+                
                 // Close modal after successful save
                 setIsModalOpen(false);
                 setModalData(null);
@@ -985,26 +1048,29 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             openEditModal(project, safeMonth, field);
         };
         
-        // Modern cell styling with enhanced visual design
+        // Modern cell styling with enhanced visual design - uniform sizing
         const defaultBgColor = rowBgColor === '#ffffff' ? '#ffffff' : '#f8fafc';
         const calculatedBackground = isFocusedCell
             ? '#dbeafe'
             : isWorking
                 ? 'rgba(59, 130, 246, 0.05)'
                 : defaultBgColor;
+        // Uniform cell size for all fields - better visual consistency
         const cellStyle = {
             padding: '8px 12px',
             border: 'none',
             borderBottom: '1px solid #e5e7eb',
             backgroundColor: calculatedBackground,
-            minHeight: field === 'comments' ? '60px' : '40px',
+            minHeight: '70px', // Uniform height for all cells
+            height: '70px', // Fixed height for consistency
             verticalAlign: 'top',
-            width: field === 'comments' ? '160px' : field === 'compliance' ? '130px' : '130px',
-            minWidth: field === 'comments' ? '160px' : field === 'compliance' ? '130px' : '130px',
+            width: '150px', // Uniform width for all cells
+            minWidth: '150px', // Uniform min width
+            maxWidth: '150px', // Uniform max width
             transition: 'all 0.2s ease',
             position: 'relative',
             boxShadow: isFocusedCell ? '0 0 0 2px rgba(59, 130, 246, 0.35)' : 'none',
-            borderRadius: '10px',
+            borderRadius: '8px',
             cursor: 'pointer'
         };
         
@@ -1015,108 +1081,80 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 ? 'Enter link...' 
                 : 'Enter link...';
         
-        // Render clickable display cell
-        if (field === 'comments') {
-            return React.createElement('td', {
-                key: cellIdentifier,
-                style: cellStyle,
-                className: 'relative group',
-                'data-cell-key': cellIdentifier,
-                'data-project-id': project.id,
-                'data-month-name': safeMonth,
-                'data-month-index': monthIdx >= 0 ? String(monthIdx) : '',
-                'data-field': field,
-                onClick: handleCellClick
-            }, React.createElement('div', {
+        // Render clickable display cell - uniform design for all fields
+        return React.createElement('td', {
+            key: cellIdentifier,
+            style: cellStyle,
+            className: 'relative group',
+            'data-cell-key': cellIdentifier,
+            'data-project-id': project.id,
+            'data-month-name': safeMonth,
+            'data-month-index': monthIdx >= 0 ? String(monthIdx) : '',
+            'data-field': field,
+            onClick: handleCellClick
+        }, React.createElement('div', { 
+            style: { 
+                position: 'relative', 
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'flex-start',
+                gap: '4px'
+            } 
+        },
+            React.createElement('div', {
                 style: {
                     width: '100%',
-                    minHeight: '44px',
-                    padding: '8px 12px',
+                    height: field === 'comments' ? '54px' : '54px', // Uniform height for all fields
+                    padding: '8px 10px',
+                    paddingRight: hasValue && field !== 'comments' ? '28px' : '10px',
                     fontSize: '12px',
                     fontFamily: 'inherit',
                     border: '1px solid #e5e7eb',
-                    borderRadius: '8px',
+                    borderRadius: '6px',
                     backgroundColor: '#ffffff',
                     color: hasValue ? '#111827' : '#9ca3af',
-                    lineHeight: '1.5',
+                    lineHeight: '1.4',
                     transition: 'all 0.2s ease',
-                    whiteSpace: 'pre-wrap',
-                    wordWrap: 'break-word',
+                    whiteSpace: field === 'comments' ? 'pre-wrap' : 'nowrap',
+                    wordWrap: field === 'comments' ? 'break-word' : 'normal',
                     overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 3,
-                    WebkitBoxOrient: 'vertical'
+                    textOverflow: field === 'comments' ? 'ellipsis' : 'ellipsis',
+                    display: field === 'comments' ? '-webkit-box' : 'flex',
+                    WebkitLineClamp: field === 'comments' ? 3 : undefined,
+                    WebkitBoxOrient: field === 'comments' ? 'vertical' : undefined,
+                    alignItems: field === 'comments' ? 'flex-start' : 'center',
+                    flex: 1,
+                    minHeight: '54px'
                 },
                 className: 'hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm',
                 title: hasValue ? displayValue : 'Click to ' + placeholderText.toLowerCase()
-            }, hasValue ? displayValue : React.createElement('span', { style: { fontStyle: 'italic' } }, placeholderText)));
-        } else {
-            // Clickable display cell for compliance and data fields
-            return React.createElement('td', {
-                key: cellIdentifier,
-                style: cellStyle,
-                className: 'relative group',
-                'data-cell-key': cellIdentifier,
-                'data-project-id': project.id,
-                'data-month-name': safeMonth,
-                'data-month-index': monthIdx >= 0 ? String(monthIdx) : '',
-                'data-field': field,
-                onClick: handleCellClick
-            }, React.createElement('div', { 
-                style: { 
-                    position: 'relative', 
-                    width: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                } 
-            },
-                React.createElement('div', {
-                    style: {
-                        width: '100%',
-                        height: '36px',
-                        padding: '8px 12px',
-                        paddingRight: hasValue ? '32px' : '12px',
-                        fontSize: '12px',
-                        fontFamily: 'inherit',
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '8px',
-                        backgroundColor: '#ffffff',
-                        color: hasValue ? '#111827' : '#9ca3af',
-                        transition: 'all 0.2s ease',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        flex: 1
-                    },
-                    className: 'hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm',
-                    title: hasValue ? displayValue : 'Click to ' + placeholderText.toLowerCase()
-                }, hasValue ? displayValue : React.createElement('span', { style: { fontStyle: 'italic' } }, placeholderText)),
-                hasValue && displayValue.trim() ? React.createElement('a', {
-                    href: displayValue.startsWith('http') ? displayValue : `https://${displayValue}`,
-                    target: '_blank',
-                    rel: 'noopener noreferrer',
-                    style: {
-                        position: 'absolute',
-                        right: '8px',
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        color: '#3b82f6',
-                        fontSize: '12px',
-                        textDecoration: 'none',
-                        padding: '4px',
-                        borderRadius: '4px',
-                        transition: 'all 0.2s ease',
-                        zIndex: 10
-                    },
-                    className: 'hover:bg-blue-100',
-                    onClick: (e) => {
-                        e.stopPropagation(); // Prevent opening modal when clicking link
-                    }
-                }, React.createElement('i', { className: 'fas fa-external-link-alt' })) : null
-            ));
-        }
+            }, hasValue ? displayValue : React.createElement('span', { style: { fontStyle: 'italic' } }, placeholderText)),
+            hasValue && displayValue.trim() && field !== 'comments' ? React.createElement('a', {
+                href: displayValue.startsWith('http') ? displayValue : `https://${displayValue}`,
+                target: '_blank',
+                rel: 'noopener noreferrer',
+                style: {
+                    position: 'absolute',
+                    right: '18px',
+                    top: '18px',
+                    color: '#3b82f6',
+                    fontSize: '11px',
+                    textDecoration: 'none',
+                    padding: '4px 6px',
+                    borderRadius: '4px',
+                    transition: 'all 0.2s ease',
+                    zIndex: 10,
+                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                    border: '1px solid #e5e7eb'
+                },
+                className: 'hover:bg-blue-100 hover:border-blue-300',
+                onClick: (e) => {
+                    e.stopPropagation(); // Prevent opening modal when clicking link
+                }
+            }, React.createElement('i', { className: 'fas fa-external-link-alt' })) : null
+        ));
     };
     
     // Safe year
@@ -1290,8 +1328,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                     border: 'none',
                                     borderLeft: idx === 0 ? '2px solid #374151' : '1px solid #e5e7eb',
                                     borderBottom: '2px solid ' + (isWorking ? '#1e40af' : '#e5e7eb'),
-                                    minWidth: '390px',
-                                    width: '390px',
+                                    minWidth: '450px',
+                                    width: '450px',
+                                    maxWidth: '450px',
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.05em',
                                     position: 'relative'
@@ -1386,8 +1425,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                         border: 'none',
                                         borderLeft: idx === 0 ? '2px solid #374151' : '1px solid #e5e7eb',
                                         borderBottom: '1px solid #e5e7eb',
-                                        minWidth: '130px',
-                                        width: '130px',
+                                        minWidth: '150px',
+                                        width: '150px',
+                                        maxWidth: '150px',
                                         textTransform: 'uppercase',
                                         letterSpacing: '0.03em'
                                     }
@@ -1407,8 +1447,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                         color: isWorking ? '#1e40af' : '#6b7280',
                                         border: 'none',
                                         borderBottom: '1px solid #e5e7eb',
-                                        minWidth: '130px',
-                                        width: '130px',
+                                        minWidth: '150px',
+                                        width: '150px',
+                                        maxWidth: '150px',
                                         textTransform: 'uppercase',
                                         letterSpacing: '0.03em'
                                     }
@@ -1428,8 +1469,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                         color: isWorking ? '#1e40af' : '#6b7280',
                                         border: 'none',
                                         borderBottom: '1px solid #e5e7eb',
-                                        minWidth: '160px',
-                                        width: '160px',
+                                        minWidth: '150px',
+                                        width: '150px',
+                                        maxWidth: '150px',
                                         textTransform: 'uppercase',
                                         letterSpacing: '0.03em'
                                     }

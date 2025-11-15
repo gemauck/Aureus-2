@@ -1154,7 +1154,8 @@ export function Projects({ onProjectClick }) {
             window.updateViewingProject = (updatedProject) => {
                 console.log('🔄 Updating viewingProject from child component:', {
                     id: updatedProject.id,
-                    hasDocumentCollectionProcess: updatedProject.hasDocumentCollectionProcess
+                    hasDocumentCollectionProcess: updatedProject.hasDocumentCollectionProcess,
+                    hasDocumentSections: !!updatedProject.documentSections
                 });
                 // Normalize the project the same way we do in handleViewProject
                 const normalized = {
@@ -1167,6 +1168,11 @@ export function Projects({ onProjectClick }) {
                     comments: typeof updatedProject.comments === 'string' ? JSON.parse(updatedProject.comments || '[]') : (updatedProject.comments || []),
                     activityLog: typeof updatedProject.activityLog === 'string' ? JSON.parse(updatedProject.activityLog || '[]') : (updatedProject.activityLog || []),
                     team: typeof updatedProject.team === 'string' ? JSON.parse(updatedProject.team || '[]') : (updatedProject.team || []),
+                    // CRITICAL: Preserve documentSections as-is (keep as JSON string, don't parse)
+                    // ProjectDetail expects documentSections as a JSON string and parses it internally
+                    // documentSections is already included via ...updatedProject spread, but we explicitly preserve it
+                    // to ensure it's not lost if it's undefined in updatedProject
+                    documentSections: updatedProject.documentSections !== undefined ? updatedProject.documentSections : undefined,
                     hasDocumentCollectionProcess: (() => {
                         const value = updatedProject.hasDocumentCollectionProcess;
                         if (value === true || value === 'true' || value === 1) return true;
@@ -1174,6 +1180,8 @@ export function Projects({ onProjectClick }) {
                         return false;
                     })()
                 };
+                console.log('✅ Normalized project with documentSections:', typeof normalized.documentSections, 
+                    normalized.documentSections ? (typeof normalized.documentSections === 'string' ? normalized.documentSections.length : 'array') : 'undefined');
                 setViewingProject(normalized);
             };
             

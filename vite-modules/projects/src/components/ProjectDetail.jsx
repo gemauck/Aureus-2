@@ -597,9 +597,32 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                 if (savedProjects) {
                     const updatedProjects = savedProjects.map(p => {
                         if (p.id !== project.id) return p;
-                        const normalizedSections = Array.isArray(p.documentSections)
-                            ? p.documentSections
-                            : documentSectionsArray;
+                        
+                        // CRITICAL: When excludeDocumentSections is true, preserve the current project.documentSections
+                        // Don't overwrite with stale data from localStorage or API response
+                        // This prevents MonthlyDocumentCollectionTracker's saved sections from being overwritten
+                        let sectionsToPreserve;
+                        if (excludeDocumentSections) {
+                            // Preserve current project.documentSections (which might have been updated by MonthlyDocumentCollectionTracker)
+                            // Parse it if it's a string, otherwise use as-is
+                            if (typeof project.documentSections === 'string') {
+                                try {
+                                    sectionsToPreserve = JSON.parse(project.documentSections);
+                                } catch (e) {
+                                    sectionsToPreserve = project.documentSections;
+                                }
+                            } else {
+                                sectionsToPreserve = project.documentSections;
+                            }
+                            console.log('  - Preserving documentSections from current project prop (excluded from save):', 
+                                Array.isArray(sectionsToPreserve) ? sectionsToPreserve.length : 'N/A', 'sections');
+                        } else {
+                            // Use normalized sections from API response or computed array
+                            sectionsToPreserve = Array.isArray(p.documentSections)
+                                ? p.documentSections
+                                : documentSectionsArray;
+                        }
+                        
                         return { 
                             ...p, 
                             tasks: nextTasks, 
@@ -607,7 +630,7 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                             customFieldDefinitions: nextCustomFieldDefinitions, 
                             documents: nextDocuments, 
                             hasDocumentCollectionProcess: nextHasDocumentCollectionProcess,
-                            documentSections: normalizedSections
+                            documentSections: sectionsToPreserve
                         };
                     });
                     if (window.dataService && typeof window.dataService.setProjects === 'function') {

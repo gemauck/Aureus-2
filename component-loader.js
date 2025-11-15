@@ -201,7 +201,8 @@
     ];
 
     const componentCacheVersions = {
-        'components/service-maintenance/ServiceAndMaintenance.jsx': 'service-maintenance-ui-v20251111'
+        'components/service-maintenance/ServiceAndMaintenance.jsx': 'service-maintenance-ui-v20251111',
+        'components/projects/ProjectProgressTracker.jsx': 'progress-tracker-uniform-cells-v20250115'
     };
     
     function loadComponent(path) {
@@ -273,6 +274,11 @@
 
             if (path.includes('components/projects/ProjectDetail') || path.includes('components/projects/Projects.jsx')) {
                 applyDynamicCacheBust(getProjectsCacheTag());
+            }
+
+            // Force cache-bust for ProjectProgressTracker to ensure uniform cells and persistence fix
+            if (path.includes('components/projects/ProjectProgressTracker.jsx')) {
+                applyDynamicCacheBust(componentCacheVersions[path] || 'progress-tracker-uniform-cells-v20250115');
             }
 
             if (path.includes('components/manufacturing/JobCards.jsx')) {
