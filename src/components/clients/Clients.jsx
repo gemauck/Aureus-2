@@ -3889,7 +3889,7 @@ const Clients = React.memo(() => {
                     <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
                         <tr>
                             <th 
-                                className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                className={`px-6 py-4 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
                                 onClick={() => handleSort('name')}
                             >
                                 <div className="flex items-center">
@@ -3900,7 +3900,7 @@ const Clients = React.memo(() => {
                                 </div>
                             </th>
                             <th 
-                                className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                className={`px-6 py-4 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
                                 onClick={() => handleSort('industry')}
                             >
                                 <div className="flex items-center">
@@ -3910,14 +3910,14 @@ const Clients = React.memo(() => {
                                     )}
                                 </div>
                             </th>
-                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
+                            <th className={`px-6 py-4 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
                                 Services
                             </th>
-                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
+                            <th className={`px-6 py-4 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
                                 Tags
                             </th>
                             <th 
-                                className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                className={`px-6 py-4 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
                                 onClick={() => handleSort('status')}
                             >
                                 <div className="flex items-center">
@@ -3947,7 +3947,7 @@ const Clients = React.memo(() => {
                                     onClick={() => handleOpenClient(client)}
                                         className={`${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'} cursor-pointer transition`}
                                 >
-                                    <td className="px-6 py-4 whitespace-nowrap">
+                                    <td className="px-6 py-5 whitespace-nowrap">
                                         <div className="flex items-center gap-3">
                                             <button
                                                 onClick={(e) => handleToggleStar(e, client, false)}
@@ -3966,8 +3966,8 @@ const Clients = React.memo(() => {
                                             <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{client.name}</div>
                                         </div>
                                     </td>
-                                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{client.industry}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
+                                    <td className={`px-6 py-5 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{client.industry}</td>
+                                    <td className="px-6 py-5 whitespace-nowrap">
                                         <div className="flex flex-wrap gap-1.5">
                                             {(() => {
                                                 const services = Array.isArray(client.services)
@@ -3994,7 +3994,7 @@ const Clients = React.memo(() => {
                                             })()}
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
+                                    <td className="px-6 py-5 whitespace-nowrap">
                                         <div className="flex flex-wrap gap-1.5">
                                             {(() => {
                                                 const tags = Array.isArray(client.tags) 
@@ -4032,7 +4032,7 @@ const Clients = React.memo(() => {
                                             })()}
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
+                                    <td className="px-6 py-5 whitespace-nowrap">
                                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                                             (client.status === 'Active' || client.status === 'active') ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                                         }`}>
@@ -4868,9 +4868,9 @@ const Clients = React.memo(() => {
 
     return (
         <div className="flex flex-col h-full w-full max-w-full overflow-hidden" style={{ width: '100%', maxWidth: '100%', minWidth: '100%', height: '100%', minHeight: '100%' }}>
-            <div className="flex-shrink-0 space-y-4 sm:space-y-6 px-4 sm:px-6 pt-4 sm:pt-6 w-full max-w-full" style={{ width: '100%', maxWidth: '100%' }}>
+            <div className="flex-shrink-0 space-y-5 sm:space-y-8 px-4 sm:px-6 pt-5 sm:pt-6 pb-2 w-full max-w-full" style={{ width: '100%', maxWidth: '100%' }}>
             {/* Modern Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 pb-2">
                 <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
                     <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
                         <i className="fas fa-users text-white text-sm sm:text-lg"></i>
@@ -4908,7 +4908,7 @@ const Clients = React.memo(() => {
                 </div>
                 
                 {/* Modern Action Buttons */}
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
                     <button 
                     onClick={() => {
                         stopSync();
@@ -4957,7 +4957,7 @@ const Clients = React.memo(() => {
             </div>
 
             {/* Modern View Tabs */}
-            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border p-1 flex sm:inline-flex shadow-sm overflow-x-auto sm:overflow-x-visible`}>
+            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border p-1.5 sm:p-1 flex sm:inline-flex shadow-sm overflow-x-auto sm:overflow-x-visible mb-2 gap-1`}>
                 <button
                     onClick={() => setViewMode('clients')}
                     className={`px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
@@ -5018,8 +5018,8 @@ const Clients = React.memo(() => {
 
         {/* Modern Search and Filters */}
         {viewMode !== 'client-detail' && viewMode !== 'lead-detail' && viewMode !== 'pipeline' && (
-                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border p-6 shadow-sm`}>
-                    <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${viewMode === 'leads' ? 'lg:grid-cols-3' : 'lg:grid-cols-4'}`}>
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border p-5 sm:p-6 shadow-sm`}>
+                    <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 ${viewMode === 'leads' ? 'lg:grid-cols-3' : 'lg:grid-cols-4'}`}>
                         <div className="sm:col-span-2 lg:col-span-1">
                             <div className="relative">
                                 <input
@@ -5112,7 +5112,7 @@ const Clients = React.memo(() => {
                     
                     {/* Modern Search Results Counter */}
                     {(searchTerm || filterIndustry !== 'All Industries' || filterStatus !== 'All Status' || (viewMode !== 'leads' && filterServices.length > 0) || showStarredOnly) && (
-                        <div className="mt-4 pt-4 border-t border-gray-200">
+                        <div className={`mt-5 sm:mt-6 pt-5 sm:pt-6 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2 text-sm text-gray-600">
                                     <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
@@ -5145,7 +5145,7 @@ const Clients = React.memo(() => {
             </div>
 
             {/* Content based on view mode */}
-            <div className="flex-1 overflow-hidden px-4 sm:px-6 pb-4 min-h-0">
+            <div className="flex-1 overflow-hidden px-4 sm:px-6 pb-5 sm:pb-6 pt-2 min-h-0">
             {viewMode === 'clients' && <ClientsListView />}
             {viewMode === 'leads' && <LeadsListView />}
             {viewMode === 'pipeline' && (
