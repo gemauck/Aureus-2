@@ -42,6 +42,10 @@ const Projects = () => {
     const [projectDetailAvailable, setProjectDetailAvailable] = useState(!!window.ProjectDetail);
     const [waitingForTracker, setWaitingForTracker] = useState(false);
     const [forceRender, setForceRender] = useState(0); // Force re-render when ProjectDetail loads
+    const [projectModalComponent, setProjectModalComponent] = useState(() => 
+        typeof window.ProjectModal === 'function' ? window.ProjectModal : null
+    );
+    const [isProjectModalLoading, setIsProjectModalLoading] = useState(false);
     
     const openProgressTrackerHash = (params = {}) => {
         try {
@@ -166,6 +170,13 @@ const Projects = () => {
             console.log('✅ Projects: Storage is available');
         }
     }, []);
+    
+    // Ensure ProjectModal is loaded
+    useEffect(() => {
+        if (!projectModalComponent && window.ProjectModal && typeof window.ProjectModal === 'function') {
+            setProjectModalComponent(window.ProjectModal);
+        }
+    }, [projectModalComponent]);
     
     // Wait for ProjectProgressTracker component to load when needed
     useEffect(() => {
@@ -853,13 +864,135 @@ const Projects = () => {
         return count;
     };
 
-    const handleAddProject = () => {
-        setSelectedProject(null);
-        setShowModal(true);
+    const handleAddProject = async () => {
+        // Ensure ProjectModal is loaded before showing modal
+        if (!projectModalComponent && !isProjectModalLoading) {
+            console.log('⏳ ProjectModal not loaded, loading now...');
+            setIsProjectModalLoading(true);
+            
+            // Try to load ProjectModal
+            let loaded = false;
+            for (let i = 0; i < 50; i++) {
+                if (window.ProjectModal && typeof window.ProjectModal === 'function') {
+                    console.log('✅ ProjectModal loaded');
+                    setProjectModalComponent(window.ProjectModal);
+                    loaded = true;
+                    break;
+                }
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            
+            if (!loaded) {
+                // Try loading the script directly
+                console.log('🚀 Attempting to load ProjectModal script...');
+                const script = document.createElement('script');
+                script.src = '/dist/src/components/projects/ProjectModal.js';
+                script.async = true;
+                await new Promise((resolve, reject) => {
+                    script.onload = () => {
+                        // Wait for initialization
+                        let attempts = 0;
+                        const checkInit = setInterval(() => {
+                            attempts++;
+                            if (window.ProjectModal && typeof window.ProjectModal === 'function') {
+                                console.log('✅ ProjectModal loaded via script');
+                                setProjectModalComponent(window.ProjectModal);
+                                clearInterval(checkInit);
+                                setIsProjectModalLoading(false);
+                                resolve();
+                            } else if (attempts >= 50) {
+                                console.error('❌ ProjectModal failed to initialize');
+                                clearInterval(checkInit);
+                                setIsProjectModalLoading(false);
+                                alert('Failed to load project editor. Please refresh the page.');
+                                reject(new Error('ProjectModal failed to load'));
+                            }
+                        }, 100);
+                    };
+                    script.onerror = () => {
+                        console.error('❌ Failed to load ProjectModal script');
+                        setIsProjectModalLoading(false);
+                        alert('Failed to load project editor. Please refresh the page.');
+                        reject(new Error('Failed to load ProjectModal script'));
+                    };
+                    document.body.appendChild(script);
+                });
+            } else {
+                setIsProjectModalLoading(false);
+            }
+        }
+        
+        // Only show modal if ProjectModal is loaded
+        if (projectModalComponent || (window.ProjectModal && typeof window.ProjectModal === 'function')) {
+            if (!projectModalComponent) {
+                setProjectModalComponent(window.ProjectModal);
+            }
+            setSelectedProject(null);
+            setShowModal(true);
+        } else {
+            alert('Project editor is still loading. Please wait a moment and try again.');
+        }
     };
 
     const handleEditProject = async (project) => {
         try {
+            // Ensure ProjectModal is loaded before showing modal
+            if (!projectModalComponent && !isProjectModalLoading) {
+                console.log('⏳ ProjectModal not loaded for edit, loading now...');
+                setIsProjectModalLoading(true);
+                
+                // Try to load ProjectModal
+                let loaded = false;
+                for (let i = 0; i < 50; i++) {
+                    if (window.ProjectModal && typeof window.ProjectModal === 'function') {
+                        console.log('✅ ProjectModal loaded');
+                        setProjectModalComponent(window.ProjectModal);
+                        loaded = true;
+                        break;
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+                
+                if (!loaded) {
+                    // Try loading the script directly
+                    console.log('🚀 Attempting to load ProjectModal script...');
+                    const script = document.createElement('script');
+                    script.src = '/dist/src/components/projects/ProjectModal.js';
+                    script.async = true;
+                    await new Promise((resolve, reject) => {
+                        script.onload = () => {
+                            // Wait for initialization
+                            let attempts = 0;
+                            const checkInit = setInterval(() => {
+                                attempts++;
+                                if (window.ProjectModal && typeof window.ProjectModal === 'function') {
+                                    console.log('✅ ProjectModal loaded via script');
+                                    setProjectModalComponent(window.ProjectModal);
+                                    clearInterval(checkInit);
+                                    setIsProjectModalLoading(false);
+                                    resolve();
+                                } else if (attempts >= 50) {
+                                    console.error('❌ ProjectModal failed to initialize');
+                                    clearInterval(checkInit);
+                                    setIsProjectModalLoading(false);
+                                    alert('Failed to load project editor. Please refresh the page.');
+                                    reject(new Error('ProjectModal failed to load'));
+                                }
+                            }, 100);
+                        };
+                        script.onerror = () => {
+                            console.error('❌ Failed to load ProjectModal script');
+                            setIsProjectModalLoading(false);
+                            alert('Failed to load project editor. Please refresh the page.');
+                            reject(new Error('Failed to load ProjectModal script'));
+                        };
+                        document.body.appendChild(script);
+                    });
+                } else {
+                    setIsProjectModalLoading(false);
+                }
+            }
+            
             // Fetch full project data for editing
             // Always use safe fallback approach to avoid function errors
             let response;
@@ -910,8 +1043,16 @@ const Projects = () => {
                 client: fullProject.clientName || fullProject.client || ''
             };
             
-            setSelectedProject(normalizedProject);
-            setShowModal(true);
+            // Only show modal if ProjectModal is loaded
+            if (projectModalComponent || (window.ProjectModal && typeof window.ProjectModal === 'function')) {
+                if (!projectModalComponent) {
+                    setProjectModalComponent(window.ProjectModal);
+                }
+                setSelectedProject(normalizedProject);
+                setShowModal(true);
+            } else {
+                alert('Project editor is still loading. Please wait a moment and try again.');
+            }
         } catch (error) {
             console.error('Error loading project for editing:', error);
             alert('Error loading project: ' + error.message);
@@ -2269,34 +2410,43 @@ const Projects = () => {
             )}
 
             {/* Add/Edit Modal */}
-            {showModal && (
-                ProjectModal ? (
-                    <ProjectModal
-                        project={selectedProject}
-                        onSave={handleSaveProject}
-                        onDelete={handleDeleteProject}
-                        onClose={() => {
-                            setShowModal(false);
-                            setSelectedProject(null);
-                        }}
-                    />
-                ) : (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                        <div className="bg-white rounded-lg p-4 w-full max-w-md">
-                            <h2 className="text-lg font-semibold text-gray-900 mb-2">Something went wrong</h2>
-                            <p className="text-sm text-gray-600 mb-3">Project editor failed to load. Please wait a moment and try again.</p>
-                            <div className="flex justify-end">
-                                <button
-                                    onClick={() => setShowModal(false)}
-                                    className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                                >
-                                    Close
-                                </button>
+            {showModal && (() => {
+                const ModalComponent = projectModalComponent || (window.ProjectModal && typeof window.ProjectModal === 'function' ? window.ProjectModal : null);
+                
+                if (ModalComponent) {
+                    return (
+                        <ModalComponent
+                            project={selectedProject}
+                            onSave={handleSaveProject}
+                            onDelete={handleDeleteProject}
+                            onClose={() => {
+                                setShowModal(false);
+                                setSelectedProject(null);
+                            }}
+                        />
+                    );
+                } else {
+                    return (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-lg p-4 w-full max-w-md">
+                                <h2 className="text-lg font-semibold text-gray-900 mb-2">Loading Project Editor</h2>
+                                <p className="text-sm text-gray-600 mb-3">Please wait while the project editor loads...</p>
+                                <div className="flex justify-end">
+                                    <button
+                                        onClick={() => {
+                                            setShowModal(false);
+                                            setSelectedProject(null);
+                                        }}
+                                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                )
-            )}
+                    );
+                }
+            })()}
         </div>
     );
 };
