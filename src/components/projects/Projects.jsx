@@ -1376,12 +1376,16 @@ const Projects = () => {
         const matchesClient = selectedClient === 'all' || p.client === selectedClient;
         const matchesSearch = searchTerm === '' || 
             p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            p.client.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (p.client || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             p.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
             p.assignedTo?.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesStatus = filterStatus === 'all' || p.status === filterStatus;
         return matchesClient && matchesSearch && matchesStatus;
-    }).sort((a, b) => a.client.localeCompare(b.client));
+    }).sort((a, b) => {
+        const aClient = a.client || '';
+        const bClient = b.client || '';
+        return aClient.localeCompare(bClient);
+    });
 
     // Function to render Progress Tracker
     const renderProgressTracker = () => {

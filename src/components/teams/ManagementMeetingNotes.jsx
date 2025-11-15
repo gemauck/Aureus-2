@@ -1157,6 +1157,81 @@ const ManagementMeetingNotes = () => {
         }
     };
 
+    // Helper function to update action items in local state
+    const updateActionItemLocal = useCallback((actionItem, isNew = false) => {
+        const applyUpdate = (note) => {
+            if (!note) return note;
+
+            // Update monthly action items
+            if (actionItem.monthlyNotesId && !actionItem.weeklyNotesId && !actionItem.departmentNotesId) {
+                const monthlyActionItems = Array.isArray(note.actionItems) ? [...note.actionItems] : [];
+                if (isNew) {
+                    monthlyActionItems.push(actionItem);
+                } else {
+                    const index = monthlyActionItems.findIndex(item => item.id === actionItem.id);
+                    if (index >= 0) {
+                        monthlyActionItems[index] = actionItem;
+                    } else {
+                        monthlyActionItems.push(actionItem);
+                    }
+                }
+                return { ...note, actionItems: monthlyActionItems };
+            }
+
+            // Update weekly or department action items
+            const weeklyNotes = Array.isArray(note.weeklyNotes)
+                ? note.weeklyNotes.map((week) => {
+                      // Update weekly-level action items
+                      if (actionItem.weeklyNotesId === week.id && !actionItem.departmentNotesId) {
+                          const weeklyActionItems = Array.isArray(week.actionItems) ? [...week.actionItems] : [];
+                          if (isNew) {
+                              weeklyActionItems.push(actionItem);
+                          } else {
+                              const index = weeklyActionItems.findIndex(item => item.id === actionItem.id);
+                              if (index >= 0) {
+                                  weeklyActionItems[index] = actionItem;
+                              } else {
+                                  weeklyActionItems.push(actionItem);
+                              }
+                          }
+                          return { ...week, actionItems: weeklyActionItems };
+                      }
+
+                      // Update department-level action items
+                      if (actionItem.departmentNotesId && week.departmentNotes) {
+                          const departmentNotes = week.departmentNotes.map((deptNote) => {
+                              if (deptNote.id === actionItem.departmentNotesId) {
+                                  const deptActionItems = Array.isArray(deptNote.actionItems) ? [...deptNote.actionItems] : [];
+                                  if (isNew) {
+                                      deptActionItems.push(actionItem);
+                                  } else {
+                                      const index = deptActionItems.findIndex(item => item.id === actionItem.id);
+                                      if (index >= 0) {
+                                          deptActionItems[index] = actionItem;
+                                      } else {
+                                          deptActionItems.push(actionItem);
+                                      }
+                                  }
+                                  return { ...deptNote, actionItems: deptActionItems };
+                              }
+                              return deptNote;
+                          });
+                          return { ...week, departmentNotes };
+                      }
+
+                      return week;
+                  })
+                : note.weeklyNotes;
+            return { ...note, weeklyNotes };
+        };
+
+        setCurrentMonthlyNotes((prev) => (prev ? applyUpdate(prev) : prev));
+        setMonthlyNotesList((prev) => {
+            if (!Array.isArray(prev)) return prev;
+            return prev.map((note) => (note?.id === currentMonthlyNotes?.id ? applyUpdate(note) : note));
+        });
+    }, [currentMonthlyNotes?.id]);
+
     // Create/Update action item
     const handleSaveActionItem = async (actionItemData) => {
         try {
@@ -1171,17 +1246,29 @@ const ManagementMeetingNotes = () => {
                 actionItemData.monthlyNotesId = currentMonthlyNotes.id;
             }
 
+            const isUpdate = !!editingActionItem?.id;
+            const tempActionItem = {
+                ...actionItemData,
+                id: editingActionItem?.id || `temp-${Date.now()}`,
+                createdAt: editingActionItem?.createdAt || new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+
+            // Optimistic update - show immediately
+            updateActionItemLocal(tempActionItem, !isUpdate);
+            setShowActionItemModal(false);
+            setEditingActionItem(null);
+
             setLoading(true);
             console.log('💾 Saving action item:', {
-                isUpdate: !!editingActionItem?.id,
-                hasId: !!editingActionItem?.id,
+                isUpdate,
                 actionItemData,
                 editingActionItem
             });
 
             let response;
             // Check if we're updating (has id) or creating (no id)
-            if (editingActionItem?.id) {
+            if (isUpdate) {
                 // Update existing action item
                 response = await window.DatabaseAPI.updateActionItem(editingActionItem.id, actionItemData);
             } else {
@@ -1191,55 +1278,201 @@ const ManagementMeetingNotes = () => {
             
             console.log('✅ Action item response:', response);
             
-            if (response?.data?.actionItem || response?.actionItem || response?.success) {
-                // Reload current month's notes
-                const monthResponse = await window.DatabaseAPI.getMeetingNotes(selectedMonth);
-                setCurrentMonthlyNotes(monthResponse.data?.monthlyNotes);
-                setShowActionItemModal(false);
-                setEditingActionItem(null);
-            } else {
-                // Even if response structure is different, reload to get updated data
-                console.warn('⚠️ Unexpected response structure, reloading anyway:', response);
-                const monthResponse = await window.DatabaseAPI.getMeetingNotes(selectedMonth);
-                setCurrentMonthlyNotes(monthResponse.data?.monthlyNotes);
-                setShowActionItemModal(false);
-                setEditingActionItem(null);
+            // Get the actual action item from response
+            const savedActionItem = response?.data?.actionItem || response?.actionItem;
+            if (savedActionItem) {
+                // Update with server response (includes real ID and timestamps)
+                updateActionItemLocal(savedActionItem, false);
+            } else if (response?.success) {
+                // If response just indicates success, refresh from server in background
+                window.DatabaseAPI.getMeetingNotes(selectedMonth)
+                    .then(monthResponse => {
+                        if (monthResponse?.data?.monthlyNotes) {
+                            setCurrentMonthlyNotes(monthResponse.data.monthlyNotes);
+                            setMonthlyNotesList((prev) => {
+                                if (!Array.isArray(prev)) return prev;
+                                return prev.map((note) => 
+                                    (note?.id === monthResponse.data.monthlyNotes.id ? monthResponse.data.monthlyNotes : note)
+                                );
+                            });
+                        }
+                    })
+                    .catch(err => console.warn('Background refresh failed:', err));
             }
         } catch (error) {
             console.error('❌ Error saving action item:', error);
-            console.error('❌ Error details:', {
-                message: error.message,
-                stack: error.stack,
-                response: error.response,
-                data: error.data
-            });
+            // Revert optimistic update on error
+            if (selectedMonth) {
+                window.DatabaseAPI.getMeetingNotes(selectedMonth)
+                    .then(monthResponse => {
+                        if (monthResponse?.data?.monthlyNotes) {
+                            setCurrentMonthlyNotes(monthResponse.data.monthlyNotes);
+                            setMonthlyNotesList((prev) => {
+                                if (!Array.isArray(prev)) return prev;
+                                return prev.map((note) => 
+                                    (note?.id === monthResponse.data.monthlyNotes.id ? monthResponse.data.monthlyNotes : note)
+                                );
+                            });
+                        }
+                    })
+                    .catch(err => console.error('Error reverting changes:', err));
+            }
             alert('Failed to save action item: ' + (error.message || 'Unknown error'));
         } finally {
             setLoading(false);
         }
     };
 
+    // Helper function to delete action item from local state
+    const deleteActionItemLocal = useCallback((actionItemId) => {
+        const applyDelete = (note) => {
+            if (!note) return note;
+
+            // Remove from monthly action items
+            if (Array.isArray(note.actionItems)) {
+                const filtered = note.actionItems.filter(item => item.id !== actionItemId);
+                if (filtered.length !== note.actionItems.length) {
+                    return { ...note, actionItems: filtered };
+                }
+            }
+
+            // Remove from weekly or department action items
+            const weeklyNotes = Array.isArray(note.weeklyNotes)
+                ? note.weeklyNotes.map((week) => {
+                      // Remove from weekly-level action items
+                      if (Array.isArray(week.actionItems)) {
+                          const filtered = week.actionItems.filter(item => item.id !== actionItemId);
+                          if (filtered.length !== week.actionItems.length) {
+                              return { ...week, actionItems: filtered };
+                          }
+                      }
+
+                      // Remove from department-level action items
+                      if (week.departmentNotes) {
+                          const departmentNotes = week.departmentNotes.map((deptNote) => {
+                              if (Array.isArray(deptNote.actionItems)) {
+                                  const filtered = deptNote.actionItems.filter(item => item.id !== actionItemId);
+                                  if (filtered.length !== deptNote.actionItems.length) {
+                                      return { ...deptNote, actionItems: filtered };
+                                  }
+                              }
+                              return deptNote;
+                          });
+                          return { ...week, departmentNotes };
+                      }
+
+                      return week;
+                  })
+                : note.weeklyNotes;
+            return { ...note, weeklyNotes };
+        };
+
+        setCurrentMonthlyNotes((prev) => (prev ? applyDelete(prev) : prev));
+        setMonthlyNotesList((prev) => {
+            if (!Array.isArray(prev)) return prev;
+            return prev.map((note) => (note?.id === currentMonthlyNotes?.id ? applyDelete(note) : note));
+        });
+    }, [currentMonthlyNotes?.id]);
+
     // Delete action item
     const handleDeleteActionItem = async (id) => {
         if (!confirm('Are you sure you want to delete this action item?')) return;
         
+        // Store previous state for rollback
+        const previousNotes = currentMonthlyNotes;
+        
+        // Optimistic update - remove immediately
+        deleteActionItemLocal(id);
+        
         try {
             setLoading(true);
             await window.DatabaseAPI.deleteActionItem(id);
-            // Reload current month's notes
-            const monthResponse = await window.DatabaseAPI.getMeetingNotes(selectedMonth);
-            setCurrentMonthlyNotes(monthResponse.data?.monthlyNotes);
+            // Success - state already updated
         } catch (error) {
             console.error('Error deleting action item:', error);
+            // Revert on error
+            if (previousNotes) {
+                setCurrentMonthlyNotes(previousNotes);
+                setMonthlyNotesList((prev) => {
+                    if (!Array.isArray(prev)) return prev;
+                    return prev.map((note) => 
+                        (note?.id === previousNotes.id ? previousNotes : note)
+                    );
+                });
+            }
             alert('Failed to delete action item');
         } finally {
             setLoading(false);
         }
     };
 
+    // Helper function to add comment to local state
+    const addCommentLocal = useCallback((comment) => {
+        const applyAdd = (note) => {
+            if (!note) return note;
+
+            // Add to monthly comments
+            if (comment.monthlyNotesId && note.id === comment.monthlyNotesId) {
+                const monthlyComments = Array.isArray(note.comments) ? [...note.comments] : [];
+                monthlyComments.push(comment);
+                return { ...note, comments: monthlyComments };
+            }
+
+            // Add to weekly or department comments
+            const weeklyNotes = Array.isArray(note.weeklyNotes)
+                ? note.weeklyNotes.map((week) => {
+                      // Add to weekly-level comments
+                      if (comment.weeklyNotesId === week.id) {
+                          const weeklyComments = Array.isArray(week.comments) ? [...week.comments] : [];
+                          weeklyComments.push(comment);
+                          return { ...week, comments: weeklyComments };
+                      }
+
+                      // Add to department-level comments
+                      if (comment.departmentNotesId && week.departmentNotes) {
+                          const departmentNotes = week.departmentNotes.map((deptNote) => {
+                              if (deptNote.id === comment.departmentNotesId) {
+                                  const deptComments = Array.isArray(deptNote.comments) ? [...deptNote.comments] : [];
+                                  deptComments.push(comment);
+                                  return { ...deptNote, comments: deptComments };
+                              }
+                              return deptNote;
+                          });
+                          return { ...week, departmentNotes };
+                      }
+
+                      return week;
+                  })
+                : note.weeklyNotes;
+            return { ...note, weeklyNotes };
+        };
+
+        setCurrentMonthlyNotes((prev) => (prev ? applyAdd(prev) : prev));
+        setMonthlyNotesList((prev) => {
+            if (!Array.isArray(prev)) return prev;
+            return prev.map((note) => (note?.id === currentMonthlyNotes?.id ? applyAdd(note) : note));
+        });
+    }, [currentMonthlyNotes?.id]);
+
     // Create comment with mention processing
     const handleCreateComment = async (content) => {
         if (!commentContext) return;
+        
+        const currentUser = window.storage?.getUserInfo() || {};
+        const tempComment = {
+            id: `temp-${Date.now()}`,
+            content,
+            author: { name: currentUser.name || currentUser.email || 'Unknown', email: currentUser.email },
+            createdAt: new Date().toISOString(),
+            [commentContext.type === 'monthly' ? 'monthlyNotesId' : 
+              commentContext.type === 'department' ? 'departmentNotesId' : 
+              'actionItemId']: commentContext.id
+        };
+
+        // Optimistic update - show immediately
+        addCommentLocal(tempComment);
+        setShowCommentModal(false);
+        setCommentContext(null);
         
         try {
             setLoading(true);
@@ -1250,11 +1483,73 @@ const ManagementMeetingNotes = () => {
                   'actionItemId']: commentContext.id
             };
             
-            await window.DatabaseAPI.createComment(commentData);
+            const response = await window.DatabaseAPI.createComment(commentData);
+            
+            // Get the actual comment from response
+            const savedComment = response?.data?.comment || response?.comment;
+            if (savedComment) {
+                // Replace temp comment with real one
+                const applyReplace = (note) => {
+                    if (!note) return note;
+
+                    // Replace in monthly comments
+                    if (savedComment.monthlyNotesId && note.id === savedComment.monthlyNotesId) {
+                        const monthlyComments = Array.isArray(note.comments) ? [...note.comments] : [];
+                        const index = monthlyComments.findIndex(c => c.id === tempComment.id);
+                        if (index >= 0) {
+                            monthlyComments[index] = savedComment;
+                        } else {
+                            monthlyComments.push(savedComment);
+                        }
+                        return { ...note, comments: monthlyComments };
+                    }
+
+                    // Replace in weekly or department comments
+                    const weeklyNotes = Array.isArray(note.weeklyNotes)
+                        ? note.weeklyNotes.map((week) => {
+                              if (savedComment.weeklyNotesId === week.id) {
+                                  const weeklyComments = Array.isArray(week.comments) ? [...week.comments] : [];
+                                  const index = weeklyComments.findIndex(c => c.id === tempComment.id);
+                                  if (index >= 0) {
+                                      weeklyComments[index] = savedComment;
+                                  } else {
+                                      weeklyComments.push(savedComment);
+                                  }
+                                  return { ...week, comments: weeklyComments };
+                              }
+
+                              if (savedComment.departmentNotesId && week.departmentNotes) {
+                                  const departmentNotes = week.departmentNotes.map((deptNote) => {
+                                      if (deptNote.id === savedComment.departmentNotesId) {
+                                          const deptComments = Array.isArray(deptNote.comments) ? [...deptNote.comments] : [];
+                                          const index = deptComments.findIndex(c => c.id === tempComment.id);
+                                          if (index >= 0) {
+                                              deptComments[index] = savedComment;
+                                          } else {
+                                              deptComments.push(savedComment);
+                                          }
+                                          return { ...deptNote, comments: deptComments };
+                                      }
+                                      return deptNote;
+                                  });
+                                  return { ...week, departmentNotes };
+                              }
+
+                              return week;
+                          })
+                        : note.weeklyNotes;
+                    return { ...note, weeklyNotes };
+                };
+
+                setCurrentMonthlyNotes((prev) => (prev ? applyReplace(prev) : prev));
+                setMonthlyNotesList((prev) => {
+                    if (!Array.isArray(prev)) return prev;
+                    return prev.map((note) => (note?.id === currentMonthlyNotes?.id ? applyReplace(note) : note));
+                });
+            }
             
             // Process mentions and send notifications
             if (window.MentionHelper && window.MentionHelper.hasMentions(content)) {
-                const currentUser = window.storage?.getUserInfo() || {};
                 const authorName = currentUser.name || currentUser.email || 'Unknown';
                 
                 // Build context title and link
@@ -1279,14 +1574,24 @@ const ManagementMeetingNotes = () => {
                     users
                 ).catch(err => console.error('Error processing mentions:', err));
             }
-            
-            // Reload current month's notes
-            const monthResponse = await window.DatabaseAPI.getMeetingNotes(selectedMonth);
-            setCurrentMonthlyNotes(monthResponse.data?.monthlyNotes);
-            setShowCommentModal(false);
-            setCommentContext(null);
         } catch (error) {
             console.error('Error creating comment:', error);
+            // Revert optimistic update on error
+            if (selectedMonth) {
+                window.DatabaseAPI.getMeetingNotes(selectedMonth)
+                    .then(monthResponse => {
+                        if (monthResponse?.data?.monthlyNotes) {
+                            setCurrentMonthlyNotes(monthResponse.data.monthlyNotes);
+                            setMonthlyNotesList((prev) => {
+                                if (!Array.isArray(prev)) return prev;
+                                return prev.map((note) => 
+                                    (note?.id === monthResponse.data.monthlyNotes.id ? monthResponse.data.monthlyNotes : note)
+                                );
+                            });
+                        }
+                    })
+                    .catch(err => console.error('Error reverting changes:', err));
+            }
             alert('Failed to create comment');
         } finally {
             setLoading(false);
@@ -1763,19 +2068,58 @@ const ManagementMeetingNotes = () => {
                                             </div>
 
                                             <div className="space-y-4 flex-1 overflow-y-auto">
-                                                {hasDepartmentNotes ? (
-                                                    DEPARTMENTS.map((dept) => {
-                                                        const deptNote = week.departmentNotes?.find(
-                                                            (dn) => dn.departmentId === dept.id
-                                                        );
+                                                {/* Always show all departments in the same order for comparison across weeks */}
+                                                {DEPARTMENTS.map((dept) => {
+                                                    const deptNote = week.departmentNotes?.find(
+                                                        (dn) => dn.departmentId === dept.id
+                                                    );
 
-                                                        if (!deptNote) return null;
+                                                    // Show empty placeholder if department note doesn't exist yet
+                                                    if (!deptNote) {
+                                                        const allocations = currentMonthlyNotes.userAllocations?.filter(
+                                                            (a) => a.departmentId === dept.id
+                                                        ) || [];
+                                                        return (
+                                                            <div key={dept.id} className={`border rounded-lg p-3 border-dashed opacity-60 transition-opacity duration-200 ${isDark ? 'border-slate-600' : 'border-gray-300'}`}>
+                                                                <div className="flex items-center justify-between mb-3">
+                                                                    <h4 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? `text-${dept.color}-300` : `text-${dept.color}-700`}`}>
+                                                                        <i className={`fas ${dept.icon} ${isDark ? `text-${dept.color}-400` : `text-${dept.color}-600`}`}></i>
+                                                                        {dept.name}
+                                                                    </h4>
+                                                                    <div className="flex gap-2">
+                                                                        {allocations.length > 0 && (
+                                                                            <div className="flex gap-1">
+                                                                                {allocations.map((allocation) => (
+                                                                                    <span key={allocation.id} className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-gray-100 text-gray-700'}`}>
+                                                                                        {getUserName(allocation.userId)}
+                                                                                    </span>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setSelectedDepartment(dept.id);
+                                                                                setShowAllocationModal(true);
+                                                                            }}
+                                                                            className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                                            title="Allocate users"
+                                                                        >
+                                                                            <i className="fas fa-user-plus"></i>
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                                <div className={`text-center py-4 ${isDark ? 'text-slate-400' : 'text-gray-400'}`}>
+                                                                    <p className="text-xs">No notes for this department yet</p>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    }
 
                                                         const allocations = currentMonthlyNotes.userAllocations?.filter(
                                                             (a) => a.departmentId === dept.id
                                                         ) || [];
                                                         return (
-                                                            <div key={dept.id} className={`border rounded-lg p-3 ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
+                                                            <div key={dept.id} className={`border rounded-lg p-3 transition-all duration-200 ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
                                                                 <div className="flex items-center justify-between mb-3">
                                                                     <h4 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? `text-${dept.color}-300` : `text-${dept.color}-700`}`}>
                                                                         <i className={`fas ${dept.icon} ${isDark ? `text-${dept.color}-400` : `text-${dept.color}-600`}`}></i>
@@ -1969,7 +2313,7 @@ const ManagementMeetingNotes = () => {
                                                                             </label>
                                                                             <div className="space-y-2">
                                                                                 {deptNote.actionItems.map((item) => (
-                                                                                    <div key={item.id} className={`flex items-center justify-between p-2 rounded ${isDark ? 'bg-slate-700' : 'bg-gray-50'}`}>
+                                                                                    <div key={item.id} className={`flex items-center justify-between p-2 rounded transition-all duration-200 ${isDark ? 'bg-slate-700' : 'bg-gray-50'}`}>
                                                                                         <div className="flex-1">
                                                                                             <p className={`text-xs font-medium ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{item.title}</p>
                                                                                             {item.description && (
@@ -2059,13 +2403,6 @@ const ManagementMeetingNotes = () => {
                                                             </div>
                                                         );
                                                     })
-                                                ) : (
-                                                    <div className={`rounded-lg border px-3 py-4 text-center ${isDark ? 'border-slate-700 bg-slate-900/30 text-slate-300' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
-                                                        <p className="text-xs">No department notes captured for this week yet.</p>
-                                                        <p className="text-[11px] mt-1">
-                                                            Add a department update above to get started.
-                                                        </p>
-                                                    </div>
                                                 )}
                                             </div>
                         </div>

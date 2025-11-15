@@ -87,6 +87,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const debouncedSaveTimeoutRef = useRef(null);
     const previousDocumentSectionsRef = useRef(project?.documentSections);
     const previousProjectIdRef = useRef(project?.id);
+    const editingSectionIdRef = useRef(null); // Ref to store current editingSectionId
     
     // ULTRA AGGRESSIVE: Initialize sections from props, but check sessionStorage first to preserve saved sections
     const [sections, setSections] = useState(() => {
@@ -623,18 +624,41 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
 
     const handleAddDocument = (sectionId) => {
+        console.log('➕ handleAddDocument called with sectionId:', sectionId);
+        if (!sectionId) {
+            console.error('❌ handleAddDocument called without sectionId');
+            alert('Error: Cannot add document. Section ID is missing.');
+            return;
+        }
+        // Store in both state and ref to ensure handleSaveDocument always has access
+        editingSectionIdRef.current = sectionId;
         setEditingSectionId(sectionId);
         setEditingDocument(null);
         setShowDocumentModal(true);
+        console.log('✅ Document modal opening for section:', sectionId);
     };
 
     const handleEditDocument = (section, document) => {
+        // Store in both state and ref to ensure handleSaveDocument always has access
+        editingSectionIdRef.current = section.id;
         setEditingSectionId(section.id);
         setEditingDocument(document);
         setShowDocumentModal(true);
     };
 
     const handleSaveDocument = async (documentData) => {
+        // Use ref value to ensure we always have the current section ID
+        const currentSectionId = editingSectionIdRef.current || editingSectionId;
+        
+        // Validate that we have a section ID
+        if (!currentSectionId) {
+            console.error('❌ Cannot save document: No section ID specified');
+            alert('Error: No section selected. Please try again.');
+            return;
+        }
+        
+        console.log('💾 Saving document to section ID:', currentSectionId);
+        
         // Get current user info
         const currentUser = getCurrentUser();
         
@@ -645,10 +669,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         // Use functional update to avoid race conditions
         setSections(currentSections => {
-            const section = currentSections.find(s => s.id === editingSectionId);
+            const section = currentSections.find(s => s.id === currentSectionId);
+            
+            // Validate section exists
+            if (!section) {
+                console.error('❌ Cannot save document: Section not found with ID:', currentSectionId);
+                alert('Error: Section not found. Please try again.');
+                return currentSections;
+            }
             
             updatedSections = currentSections.map(s => {
-                if (s.id === editingSectionId) {
+                if (s.id === currentSectionId) {
                     if (editingDocument) {
                         // Update existing document - preserve ALL existing fields and merge new data
                         const updated = {
@@ -741,6 +772,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         setShowDocumentModal(false);
         setEditingDocument(null);
         setEditingSectionId(null);
+        editingSectionIdRef.current = null; // Clear ref as well
         
         // Immediately save to database to ensure persistence
         if (updatedSections) {
@@ -1731,6 +1763,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         );
     };
 
+    const handleCloseDocumentModal = () => {
+        setShowDocumentModal(false);
+        setEditingDocument(null);
+        setEditingSectionId(null);
+        editingSectionIdRef.current = null; // Clear ref when modal closes
+    };
+
     const DocumentModal = () => {
         const [documentFormData, setDocumentFormData] = useState({
             name: editingDocument?.name || '',
@@ -1849,7 +1888,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             {editingDocument ? 'Edit Document/Data' : 'Add Document/Data'}
                         </h2>
                         <button 
-                            onClick={() => setShowDocumentModal(false)} 
+                            onClick={handleCloseDocumentModal} 
                             className="text-gray-400 hover:text-gray-600 p-1"
                         >
                             <i className="fas fa-times text-sm"></i>
@@ -1858,10 +1897,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
                     <form onSubmit={handleSubmit} className="p-4 space-y-3">
                         <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                            <label htmlFor="documentName" className="block text-xs font-medium text-gray-700 mb-1.5">
                                 Document/Data Name *
                             </label>
                             <input
+                                id="documentName"
+                                name="documentName"
                                 type="text"
                                 value={documentFormData.name}
                                 onChange={(e) => setDocumentFormData({...documentFormData, name: e.target.value})}
@@ -1872,10 +1913,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         </div>
 
                         <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                            <label htmlFor="documentDescription" className="block text-xs font-medium text-gray-700 mb-1.5">
                                 Description (Optional)
                             </label>
                             <textarea
+                                id="documentDescription"
+                                name="documentDescription"
                                 value={documentFormData.description}
                                 onChange={(e) => setDocumentFormData({...documentFormData, description: e.target.value})}
                                 className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -1964,7 +2007,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
                             <button
                                 type="button"
-                                onClick={() => setShowDocumentModal(false)}
+                                onClick={handleCloseDocumentModal}
                                 className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
                             >
                                 Cancel

@@ -211,6 +211,17 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                 });
             }
             
+            // CRITICAL: Save to sessionStorage IMMEDIATELY to prevent overwrites
+            // This ensures that even if the component re-mounts or re-renders,
+            // it will use the saved sections instead of stale prop data
+            const storageKey = `documentSections_${project.id}`;
+            try {
+                sessionStorage.setItem(storageKey, JSON.stringify(sectionsToSave));
+                console.log('💾 Saved sections to sessionStorage:', sectionsToSave.length, 'sections');
+            } catch (e) {
+                console.warn('Failed to save sections to sessionStorage:', e);
+            }
+            
             // Update localStorage for consistency
             if (window.dataService && typeof window.dataService.getProjects === 'function') {
                 const savedProjects = await window.dataService.getProjects();
@@ -310,12 +321,52 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
             previousDocumentSectionsRef.current = null; // Reset to allow sync for new project
         }
         
+        // CRITICAL: Check sessionStorage FIRST - if we have saved sections, NEVER sync from props
+        // This prevents stale prop data from overwriting user changes
+        const storageKey = `documentSections_${project?.id}`;
+        let hasSessionStorageData = false;
+        try {
+            const savedSections = sessionStorage.getItem(storageKey);
+            if (savedSections) {
+                const parsed = JSON.parse(savedSections);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    hasSessionStorageData = true;
+                    // CRITICAL: Mark as initialized IMMEDIATELY to prevent any sync from props
+                    // This must happen before setSections to prevent race conditions
+                    hasInitializedRef.current = true;
+                    isInitialMount.current = false;
+                    
+                    // We have saved sections in sessionStorage - check if we need to restore them
+                    setSections(currentSections => {
+                        // If local state is empty but sessionStorage has data, restore from sessionStorage
+                        // This handles the case where the component remounted and lost state
+                        if (currentSections.length === 0 && parsed.length > 0) {
+                            console.log('🔄 Restoring sections from sessionStorage:', parsed.length, 'sections');
+                            return parsed;
+                        }
+                        // If local state has data, keep it (it's more recent than sessionStorage)
+                        // hasInitializedRef is already set above, so sync from props is blocked
+                        if (currentSections.length > 0) {
+                            console.log('🛡️ Local state has sections - keeping local state and blocking syncs from props');
+                        }
+                        return currentSections;
+                    });
+                    
+                    // NEVER sync from props if sessionStorage has data
+                    console.log('🛡️ sessionStorage has saved sections - BLOCKING all syncs from props');
+                    return;
+                }
+            }
+        } catch (e) {
+            console.warn('Failed to check sessionStorage:', e);
+        }
+        
         // ULTRA AGGRESSIVE: If already initialized, NEVER sync - even if prop changes
         // Local state is the source of truth after initialization
         if (hasInitializedRef.current) {
             console.log('🛑 ULTRA AGGRESSIVE: Component initialized - BLOCKING all syncs to preserve user input');
-                return;
-            }
+            return;
+        }
             
         // Only sync on the very first mount when local state is empty AND we haven't initialized
         if (project && project.documentSections !== undefined && isInitialMount.current && !hasInitializedRef.current) {
@@ -327,10 +378,10 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                 if (currentSections.length === 0 && parsed.length > 0) {
                     console.log('🔄 Initial sync from project prop on first mount:', parsed.length, 'sections');
                     hasInitializedRef.current = true; // Mark as initialized - NEVER sync again
-                        isInitialMount.current = false;
+                    isInitialMount.current = false;
                     lastLocalUpdateRef.current = Date.now();
                     previousDocumentSectionsRef.current = project.documentSections;
-                        return parsed;
+                    return parsed;
                 } else if (currentSections.length === 0 && parsed.length === 0) {
                     // Empty state - mark as initialized but don't change state
                     console.log('✅ Component initialized with empty sections');
@@ -345,7 +396,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                 return currentSections;
             });
         }
-    }, [project?.id]); // ONLY run when project ID changes (switching projects)
+    }, [project?.id]); // ONLY run when project ID changes (switching projects) - we check sessionStorage on every run to prevent overwrites
 
     // REMOVED: Debounced auto-save effect
     // NEW METHODOLOGY: Only save explicitly when user adds/edits/deletes sections or documents

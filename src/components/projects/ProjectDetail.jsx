@@ -1493,7 +1493,7 @@ function initializeProjectDetail() {
 
         return Array.from(map.entries())
             .map(([value, label]) => ({ value, label }))
-            .sort((a, b) => a.label.localeCompare(b.label));
+            .sort((a, b) => (a.label || '').localeCompare(b.label || ''));
     }, [tasks, users, getAssigneeKey, getAssigneeLabel]);
 
     const listOptions = useMemo(() => {

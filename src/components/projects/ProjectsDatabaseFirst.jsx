@@ -526,7 +526,7 @@ const ProjectsDatabaseFirst = () => {
     const filteredProjects = projects
         .filter(project => {
         const matchesSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            project.client.toLowerCase().includes(searchTerm.toLowerCase());
+                            (project.client || '').toLowerCase().includes(searchTerm.toLowerCase());
         const matchesStatus = filterStatus === 'All Status' || project.status === filterStatus;
         const matchesType = filterType === 'All Types' || project.type === filterType;
         return matchesSearch && matchesStatus && matchesType;
