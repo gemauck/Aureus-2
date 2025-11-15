@@ -161,6 +161,7 @@
         
         // Leave Platform - Load before Manufacturing for better availability
         'components/leave-platform/LeavePlatform.jsx',
+        'components/leave-platform/EmployeeDetail.jsx',
         
         // Manufacturing
         'components/manufacturing/locations/StockLocations.jsx',
@@ -264,7 +265,7 @@
             }
 
             if (path.includes('components/clients/Clients.jsx')) {
-                applyDynamicCacheBust('clients-button-spacing-20251115');
+                applyDynamicCacheBust('clients-title-spacing-20251115');
             }
 
             if (path.includes('components/service-maintenance/ServiceAndMaintenance.jsx')) {
