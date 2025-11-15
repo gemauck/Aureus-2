@@ -2511,6 +2511,7 @@ function initializeProjectDetail() {
 
     // List View Component
     const ListView = () => {
+        console.log('🔍 ListView rendering - Table structure version 2.0');
         const formatChecklistProgress = (checklist = []) => {
             if (!Array.isArray(checklist) || checklist.length === 0) {
                 return { percent: 0, label: '0/0 complete' };
@@ -2671,7 +2672,7 @@ function initializeProjectDetail() {
                                 </header>
                                 <div className="flex-1">
                                     <div className="overflow-x-auto">
-                                        <table className="min-w-full divide-y divide-gray-200">
+                                        <table className="min-w-full divide-y divide-gray-200" data-task-table-version="2.0">
                                             {list.tasks.length > 0 && (
                                                 <thead className="bg-gray-50">
                                                     <tr>

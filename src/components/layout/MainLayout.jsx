@@ -1109,7 +1109,7 @@ const MainLayout = () => {
                 </header>
 
                 {/* Page Content - SCROLLABLE */}
-                <main className="flex-1 overflow-y-auto overflow-x-hidden p-4" style={{ width: '100%', maxWidth: '100%' }}>
+                <main className={`flex-1 overflow-y-auto overflow-x-hidden ${currentPage === 'clients' ? 'p-0' : 'p-4'}`} style={{ width: '100%', maxWidth: '100%' }}>
                     <div className="w-full max-w-full">
                         {renderPage}
                     </div>

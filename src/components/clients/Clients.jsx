@@ -4851,7 +4851,7 @@ const Clients = React.memo(() => {
     // Removed render logging to reduce console spam during infinite loops
 
     return (
-        <div className="flex flex-col h-screen w-full max-w-full overflow-hidden">
+        <div className="flex flex-col h-full w-full max-w-full overflow-hidden" style={{ height: '100%', minHeight: '100%' }}>
             <div className="flex-shrink-0 space-y-4 sm:space-y-6 px-4 sm:px-6 pt-4 sm:pt-6">
             {/* Modern Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
@@ -5129,7 +5129,7 @@ const Clients = React.memo(() => {
             </div>
 
             {/* Content based on view mode */}
-            <div className="flex-1 overflow-hidden px-4 sm:px-6 pb-4 sm:pb-6 min-h-0">
+            <div className="flex-1 overflow-hidden px-4 sm:px-6 pb-4 min-h-0">
             {viewMode === 'clients' && <ClientsListView />}
             {viewMode === 'leads' && <LeadsListView />}
             {viewMode === 'pipeline' && (
