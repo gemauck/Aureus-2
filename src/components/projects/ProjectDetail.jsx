@@ -2684,26 +2684,26 @@ function initializeProjectDetail() {
                                     </div>
                                 </header>
                                 <div className="flex-1">
-                                    <div className="overflow-x-auto" style={{ border: '2px solid red' }}>
+                                    <div className="overflow-x-auto">
                                         {/* TABLE STRUCTURE VERSION 3.0 - IF YOU SEE THIS, NEW CODE IS LOADED */}
                                         <table className="min-w-full divide-y divide-gray-200" data-task-table-version="3.0" style={{ display: 'table', width: '100%' }}>
                                             {list.tasks.length > 0 && (
                                                 <thead className="bg-gray-50">
                                                     <tr>
-                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Task</th>
-                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assignee</th>
-                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
-                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
-                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Comments</th>
-                                                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Task</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assignee</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Comments</th>
+                                                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                                                     </tr>
                                                 </thead>
                                             )}
                                             <tbody className="bg-white divide-y divide-gray-200">
                                                 {list.tasks.length === 0 ? (
                                                     <tr>
-                                                        <td colSpan="7" className="px-6 py-12 text-center">
+                                                        <td colSpan="7" className="px-4 py-12 text-center">
                                                             <div className="flex flex-col items-center justify-center text-center text-gray-400">
                                                                 <i className="fas fa-clipboard-list text-3xl mb-3"></i>
                                                                 <p className="text-sm font-medium">
@@ -2731,57 +2731,57 @@ function initializeProjectDetail() {
                                                                     onClick={() => handleViewTaskDetail(task)}
                                                                     className="hover:bg-gray-50 cursor-pointer transition"
                                                                 >
-                                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                                        <div className="text-sm font-medium text-gray-900">{task.title || 'Untitled task'}</div>
+                                                                    <td className="px-4 py-2 whitespace-nowrap">
+                                                                        <div className="text-xs font-medium text-gray-900">{task.title || 'Untitled task'}</div>
                                                                     </td>
-                                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(task.status || 'To Do')}`}>
+                                                                    <td className="px-4 py-2 whitespace-nowrap">
+                                                                        <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${getStatusColor(task.status || 'To Do')}`}>
                                                                             {task.status || 'To Do'}
                                                                         </span>
                                                                     </td>
-                                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                                    <td className="px-4 py-2 whitespace-nowrap">
                                                                         {task.assignee ? (
-                                                                            <div className="flex items-center text-sm text-gray-500">
-                                                                                <i className="fas fa-user text-xs text-gray-400 mr-1"></i>
+                                                                            <div className="flex items-center text-xs text-gray-500">
+                                                                                <i className="fas fa-user text-[10px] text-gray-400 mr-1"></i>
                                                                                 {task.assignee}
                                                                             </div>
                                                                         ) : (
-                                                                            <span className="text-sm text-gray-400">—</span>
+                                                                            <span className="text-xs text-gray-400">—</span>
                                                                         )}
                                                                     </td>
-                                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(task.priority || 'Medium')}`}>
-                                                                            <i className="fas fa-bolt text-[10px] mr-1"></i>
+                                                                    <td className="px-4 py-2 whitespace-nowrap">
+                                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${getPriorityColor(task.priority || 'Medium')}`}>
+                                                                            <i className="fas fa-bolt text-[9px] mr-1"></i>
                                                                             {task.priority || 'Medium'}
                                                                         </span>
                                                                     </td>
-                                                                    <td className="px-6 py-4 whitespace-nowrap">
-                                                                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${dueMeta.pillClass}`}>
-                                                                            <i className="fas fa-calendar-alt text-[10px] mr-1"></i>
+                                                                    <td className="px-4 py-2 whitespace-nowrap">
+                                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${dueMeta.pillClass}`}>
+                                                                            <i className="fas fa-calendar-alt text-[9px] mr-1"></i>
                                                                             {dueMeta.label}
                                                                         </span>
                                                                     </td>
-                                                                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                                                                    <td className="px-4 py-2 whitespace-nowrap text-center">
                                                                         {task.comments?.length > 0 ? (
-                                                                            <span className="inline-flex items-center text-sm text-gray-500">
-                                                                                <i className="fas fa-comments text-xs text-gray-400 mr-1"></i>
+                                                                            <span className="inline-flex items-center text-xs text-gray-500">
+                                                                                <i className="fas fa-comments text-[10px] text-gray-400 mr-1"></i>
                                                                                 {task.comments.length}
                                                                             </span>
                                                                         ) : (
-                                                                            <span className="text-sm text-gray-400">—</span>
+                                                                            <span className="text-xs text-gray-400">—</span>
                                                                         )}
                                                                     </td>
-                                                                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                                                                    <td className="px-4 py-2 whitespace-nowrap text-right">
                                                                         <div className="flex items-center justify-end gap-1">
                                                                             <button
                                                                                 onClick={(e) => {
                                                                                     e.stopPropagation();
                                                                                     openTaskComments(e, task);
                                                                                 }}
-                                                                                className="inline-flex items-center px-2 py-1 text-xs bg-primary-500 text-white rounded hover:bg-primary-600 transition-all font-medium"
+                                                                                className="inline-flex items-center px-1.5 py-0.5 text-[10px] bg-primary-500 text-white rounded hover:bg-primary-600 transition-all font-medium"
                                                                                 title="Open comments"
                                                                             >
-                                                                                <i className="fas fa-comments text-[10px] mr-1"></i>
+                                                                                <i className="fas fa-comments text-[9px] mr-0.5"></i>
                                                                                 {task.comments?.length || 0}
                                                                             </button>
                                                                             <button
@@ -2789,10 +2789,10 @@ function initializeProjectDetail() {
                                                                                     e.stopPropagation();
                                                                                     handleAddSubtask(task);
                                                                                 }}
-                                                                                className="inline-flex items-center px-2 py-1 text-xs bg-primary-500 text-white rounded hover:bg-primary-600 transition-all font-medium"
+                                                                                className="inline-flex items-center px-1.5 py-0.5 text-[10px] bg-primary-500 text-white rounded hover:bg-primary-600 transition-all font-medium"
                                                                                 title="Add subtask"
                                                                             >
-                                                                                <i className="fas fa-level-down-alt text-[10px] mr-1"></i>
+                                                                                <i className="fas fa-level-down-alt text-[9px] mr-0.5"></i>
                                                                                 {task.subtasks?.length || 0}
                                                                             </button>
                                                                             <button
@@ -2800,7 +2800,7 @@ function initializeProjectDetail() {
                                                                                     e.stopPropagation();
                                                                                     handleViewTaskDetail(task);
                                                                                 }}
-                                                                                className="text-xs text-primary-600 hover:text-primary-700 font-semibold px-2"
+                                                                                className="text-[10px] text-primary-600 hover:text-primary-700 font-semibold px-1.5"
                                                                             >
                                                                                 View
                                                                             </button>
@@ -2809,10 +2809,10 @@ function initializeProjectDetail() {
                                                                                     e.stopPropagation();
                                                                                     handleDeleteTask(task.id);
                                                                                 }}
-                                                                                className="inline-flex items-center px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-all font-medium"
+                                                                                className="inline-flex items-center px-1.5 py-0.5 text-[10px] bg-red-500 text-white rounded hover:bg-red-600 transition-all font-medium"
                                                                                 title="Delete task"
                                                                             >
-                                                                                <i className="fas fa-trash text-[10px]"></i>
+                                                                                <i className="fas fa-trash text-[9px]"></i>
                                                                             </button>
                                                                         </div>
                                                                     </td>
@@ -2825,60 +2825,60 @@ function initializeProjectDetail() {
                                                                             onClick={() => handleViewTaskDetail(subtask, task)}
                                                                             className="bg-gray-50 hover:bg-gray-100 cursor-pointer transition"
                                                                         >
-                                                                            <td className="px-6 py-2 whitespace-nowrap pl-12">
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <i className="fas fa-level-up-alt fa-rotate-90 text-xs text-gray-400"></i>
-                                                                                    <div className="text-xs font-medium text-gray-700">{subtask.title || 'Untitled subtask'}</div>
+                                                                            <td className="px-4 py-1.5 whitespace-nowrap pl-10">
+                                                                                <div className="flex items-center gap-1.5">
+                                                                                    <i className="fas fa-level-up-alt fa-rotate-90 text-[10px] text-gray-400"></i>
+                                                                                    <div className="text-[10px] font-medium text-gray-700">{subtask.title || 'Untitled subtask'}</div>
                                                                                 </div>
                                                                             </td>
-                                                                            <td className="px-6 py-2 whitespace-nowrap">
-                                                                                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusColor(subtask.status || 'To Do')}`}>
+                                                                            <td className="px-4 py-1.5 whitespace-nowrap">
+                                                                                <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${getStatusColor(subtask.status || 'To Do')}`}>
                                                                                     {subtask.status || 'To Do'}
                                                                                 </span>
                                                                             </td>
-                                                                            <td className="px-6 py-2 whitespace-nowrap">
+                                                                            <td className="px-4 py-1.5 whitespace-nowrap">
                                                                                 {subtask.assignee ? (
-                                                                                    <div className="flex items-center text-xs text-gray-500">
-                                                                                        <i className="fas fa-user text-[10px] text-gray-400 mr-1"></i>
+                                                                                    <div className="flex items-center text-[10px] text-gray-500">
+                                                                                        <i className="fas fa-user text-[9px] text-gray-400 mr-1"></i>
                                                                                         {subtask.assignee}
                                                                                     </div>
                                                                                 ) : (
-                                                                                    <span className="text-xs text-gray-400">—</span>
+                                                                                    <span className="text-[10px] text-gray-400">—</span>
                                                                                 )}
                                                                             </td>
-                                                                            <td className="px-6 py-2 whitespace-nowrap">
-                                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(subtask.priority || 'Medium')}`}>
-                                                                                    <i className="fas fa-bolt text-[10px] mr-1"></i>
+                                                                            <td className="px-4 py-1.5 whitespace-nowrap">
+                                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${getPriorityColor(subtask.priority || 'Medium')}`}>
+                                                                                    <i className="fas fa-bolt text-[9px] mr-1"></i>
                                                                                     {subtask.priority || 'Medium'}
                                                                                 </span>
                                                                             </td>
-                                                                            <td className="px-6 py-2 whitespace-nowrap">
-                                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${subtaskDue.pillClass}`}>
-                                                                                    <i className="fas fa-calendar-alt text-[10px] mr-1"></i>
+                                                                            <td className="px-4 py-1.5 whitespace-nowrap">
+                                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${subtaskDue.pillClass}`}>
+                                                                                    <i className="fas fa-calendar-alt text-[9px] mr-1"></i>
                                                                                     {subtaskDue.label}
                                                                                 </span>
                                                                             </td>
-                                                                            <td className="px-6 py-2 whitespace-nowrap text-center">
+                                                                            <td className="px-4 py-1.5 whitespace-nowrap text-center">
                                                                                 {subtask.comments?.length > 0 ? (
-                                                                                    <span className="inline-flex items-center text-xs text-gray-500">
-                                                                                        <i className="fas fa-comments text-[10px] text-gray-400 mr-1"></i>
+                                                                                    <span className="inline-flex items-center text-[10px] text-gray-500">
+                                                                                        <i className="fas fa-comments text-[9px] text-gray-400 mr-1"></i>
                                                                                         {subtask.comments.length}
                                                                                     </span>
                                                                                 ) : (
-                                                                                    <span className="text-xs text-gray-400">—</span>
+                                                                                    <span className="text-[10px] text-gray-400">—</span>
                                                                                 )}
                                                                             </td>
-                                                                            <td className="px-6 py-2 whitespace-nowrap text-right">
+                                                                            <td className="px-4 py-1.5 whitespace-nowrap text-right">
                                                                                 <div className="flex items-center justify-end gap-1">
                                                                                     <button
                                                                                         onClick={(e) => {
                                                                                             e.stopPropagation();
                                                                                             openTaskComments(e, subtask, { parentTask: task, isSubtask: true });
                                                                                         }}
-                                                                                        className="inline-flex items-center px-2 py-1 text-xs bg-primary-500 text-white rounded hover:bg-primary-600 transition-all font-medium"
+                                                                                        className="inline-flex items-center px-1.5 py-0.5 text-[10px] bg-primary-500 text-white rounded hover:bg-primary-600 transition-all font-medium"
                                                                                         title="Open comments"
                                                                                     >
-                                                                                        <i className="fas fa-comments text-[10px] mr-1"></i>
+                                                                                        <i className="fas fa-comments text-[9px] mr-0.5"></i>
                                                                                         {subtask.comments?.length || 0}
                                                                                     </button>
                                                                                     <button
@@ -2886,7 +2886,7 @@ function initializeProjectDetail() {
                                                                                             e.stopPropagation();
                                                                                             handleViewTaskDetail(subtask, task);
                                                                                         }}
-                                                                                        className="text-xs text-primary-600 hover:text-primary-700 font-semibold px-2"
+                                                                                        className="text-[10px] text-primary-600 hover:text-primary-700 font-semibold px-1.5"
                                                                                     >
                                                                                         View
                                                                                     </button>

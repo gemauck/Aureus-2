@@ -129,6 +129,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         const [employeeSortConfig, setEmployeeSortConfig] = useState({ key: null, direction: 'asc' });
         const [selectedEmployee, setSelectedEmployee] = useState(null);
         const [showEmployeeModal, setShowEmployeeModal] = useState(false);
+        const [viewingEmployeeId, setViewingEmployeeId] = useState(null);
         
         console.log('✅ LeavePlatform component rendering, user:', user?.email || 'none');
         useEffect(() => {
@@ -147,6 +148,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
 
         const leaveUtils = window.leaveUtils || {};
         const EmployeeManagementComponent = useMemo(() => window.EmployeeManagement, []);
+        const EmployeeDetailComponent = useMemo(() => window.EmployeeDetail, []);
         const isAdmin = user?.role?.toLowerCase() === 'admin';
 
         // South African BCEA leave types (centralised in leaveUtils)
@@ -666,8 +668,11 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         }, []);
 
         const handleEmployeeClick = useCallback((employee) => {
-            setSelectedEmployee(employee);
-            setShowEmployeeModal(true);
+            setViewingEmployeeId(employee.id);
+        }, []);
+
+        const handleBackFromEmployeeDetail = useCallback(() => {
+            setViewingEmployeeId(null);
         }, []);
 
         const handleSaveEmployee = useCallback(async (employeeData) => {
@@ -732,6 +737,22 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                 case 'employees':
                     if (!isAdmin) {
                         return <AccessNotice />;
+                    }
+                    // Show employee detail view if an employee is selected
+                    if (viewingEmployeeId && EmployeeDetailComponent && typeof EmployeeDetailComponent === 'function') {
+                        try {
+                            const Component = EmployeeDetailComponent;
+                            return (
+                                <Component
+                                    employeeId={viewingEmployeeId}
+                                    onBack={handleBackFromEmployeeDetail}
+                                    user={user}
+                                    isAdmin={isAdmin}
+                                />
+                            );
+                        } catch (err) {
+                            console.error('LeavePlatform: error rendering EmployeeDetail component', err);
+                        }
                     }
                     // Use EmployeeManagement component if available
                     if (EmployeeManagementComponent && typeof EmployeeManagementComponent === 'function') {
@@ -804,7 +825,8 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                                                 {filteredAndSortedEmployees.map(emp => (
                                                     <tr 
                                                         key={emp.id} 
-                                                        className="hover:bg-gray-50 transition-colors"
+                                                        onClick={() => handleEmployeeClick(emp)}
+                                                        className="hover:bg-gray-50 transition-colors cursor-pointer"
                                                     >
                                                         <td className="px-4 py-3 text-sm font-medium text-gray-900">{emp.name || 'N/A'}</td>
                                                         <td className="px-4 py-3 text-sm text-gray-500">{emp.email || 'N/A'}</td>
