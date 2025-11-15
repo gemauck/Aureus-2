@@ -102,31 +102,58 @@ const getApplicationDays = (application, calculateWorkingDays) => {
 };
 
 const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
+    // Get auth hook safely - only call it if it's available and we're in a React component context
+    let user = null;
+    let isAdmin = false;
+    
     try {
-        // Get auth hook safely
-        const authHook = window.useAuth || (() => ({ user: null }));
-        let user = null;
-        try {
-            const authResult = authHook();
-            user = authResult?.user || authResult || null;
-        } catch (e) {
-            console.warn('⚠️ LeavePlatform: Error getting user from useAuth:', e);
-            user = null;
+        // Only use useAuth if we're in a proper React component context
+        // Check if React is available and if we can safely use hooks
+        if (typeof window !== 'undefined' && window.useAuth && typeof window.useAuth === 'function') {
+            try {
+                const authResult = window.useAuth();
+                user = authResult?.user || authResult || null;
+                isAdmin = user?.role?.toLowerCase() === 'admin' || false;
+            } catch (e) {
+                console.warn('⚠️ LeavePlatform: Error getting user from useAuth:', e);
+                // Fallback: try to get user from storage
+                if (window.storage?.getUser) {
+                    try {
+                        user = window.storage.getUser();
+                        isAdmin = user?.role?.toLowerCase() === 'admin' || false;
+                    } catch (storageError) {
+                        console.warn('⚠️ LeavePlatform: Error getting user from storage:', storageError);
+                    }
+                }
+            }
+        } else {
+            // Fallback: try to get user from storage
+            if (window.storage?.getUser) {
+                try {
+                    user = window.storage.getUser();
+                    isAdmin = user?.role?.toLowerCase() === 'admin' || false;
+                } catch (storageError) {
+                    console.warn('⚠️ LeavePlatform: Error getting user from storage:', storageError);
+                }
+            }
         }
-        
-        const [currentTab, setCurrentTab] = useState(initialTab);
-        const [loading, setLoading] = useState(false);
-        const [leaveApplications, setLeaveApplications] = useState([]);
-        const [leaveBalances, setLeaveBalances] = useState([]);
-        const [employees, setEmployees] = useState([]);
-        const [departments, setDepartments] = useState([]);
-        const [leaveApprovers, setLeaveApprovers] = useState([]);
-        const [birthdays, setBirthdays] = useState([]);
-        const [calendarView, setCalendarView] = useState('month');
-        
-        // Employee management state
-        const [employeeSearchTerm, setEmployeeSearchTerm] = useState('');
-        const [employeeSortConfig, setEmployeeSortConfig] = useState({ key: null, direction: 'asc' });
+    } catch (e) {
+        console.warn('⚠️ LeavePlatform: Error initializing auth:', e);
+    }
+    
+    const [currentTab, setCurrentTab] = useState(initialTab);
+    const [loading, setLoading] = useState(false);
+    const [leaveApplications, setLeaveApplications] = useState([]);
+    const [leaveBalances, setLeaveBalances] = useState([]);
+    const [employees, setEmployees] = useState([]);
+    const [departments, setDepartments] = useState([]);
+    const [leaveApprovers, setLeaveApprovers] = useState([]);
+    const [birthdays, setBirthdays] = useState([]);
+    const [calendarView, setCalendarView] = useState('month');
+    
+    // Employee management state
+    const [employeeSearchTerm, setEmployeeSearchTerm] = useState('');
+    const [employeeSortConfig, setEmployeeSortConfig] = useState({ key: null, direction: 'asc' });
         const [selectedEmployee, setSelectedEmployee] = useState(null);
         const [showEmployeeModal, setShowEmployeeModal] = useState(false);
         const [viewingEmployeeId, setViewingEmployeeId] = useState(null);
@@ -222,7 +249,10 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         }, []);
 
         const leaveUtils = window.leaveUtils || {};
-        const isAdmin = user?.role?.toLowerCase() === 'admin';
+        // Update isAdmin if user role is available
+        if (user?.role) {
+            isAdmin = user.role.toLowerCase() === 'admin';
+        }
 
         // South African BCEA leave types (centralised in leaveUtils)
         const leaveTypes = leaveUtils.BCEA_LEAVE_TYPES || [
@@ -826,16 +856,43 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                         if (EmployeeDetailComponent && typeof EmployeeDetailComponent === 'function') {
                             try {
                                 const Component = EmployeeDetailComponent;
+                                // Ensure all props are defined before rendering
+                                if (!viewingEmployeeId) {
+                                    console.warn('⚠️ LeavePlatform: viewingEmployeeId is not set');
+                                    return (
+                                        <div className="text-center py-12">
+                                            <p className="text-gray-600">No employee selected</p>
+                                            <button
+                                                onClick={handleBackFromEmployeeDetail}
+                                                className="mt-4 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                                            >
+                                                Go Back
+                                            </button>
+                                        </div>
+                                    );
+                                }
                                 return (
                                     <Component
                                         employeeId={viewingEmployeeId}
                                         onBack={handleBackFromEmployeeDetail}
-                                        user={user}
-                                        isAdmin={isAdmin}
+                                        user={user || null}
+                                        isAdmin={isAdmin || false}
                                     />
                                 );
                             } catch (err) {
                                 console.error('LeavePlatform: error rendering EmployeeDetail component', err);
+                                // Return error UI instead of crashing
+                                return (
+                                    <div className="text-center py-12">
+                                        <p className="text-red-600">Error loading employee details</p>
+                                        <button
+                                            onClick={handleBackFromEmployeeDetail}
+                                            className="mt-4 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                                        >
+                                            Go Back
+                                        </button>
+                                    </div>
+                                );
                             }
                         } else {
                             console.warn('⚠️ EmployeeDetailComponent not available, showing loading message');
@@ -1141,24 +1198,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             </div>
         </div>
     );
-    } catch (error) {
-        console.error('❌ LeavePlatform: Error rendering component:', error);
-        return (
-            <div className="p-8 text-center">
-                <div className="text-red-600 mb-4">
-                    <i className="fas fa-exclamation-triangle text-4xl mb-4"></i>
-                    <h2 className="text-xl font-semibold mb-2">Error Loading Leave Platform</h2>
-                    <p className="text-sm text-gray-600">{error.message || 'Unknown error'}</p>
-                    <button 
-                        onClick={() => window.location.reload()} 
-                        className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-                    >
-                        Reload Page
-                    </button>
-                </div>
-            </div>
-        );
-    }
 };
 
 // My Leave View

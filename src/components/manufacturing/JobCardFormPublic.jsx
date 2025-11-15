@@ -140,6 +140,7 @@ const JobCardFormPublic = () => {
   const isDrawingRef = useRef(false);
   const lastEventTypeRef = useRef(null); // Track last event type to prevent double handling
   const [showMapModal, setShowMapModal] = useState(false);
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const mapMarkerRef = useRef(null);
@@ -193,7 +194,8 @@ const JobCardFormPublic = () => {
 
     const ratio = window.devicePixelRatio || 1;
     const width = wrapper.clientWidth;
-    const height = 250; // Increased to 250px for better visibility and signing space
+    // Use wrapper height if available (fullscreen modal), otherwise default to 250px
+    const height = wrapper.clientHeight > 0 ? wrapper.clientHeight : 250;
 
     canvas.width = width * ratio;
     canvas.height = height * ratio;
@@ -216,8 +218,12 @@ const JobCardFormPublic = () => {
     canvas.style.zIndex = '2';
     canvas.style.display = 'block';
     canvas.style.width = '100%';
-    canvas.style.height = '250px';
-    canvas.style.minHeight = '250px';
+    if (wrapper.clientHeight > 0) {
+      canvas.style.height = `${wrapper.clientHeight}px`;
+    } else {
+      canvas.style.height = '250px';
+      canvas.style.minHeight = '250px';
+    }
   }, []);
 
   const getSignaturePosition = useCallback((event) => {
@@ -934,6 +940,13 @@ const JobCardFormPublic = () => {
   }, [formData.siteId, availableSites]);
 
   useEffect(() => {
+    // Resize when modal opens/closes
+    if (showSignatureModal) {
+      // Small delay to ensure DOM is ready
+      setTimeout(() => {
+        resizeSignatureCanvas();
+      }, 100);
+    }
     resizeSignatureCanvas();
 
     const canvas = signatureCanvasRef.current;
@@ -999,7 +1012,7 @@ const JobCardFormPublic = () => {
       
       window.removeEventListener('resize', handleResize);
     };
-  }, [drawSignature, endSignature, resizeSignatureCanvas, startSignature]);
+  }, [drawSignature, endSignature, resizeSignatureCanvas, startSignature, showSignatureModal]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -1028,15 +1041,56 @@ const JobCardFormPublic = () => {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
 
-      files.forEach(file => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
+    // Process files sequentially to avoid race conditions
+    files.forEach((file, index) => {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        console.warn(`Skipping non-image file: ${file.name}`);
+        return;
+      }
+
+      // Validate file size (10MB limit)
+      const maxSize = 10 * 1024 * 1024; // 10MB in bytes
+      if (file.size > maxSize) {
+        console.warn(`File ${file.name} exceeds 10MB limit, skipping`);
+        alert(`File ${file.name} is too large. Maximum size is 10MB.`);
+        return;
+      }
+
+      const reader = new FileReader();
+      
+      reader.onloadend = () => {
+        try {
           const dataUrl = reader.result;
-          setSelectedPhotos(prev => [...prev, { name: file.name, url: dataUrl, size: file.size }]);
-          setFormData(prev => ({ ...prev, photos: [...prev.photos, dataUrl] }));
-        };
-        reader.readAsDataURL(file);
-      });
+          if (dataUrl) {
+            // Update both states atomically
+            setSelectedPhotos(prev => {
+              const updated = [...prev, { name: file.name, url: dataUrl, size: file.size }];
+              // Sync with formData
+              setFormData(prevForm => ({
+                ...prevForm,
+                photos: updated.map(photo => typeof photo === 'string' ? photo : photo.url)
+              }));
+              return updated;
+            });
+            console.log(`✅ Photo ${file.name} loaded successfully`);
+          }
+        } catch (error) {
+          console.error(`❌ Error processing photo ${file.name}:`, error);
+          alert(`Failed to load photo: ${file.name}`);
+        }
+      };
+
+      reader.onerror = (error) => {
+        console.error(`❌ FileReader error for ${file.name}:`, error);
+        alert(`Failed to read file: ${file.name}`);
+      };
+
+      reader.readAsDataURL(file);
+    });
+
+    // Reset input to allow selecting the same file again
+    event.target.value = '';
   };
 
   const handleRemovePhoto = (index) => {
@@ -1324,17 +1378,38 @@ const JobCardFormPublic = () => {
       if (isOnline) {
         try {
           console.log(`📡 ${isUpdate ? 'Updating' : 'Submitting'} job card to public API...`);
+          
+          // Ensure photos array is properly formatted
+          const submissionData = {
+            ...jobCardData,
+            photos: Array.isArray(jobCardData.photos) 
+              ? jobCardData.photos.filter(photo => {
+                  if (!photo) return false;
+                  // Handle both string URLs and object URLs
+                  const photoUrl = typeof photo === 'string' ? photo : (photo.url || '');
+                  return photoUrl && photoUrl.length > 0;
+                })
+              : []
+          };
+
           const response = await fetch('/api/public/jobcards', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify(jobCardData)
+            body: JSON.stringify(submissionData)
           });
 
           if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-            throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+            let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+            try {
+              const errorData = await response.json();
+              errorMessage = errorData.error || errorData.message || errorMessage;
+            } catch (parseError) {
+              // If JSON parsing fails, use status text
+              console.warn('Could not parse error response:', parseError);
+            }
+            throw new Error(errorMessage);
           }
 
           const result = await response.json();
@@ -1359,7 +1434,8 @@ const JobCardFormPublic = () => {
           console.error(`❌ Failed to ${isUpdate ? 'update' : 'submit'} job card to API:`, error);
           // Partial success - saved locally but API failed
           setSubmissionStatus('error');
-          setSubmissionMessage(`Job card saved locally, but failed to ${isUpdate ? 'update on' : 'submit to'} server: ${error.message}\n\nIt will be synced when you are online.`);
+          const errorMsg = error.message || 'Unknown error occurred';
+          setSubmissionMessage(`Job card saved locally, but failed to ${isUpdate ? 'update on' : 'submit to'} server:\n${errorMsg}\n\nIt will be synced when you are online.`);
           setSubmittedJobCardId(jobCardData.id);
         }
       } else {
@@ -1960,7 +2036,7 @@ const JobCardFormPublic = () => {
             </span>
           )}
         </header>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 sm:p-6 text-center">
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 sm:p-6 text-center hover:border-blue-400 transition-colors">
               <input
                 type="file"
                 id="photoUpload"
@@ -1968,37 +2044,48 @@ const JobCardFormPublic = () => {
                 className="hidden"
                 accept="image/*"
                 multiple
+                capture="environment"
               />
               <label
                 htmlFor="photoUpload"
-                className="cursor-pointer block"
+                className="cursor-pointer block touch-manipulation"
               >
                 <i className="fas fa-camera text-3xl sm:text-4xl text-gray-400 mb-2"></i>
-                <p className="text-sm sm:text-base text-gray-600">
-              Tap to upload photos or drag and drop
+                <p className="text-sm sm:text-base text-gray-600 font-medium">
+                  Tap to upload photos or drag and drop
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-              Supports mobile camera capture • Max 10MB each
+                  Supports mobile camera capture • Max 10MB each
                 </p>
               </label>
             </div>
             {selectedPhotos.length > 0 && (
-              <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {selectedPhotos.map((photo, idx) => (
-              <div key={idx} className="relative group rounded-lg overflow-hidden border border-gray-200">
+                  <div key={idx} className="relative group rounded-lg overflow-hidden border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
                     <img
                       src={typeof photo === 'string' ? photo : photo.url}
                       alt={`Photo ${idx + 1}`}
-                  className="w-full h-24 sm:h-32 object-cover"
+                      className="w-full h-24 sm:h-32 object-cover"
+                      onError={(e) => {
+                        console.error(`Failed to load photo ${idx + 1}`);
+                        e.target.style.display = 'none';
+                      }}
                     />
                     <button
                       type="button"
                       onClick={() => handleRemovePhoto(idx)}
-                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center opacity-0 group-hover:opacity-100 transition touch-manipulation"
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center opacity-90 sm:opacity-0 group-hover:opacity-100 hover:bg-red-600 transition touch-manipulation shadow-lg"
                       title="Remove photo"
+                      aria-label={`Remove photo ${idx + 1}`}
                     >
                       <i className="fas fa-times text-xs"></i>
                     </button>
+                    {typeof photo === 'object' && photo.name && (
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] px-1 py-0.5 truncate opacity-0 group-hover:opacity-100 transition">
+                        {photo.name}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -2095,10 +2182,28 @@ const JobCardFormPublic = () => {
             <label className="block text-sm font-medium text-gray-700 mb-3">
               Customer Signature *
             </label>
+            {/* Mobile: Button to open fullscreen signature */}
+            <div className="sm:hidden mb-3">
+              <button
+                type="button"
+                onClick={() => setShowSignatureModal(true)}
+                className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 font-semibold touch-manipulation flex items-center justify-center gap-2"
+              >
+                <i className="fas fa-signature"></i>
+                {hasSignature ? 'Edit Signature' : 'Sign Here'}
+              </button>
+              {hasSignature && (
+                <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
+                  <i className="fas fa-check-circle text-green-600"></i>
+                  <span className="text-sm text-green-700 font-medium">Signature captured</span>
+                </div>
+              )}
+            </div>
+            {/* Desktop: Inline signature */}
             <div
               ref={signatureWrapperRef}
               className={[
-                'border-2 rounded-lg overflow-hidden relative bg-white signature-wrapper',
+                'hidden sm:block border-2 rounded-lg overflow-hidden relative bg-white signature-wrapper',
                 hasSignature ? 'border-blue-500 shadow-md' : 'border-gray-300 border-dashed'
               ].join(' ')}
               style={{ 
@@ -2170,7 +2275,7 @@ const JobCardFormPublic = () => {
               <button
                 type="button"
                 onClick={clearSignature}
-                className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                className="text-sm font-medium text-blue-600 hover:text-blue-800 touch-manipulation"
               >
                 Clear signature
               </button>
@@ -2432,16 +2537,17 @@ const JobCardFormPublic = () => {
         {/* Footer removed - navigation buttons are now inline at end of each step */}
       </div>
 
-      {/* Map Selection Modal */}
+      {/* Map Selection Modal - Fullscreen on Mobile */}
       {showMapModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 sm:p-4">
+          <div className="bg-white shadow-xl w-full h-full sm:rounded-xl sm:w-full sm:max-w-4xl sm:h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
               <h3 className="text-lg font-semibold text-gray-900">Select Location on Map</h3>
               <button
                 type="button"
                 onClick={handleCloseMap}
-                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 touch-manipulation"
+                aria-label="Close map"
               >
                 <i className="fas fa-times text-xl"></i>
               </button>
@@ -2457,7 +2563,7 @@ const JobCardFormPublic = () => {
               <div className="flex flex-col sm:flex-row gap-3">
                 <div className="flex-1">
                   <p className="text-sm text-gray-600 mb-1">Selected Location:</p>
-                  <p className="text-sm font-medium text-gray-900">{formData.location || 'Click on the map to select a location'}</p>
+                  <p className="text-sm font-medium text-gray-900 break-words">{formData.location || 'Click on the map to select a location'}</p>
                   {formData.latitude && formData.longitude && (
                     <p className="text-xs text-gray-500 mt-1">
                       Coordinates: {formData.latitude}, {formData.longitude}
@@ -2467,9 +2573,110 @@ const JobCardFormPublic = () => {
                 <button
                   type="button"
                   onClick={handleCloseMap}
-                  className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 font-semibold touch-manipulation"
+                  className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 font-semibold touch-manipulation whitespace-nowrap"
                 >
                   Use This Location
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Signature Modal - Fullscreen on Mobile */}
+      {showSignatureModal && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-white sm:bg-black sm:bg-opacity-50 sm:items-center sm:justify-center sm:p-4">
+          <div className="bg-white shadow-xl w-full h-full sm:rounded-xl sm:w-full sm:max-w-2xl sm:h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white flex-shrink-0">
+              <h3 className="text-lg font-semibold text-gray-900">Customer Signature</h3>
+              <button
+                type="button"
+                onClick={() => setShowSignatureModal(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 touch-manipulation"
+                aria-label="Close signature"
+              >
+                <i className="fas fa-times text-xl"></i>
+              </button>
+            </div>
+            <div className="flex-1 flex flex-col p-4 min-h-0 overflow-hidden">
+              <div
+                ref={signatureWrapperRef}
+                className={[
+                  'flex-1 border-2 rounded-lg overflow-hidden relative bg-white signature-wrapper',
+                  hasSignature ? 'border-blue-500 shadow-md' : 'border-gray-300 border-dashed'
+                ].join(' ')}
+                style={{ 
+                  touchAction: 'none', 
+                  WebkitTouchCallout: 'none', 
+                  WebkitUserSelect: 'none', 
+                  userSelect: 'none',
+                  position: 'relative',
+                  zIndex: 1,
+                  WebkitTapHighlightColor: 'transparent',
+                  minHeight: '300px',
+                  width: '100%'
+                }}
+              >
+                <canvas
+                  ref={signatureCanvasRef}
+                  className="w-full h-full signature-canvas"
+                  style={{ 
+                    touchAction: 'none', 
+                    display: 'block',
+                    pointerEvents: 'auto',
+                    WebkitTouchCallout: 'none',
+                    WebkitUserSelect: 'none',
+                    userSelect: 'none',
+                    WebkitTapHighlightColor: 'transparent',
+                    cursor: 'crosshair',
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    zIndex: 2,
+                    backgroundColor: '#ffffff',
+                    WebkitAppearance: 'none',
+                    appearance: 'none',
+                    width: '100%',
+                    height: '100%'
+                  }}
+                />
+                {!hasSignature && (
+                  <div 
+                    className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
+                    style={{ zIndex: 0 }}
+                  >
+                    <i className="fas fa-signature text-4xl text-gray-300 mb-3"></i>
+                    <p className="text-base text-gray-400 text-center px-4 font-medium">
+                      Sign here with finger or stylus
+                    </p>
+                    <p className="text-sm text-gray-400 text-center px-4 mt-2">
+                      Touch and drag to create your signature
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mt-4 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={clearSignature}
+                  className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium touch-manipulation"
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (hasSignature) {
+                      setShowSignatureModal(false);
+                    } else {
+                      alert('Please provide a signature before closing.');
+                    }
+                  }}
+                  className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 font-semibold touch-manipulation"
+                >
+                  Done
                 </button>
               </div>
             </div>

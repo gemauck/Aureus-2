@@ -24,7 +24,28 @@ try {
 
 const { useState, useEffect, useCallback } = ReactHooks;
 
-const EmployeeDetail = ({ employeeId, onBack, user, isAdmin }) => {
+const EmployeeDetail = (props) => {
+    // Safely destructure props with defaults
+    const { employeeId, onBack, user, isAdmin } = props || {};
+    
+    // Early return if required props are missing
+    if (!employeeId) {
+        console.warn('⚠️ EmployeeDetail: employeeId is required but not provided', props);
+        return (
+            <div className="text-center py-12">
+                <p className="text-red-600">Error: Employee ID is required</p>
+                {onBack && (
+                    <button
+                        onClick={onBack}
+                        className="mt-4 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                    >
+                        Go Back
+                    </button>
+                )}
+            </div>
+        );
+    }
+    
     const [employee, setEmployee] = useState(null);
     const [leaveBalances, setLeaveBalances] = useState([]);
     const [leaveApplications, setLeaveApplications] = useState([]);

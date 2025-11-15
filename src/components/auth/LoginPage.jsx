@@ -480,6 +480,35 @@ const LoginPage = () => {
                         min-height: 48px !important;
                     }
                     
+                    .password-wrapper {
+                        display: flex !important;
+                        align-items: center !important;
+                        position: relative !important;
+                    }
+                    
+                    .password-toggle {
+                        position: absolute !important;
+                        right: clamp(0.75rem, 3vw, 1rem) !important;
+                        top: 50% !important;
+                        transform: translateY(-50%) !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        padding: 0 !important;
+                        min-width: 44px !important;
+                        min-height: 44px !important;
+                        width: 44px !important;
+                        height: 44px !important;
+                    }
+                    
+                    .password-toggle i {
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        font-size: 1rem !important;
+                        line-height: 1 !important;
+                    }
+                    
                     .remember-me-container {
                         margin: clamp(0.75rem, 2vw, 1rem) 0 !important;
                         display: flex !important;
@@ -644,6 +673,8 @@ const LoginPage = () => {
                 /* Password Input Wrapper */
                 .password-wrapper {
                     position: relative;
+                    display: flex;
+                    align-items: center;
                 }
                 
                 .password-toggle {
@@ -655,14 +686,27 @@ const LoginPage = () => {
                     border: none;
                     color: #6b7280;
                     cursor: pointer;
-                    padding: 0.5rem;
+                    padding: 0;
                     display: flex;
                     align-items: center;
                     justify-content: center;
                     touch-action: manipulation;
                     min-width: 44px;
                     min-height: 44px;
+                    width: 44px;
+                    height: 44px;
                     transition: color 0.2s ease;
+                    z-index: 1;
+                }
+                
+                .password-toggle i {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 100%;
+                    height: 100%;
+                    font-size: 1rem;
+                    line-height: 1;
                 }
                 
                 .password-toggle:hover,
@@ -903,7 +947,22 @@ const LoginPage = () => {
                     .password-toggle {
                         min-width: 44px !important;
                         min-height: 44px !important;
+                        width: 44px !important;
+                        height: 44px !important;
                         right: clamp(0.75rem, 3vw, 1rem) !important;
+                        top: 50% !important;
+                        transform: translateY(-50%) !important;
+                        padding: 0 !important;
+                    }
+                    
+                    .password-toggle i {
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        width: 100% !important;
+                        height: 100% !important;
+                        font-size: 1rem !important;
+                        line-height: 1 !important;
                     }
                     
                     .remember-me-container {
