@@ -2081,9 +2081,9 @@ const ManagementMeetingNotes = () => {
                                 return weeks.map((week, weekIndex) => {
                                     const rawId = getWeekIdentifier(week);
                                     const identifier = rawId || `week-${weekIndex}`;
-                                                        const deptNote = week.departmentNotes?.find(
-                                                            (dn) => dn.departmentId === dept.id
-                                                        );
+                                    const deptNote = week.departmentNotes?.find(
+                                        (dn) => dn.departmentId === dept.id
+                                    );
 
                                     return (
                                         <div
