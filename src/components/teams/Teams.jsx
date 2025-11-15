@@ -1,5 +1,5 @@
 // Get dependencies from window
-const { useState, useEffect, useMemo, useCallback } = React;
+const { useState, useEffect, useMemo, useCallback, useRef } = React;
 const storage = window.storage;
 const DocumentModal = window.DocumentModal;
 const WorkflowModal = window.WorkflowModal;
@@ -282,6 +282,9 @@ const Teams = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [isReady, setIsReady] = useState(false);
     
+    // Track initial mount to avoid overwriting URL params on first load
+    const isInitialMount = useRef(true);
+    
     // Modal states
     const [showDocumentModal, setShowDocumentModal] = useState(false);
     const [showWorkflowModal, setShowWorkflowModal] = useState(false);
@@ -331,33 +334,55 @@ const Teams = () => {
         }
     }, [isAdminUser, isTeamAccessible]);
     
-    // Update URL when tab changes
+    // Update URL when tab changes - preserve existing params like month and week
     useEffect(() => {
-        if (selectedTeam?.id === 'management' && activeTab === 'meeting-notes') {
-            const url = new URL(window.location);
-            url.searchParams.set('tab', 'meeting-notes');
-            if (url.searchParams.get('team') !== 'management') {
-                url.searchParams.set('team', 'management');
+        // On initial mount, check if URL already has the correct params
+        // If so, don't update URL to preserve params like month and week
+        if (isInitialMount.current) {
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlTab = urlParams.get('tab') || 'overview';
+            const urlTeam = urlParams.get('team');
+            
+            const tabMatches = (urlTab === 'overview' && activeTab === 'overview') || 
+                              (urlTab === activeTab);
+            const teamMatches = (!urlTeam && !selectedTeam?.id) || 
+                               (urlTeam === selectedTeam?.id);
+            
+            // If URL already matches state, mark as not initial mount and return
+            // This preserves existing URL params (month, week, etc.)
+            if (tabMatches && teamMatches) {
+                isInitialMount.current = false;
+                return;
             }
-            window.history.pushState({ tab: activeTab, team: selectedTeam.id }, '', url);
+            isInitialMount.current = false;
+        }
+        
+        const url = new URL(window.location);
+        
+        if (selectedTeam?.id === 'management' && activeTab === 'meeting-notes') {
+            url.searchParams.set('tab', 'meeting-notes');
+            url.searchParams.set('team', 'management');
+            // Preserve month and week params for meeting-notes
+            // (month and week are managed by ManagementMeetingNotes component)
         } else if (activeTab !== 'overview') {
-            const url = new URL(window.location);
             url.searchParams.set('tab', activeTab);
             if (selectedTeam?.id) {
                 url.searchParams.set('team', selectedTeam.id);
             }
-            window.history.pushState({ tab: activeTab, team: selectedTeam?.id }, '', url);
         } else {
             // Remove tab param for overview
-            const url = new URL(window.location);
             url.searchParams.delete('tab');
             if (selectedTeam?.id) {
                 url.searchParams.set('team', selectedTeam.id);
             } else {
                 url.searchParams.delete('team');
             }
-            window.history.pushState({ tab: activeTab, team: selectedTeam?.id }, '', url);
         }
+        
+        // Preserve all other existing params (like month, week, etc.)
+        // They are already in the URL object, so we just need to make sure we don't delete them
+        
+        window.history.pushState({ tab: activeTab, team: selectedTeam?.id }, '', url);
     }, [activeTab, selectedTeam]);
     
     // Listen for browser back/forward
