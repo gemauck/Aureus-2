@@ -181,22 +181,62 @@ const LoginPage = () => {
     useEffect(() => {
         document.body.classList.add('login-page');
         
-        // Dynamic viewport height calculation for mobile
+        // Dynamic viewport height calculation for mobile (iPhone 13 and similar)
         const setViewportHeight = () => {
             const vh = window.innerHeight * 0.01;
             document.documentElement.style.setProperty('--vh', `${vh}px`);
+            
+            // iPhone 13 specific: Ensure proper height calculation
+            // Account for safe area insets on notched devices
+            const safeAreaTop = parseInt(getComputedStyle(document.documentElement).getPropertyValue('env(safe-area-inset-top)') || '0', 10);
+            const safeAreaBottom = parseInt(getComputedStyle(document.documentElement).getPropertyValue('env(safe-area-inset-bottom)') || '0', 10);
+            const availableHeight = window.innerHeight - safeAreaTop - safeAreaBottom;
+            const adjustedVh = availableHeight * 0.01;
+            document.documentElement.style.setProperty('--vh-adjusted', `${adjustedVh}px`);
         };
         
         setViewportHeight();
-        window.addEventListener('resize', setViewportHeight);
-        window.addEventListener('orientationchange', () => {
-            setTimeout(setViewportHeight, 100);
-        });
+        
+        // Handle resize events
+        const handleResize = () => {
+            setViewportHeight();
+        };
+        
+        // Handle orientation changes (with delay for iOS)
+        const handleOrientationChange = () => {
+            setTimeout(() => {
+                setViewportHeight();
+                // Force a reflow to ensure proper layout
+                if (wrapperRef.current) {
+                    wrapperRef.current.offsetHeight;
+                }
+            }, 150);
+        };
+        
+        // Handle visual viewport changes (keyboard show/hide on iOS)
+        const handleVisualViewportChange = () => {
+            if (window.visualViewport) {
+                setViewportHeight();
+            }
+        };
+        
+        window.addEventListener('resize', handleResize);
+        window.addEventListener('orientationchange', handleOrientationChange);
+        
+        // Visual viewport API for better keyboard handling on iOS
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', handleVisualViewportChange);
+            window.visualViewport.addEventListener('scroll', handleVisualViewportChange);
+        }
         
         return () => {
             document.body.classList.remove('login-page');
-            window.removeEventListener('resize', setViewportHeight);
-            window.removeEventListener('orientationchange', setViewportHeight);
+            window.removeEventListener('resize', handleResize);
+            window.removeEventListener('orientationchange', handleOrientationChange);
+            if (window.visualViewport) {
+                window.visualViewport.removeEventListener('resize', handleVisualViewportChange);
+                window.visualViewport.removeEventListener('scroll', handleVisualViewportChange);
+            }
         };
     }, []);
 
@@ -791,6 +831,100 @@ const LoginPage = () => {
                     
                     .login-form {
                         gap: 1rem;
+                    }
+                }
+                
+                /* iPhone 13 / iPhone 12 / iPhone 11 Pro Max (390px width) - Optimized */
+                @media (min-width: 375px) and (max-width: 390px) {
+                    /* Prevent horizontal scroll */
+                    body.login-page,
+                    .login-wrapper,
+                    .login-card,
+                    .login-form-container,
+                    .login-form {
+                        overflow-x: hidden !important;
+                        max-width: 100vw !important;
+                        width: 100% !important;
+                    }
+                    
+                    .login-wrapper {
+                        padding: 0 !important;
+                        padding-top: env(safe-area-inset-top, 0) !important;
+                        padding-bottom: env(safe-area-inset-bottom, 0) !important;
+                        box-sizing: border-box !important;
+                    }
+                    
+                    .login-header {
+                        padding: clamp(0.875rem, 2.5vw, 1rem) clamp(1rem, 4vw, 1.5rem) !important;
+                        min-height: 56px !important;
+                        max-height: 60px !important;
+                    }
+                    
+                    .login-brand {
+                        font-size: clamp(1.375rem, 4.5vw, 1.5rem) !important;
+                    }
+                    
+                    .login-form-container {
+                        padding: clamp(1.75rem, 5vw, 2rem) clamp(1.25rem, 4vw, 1.75rem) !important;
+                        padding-bottom: clamp(2.25rem, 6vw, 3rem) !important;
+                        overflow-y: auto !important;
+                        -webkit-overflow-scrolling: touch !important;
+                        /* Flexible height: allows full height when keyboard hidden, scrolls when keyboard visible */
+                        /* iPhone 13 viewport: 844px height, header ~60px, safe areas ~44px top, ~34px bottom */
+                        /* Use 100% of available space, but allow scrolling when keyboard reduces viewport */
+                        flex: 1 1 auto !important;
+                        min-height: 0 !important;
+                        /* Max height ensures form can scroll when keyboard appears */
+                        max-height: calc(100vh - env(safe-area-inset-top, 44px) - env(safe-area-inset-bottom, 34px) - 60px) !important;
+                    }
+                    
+                    .login-title {
+                        font-size: clamp(1.625rem, 5vw, 1.875rem) !important;
+                        margin-bottom: 0.625rem !important;
+                    }
+                    
+                    .login-subtitle {
+                        font-size: clamp(0.9375rem, 3vw, 1rem) !important;
+                        margin-bottom: clamp(1.75rem, 5vw, 2rem) !important;
+                    }
+                    
+                    .form-input {
+                        padding: clamp(0.9375rem, 3vw, 1rem) clamp(0.9375rem, 3vw, 1.125rem) !important;
+                        font-size: 16px !important; /* Critical: Prevents iOS zoom */
+                        min-height: 48px !important;
+                    }
+                    
+                    .submit-button {
+                        padding: clamp(0.9375rem, 3vw, 1rem) clamp(1.25rem, 4vw, 1.5rem) !important;
+                        min-height: 52px !important;
+                        font-size: clamp(0.9375rem, 3vw, 1rem) !important;
+                    }
+                    
+                    .password-toggle {
+                        min-width: 44px !important;
+                        min-height: 44px !important;
+                        right: clamp(0.75rem, 3vw, 1rem) !important;
+                    }
+                    
+                    .remember-me-container {
+                        margin: clamp(0.875rem, 2vw, 1rem) 0 !important;
+                        min-height: 44px !important;
+                    }
+                    
+                    .remember-me-checkbox {
+                        width: 20px !important;
+                        height: 20px !important;
+                        min-width: 20px !important;
+                        min-height: 20px !important;
+                    }
+                    
+                    .forgot-link {
+                        font-size: clamp(0.875rem, 3vw, 0.9375rem) !important;
+                        padding: 0.625rem !important;
+                        min-height: 44px !important;
+                        display: inline-flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
                     }
                 }
                 
