@@ -118,13 +118,17 @@
     
     <!-- Mobile Optimizations CSS -->
     <link rel="stylesheet" href="mobile-optimizations.css">
-    <link rel="stylesheet" href="clients-width-fix.css">
     
     <!-- Mobile Refresh 2025 - Complete mobile overhaul -->
     <link rel="stylesheet" href="mobile-refresh-2025.css">
     
     <!-- Mobile Critical Fix - Fixes content disappearing below 766px -->
     <link rel="stylesheet" href="mobile-critical-fix.css">
+    
+    <!-- Clients Width Fix - MUST LOAD AFTER mobile-critical-fix.css to override flex rules -->
+    <link rel="stylesheet" href="clients-width-fix.css">
+    <!-- Clients Width Fix JavaScript - Forces full width on desktop -->
+    <script defer src="clients-width-fix.js"></script>
     
     <!-- Mobile NUCLEAR Fix - Most aggressive fix possible -->
     <link rel="stylesheet" href="mobile-nuclear-fix.css?v=20250106-mobile-fix">

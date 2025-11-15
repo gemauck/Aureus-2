@@ -325,15 +325,22 @@
     opacity: 1 !important;
     width: 100% !important;
     max-width: 100% !important;
-    min-height: 150px !important;
-    height: auto !important;
+    min-height: 250px !important;
+    height: 250px !important;
     background-color: white !important;
-    border: 2px solid #e5e7eb !important;
-    border-radius: 8px !important;
+    border: none !important;
+    border-radius: 0 !important;
     touch-action: none !important;
+    -webkit-touch-callout: none !important;
+    -webkit-user-select: none !important;
+    -webkit-tap-highlight-color: transparent !important;
+    user-select: none !important;
     pointer-events: auto !important;
     position: relative !important;
-    z-index: 1 !important;
+    z-index: 2 !important;
+    cursor: crosshair !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
   }
   
   body.job-card-public .signature-wrapper,
@@ -345,9 +352,34 @@
     width: 100% !important;
     max-width: 100% !important;
     margin: 0.5rem 0 !important;
-    padding: 0.5rem !important;
+    padding: 0 !important;
+    min-height: 250px !important;
+    height: 250px !important;
     touch-action: none !important;
+    -webkit-touch-callout: none !important;
+    -webkit-user-select: none !important;
+    -webkit-tap-highlight-color: transparent !important;
+    user-select: none !important;
     pointer-events: auto !important;
+    position: relative !important;
+    z-index: 1 !important;
+    overflow: hidden !important;
+  }
+  
+  /* iOS Safari specific fixes */
+  @supports (-webkit-touch-callout: none) {
+    body.job-card-public .signature-canvas,
+    body.job-card-public canvas[class*="signature"] {
+      -webkit-transform: translateZ(0) !important;
+      transform: translateZ(0) !important;
+      will-change: auto !important;
+    }
+  }
+  
+  /* Ensure signature canvas overlay text doesn't interfere */
+  body.job-card-public .signature-wrapper > div[class*="pointer-events-none"] {
+    pointer-events: none !important;
+    z-index: 0 !important;
   }
   
   /* Map - ensure it's visible in forms */

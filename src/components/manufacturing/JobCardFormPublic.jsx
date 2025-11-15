@@ -131,6 +131,9 @@ const JobCardFormPublic = () => {
   const [stepError, setStepError] = useState('');
   const [hasSignature, setHasSignature] = useState(false);
   const [shareStatus, setShareStatus] = useState('Copy share link');
+  const [submissionStatus, setSubmissionStatus] = useState(null); // 'success', 'error', or null
+  const [submissionMessage, setSubmissionMessage] = useState('');
+  const [submittedJobCardId, setSubmittedJobCardId] = useState(null);
 
   const signatureCanvasRef = useRef(null);
   const signatureWrapperRef = useRef(null);
@@ -190,7 +193,7 @@ const JobCardFormPublic = () => {
 
     const ratio = window.devicePixelRatio || 1;
     const width = wrapper.clientWidth;
-    const height = 180;
+    const height = 250; // Increased to 250px for better visibility and signing space
 
     canvas.width = width * ratio;
     canvas.height = height * ratio;
@@ -205,6 +208,16 @@ const JobCardFormPublic = () => {
     ctx.strokeStyle = '#111827';
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, width, height);
+    
+    // Ensure canvas is interactive
+    canvas.style.touchAction = 'none';
+    canvas.style.pointerEvents = 'auto';
+    canvas.style.position = 'relative';
+    canvas.style.zIndex = '2';
+    canvas.style.display = 'block';
+    canvas.style.width = '100%';
+    canvas.style.height = '250px';
+    canvas.style.minHeight = '250px';
   }, []);
 
   const getSignaturePosition = useCallback((event) => {
@@ -221,11 +234,16 @@ const JobCardFormPublic = () => {
       // Touch end event
       clientX = event.changedTouches[0].clientX;
       clientY = event.changedTouches[0].clientY;
+    } else if (event.pointerType) {
+      // Pointer event
+      clientX = event.clientX;
+      clientY = event.clientY;
     } else {
-      // Pointer event or mouse event
+      // Mouse event
       clientX = event.clientX;
       clientY = event.clientY;
     }
+    // Return coordinates relative to canvas (context is already scaled)
     return {
       x: clientX - rect.left,
       y: clientY - rect.top
@@ -263,9 +281,14 @@ const JobCardFormPublic = () => {
     // Prevent default to avoid scrolling and other browser behaviors
     event.preventDefault();
     event.stopPropagation();
+    event.stopImmediatePropagation();
 
     isDrawingRef.current = true;
     const ctx = canvas.getContext('2d');
+    // Context is already scaled in resizeSignatureCanvas, so use base line width
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
     const { x, y } = getSignaturePosition(event);
     ctx.beginPath();
     ctx.moveTo(x, y);
@@ -293,6 +316,7 @@ const JobCardFormPublic = () => {
     // Prevent default to avoid scrolling
     event.preventDefault();
     event.stopPropagation();
+    event.stopImmediatePropagation();
 
     const ctx = canvas.getContext('2d');
     const { x, y } = getSignaturePosition(event);
@@ -319,6 +343,7 @@ const JobCardFormPublic = () => {
       
       event.preventDefault();
       event.stopPropagation();
+      event.stopImmediatePropagation();
     }
     isDrawingRef.current = false;
     lastEventTypeRef.current = null; // Reset for next drawing session
@@ -917,53 +942,61 @@ const JobCardFormPublic = () => {
     const handleResize = () => resizeSignatureCanvas();
 
     // Use non-passive listeners to allow preventDefault
-    const options = { passive: false };
+    const options = { passive: false, capture: true };
     
-    // Check if pointer events are supported
-    const supportsPointerEvents = typeof window !== 'undefined' && window.PointerEvent;
+    // Always add both pointer and touch events for maximum compatibility
+    // Pointer events work best on modern browsers
+    canvas.addEventListener('pointerdown', startSignature, options);
+    canvas.addEventListener('pointermove', drawSignature, options);
+    canvas.addEventListener('pointerup', endSignature, options);
+    canvas.addEventListener('pointerleave', endSignature, options);
+    canvas.addEventListener('pointercancel', endSignature, options);
     
-    if (supportsPointerEvents) {
-      // Use pointer events (works for mouse, touch, and pen on modern browsers)
-      canvas.addEventListener('pointerdown', startSignature, options);
-      canvas.addEventListener('pointermove', drawSignature, options);
-      canvas.addEventListener('pointerup', endSignature, options);
-      canvas.addEventListener('pointerleave', endSignature, options);
-      canvas.addEventListener('pointercancel', endSignature, options);
-      window.addEventListener('pointerup', endSignature, options);
-    } else {
-      // Fallback to touch and mouse events for older browsers
-      canvas.addEventListener('touchstart', startSignature, options);
-      canvas.addEventListener('touchmove', drawSignature, options);
-      canvas.addEventListener('touchend', endSignature, options);
-      canvas.addEventListener('touchcancel', endSignature, options);
-      canvas.addEventListener('mousedown', startSignature, options);
-      canvas.addEventListener('mousemove', drawSignature, options);
-      canvas.addEventListener('mouseup', endSignature, options);
-      canvas.addEventListener('mouseleave', endSignature, options);
-      window.addEventListener('touchcancel', endSignature, options);
-    }
+    // Touch events for mobile devices (especially iOS)
+    canvas.addEventListener('touchstart', startSignature, options);
+    canvas.addEventListener('touchmove', drawSignature, options);
+    canvas.addEventListener('touchend', endSignature, options);
+    canvas.addEventListener('touchcancel', endSignature, options);
+    
+    // Mouse events for desktop
+    canvas.addEventListener('mousedown', startSignature, options);
+    canvas.addEventListener('mousemove', drawSignature, options);
+    canvas.addEventListener('mouseup', endSignature, options);
+    canvas.addEventListener('mouseleave', endSignature, options);
+    
+    // Global handlers to catch events that leave the canvas
+    window.addEventListener('pointerup', endSignature, options);
+    window.addEventListener('touchend', endSignature, options);
+    window.addEventListener('touchcancel', endSignature, options);
     
     window.addEventListener('resize', handleResize);
 
     return () => {
-      if (supportsPointerEvents) {
-        canvas.removeEventListener('pointerdown', startSignature);
-        canvas.removeEventListener('pointermove', drawSignature);
-        canvas.removeEventListener('pointerup', endSignature);
-        canvas.removeEventListener('pointerleave', endSignature);
-        canvas.removeEventListener('pointercancel', endSignature);
-        window.removeEventListener('pointerup', endSignature);
-      } else {
-        canvas.removeEventListener('touchstart', startSignature);
-        canvas.removeEventListener('touchmove', drawSignature);
-        canvas.removeEventListener('touchend', endSignature);
-        canvas.removeEventListener('touchcancel', endSignature);
-        canvas.removeEventListener('mousedown', startSignature);
-        canvas.removeEventListener('mousemove', drawSignature);
-        canvas.removeEventListener('mouseup', endSignature);
-        canvas.removeEventListener('mouseleave', endSignature);
-        window.removeEventListener('touchcancel', endSignature);
-      }
+      const removeOptions = { capture: true };
+      // Remove pointer events
+      canvas.removeEventListener('pointerdown', startSignature, removeOptions);
+      canvas.removeEventListener('pointermove', drawSignature, removeOptions);
+      canvas.removeEventListener('pointerup', endSignature, removeOptions);
+      canvas.removeEventListener('pointerleave', endSignature, removeOptions);
+      canvas.removeEventListener('pointercancel', endSignature, removeOptions);
+      
+      // Remove touch events
+      canvas.removeEventListener('touchstart', startSignature, removeOptions);
+      canvas.removeEventListener('touchmove', drawSignature, removeOptions);
+      canvas.removeEventListener('touchend', endSignature, removeOptions);
+      canvas.removeEventListener('touchcancel', endSignature, removeOptions);
+      
+      // Remove mouse events
+      canvas.removeEventListener('mousedown', startSignature, removeOptions);
+      canvas.removeEventListener('mousemove', drawSignature, removeOptions);
+      canvas.removeEventListener('mouseup', endSignature, removeOptions);
+      canvas.removeEventListener('mouseleave', endSignature, removeOptions);
+      
+      // Remove global handlers
+      window.removeEventListener('pointerup', endSignature, removeOptions);
+      window.removeEventListener('touchend', endSignature, removeOptions);
+      window.removeEventListener('touchcancel', endSignature, removeOptions);
+      
       window.removeEventListener('resize', handleResize);
     };
   }, [drawSignature, endSignature, resizeSignatureCanvas, startSignature]);
@@ -1159,6 +1192,18 @@ const JobCardFormPublic = () => {
       setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
     setCurrentStep(0);
     clearSignature();
+    setSubmissionStatus(null);
+    setSubmissionMessage('');
+    setSubmittedJobCardId(null);
+  };
+
+  const handleCloseSubmissionMessage = () => {
+    setSubmissionStatus(null);
+    setSubmissionMessage('');
+  };
+
+  const handleCreateNew = () => {
+    resetForm();
   };
 
   const handleSave = async () => {
@@ -1252,14 +1297,33 @@ const JobCardFormPublic = () => {
 
       // Always save to localStorage first
       const existingJobCards = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
-      const updatedJobCards = [...existingJobCards, jobCardData];
+      
+      // If updating existing job card, replace it; otherwise add new
+      let updatedJobCards;
+      if (submittedJobCardId && jobCardData.id === submittedJobCardId) {
+        // Update existing job card
+        const index = existingJobCards.findIndex(jc => jc.id === submittedJobCardId);
+        if (index >= 0) {
+          updatedJobCards = [...existingJobCards];
+          updatedJobCards[index] = { ...jobCardData, updatedAt: new Date().toISOString() };
+          console.log('✅ Job card updated in local storage');
+        } else {
+          updatedJobCards = [...existingJobCards, jobCardData];
+          console.log('✅ Job card saved to local storage (new entry)');
+        }
+      } else {
+        // New job card
+        updatedJobCards = [...existingJobCards, jobCardData];
+        console.log('✅ Job card saved to local storage');
+      }
+      
       localStorage.setItem('manufacturing_jobcards', JSON.stringify(updatedJobCards));
-      console.log('✅ Job card saved to local storage');
 
       // Try to submit to public API endpoint (no authentication required)
+      const isUpdate = submittedJobCardId && jobCardData.id === submittedJobCardId;
       if (isOnline) {
         try {
-          console.log('📡 Submitting job card to public API...');
+          console.log(`📡 ${isUpdate ? 'Updating' : 'Submitting'} job card to public API...`);
           const response = await fetch('/api/public/jobcards', {
             method: 'POST',
             headers: {
@@ -1274,7 +1338,7 @@ const JobCardFormPublic = () => {
           }
 
           const result = await response.json();
-          console.log('✅ Job card submitted to API:', result);
+          console.log(`✅ Job card ${isUpdate ? 'updated' : 'submitted'} to API:`, result);
           
           // Try to sync client contact if function exists
           if (typeof syncClientContact === 'function') {
@@ -1285,19 +1349,31 @@ const JobCardFormPublic = () => {
             }
           }
           
-          alert('✅ Job card saved and submitted successfully!');
+          // Success - show message but keep form data for editing
+          setSubmissionStatus('success');
+          setSubmissionMessage(isUpdate 
+            ? 'Job card updated and submitted successfully!'
+            : 'Job card saved and submitted successfully!');
+          setSubmittedJobCardId(jobCardData.id);
         } catch (error) {
-          console.error('❌ Failed to submit job card to API:', error);
-          alert('✅ Job card saved locally, but failed to submit to server: ' + error.message + '\n\nIt will be synced when you are online.');
+          console.error(`❌ Failed to ${isUpdate ? 'update' : 'submit'} job card to API:`, error);
+          // Partial success - saved locally but API failed
+          setSubmissionStatus('error');
+          setSubmissionMessage(`Job card saved locally, but failed to ${isUpdate ? 'update on' : 'submit to'} server: ${error.message}\n\nIt will be synced when you are online.`);
+          setSubmittedJobCardId(jobCardData.id);
         }
       } else {
-        alert('✅ Job card saved offline! It will be synced when you are online.');
+        // Offline - saved locally
+        setSubmissionStatus('success');
+        setSubmissionMessage(isUpdate 
+          ? 'Job card updated offline! It will be synced when you are online.'
+          : 'Job card saved offline! It will be synced when you are online.');
+        setSubmittedJobCardId(jobCardData.id);
       }
-
-      resetForm();
     } catch (error) {
       console.error('Error saving job card:', error);
-      alert(`Failed to save job card: ${error.message}`);
+      setSubmissionStatus('error');
+      setSubmissionMessage(`Failed to save job card: ${error.message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -2015,21 +2091,44 @@ const JobCardFormPublic = () => {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-gray-700 mb-3">
               Customer Signature *
             </label>
             <div
               ref={signatureWrapperRef}
               className={[
                 'border-2 rounded-lg overflow-hidden relative bg-white signature-wrapper',
-                hasSignature ? 'border-blue-500' : 'border-gray-300'
+                hasSignature ? 'border-blue-500 shadow-md' : 'border-gray-300 border-dashed'
               ].join(' ')}
-              style={{ touchAction: 'none', WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
+              style={{ 
+                touchAction: 'none', 
+                WebkitTouchCallout: 'none', 
+                WebkitUserSelect: 'none', 
+                userSelect: 'none',
+                position: 'relative',
+                zIndex: 1,
+                WebkitTapHighlightColor: 'transparent',
+                minHeight: '250px',
+                height: '250px',
+                width: '100%'
+              }}
+              onTouchStart={(e) => {
+                // Only prevent default if touching the wrapper, not the canvas
+                if (e.target === signatureWrapperRef.current) {
+                  e.preventDefault();
+                }
+              }}
+              onTouchMove={(e) => {
+                // Only prevent default if touching the wrapper, not the canvas
+                if (e.target === signatureWrapperRef.current) {
+                  e.preventDefault();
+                }
+              }}
             >
               <canvas
                 ref={signatureCanvasRef}
-                className="w-full h-48 signature-canvas"
+                className="w-full signature-canvas"
                 style={{ 
                   touchAction: 'none', 
                   display: 'block',
@@ -2037,15 +2136,31 @@ const JobCardFormPublic = () => {
                   WebkitTouchCallout: 'none',
                   WebkitUserSelect: 'none',
                   userSelect: 'none',
-                  cursor: 'crosshair'
+                  WebkitTapHighlightColor: 'transparent',
+                  cursor: 'crosshair',
+                  position: 'relative',
+                  zIndex: 2,
+                  backgroundColor: '#ffffff',
+                  WebkitAppearance: 'none',
+                  appearance: 'none',
+                  width: '100%',
+                  height: '250px',
+                  minHeight: '250px'
                 }}
               />
               {!hasSignature && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <p className="text-xs sm:text-sm text-gray-400 text-center px-4">
+                <div 
+                  className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
+                  style={{ zIndex: 0 }}
+                >
+                  <i className="fas fa-signature text-3xl text-gray-300 mb-2"></i>
+                  <p className="text-sm sm:text-base text-gray-400 text-center px-4 font-medium">
                     Sign here with finger or stylus
-            </p>
-          </div>
+                  </p>
+                  <p className="text-xs text-gray-400 text-center px-4 mt-1">
+                    Touch and drag to create your signature
+                  </p>
+                </div>
               )}
             </div>
             <div className="flex items-center justify-between mt-3">
@@ -2116,7 +2231,11 @@ const JobCardFormPublic = () => {
               disabled={isSubmitting}
               className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-semibold shadow-sm touch-manipulation disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSubmitting ? 'Saving...' : 'Submit Job Card'}
+              {isSubmitting 
+                ? 'Saving...' 
+                : submittedJobCardId 
+                  ? 'Update Job Card' 
+                  : 'Submit Job Card'}
             </button>
           )}
         </div>
@@ -2351,6 +2470,68 @@ const JobCardFormPublic = () => {
                   className="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 font-semibold touch-manipulation"
                 >
                   Use This Location
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Submission Status Modal */}
+      {submissionStatus && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className={`p-6 border-b ${submissionStatus === 'success' ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
+              <div className="flex items-start gap-4">
+                <div className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center ${
+                  submissionStatus === 'success' ? 'bg-green-100' : 'bg-red-100'
+                }`}>
+                  <i className={`fas ${
+                    submissionStatus === 'success' ? 'fa-check-circle text-green-600' : 'fa-exclamation-circle text-red-600'
+                  } text-2xl`}></i>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className={`text-lg font-semibold mb-1 ${
+                    submissionStatus === 'success' ? 'text-green-900' : 'text-red-900'
+                  }`}>
+                    {submissionStatus === 'success' ? 'Success!' : 'Submission Issue'}
+                  </h3>
+                  <p className={`text-sm whitespace-pre-line ${
+                    submissionStatus === 'success' ? 'text-green-700' : 'text-red-700'
+                  }`}>
+                    {submissionMessage}
+                  </p>
+                  {submittedJobCardId && (
+                    <p className="text-xs text-gray-500 mt-2">
+                      Job Card ID: {submittedJobCardId}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCloseSubmissionMessage}
+                  className="flex-shrink-0 p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-white/50"
+                >
+                  <i className="fas fa-times text-lg"></i>
+                </button>
+              </div>
+            </div>
+            <div className="p-6 bg-gray-50">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  onClick={handleCloseSubmissionMessage}
+                  className="flex-1 px-4 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition touch-manipulation"
+                >
+                  Continue Editing
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreateNew}
+                  className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 font-semibold transition touch-manipulation"
+                >
+                  <i className="fas fa-plus mr-2"></i>
+                  Create New
                 </button>
               </div>
             </div>

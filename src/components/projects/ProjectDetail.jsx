@@ -246,7 +246,8 @@ function initializeProjectDetail() {
             }
             return null;
         }
-        const { useState, useEffect, useRef, useCallback, useMemo } = ReactHooks;
+        const { useState, useEffect, useRef, useCallback, useMemo, Fragment } = ReactHooks;
+        const React = ReactHooks; // Keep React available for React.Fragment fallback
         const [listModalComponent, setListModalComponent] = useState(
             () => (typeof window.ListModal === 'function' ? window.ListModal : null)
         );
@@ -2511,7 +2512,19 @@ function initializeProjectDetail() {
 
     // List View Component
     const ListView = () => {
-        console.log('🔍 ListView rendering - Table structure version 2.0');
+        console.log('🔍 ListView rendering - Table structure version 3.0 - FORCE REFRESH');
+        console.log('🔍 ListView - viewMode check:', viewMode);
+        console.log('🔍 ListView - filteredTaskLists:', filteredTaskLists?.length);
+        console.log('🔍 ListView - Table structure is active, check DOM for table elements');
+        if (typeof window !== 'undefined') {
+            setTimeout(() => {
+                const tables = document.querySelectorAll('[data-task-table-version="3.0"]');
+                console.log('🔍 Found', tables.length, 'table(s) with version 3.0 in DOM');
+                if (tables.length === 0) {
+                    console.error('❌ NO TABLE FOUND - OLD CODE MAY BE RUNNING');
+                }
+            }, 1000);
+        }
         const formatChecklistProgress = (checklist = []) => {
             if (!Array.isArray(checklist) || checklist.length === 0) {
                 return { percent: 0, label: '0/0 complete' };
@@ -2671,8 +2684,9 @@ function initializeProjectDetail() {
                                     </div>
                                 </header>
                                 <div className="flex-1">
-                                    <div className="overflow-x-auto">
-                                        <table className="min-w-full divide-y divide-gray-200" data-task-table-version="2.0">
+                                    <div className="overflow-x-auto" style={{ border: '2px solid red' }}>
+                                        {/* TABLE STRUCTURE VERSION 3.0 - IF YOU SEE THIS, NEW CODE IS LOADED */}
+                                        <table className="min-w-full divide-y divide-gray-200" data-task-table-version="3.0" style={{ display: 'table', width: '100%' }}>
                                             {list.tasks.length > 0 && (
                                                 <thead className="bg-gray-50">
                                                     <tr>
@@ -2712,7 +2726,7 @@ function initializeProjectDetail() {
                                                         const checklistMeta = formatChecklistProgress(task.checklist);
                                                         const subtasksForCard = matchingSubtasks || [];
                                                         return (
-                                                            <React.Fragment key={task.id}>
+                                                            <Fragment key={task.id}>
                                                                 <tr
                                                                     onClick={() => handleViewTaskDetail(task)}
                                                                     className="hover:bg-gray-50 cursor-pointer transition"
@@ -2881,7 +2895,7 @@ function initializeProjectDetail() {
                                                                         </tr>
                                                                     );
                                                                 })}
-                                                            </React.Fragment>
+                                                            </Fragment>
                                                         );
                                                     })
                                                 )}
@@ -3026,6 +3040,12 @@ function initializeProjectDetail() {
             
             {activeSection === 'tasks' && (
                 <>
+                    {/* DEBUG: TASKS SECTION ACTIVE - VERSION 3.0 */}
+                    <div style={{ background: 'yellow', padding: '10px', marginBottom: '10px', border: '3px solid red' }}>
+                        <strong>🔍 DEBUG: Tasks section is rendering - Version 3.0</strong>
+                        <br />ViewMode: {viewMode}
+                        <br />ListView should render below
+                    </div>
                     {/* Task View Controls */}
                     <div className="flex justify-between items-center">
                         <div className="flex gap-2">
@@ -3075,6 +3095,12 @@ function initializeProjectDetail() {
                     </div>
 
             {/* List or Kanban View */}
+            {(() => {
+                console.error('🔴 CRITICAL DEBUG - Tasks section rendering');
+                console.error('🔴 viewMode:', viewMode);
+                console.error('🔴 Will render:', viewMode === 'list' ? 'ListView' : 'KanbanView');
+                return null;
+            })()}
             {viewMode === 'list' ? (
                 <ListView />
             ) : (

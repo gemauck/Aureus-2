@@ -123,16 +123,22 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
     const [showSectionModal, setShowSectionModal] = useState(false);
     const [showDocumentModal, setShowDocumentModal] = useState(false);
 
-  // Pause LiveDataSync when modals are open to prevent background refreshes from resetting form state
+  // Pause LiveDataSync when modals are open OR when user is interacting with status/comment controls
   useEffect(() => {
     const isModalOpen = showSectionModal || showDocumentModal;
-    if (isModalOpen) {
-      console.log('🛑 Pausing LiveDataSync - modal is open');
+    const isUserInteracting = isInteractingRef.current || hoverCommentCell !== null;
+    
+    if (isModalOpen || isUserInteracting) {
+      if (isModalOpen) {
+        console.log('🛑 Pausing LiveDataSync - modal is open');
+      } else if (isUserInteracting) {
+        console.log('🛑 Pausing LiveDataSync - user is interacting with status/comment controls');
+      }
       if (window.LiveDataSync && typeof window.LiveDataSync.pause === 'function') {
         window.LiveDataSync.pause();
       }
     } else {
-      console.log('▶️ Resuming LiveDataSync - modal is closed');
+      console.log('▶️ Resuming LiveDataSync - modal closed and no user interaction');
       if (window.LiveDataSync && typeof window.LiveDataSync.resume === 'function') {
         window.LiveDataSync.resume();
       }
@@ -144,7 +150,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         window.LiveDataSync.resume();
       }
     };
-  }, [showSectionModal, showDocumentModal]);
+  }, [showSectionModal, showDocumentModal, hoverCommentCell]);
     const [editingSection, setEditingSection] = useState(null);
     const [editingDocument, setEditingDocument] = useState(null);
     const [editingSectionId, setEditingSectionId] = useState(null);
@@ -155,6 +161,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
     const [quickComment, setQuickComment] = useState(''); // For quick comment input
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 }); // Store popup position
     const commentPopupContainerRef = useRef(null); // Ref for comment popup scrollable container
+    const isInteractingRef = useRef(false); // Track if user is interacting with status/comment controls
     
     // Helper function to immediately save documentSections to database
     const immediatelySaveDocumentSections = async (sectionsToSave) => {
@@ -2115,7 +2122,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
 
         return (
             <td 
-                className={`px-2 py-1 text-xs border-l border-gray-100 dark:border-gray-700 ${
+                className={`px-2 py-1 text-xs border-l border-gray-100 dark:border-gray-700 relative z-20 ${
                     workingMonths.includes(months.indexOf(month)) && selectedYear === currentYear
                         ? 'bg-primary-50 dark:bg-primary-900 bg-opacity-30 dark:bg-opacity-30'
                         : ''
@@ -2126,11 +2133,33 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                     <select
                         value={status || ''}
                         onChange={(e) => handleUpdateStatus(section.id, document.id, month, e.target.value)}
-                        className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent dark:bg-transparent ${
+                        onFocus={() => {
+                            isInteractingRef.current = true;
+                            if (window.LiveDataSync && typeof window.LiveDataSync.pause === 'function') {
+                                window.LiveDataSync.pause();
+                            }
+                        }}
+                        onBlur={() => {
+                            // Delay to allow onChange to complete
+                            setTimeout(() => {
+                                isInteractingRef.current = false;
+                                if (!hoverCommentCell && !showSectionModal && !showDocumentModal) {
+                                    if (window.LiveDataSync && typeof window.LiveDataSync.resume === 'function') {
+                                        window.LiveDataSync.resume();
+                                    }
+                                }
+                            }, 100);
+                        }}
+                        className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent dark:bg-transparent relative z-30 ${
                             status 
                                 ? statusConfig.textColor
                                 : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400'
                         }`}
+                        style={{ pointerEvents: 'auto' }}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            isInteractingRef.current = true;
+                        }}
                     >
                         <option value="">Select Status</option>
                         {statusOptions.map(option => (
@@ -2141,7 +2170,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                     </select>
                     
                     {/* Comments Icon/Badge - Centered vertically on right */}
-                    <div className="absolute top-1/2 right-0.5 -translate-y-1/2">
+                    <div className="absolute top-1/2 right-0.5 -translate-y-1/2 z-40">
                         <button
                             data-comment-cell={cellKey}
                             onClick={(e) => {
@@ -2166,6 +2195,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                             className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors relative p-1"
                             title={hasComments ? `${comments.length} comment(s)` : 'Add comment'}
                             type="button"
+                            style={{ pointerEvents: 'auto' }}
                         >
                             <i className="fas fa-comment text-base"></i>
                             {hasComments && (

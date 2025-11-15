@@ -925,7 +925,7 @@ const MainLayout = () => {
     );
 
     return (
-        <div className={`flex h-screen overflow-hidden ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+        <div className={`flex h-screen overflow-hidden ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`} style={{ width: '100vw', maxWidth: '100vw' }}>
             {/* Mobile Sidebar Overlay - FIXED positioning */}
             {isMobile && sidebarOpen && (
                 <div 
@@ -1017,7 +1017,7 @@ const MainLayout = () => {
             </div>
             
             {/* Main Content - ALWAYS FULL WIDTH */}
-            <div className="flex-1 flex flex-col overflow-hidden" style={{ minWidth: 0, width: '100%', maxWidth: '100%', flex: '1 1 auto' }}>
+            <div className="flex-1 flex flex-col overflow-hidden" style={{ minWidth: 0, width: 'auto', maxWidth: 'none', flex: '1 1 0%', flexBasis: '0%', flexGrow: 1, flexShrink: 1 }}>
                 {/* Header - STICKY on mobile */}
                 <header 
                     className={`
@@ -1109,8 +1109,8 @@ const MainLayout = () => {
                 </header>
 
                 {/* Page Content - SCROLLABLE */}
-                <main className={`flex-1 overflow-y-auto overflow-x-hidden ${currentPage === 'clients' ? 'p-0' : 'p-4'}`} style={{ width: '100%', maxWidth: '100%', minWidth: '100%', flex: '1 1 auto' }}>
-                    <div className="w-full max-w-full min-w-full" style={{ width: '100%', maxWidth: '100%', minWidth: '100%', flex: '1 1 auto' }}>
+                <main className={`flex-1 overflow-y-auto overflow-x-hidden ${currentPage === 'clients' ? 'p-0' : 'p-4'}`} style={{ width: 'auto', maxWidth: 'none', minWidth: 0, flex: '1 1 0%', flexBasis: '0%', flexGrow: 1, flexShrink: 1 }}>
+                    <div className="w-full max-w-full min-w-full" style={{ width: '100%', maxWidth: '100%', minWidth: '100%' }}>
                         {renderPage}
                     </div>
                 </main>

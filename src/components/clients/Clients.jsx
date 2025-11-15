@@ -528,7 +528,23 @@ const Clients = React.memo(() => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterIndustry, setFilterIndustry] = useState('All Industries');
     const [filterStatus, setFilterStatus] = useState('All Status');
-    const [filterServices, setFilterServices] = useState([]);
+    const [filterServices, setFilterServices] = useState(() => {
+        try {
+            const saved = localStorage.getItem('clients_filterServices');
+            return saved ? JSON.parse(saved) : [];
+        } catch {
+            return [];
+        }
+    });
+    
+    // Persist filterServices to localStorage whenever it changes
+    useEffect(() => {
+        try {
+            localStorage.setItem('clients_filterServices', JSON.stringify(filterServices));
+        } catch (error) {
+            console.warn('Failed to save filterServices to localStorage:', error);
+        }
+    }, [filterServices]);
     const [showStarredOnly, setShowStarredOnly] = useState(false);
     const [sortField, setSortField] = useState('name');
     const [sortDirection, setSortDirection] = useState('asc');
