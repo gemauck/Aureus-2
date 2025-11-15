@@ -2464,7 +2464,8 @@ const Clients = React.memo(() => {
                     contracts: Array.isArray(leadFormData.contracts) ? leadFormData.contracts : (selectedLead.contracts || []),
                     activityLog: Array.isArray(leadFormData.activityLog) ? leadFormData.activityLog : (selectedLead.activityLog || []),
                     projectIds: Array.isArray(leadFormData.projectIds) ? leadFormData.projectIds : (selectedLead.projectIds || []),
-                    proposals: Array.isArray(leadFormData.proposals) ? leadFormData.proposals : (selectedLead.proposals || [])
+                    proposals: Array.isArray(leadFormData.proposals) ? leadFormData.proposals : (selectedLead.proposals || []),
+                    services: Array.isArray(leadFormData.services) ? leadFormData.services : (selectedLead.services || [])
                 };
                 
                 console.log('🔄 Updated lead object:', { 
@@ -2551,7 +2552,9 @@ const Clients = React.memo(() => {
                             billingTerms: safeParseJSON(savedLead.billingTerms, {}),
                             // CRITICAL: Preserve proposals from leadFormData (what we just sent) instead of API response
                             // API response might have stale or missing proposals
-                            proposals: safeParseJSON(leadFormData.proposals || savedLead.proposals, [])
+                            proposals: safeParseJSON(leadFormData.proposals || savedLead.proposals, []),
+                            // CRITICAL: Preserve services from leadFormData (what we just sent) instead of API response
+                            services: safeParseJSON(leadFormData.services || savedLead.services, [])
                         };
                         
                         console.log('✅ Parsed saved lead - stage:', savedLead.stage, 'status:', savedLead.status);
@@ -2700,6 +2703,7 @@ const Clients = React.memo(() => {
                                 website: (savedLead.website && savedLead.website.trim()) ? savedLead.website : (newLead.website || ''),
                                 value: savedLead.value !== undefined && savedLead.value !== null ? savedLead.value : (newLead.value || 0),
                                 contacts: savedLead.contacts || newLead.contacts || [],
+                                services: savedLead.services || newLead.services || [],
                                 firstContactDate: savedLead.firstContactDate || savedLead.createdAt ? new Date(savedLead.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
                                 lastContact: savedLead.lastContact || savedLead.updatedAt ? new Date(savedLead.updatedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
                             };
