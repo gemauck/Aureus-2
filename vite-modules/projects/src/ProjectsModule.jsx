@@ -20,12 +20,21 @@ const ProjectsModule = () => {
 export { Projects, ProjectDetail, ProjectModal, MonthlyDocumentCollectionTracker };
 
 // Also expose to window for backwards compatibility
+// NOTE: Only MonthlyDocumentCollectionTracker should be exposed here
+// The old Projects, ProjectDetail, and ProjectModal should NOT be exposed
+// as they conflict with newer versions in src/components/projects/
 if (typeof window !== 'undefined') {
-  window.Projects = Projects;
-  window.ProjectDetail = ProjectDetail;
-  window.ProjectModal = ProjectModal;
-  window.MonthlyDocumentCollectionTracker = MonthlyDocumentCollectionTracker;
-  console.log('✅ Projects module components exposed to window');
+  // Only expose MonthlyDocumentCollectionTracker if not already available
+  if (!window.MonthlyDocumentCollectionTracker || typeof window.MonthlyDocumentCollectionTracker !== 'function') {
+    window.MonthlyDocumentCollectionTracker = MonthlyDocumentCollectionTracker;
+    console.log('✅ ProjectsModule: MonthlyDocumentCollectionTracker exposed to window');
+  }
+  
+  // DO NOT expose old Projects components - they will conflict with newer versions
+  // These are commented out to prevent the old version from loading
+  // window.Projects = Projects; // COMMENTED OUT - conflicts with src/components/projects/Projects.jsx
+  // window.ProjectDetail = ProjectDetail; // COMMENTED OUT - conflicts with src/components/projects/ProjectDetail.jsx
+  // window.ProjectModal = ProjectModal; // COMMENTED OUT - conflicts with src/components/projects/ProjectModal.jsx
 }
 
 export default ProjectsModule;

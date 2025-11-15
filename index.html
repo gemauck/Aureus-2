@@ -634,16 +634,14 @@
                 typeof window.React.useEffect === 'function' &&
                 typeof window.React.useRef === 'function') {
                 
-                // Check if already loaded
+                // Check if already loaded from main source (lazy-load-components.js)
+                // The Vite module should only be a fallback if MonthlyDocumentCollectionTracker isn't available
                 if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
-                    console.log('✅ Vite Projects module already loaded');
+                    console.log('✅ MonthlyDocumentCollectionTracker already available from main source, skipping Vite module load');
                     // Dispatch event even if already loaded (for components that missed it)
                     if (typeof window.dispatchEvent === 'function') {
                         window.dispatchEvent(new CustomEvent('viteProjectsReady', {
                             detail: { 
-                                Projects: window.Projects,
-                                ProjectDetail: window.ProjectDetail,
-                                ProjectModal: window.ProjectModal,
                                 MonthlyDocumentCollectionTracker: window.MonthlyDocumentCollectionTracker 
                             }
                         }));
@@ -683,13 +681,11 @@
                             if (typeof window.dispatchEvent === 'function') {
                                 window.dispatchEvent(new CustomEvent('viteProjectsReady', {
                                     detail: { 
-                                        Projects: window.Projects,
-                                        ProjectDetail: window.ProjectDetail,
-                                        ProjectModal: window.ProjectModal,
+                                        // Only include MonthlyDocumentCollectionTracker - old Projects components cause conflicts
                                         MonthlyDocumentCollectionTracker: window.MonthlyDocumentCollectionTracker 
                                     }
                                 }));
-                                console.log('📢 Dispatched viteProjectsReady event after component load');
+                                console.log('📢 Dispatched viteProjectsReady event after component load (MonthlyDocumentCollectionTracker only)');
                             }
                         } else if (attempts >= maxAttempts) {
                             console.warn('⚠️ Script loaded but MonthlyDocumentCollectionTracker not available after ' + maxAttempts + ' attempts');

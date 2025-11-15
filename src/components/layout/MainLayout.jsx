@@ -371,9 +371,20 @@ const MainLayout = () => {
     
     React.useEffect(() => {
         const checkProjects = () => {
-            const ProjectsComponent = window.ProjectsDatabaseFirst || window.Projects || window.ProjectsSimple;
-            if (ProjectsComponent && !projectsComponentReady) {
-                console.log('✅ MainLayout: Projects component became available');
+            // Prefer ProjectsDatabaseFirst (newest), then ProjectsSimple (fallback)
+            // Avoid window.Projects from old Vite module - it's an outdated version
+            const ProjectsComponent = window.ProjectsDatabaseFirst || window.ProjectsSimple;
+            // Only use window.Projects if neither of the preferred versions are available
+            // This prevents the old Vite module version from being used
+            const fallbackProjects = (!ProjectsComponent && window.Projects) ? window.Projects : null;
+            const finalComponent = ProjectsComponent || fallbackProjects;
+            
+            if (finalComponent && !projectsComponentReady) {
+                if (fallbackProjects) {
+                    console.warn('⚠️ MainLayout: Using fallback Projects component (old Vite module version). Prefer ProjectsDatabaseFirst or ProjectsSimple.');
+                } else {
+                    console.log('✅ MainLayout: Projects component became available');
+                }
                 setProjectsComponentReady(true);
             }
         };
@@ -390,9 +401,18 @@ const MainLayout = () => {
     }, [projectsComponentReady]);
     
     const Projects = React.useMemo(() => {
-        const ProjectsComponent = window.ProjectsDatabaseFirst || window.Projects || window.ProjectsSimple;
-        if (ProjectsComponent) {
-            return ProjectsComponent;
+        // Prefer ProjectsDatabaseFirst (newest), then ProjectsSimple (fallback)
+        // Avoid window.Projects from old Vite module - it's an outdated version
+        const ProjectsComponent = window.ProjectsDatabaseFirst || window.ProjectsSimple;
+        // Only use window.Projects if neither of the preferred versions are available
+        const fallbackProjects = (!ProjectsComponent && window.Projects) ? window.Projects : null;
+        const finalComponent = ProjectsComponent || fallbackProjects;
+        
+        if (finalComponent) {
+            if (fallbackProjects) {
+                console.warn('⚠️ MainLayout: Using fallback Projects component (old Vite module version)');
+            }
+            return finalComponent;
         }
         return () => <div className="text-center py-12 text-gray-500">Projects loading...</div>;
     }, [projectsComponentReady]);
