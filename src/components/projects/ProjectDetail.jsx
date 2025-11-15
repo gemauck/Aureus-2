@@ -2723,15 +2723,15 @@ function initializeProjectDetail() {
                                                     onClick={() => handleViewTaskDetail(task)}
                                                     className="py-1 px-3 hover:bg-primary-50/40 transition-colors cursor-pointer"
                                                 >
-                                                    <div className="grid grid-cols-12 gap-1.5 items-center" style={{ display: 'grid', gridTemplateColumns: 'repeat(12, minmax(0, 1fr))' }}>
-                                                        <div className="col-span-2 min-w-0" style={{ gridColumn: 'span 2 / span 2' }}>
+                                                    <div className="flex items-center gap-2 py-1">
+                                                        <div className="flex-shrink-0 w-[200px] min-w-0">
                                                             <h4 className="text-xs font-semibold text-gray-900 truncate">
                                                                 {task.title || 'Untitled task'}
                                                             </h4>
                                                             {(task.description || (task.tags && task.tags.length > 0)) && (
                                                                 <div className="flex items-center gap-1 mt-0.5">
                                                                     {task.description && (
-                                                                        <p className="text-[9px] text-gray-500 truncate max-w-[150px]">
+                                                                        <p className="text-[9px] text-gray-500 truncate">
                                                                             {task.description}
                                                                         </p>
                                                                     )}
@@ -2751,55 +2751,59 @@ function initializeProjectDetail() {
                                                                 </div>
                                                             )}
                                                         </div>
-                                                        <div className="col-span-1 flex items-center" style={{ gridColumn: 'span 1 / span 1' }}>
+                                                        <div className="flex-shrink-0">
                                                             <span className={`px-1 py-0.5 text-[9px] font-semibold rounded-full ${getStatusColor(task.status || 'To Do')}`}>
                                                                 {task.status || 'To Do'}
                                                             </span>
                                                         </div>
-                                                        <div className="col-span-2 flex items-center text-[9px] text-gray-500" style={{ gridColumn: 'span 2 / span 2' }}>
-                                                            {task.assignee ? (
-                                                                <span className="inline-flex items-center gap-0.5 truncate">
-                                                                    <i className="fas fa-user text-[8px] text-gray-400"></i>
-                                                                    <span className="truncate">{task.assignee}</span>
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-gray-400">—</span>
-                                                            )}
+                                                        <div className="flex-shrink-0 w-[120px] min-w-0">
+                                                            <div className="text-[9px] text-gray-500 truncate">
+                                                                {task.assignee ? (
+                                                                    <span className="inline-flex items-center gap-0.5 truncate">
+                                                                        <i className="fas fa-user text-[8px] text-gray-400"></i>
+                                                                        <span className="truncate">{task.assignee}</span>
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-gray-400">—</span>
+                                                                )}
+                                                            </div>
                                                         </div>
-                                                        <div className="col-span-1 flex items-center" style={{ gridColumn: 'span 1 / span 1' }}>
+                                                        <div className="flex-shrink-0">
                                                             <span className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[9px] font-medium ${getPriorityColor(task.priority || 'Medium')}`}>
                                                                 <i className="fas fa-bolt text-[8px]"></i>
                                                                 {task.priority || 'Medium'}
                                                             </span>
                                                         </div>
-                                                        <div className="col-span-2 flex items-center" style={{ gridColumn: 'span 2 / span 2' }}>
+                                                        <div className="flex-shrink-0">
                                                             <span className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[9px] font-medium ${dueMeta.pillClass}`}>
                                                                 <i className="fas fa-calendar-alt text-[8px]"></i>
                                                                 {dueMeta.label}
                                                             </span>
                                                         </div>
-                                                        <div className="col-span-1 flex items-center justify-center text-[9px] text-gray-500" style={{ gridColumn: 'span 1 / span 1' }}>
+                                                        <div className="flex-shrink-0 w-[40px] text-center">
                                                             {task.comments?.length > 0 ? (
-                                                                <span className="inline-flex items-center gap-0.5">
+                                                                <span className="inline-flex items-center gap-0.5 text-[9px] text-gray-500">
                                                                     <i className="fas fa-comments text-[8px] text-gray-400"></i>
                                                                     {task.comments.length}
                                                                 </span>
                                                             ) : (
-                                                                <span className="text-gray-400">—</span>
+                                                                <span className="text-[9px] text-gray-400">—</span>
                                                             )}
                                                         </div>
                                                         {((task.customFields && customFieldDefinitions.length > 0) || (task.checklist && task.checklist.length > 0)) && (
-                                                            <div className="col-span-1 flex items-center gap-1 text-[8px] text-gray-500" style={{ gridColumn: 'span 1 / span 1' }}>
+                                                            <div className="flex-shrink-0 w-[80px] min-w-0">
                                                                 {task.customFields && customFieldDefinitions.length > 0 ? (
-                                                                    customFieldDefinitions.slice(0, 1).map(field => {
-                                                                        const value = task.customFields?.[field.name];
-                                                                        if (!value) return null;
-                                                                        return (
-                                                                            <span key={field.name} className="px-1 py-0.5 text-[8px] bg-gray-100 text-gray-600 rounded truncate max-w-[70px]" title={`${field.name}: ${value}`}>
-                                                                                {value}
-                                                                            </span>
-                                                                        );
-                                                                    })
+                                                                    <div className="flex items-center gap-1">
+                                                                        {customFieldDefinitions.slice(0, 1).map(field => {
+                                                                            const value = task.customFields?.[field.name];
+                                                                            if (!value) return null;
+                                                                            return (
+                                                                                <span key={field.name} className="px-1 py-0.5 text-[8px] bg-gray-100 text-gray-600 rounded truncate max-w-[70px]" title={`${field.name}: ${value}`}>
+                                                                                    {value}
+                                                                                </span>
+                                                                            );
+                                                                        })}
+                                                                    </div>
                                                                 ) : task.checklist && task.checklist.length > 0 ? (
                                                                     <div className="flex items-center gap-0.5">
                                                                         <div className="w-12 h-1 bg-gray-200 rounded-full overflow-hidden">
@@ -2808,12 +2812,12 @@ function initializeProjectDetail() {
                                                                                 style={{ width: `${checklistMeta.percent}%` }}
                                                                             ></div>
                                                                         </div>
-                                                                        <span>{checklistMeta.percent}%</span>
+                                                                        <span className="text-[8px] text-gray-500">{checklistMeta.percent}%</span>
                                                                     </div>
                                                                 ) : null}
                                                             </div>
                                                         )}
-                                                        <div className="col-span-2 flex items-center justify-end gap-0.5" style={{ gridColumn: 'span 2 / span 2' }}>
+                                                        <div className="flex-shrink-0 flex items-center justify-end gap-0.5 ml-auto">
                                                             <button
                                                                 onClick={(e) => openTaskComments(e, task)}
                                                                 className="inline-flex items-center gap-0.5 px-1 py-0.5 text-[9px] bg-primary-500 text-white rounded hover:bg-primary-600 transition-all font-medium"
