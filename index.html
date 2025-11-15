@@ -579,6 +579,17 @@
                 // Check if already loaded
                 if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
                     console.log('✅ Vite Projects module already loaded');
+                    // Dispatch event even if already loaded (for components that missed it)
+                    if (typeof window.dispatchEvent === 'function') {
+                        window.dispatchEvent(new CustomEvent('viteProjectsReady', {
+                            detail: { 
+                                Projects: window.Projects,
+                                ProjectDetail: window.ProjectDetail,
+                                ProjectModal: window.ProjectModal,
+                                MonthlyDocumentCollectionTracker: window.MonthlyDocumentCollectionTracker 
+                            }
+                        }));
+                    }
                     return;
                 }
                 
@@ -586,12 +597,14 @@
                 const existingScript = document.querySelector('script[src*="projects-module.js"]');
                 if (existingScript) {
                     console.log('✅ Vite Projects module script already added, waiting for load...');
-                    // Check if module loaded after a delay
-                    setTimeout(() => {
-                        if (!window.MonthlyDocumentCollectionTracker) {
-                            console.warn('⚠️ Vite Projects module script exists but component not loaded after 2s');
+                    // Listen for the component to become available
+                    const checkExisting = setInterval(() => {
+                        if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                            console.log('✅ MonthlyDocumentCollectionTracker became available from existing script');
+                            clearInterval(checkExisting);
                         }
-                    }, 2000);
+                    }, 100);
+                    setTimeout(() => clearInterval(checkExisting), 5000);
                     return;
                 }
                 
@@ -600,18 +613,37 @@
                 script.src = './dist/vite-projects/projects-module.js?v=' + Date.now();
                 script.onload = () => {
                     console.log('✅ Vite Projects module script loaded successfully');
-                    // Give it a moment to execute
-                    setTimeout(() => {
-                        if (window.MonthlyDocumentCollectionTracker) {
-                            console.log('✅ MonthlyDocumentCollectionTracker available after script load');
-                        } else {
-                            console.warn('⚠️ Script loaded but MonthlyDocumentCollectionTracker not yet available');
+                    // Poll for components to become available (more robust than fixed timeout)
+                    let attempts = 0;
+                    const maxAttempts = 30; // 3 seconds (30 * 100ms)
+                    const checkComponents = setInterval(() => {
+                        attempts++;
+                        if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                            console.log('✅ MonthlyDocumentCollectionTracker available after script load (attempt ' + attempts + ')');
+                            clearInterval(checkComponents);
+                            // Ensure event is dispatched
+                            if (typeof window.dispatchEvent === 'function') {
+                                window.dispatchEvent(new CustomEvent('viteProjectsReady', {
+                                    detail: { 
+                                        Projects: window.Projects,
+                                        ProjectDetail: window.ProjectDetail,
+                                        ProjectModal: window.ProjectModal,
+                                        MonthlyDocumentCollectionTracker: window.MonthlyDocumentCollectionTracker 
+                                    }
+                                }));
+                                console.log('📢 Dispatched viteProjectsReady event after component load');
+                            }
+                        } else if (attempts >= maxAttempts) {
+                            console.warn('⚠️ Script loaded but MonthlyDocumentCollectionTracker not available after ' + maxAttempts + ' attempts');
+                            console.warn('⚠️ Available window components:', Object.keys(window).filter(k => k.includes('Project') || k.includes('Tracker') || k.includes('Modal')));
+                            clearInterval(checkComponents);
                         }
-                    }, 500);
+                    }, 100);
                 };
                 script.onerror = (error) => {
                     console.error('❌ Failed to load Vite Projects module script:', error);
                     console.error('❌ Script URL:', script.src);
+                    console.error('❌ Please check that the file exists at: dist/vite-projects/projects-module.js');
                 };
                 document.head.appendChild(script);
                 
@@ -633,6 +665,14 @@
         } else {
             loadViteProjectsModule();
         }
+        
+        // Also listen for React ready event as fallback
+        window.addEventListener('babelready', () => {
+            if (!window.MonthlyDocumentCollectionTracker) {
+                console.log('🔄 babelready event received, checking Vite module...');
+                loadViteProjectsModule();
+            }
+        });
     </script>
     
     <script defer src="./lazy-load-components.js?v=20251114-doc-collection-fix"></script>
