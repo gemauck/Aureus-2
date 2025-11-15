@@ -1454,6 +1454,57 @@ const ManagementMeetingNotes = () => {
         });
     }, [currentMonthlyNotes?.id]);
 
+    // Helper function to delete comment from local state
+    const deleteCommentLocal = useCallback((commentId) => {
+        const applyDelete = (note) => {
+            if (!note) return note;
+
+            // Remove from monthly comments
+            if (Array.isArray(note.comments)) {
+                const filtered = note.comments.filter(c => c.id !== commentId);
+                if (filtered.length !== note.comments.length) {
+                    return { ...note, comments: filtered };
+                }
+            }
+
+            // Remove from weekly or department comments
+            const weeklyNotes = Array.isArray(note.weeklyNotes)
+                ? note.weeklyNotes.map((week) => {
+                      // Remove from weekly-level comments
+                      if (Array.isArray(week.comments)) {
+                          const filtered = week.comments.filter(c => c.id !== commentId);
+                          if (filtered.length !== week.comments.length) {
+                              return { ...week, comments: filtered };
+                          }
+                      }
+
+                      // Remove from department-level comments
+                      if (week.departmentNotes) {
+                          const departmentNotes = week.departmentNotes.map((deptNote) => {
+                              if (Array.isArray(deptNote.comments)) {
+                                  const filtered = deptNote.comments.filter(c => c.id !== commentId);
+                                  if (filtered.length !== deptNote.comments.length) {
+                                      return { ...deptNote, comments: filtered };
+                                  }
+                              }
+                              return deptNote;
+                          });
+                          return { ...week, departmentNotes };
+                      }
+
+                      return week;
+                  })
+                : note.weeklyNotes;
+            return { ...note, weeklyNotes };
+        };
+
+        setCurrentMonthlyNotes((prev) => (prev ? applyDelete(prev) : prev));
+        setMonthlyNotesList((prev) => {
+            if (!Array.isArray(prev)) return prev;
+            return prev.map((note) => (note?.id === currentMonthlyNotes?.id ? applyDelete(note) : note));
+        });
+    }, [currentMonthlyNotes?.id]);
+
     // Create comment with mention processing
     const handleCreateComment = async (content) => {
         if (!commentContext) return;
@@ -1598,6 +1649,48 @@ const ManagementMeetingNotes = () => {
         }
     };
 
+    // Delete comment
+    const handleDeleteComment = async (commentId) => {
+        if (!commentId) return;
+        if (!confirm('Are you sure you want to delete this comment?')) return;
+
+        // Store previous state for rollback
+        const previousNotes = currentMonthlyNotes;
+        
+        // Optimistic update - remove immediately
+        deleteCommentLocal(commentId);
+        
+        try {
+            setLoading(true);
+            // Check if DatabaseAPI has deleteComment method, otherwise use makeRequest
+            if (window.DatabaseAPI && typeof window.DatabaseAPI.deleteComment === 'function') {
+                await window.DatabaseAPI.deleteComment(commentId);
+            } else if (window.DatabaseAPI && typeof window.DatabaseAPI.makeRequest === 'function') {
+                await window.DatabaseAPI.makeRequest(`/meeting-notes?action=comment&id=${commentId}`, {
+                    method: 'DELETE'
+                });
+            } else {
+                throw new Error('DatabaseAPI not available');
+            }
+            // Success - state already updated
+        } catch (error) {
+            console.error('Error deleting comment:', error);
+            // Revert on error
+            if (previousNotes) {
+                setCurrentMonthlyNotes(previousNotes);
+                setMonthlyNotesList((prev) => {
+                    if (!Array.isArray(prev)) return prev;
+                    return prev.map((note) => 
+                        (note?.id === previousNotes.id ? previousNotes : note)
+                    );
+                });
+            }
+            alert('Failed to delete comment: ' + (error.message || 'Unknown error'));
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // Update user allocation
     const handleUpdateAllocation = async (departmentId, userId, role) => {
         if (!currentMonthlyNotes) return;
@@ -1721,92 +1814,103 @@ const ManagementMeetingNotes = () => {
     }
 
     return (
-        <div className="space-y-3">
+        <div className="space-y-4">
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h2 className={`text-lg font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Management Meeting Notes</h2>
-                    <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Weekly department updates and action tracking</p>
-                </div>
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                    <select
-                        value={selectedMonth || ''}
-                        onChange={(e) => setSelectedMonth(e.target.value)}
-                        className={`px-3 py-1.5 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
-                    >
-                        <option value="">Select Month...</option>
-                        {availableMonths.map(month => (
-                            <option key={month} value={month}>{formatMonth(month)}</option>
-                        ))}
-                    </select>
-                    <div className="flex items-center gap-1">
-                        <input
-                            value={newMonthKey}
-                            onChange={(e) => setNewMonthKey(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    handleCreateMonth(e.currentTarget.value);
-                                }
-                            }}
-                            placeholder="YYYY-MM"
-                            aria-label="Create month key"
-                            title="Enter a month (YYYY-MM) to create meeting notes ahead of time"
-                            className={`w-28 px-3 py-1.5 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'}`}
-                        />
-                        <button
-                            onClick={() => handleCreateMonth()}
-                            className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
-                        >
-                            <i className="fas fa-plus mr-1"></i>
-                            Create Month
-                        </button>
+            <div className={`rounded-xl border p-4 ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-white border-gray-200 shadow-sm'}`}>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div>
+                        <h2 className={`text-xl font-bold mb-1 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                            <i className="fas fa-clipboard-list mr-2 text-primary-600"></i>
+                            Management Meeting Notes
+                        </h2>
+                        <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Weekly department updates and action tracking</p>
                     </div>
-                    <button
-                        onClick={handleGenerateMonth}
-                        className="px-3 py-1.5 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
-                        title="Generate new month from previous month"
-                    >
-                        <i className="fas fa-magic mr-1"></i>
-                        Generate Month
-                    </button>
-                    {currentMonthlyNotes && (
-                        <button
-                            onClick={() => setShowAllocationModal(true)}
-                            className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                        <select
+                            value={selectedMonth || ''}
+                            onChange={(e) => setSelectedMonth(e.target.value)}
+                            className={`px-4 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition shadow-sm ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100 hover:border-slate-500' : 'bg-white border-gray-300 hover:border-gray-400'}`}
                         >
-                            <i className="fas fa-users mr-1"></i>
-                            Allocate Users
-                        </button>
-                    )}
-                    {currentMonthlyNotes && (
+                            <option value="">Select Month...</option>
+                            {availableMonths.map(month => (
+                                <option key={month} value={month}>{formatMonth(month)}</option>
+                            ))}
+                        </select>
+                        <div className="flex items-center gap-2">
+                            <input
+                                value={newMonthKey}
+                                onChange={(e) => setNewMonthKey(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        handleCreateMonth(e.currentTarget.value);
+                                    }
+                                }}
+                                placeholder="YYYY-MM"
+                                aria-label="Create month key"
+                                title="Enter a month (YYYY-MM) to create meeting notes ahead of time"
+                                className={`w-32 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition shadow-sm ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'}`}
+                            />
+                            <button
+                                onClick={() => handleCreateMonth()}
+                                className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition shadow-sm hover:shadow-md font-medium"
+                            >
+                                <i className="fas fa-plus mr-1.5"></i>
+                                Create Month
+                            </button>
+                        </div>
                         <button
-                            onClick={handleDeleteMonth}
-                            className="px-3 py-1.5 text-xs bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+                            onClick={handleGenerateMonth}
+                            className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition shadow-sm hover:shadow-md font-medium"
+                            title="Generate new month from previous month"
                         >
-                            <i className="fas fa-trash mr-1"></i>
-                            Delete Month
+                            <i className="fas fa-magic mr-1.5"></i>
+                            Generate Month
                         </button>
-                    )}
-                    {monthlyNotesList.length > 0 && (
-                        <button
-                            onClick={handleDeleteAllMonths}
-                            className="px-3 py-1.5 text-xs bg-red-700 text-white rounded-lg hover:bg-red-800 transition"
-                        >
-                            <i className="fas fa-exclamation-triangle mr-1"></i>
-                            Delete All Months
-                        </button>
-                    )}
+                        {currentMonthlyNotes && (
+                            <button
+                                onClick={() => setShowAllocationModal(true)}
+                                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-sm hover:shadow-md font-medium"
+                            >
+                                <i className="fas fa-users mr-1.5"></i>
+                                Allocate Users
+                            </button>
+                        )}
+                        {currentMonthlyNotes && (
+                            <button
+                                onClick={handleDeleteMonth}
+                                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition shadow-sm hover:shadow-md font-medium"
+                            >
+                                <i className="fas fa-trash mr-1.5"></i>
+                                Delete Month
+                            </button>
+                        )}
+                        {monthlyNotesList.length > 0 && (
+                            <button
+                                onClick={handleDeleteAllMonths}
+                                className="px-4 py-2 text-sm bg-red-700 text-white rounded-lg hover:bg-red-800 transition shadow-sm hover:shadow-md font-medium"
+                            >
+                                <i className="fas fa-exclamation-triangle mr-1.5"></i>
+                                Delete All
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 
             {/* Month Selection Info */}
             {selectedMonth && currentMonthlyNotes && (
-                <div className={`rounded-lg border p-3 ${isDark ? 'bg-blue-900/30 border-blue-700' : 'bg-blue-50 border-blue-200'}`}>
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                        <h3 className={`text-sm font-semibold ${isDark ? 'text-blue-100' : 'text-blue-900'}`}>
-                            {formatMonth(selectedMonth)}
-                        </h3>
+                <div className={`rounded-xl border p-4 ${isDark ? 'bg-gradient-to-r from-blue-900/40 to-blue-800/30 border-blue-700/50' : 'bg-gradient-to-r from-blue-50 to-blue-100/50 border-blue-200 shadow-sm'}`}>
+                    <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div>
+                            <h3 className={`text-base font-bold mb-1 ${isDark ? 'text-blue-100' : 'text-blue-900'}`}>
+                                <i className="fas fa-calendar-alt mr-2"></i>
+                                {formatMonth(selectedMonth)}
+                            </h3>
+                            <p className={`text-xs ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
+                                {weeks.length} {weeks.length === 1 ? 'week' : 'weeks'} available
+                            </p>
+                        </div>
                         <div className="flex items-center gap-2">
                             <input
                                 value={newWeekStartInput}
@@ -1820,13 +1924,13 @@ const ManagementMeetingNotes = () => {
                                 placeholder="YYYY-MM-DD"
                                 aria-label="Week start date"
                                 title="Enter a week start date (YYYY-MM-DD) to create notes ahead of time"
-                                className={`w-32 px-3 py-1.5 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'}`}
+                                className={`w-36 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition shadow-sm ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'}`}
                             />
                             <button
                                 onClick={() => handleCreateWeek()}
-                                className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-sm hover:shadow-md font-medium"
                             >
-                                <i className="fas fa-plus mr-1"></i>
+                                <i className="fas fa-plus mr-1.5"></i>
                                 Add Week
                             </button>
                         </div>
@@ -1836,9 +1940,9 @@ const ManagementMeetingNotes = () => {
 
             {/* Action Items Summary */}
             {selectedMonth && currentMonthlyNotes && allActionItems.length > 0 && (
-                <div className={`rounded-lg border p-4 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                    <div className="flex items-center justify-between mb-3">
-                        <h3 className={`text-sm font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                <div className={`rounded-xl border p-5 ${isDark ? 'bg-slate-800 border-slate-700 shadow-lg' : 'bg-white border-gray-200 shadow-md'}`}>
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className={`text-base font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
                             <i className="fas fa-tasks mr-2 text-primary-600"></i>
                             Action Items Summary
                         </h3>
@@ -1847,54 +1951,56 @@ const ManagementMeetingNotes = () => {
                                 setEditingActionItem({ monthlyNotesId: currentMonthlyNotes.id });
                                 setShowActionItemModal(true);
                             }}
-                            className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
+                            className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition shadow-sm hover:shadow-md font-medium"
                         >
-                            <i className="fas fa-plus mr-1"></i>
+                            <i className="fas fa-plus mr-1.5"></i>
                             Add Action Item
                         </button>
                     </div>
-                    <div className="grid grid-cols-4 gap-3 mb-4">
-                        <div className={`rounded-lg p-3 ${isDark ? 'bg-slate-700' : 'bg-gray-50'}`}>
-                            <p className={`text-xs mb-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Open</p>
-                            <p className={`text-2xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{actionItemsByStatus.open.length}</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                        <div className={`rounded-lg p-4 border transition hover:scale-105 ${isDark ? 'bg-gradient-to-br from-orange-900/30 to-orange-800/20 border-orange-700/50' : 'bg-gradient-to-br from-orange-50 to-orange-100/50 border-orange-200'}`}>
+                            <p className={`text-xs mb-2 font-medium uppercase tracking-wide ${isDark ? 'text-orange-300' : 'text-orange-700'}`}>Open</p>
+                            <p className={`text-3xl font-bold ${isDark ? 'text-orange-200' : 'text-orange-900'}`}>{actionItemsByStatus.open.length}</p>
                         </div>
-                        <div className={`rounded-lg p-3 ${isDark ? 'bg-slate-700' : 'bg-gray-50'}`}>
-                            <p className={`text-xs mb-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>In Progress</p>
-                            <p className={`text-2xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{actionItemsByStatus.in_progress.length}</p>
+                        <div className={`rounded-lg p-4 border transition hover:scale-105 ${isDark ? 'bg-gradient-to-br from-blue-900/30 to-blue-800/20 border-blue-700/50' : 'bg-gradient-to-br from-blue-50 to-blue-100/50 border-blue-200'}`}>
+                            <p className={`text-xs mb-2 font-medium uppercase tracking-wide ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>In Progress</p>
+                            <p className={`text-3xl font-bold ${isDark ? 'text-blue-200' : 'text-blue-900'}`}>{actionItemsByStatus.in_progress.length}</p>
                         </div>
-                        <div className={`rounded-lg p-3 ${isDark ? 'bg-slate-700' : 'bg-gray-50'}`}>
-                            <p className={`text-xs mb-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Completed</p>
-                            <p className={`text-2xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{actionItemsByStatus.completed.length}</p>
+                        <div className={`rounded-lg p-4 border transition hover:scale-105 ${isDark ? 'bg-gradient-to-br from-green-900/30 to-green-800/20 border-green-700/50' : 'bg-gradient-to-br from-green-50 to-green-100/50 border-green-200'}`}>
+                            <p className={`text-xs mb-2 font-medium uppercase tracking-wide ${isDark ? 'text-green-300' : 'text-green-700'}`}>Completed</p>
+                            <p className={`text-3xl font-bold ${isDark ? 'text-green-200' : 'text-green-900'}`}>{actionItemsByStatus.completed.length}</p>
                         </div>
-                        <div className={`rounded-lg p-3 ${isDark ? 'bg-slate-700' : 'bg-gray-50'}`}>
-                            <p className={`text-xs mb-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Total</p>
-                            <p className={`text-2xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{allActionItems.length}</p>
+                        <div className={`rounded-lg p-4 border transition hover:scale-105 ${isDark ? 'bg-gradient-to-br from-slate-700 to-slate-800 border-slate-600' : 'bg-gradient-to-br from-gray-100 to-gray-50 border-gray-300'}`}>
+                            <p className={`text-xs mb-2 font-medium uppercase tracking-wide ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Total</p>
+                            <p className={`text-3xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{allActionItems.length}</p>
                         </div>
                     </div>
-                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                         {allActionItems.slice(0, 10).map((item) => (
-                            <div key={item.id} className={`flex items-center justify-between p-2 rounded ${isDark ? 'bg-slate-700' : 'bg-gray-50'}`}>
-                                <div className="flex-1">
-                                    <p className={`text-xs font-medium ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{item.title}</p>
+                            <div key={item.id} className={`flex items-center justify-between p-3 rounded-lg border transition hover:shadow-sm ${isDark ? 'bg-slate-700/50 border-slate-600 hover:bg-slate-700' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}`}>
+                                <div className="flex-1 min-w-0">
+                                    <p className={`text-sm font-medium mb-1 truncate ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{item.title}</p>
                                     <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                                        {item.assignedUser ? getUserName(item.assignedUserId) : 'Unassigned'} • {item.status}
+                                        {item.assignedUser ? getUserName(item.assignedUserId) : 'Unassigned'} • <span className="capitalize">{item.status}</span>
                                     </p>
                                 </div>
-                                <div className="flex gap-1">
+                                <div className="flex gap-2 ml-3">
                                     <button
                                         onClick={() => {
                                             setEditingActionItem(item);
                                             setShowActionItemModal(true);
                                         }}
-                                        className={`p-1 ${isDark ? 'text-slate-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
+                                        className={`p-2 rounded-lg transition ${isDark ? 'text-slate-400 hover:text-primary-400 hover:bg-primary-900/30' : 'text-gray-400 hover:text-primary-600 hover:bg-primary-50'}`}
+                                        title="Edit"
                                     >
-                                        <i className="fas fa-edit text-xs"></i>
+                                        <i className="fas fa-edit text-sm"></i>
                                     </button>
                                     <button
                                         onClick={() => handleDeleteActionItem(item.id)}
-                                        className={`p-1 ${isDark ? 'text-slate-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
+                                        className={`p-2 rounded-lg transition ${isDark ? 'text-slate-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`}
+                                        title="Delete"
                                     >
-                                        <i className="fas fa-trash text-xs"></i>
+                                        <i className="fas fa-trash text-sm"></i>
                                     </button>
                                 </div>
                             </div>
@@ -1905,20 +2011,21 @@ const ManagementMeetingNotes = () => {
 
             {/* Weekly Notes Section */}
             {selectedMonth && currentMonthlyNotes && weeks.length > 0 && (
-                <div className="space-y-4">
-                    <div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-900/40 border-slate-700' : 'bg-slate-50 border-slate-200'}`}>
-                        <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="space-y-5">
+                    <div className={`rounded-xl border p-4 ${isDark ? 'bg-slate-800/60 border-slate-700 shadow-md' : 'bg-gradient-to-br from-slate-50 to-slate-100/50 border-slate-200 shadow-sm'}`}>
+                        <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
                             <div>
-                                <p className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                                <p className={`text-sm font-bold uppercase tracking-wide mb-2 ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+                                    <i className="fas fa-calendar-week mr-2 text-primary-600"></i>
                                     Week Navigation
                                 </p>
-                                <p className={`text-[11px] leading-tight ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                                     Focus on this week alongside next week while keeping earlier updates a swipe away. Scroll horizontally to move between weeks in the month.
                                 </p>
                             </div>
                         </div>
-                        <div className="overflow-x-auto -mx-1 mt-3">
-                            <div className="flex gap-2 px-1 pb-1">
+                        <div className="overflow-x-auto -mx-1">
+                            <div className="flex gap-3 px-1 pb-2">
                                 {weeks.map((week, index) => {
                                     const rawId = getWeekIdentifier(week);
                                     const identifier = rawId || `week-${index}`;
@@ -1938,28 +2045,28 @@ const ManagementMeetingNotes = () => {
                                                 url.searchParams.set('week', identifier);
                                                 window.history.pushState({ week: identifier, month: selectedMonth, tab: 'meeting-notes' }, '', url);
                                             }}
-                                            className={`relative whitespace-nowrap px-3 py-2 rounded-lg border text-xs font-medium transition ${
+                                            className={`relative whitespace-nowrap px-4 py-3 rounded-xl border text-xs font-medium transition-all duration-200 shadow-sm hover:shadow-md hover:scale-105 ${
                                                 isActualCurrentWeek
                                                     ? isDark
-                                                        ? 'bg-primary-600/20 border-primary-400 text-primary-200'
-                                                        : 'bg-primary-50 border-primary-500 text-primary-700'
+                                                        ? 'bg-gradient-to-br from-primary-600/30 to-primary-700/20 border-primary-400 text-primary-100 shadow-primary-900/40'
+                                                        : 'bg-gradient-to-br from-primary-50 to-primary-100/50 border-primary-500 text-primary-800 shadow-primary-200/50'
                                                     : isActualNextWeek
                                                         ? isDark
-                                                            ? 'bg-amber-500/20 border-amber-400 text-amber-200'
-                                                            : 'bg-amber-50 border-amber-400 text-amber-700'
+                                                            ? 'bg-gradient-to-br from-amber-500/30 to-amber-600/20 border-amber-400 text-amber-100 shadow-amber-900/30'
+                                                            : 'bg-gradient-to-br from-amber-50 to-amber-100/50 border-amber-400 text-amber-800 shadow-amber-200/50'
                                                         : isSelected
                                                             ? isDark
-                                                                ? 'bg-slate-700 border-slate-600 text-slate-200'
-                                                                : 'bg-slate-100 border-slate-300 text-slate-700'
+                                                                ? 'bg-slate-700 border-slate-500 text-slate-200 shadow-slate-900/30'
+                                                                : 'bg-slate-100 border-slate-400 text-slate-800 shadow-slate-200/40'
                                                             : isDark
-                                                                ? 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-500 hover:text-slate-200'
-                                                                : 'bg-white border-slate-200 text-slate-600 hover:border-slate-400 hover:text-slate-700'
+                                                                ? 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-500 hover:text-slate-200 hover:bg-slate-750'
+                                                                : 'bg-white border-slate-300 text-slate-700 hover:border-slate-400 hover:text-slate-800 hover:bg-slate-50'
                                             }`}
                                         >
-                                            <span className="block text-[10px] uppercase tracking-wide">
+                                            <span className="block text-[10px] uppercase tracking-wider font-bold mb-1">
                                                 {label}
                                             </span>
-                                            <span className="block text-[11px] font-semibold">
+                                            <span className="block text-sm font-bold">
                                                 {formatWeek(week.weekKey, week.weekStart)}
                                             </span>
                                         </button>
@@ -2004,37 +2111,37 @@ const ManagementMeetingNotes = () => {
                                             gridRow: '1',
                                             gridColumn: `${index + 1}`
                                         }}
-                                        className={`rounded-lg border p-4 transition-all duration-200 ${
+                                        className={`rounded-xl border-2 p-5 transition-all duration-300 ${
                                             isActualCurrentWeek
                                                 ? isDark
-                                                    ? 'border-primary-400 shadow-lg shadow-primary-900/40 bg-slate-800'
-                                                    : 'border-primary-500 shadow-lg shadow-primary-200/60 bg-white'
+                                                    ? 'border-primary-400 shadow-xl shadow-primary-900/50 bg-gradient-to-br from-slate-800 to-slate-900'
+                                                    : 'border-primary-500 shadow-xl shadow-primary-200/60 bg-gradient-to-br from-white to-primary-50/30'
                                                 : isActualNextWeek
                                                     ? isDark
-                                                        ? 'border-amber-400 shadow-md shadow-amber-900/30 bg-slate-800'
-                                                        : 'border-amber-400 shadow-md shadow-amber-100/80 bg-white'
+                                                        ? 'border-amber-400 shadow-lg shadow-amber-900/40 bg-gradient-to-br from-slate-800 to-slate-900'
+                                                        : 'border-amber-400 shadow-lg shadow-amber-100/60 bg-gradient-to-br from-white to-amber-50/30'
                                                     : isSelected
                                                         ? isDark
-                                                            ? 'border-slate-600 shadow-md shadow-slate-900/20 bg-slate-800'
-                                                            : 'border-slate-400 shadow-md shadow-slate-200/40 bg-white'
+                                                            ? 'border-slate-500 shadow-lg shadow-slate-900/30 bg-gradient-to-br from-slate-800 to-slate-900'
+                                                            : 'border-slate-400 shadow-lg shadow-slate-200/50 bg-gradient-to-br from-white to-slate-50'
                                                         : isDark
-                                                            ? 'border-slate-700 bg-slate-800'
-                                                            : 'border-gray-200 bg-white'
+                                                            ? 'border-slate-700 bg-slate-800 hover:border-slate-600 hover:shadow-md'
+                                                            : 'border-gray-300 bg-white hover:border-gray-400 hover:shadow-md'
                                         }`}
                                     >
-                                            <div className="flex items-start justify-between gap-2 mb-3">
-                                                <div>
-                                                    <p className={`text-[11px] uppercase tracking-wide font-semibold ${isActualCurrentWeek ? (isDark ? 'text-primary-300' : 'text-primary-600') : isActualNextWeek ? (isDark ? 'text-amber-300' : 'text-amber-600') : isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                            <div className="flex items-start justify-between gap-3 mb-4">
+                                                <div className="flex-1">
+                                                    <p className={`text-xs uppercase tracking-wider font-bold mb-1 ${isActualCurrentWeek ? (isDark ? 'text-primary-300' : 'text-primary-600') : isActualNextWeek ? (isDark ? 'text-amber-300' : 'text-amber-600') : isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                                                         {isActualCurrentWeek ? 'This Week' : isActualNextWeek ? 'Next Week' : 'Week Overview'}
                                                     </p>
-                                <h3 className={`text-sm font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
-                                    <i className="fas fa-calendar-week mr-2 text-primary-600"></i>
+                                                    <h3 className={`text-base font-bold flex items-center ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                                                        <i className={`fas fa-calendar-week mr-2 ${isActualCurrentWeek ? 'text-primary-500' : isActualNextWeek ? 'text-amber-500' : 'text-slate-500'}`}></i>
                                                         {formatWeek(week.weekKey, week.weekStart)}
-                                </h3>
+                                                    </h3>
                                                 </div>
-                                <div className="flex items-center gap-2">
+                                                <div className="flex items-center gap-2">
                                                     {!isSelected && (
-                                    <button
+                                                        <button
                                                             type="button"
                                                             onClick={() => {
                                                                 setSelectedWeek(identifier);
@@ -2043,33 +2150,34 @@ const ManagementMeetingNotes = () => {
                                                                 url.searchParams.set('week', identifier);
                                                                 window.history.pushState({ week: identifier, month: selectedMonth, tab: 'meeting-notes' }, '', url);
                                                             }}
-                                                            className={`text-[11px] px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                            className={`text-xs px-3 py-1.5 rounded-lg font-medium transition shadow-sm hover:shadow-md ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                                                         >
+                                                            <i className="fas fa-crosshairs mr-1"></i>
                                                             Focus
-                                    </button>
+                                                        </button>
                                                     )}
-                                    <button
+                                                    <button
                                                         type="button"
-                                        onClick={() => handleDeleteWeek(week)}
-                                                        className={`text-[11px] flex items-center gap-1 px-2 py-1 rounded ${isDark ? 'bg-red-900 text-red-200 hover:bg-red-800' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
-                                    >
-                                        <i className="fas fa-trash"></i>
+                                                        onClick={() => handleDeleteWeek(week)}
+                                                        className={`text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition shadow-sm hover:shadow-md ${isDark ? 'bg-red-900/50 text-red-200 hover:bg-red-800/50 border border-red-700' : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'}`}
+                                                    >
+                                                        <i className="fas fa-trash"></i>
                                                         Delete
-                                    </button>
-                                </div>
-                            </div>
-                                        <div className="grid grid-cols-3 gap-2">
-                                                <div className={`rounded border px-2 py-1 ${isDark ? 'border-slate-700 bg-slate-900/40 text-slate-200' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
-                                                    <p className="text-[10px] uppercase tracking-wide">Departments</p>
-                                                    <p className="text-sm font-semibold">{summary.departmentCount}</p>
+                                                    </button>
                                                 </div>
-                                                <div className={`rounded border px-2 py-1 ${isDark ? 'border-slate-700 bg-slate-900/40 text-slate-200' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
-                                                    <p className="text-[10px] uppercase tracking-wide">Action Items</p>
-                                                    <p className="text-sm font-semibold">{summary.totalActionItems}</p>
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-3">
+                                                <div className={`rounded-lg border p-3 transition hover:scale-105 ${isDark ? 'border-slate-600 bg-slate-900/40 text-slate-200' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
+                                                    <p className="text-[10px] uppercase tracking-wide font-medium mb-1">Departments</p>
+                                                    <p className="text-lg font-bold">{summary.departmentCount}</p>
                                                 </div>
-                                                <div className={`rounded border px-2 py-1 ${isDark ? 'border-slate-700 bg-slate-900/40 text-slate-200' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
-                                                    <p className="text-[10px] uppercase tracking-wide">Comments</p>
-                                                    <p className="text-sm font-semibold">{summary.totalComments}</p>
+                                                <div className={`rounded-lg border p-3 transition hover:scale-105 ${isDark ? 'border-slate-600 bg-slate-900/40 text-slate-200' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
+                                                    <p className="text-[10px] uppercase tracking-wide font-medium mb-1">Action Items</p>
+                                                    <p className="text-lg font-bold">{summary.totalActionItems}</p>
+                                                </div>
+                                                <div className={`rounded-lg border p-3 transition hover:scale-105 ${isDark ? 'border-slate-600 bg-slate-900/40 text-slate-200' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
+                                                    <p className="text-[10px] uppercase tracking-wide font-medium mb-1">Comments</p>
+                                                    <p className="text-lg font-bold">{summary.totalComments}</p>
                                                 </div>
                                             </div>
                                     </div>
@@ -2088,11 +2196,11 @@ const ManagementMeetingNotes = () => {
                                     return (
                                         <div
                                             key={`${dept.id}-${identifier}`}
-                                            className={`rounded-lg border p-3 transition-all duration-200 h-full flex flex-col ${
+                                            className={`rounded-xl border-2 p-4 transition-all duration-200 h-full flex flex-col hover:shadow-md ${
                                                 !deptNote 
-                                                    ? `border-dashed opacity-60 ${isDark ? 'border-slate-600' : 'border-gray-300'}`
-                                                    : `${isDark ? 'border-slate-700' : 'border-gray-200'}`
-                                            } ${isDark ? 'bg-slate-800' : 'bg-white'}`}
+                                                    ? `border-dashed opacity-60 ${isDark ? 'border-slate-600 bg-slate-800/50' : 'border-gray-300 bg-gray-50/50'}`
+                                                    : `${isDark ? 'border-slate-700 bg-slate-800 hover:border-slate-600' : 'border-gray-300 bg-white hover:border-gray-400'}`
+                                            }`}
                                             style={{ 
                                                 minHeight: '200px',
                                                 gridRow: `${deptIndex + 2}`, // +2 because row 1 is headers
@@ -2369,14 +2477,25 @@ const ManagementMeetingNotes = () => {
                                                                         }
                                                                         
                                                                         return (
-                                                                            <div key={comment.id} className={`p-2 rounded transition-all duration-200 ${isDark ? 'bg-slate-700' : 'bg-gray-50'}`}>
-                                                                                <p 
-                                                                                    className={`text-xs ${isDark ? 'text-slate-100' : 'text-gray-900'}`}
-                                                                                    dangerouslySetInnerHTML={{ __html: displayContent }}
-                                                                                />
-                                                                                <p className={`text-xs mt-1 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                                                                                    {comment.author ? (comment.author.name || comment.author.email) : 'Unknown'} • {new Date(comment.createdAt).toLocaleDateString()}
-                                                                                </p>
+                                                                            <div key={comment.id} className={`p-3 rounded-lg border transition-all duration-200 hover:shadow-sm ${isDark ? 'bg-slate-700 border-slate-600' : 'bg-gray-50 border-gray-200'}`}>
+                                                                                <div className="flex items-start justify-between gap-2">
+                                                                                    <div className="flex-1 min-w-0">
+                                                                                        <p 
+                                                                                            className={`text-xs ${isDark ? 'text-slate-100' : 'text-gray-900'}`}
+                                                                                            dangerouslySetInnerHTML={{ __html: displayContent }}
+                                                                                        />
+                                                                                        <p className={`text-xs mt-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                                                                                            {comment.author ? (comment.author.name || comment.author.email) : 'Unknown'} • {new Date(comment.createdAt).toLocaleDateString()}
+                                                                                        </p>
+                                                                                    </div>
+                                                                                    <button
+                                                                                        onClick={() => handleDeleteComment(comment.id)}
+                                                                                        className={`p-1.5 rounded-lg transition flex-shrink-0 ${isDark ? 'text-slate-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`}
+                                                                                        title="Delete comment"
+                                                                                    >
+                                                                                        <i className="fas fa-trash text-xs"></i>
+                                                                                    </button>
+                                                                                </div>
                                                                             </div>
                                                                         );
                                                                     })}

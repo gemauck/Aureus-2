@@ -1822,6 +1822,15 @@ const DatabaseAPI = {
         return response;
     },
 
+    async deleteComment(commentId) {
+        console.log(`📡 Deleting comment ${commentId} from database...`);
+        const response = await this.makeRequest(`/meeting-notes?action=comment&id=${commentId}`, {
+            method: 'DELETE'
+        });
+        console.log('✅ Comment deleted from database');
+        return response;
+    },
+
     async updateUserAllocation(monthlyNotesId, departmentId, userId, role = 'contributor') {
         console.log('📡 Updating user allocation in database...');
         const response = await this.makeRequest('/meeting-notes?action=allocation', {

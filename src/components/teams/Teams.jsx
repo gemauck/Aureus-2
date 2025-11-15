@@ -264,6 +264,7 @@ const Teams = () => {
         return urlParams.get('tab') || 'overview';
     };
     
+    // ALL useState hooks must be declared before any useEffect hooks
     const [activeTab, setActiveTab] = useState(getTabFromURL());
     const [selectedTeam, setSelectedTeam] = useState(() => {
         // Initialize from URL if available
@@ -278,6 +279,34 @@ const Teams = () => {
         }
         return null;
     });
+    const [searchTerm, setSearchTerm] = useState('');
+    const [isReady, setIsReady] = useState(false);
+    
+    // Modal states
+    const [showDocumentModal, setShowDocumentModal] = useState(false);
+    const [showWorkflowModal, setShowWorkflowModal] = useState(false);
+    const [showChecklistModal, setShowChecklistModal] = useState(false);
+    const [showNoticeModal, setShowNoticeModal] = useState(false);
+    const [showWorkflowExecutionModal, setShowWorkflowExecutionModal] = useState(false);
+    const [showDocumentViewModal, setShowDocumentViewModal] = useState(false);
+    
+    // Data states
+    const [documents, setDocuments] = useState([]);
+    const [workflows, setWorkflows] = useState([]);
+    const [checklists, setChecklists] = useState([]);
+    const [notices, setNotices] = useState([]);
+    const [workflowExecutions, setWorkflowExecutions] = useState([]);
+    
+    // Edit states
+    const [editingDocument, setEditingDocument] = useState(null);
+    const [editingWorkflow, setEditingWorkflow] = useState(null);
+    const [editingChecklist, setEditingChecklist] = useState(null);
+    const [editingNotice, setEditingNotice] = useState(null);
+    const [executingWorkflow, setExecutingWorkflow] = useState(null);
+    const [viewingDocument, setViewingDocument] = useState(null);
+    
+    // State to track ManagementMeetingNotes availability
+    const [managementMeetingNotesAvailable, setManagementMeetingNotesAvailable] = useState(false);
     
     // Validate selectedTeam from URL after component mounts and isAdminUser is computed
     useEffect(() => {
@@ -356,34 +385,6 @@ const Teams = () => {
         window.addEventListener('popstate', handlePopState);
         return () => window.removeEventListener('popstate', handlePopState);
     }, [isTeamAccessible]);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [isReady, setIsReady] = useState(false);
-    
-    // Modal states
-    const [showDocumentModal, setShowDocumentModal] = useState(false);
-    const [showWorkflowModal, setShowWorkflowModal] = useState(false);
-    const [showChecklistModal, setShowChecklistModal] = useState(false);
-    const [showNoticeModal, setShowNoticeModal] = useState(false);
-    const [showWorkflowExecutionModal, setShowWorkflowExecutionModal] = useState(false);
-    const [showDocumentViewModal, setShowDocumentViewModal] = useState(false);
-    
-    // Data states
-    const [documents, setDocuments] = useState([]);
-    const [workflows, setWorkflows] = useState([]);
-    const [checklists, setChecklists] = useState([]);
-    const [notices, setNotices] = useState([]);
-    const [workflowExecutions, setWorkflowExecutions] = useState([]);
-    
-    // Edit states
-    const [editingDocument, setEditingDocument] = useState(null);
-    const [editingWorkflow, setEditingWorkflow] = useState(null);
-    const [editingChecklist, setEditingChecklist] = useState(null);
-    const [editingNotice, setEditingNotice] = useState(null);
-    const [executingWorkflow, setExecutingWorkflow] = useState(null);
-    const [viewingDocument, setViewingDocument] = useState(null);
-
-    // State to track ManagementMeetingNotes availability
-    const [managementMeetingNotesAvailable, setManagementMeetingNotesAvailable] = useState(false);
 
     // Check modal components on mount only
     useEffect(() => {
@@ -802,18 +803,19 @@ const Teams = () => {
     return (
         <div className="space-y-3">
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div>
-					<h1 className={`text-lg font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Teams & Knowledge Hub</h1>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div className="flex-1 min-w-0">
+					<h1 className={`text-base sm:text-lg font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Teams & Knowledge Hub</h1>
 					<p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Centralized documentation, workflows, and team collaboration</p>
                 </div>
                 {selectedTeam && (
                     <button
                         onClick={() => setSelectedTeam(null)}
-						className={`px-3 py-1.5 text-xs rounded-lg hover:bg-gray-200 transition ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+						className={`px-3 py-2 sm:py-1.5 text-xs sm:text-xs rounded-lg hover:bg-gray-200 transition whitespace-nowrap min-h-[44px] sm:min-h-0 ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                     >
                         <i className="fas fa-arrow-left mr-1.5"></i>
-                        Back to All Teams
+                        <span className="hidden sm:inline">Back to All Teams</span>
+                        <span className="sm:hidden">Back</span>
                     </button>
                 )}
             </div>
@@ -821,73 +823,78 @@ const Teams = () => {
             {/* Search and Filter Bar */}
             {selectedTeam && (
 				<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                    <div className="flex items-center gap-3">
-                        <div className="flex-1 relative">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                        <div className="flex-1 relative w-full min-w-0">
                             <input
                                 type="text"
                                 placeholder="Search documents, workflows, checklists..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-								className={`w-full pl-8 pr-3 py-1.5 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent placeholder-gray-400 ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400' : 'border-gray-300'}`}
+								className={`w-full pl-8 pr-3 py-2 sm:py-1.5 text-sm sm:text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent placeholder-gray-400 min-h-[44px] sm:min-h-0 ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400' : 'border-gray-300'}`}
                             />
-							<i className={`fas fa-search absolute left-2.5 top-2 text-xs ${isDark ? 'text-slate-400' : 'text-gray-400'}`}></i>
+							<i className={`fas fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-xs sm:text-xs ${isDark ? 'text-slate-400' : 'text-gray-400'}`}></i>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap sm:flex-nowrap gap-2 overflow-x-auto sm:overflow-x-visible pb-1 sm:pb-0 -mx-1 px-1 sm:mx-0 sm:px-0">
                             <button
                                 onClick={() => setActiveTab('documents')}
-                                className={`px-3 py-1.5 text-xs rounded-lg transition ${
+                                className={`px-3 py-2 sm:py-1.5 text-xs rounded-lg transition whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
                                     activeTab === 'documents'
                                         ? 'bg-primary-600 text-white'
 										: isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                 }`}
                             >
                                 <i className="fas fa-file-alt mr-1"></i>
-                                Documents
+                                <span className="hidden sm:inline">Documents</span>
+                                <span className="sm:hidden">Docs</span>
                             </button>
                             <button
                                 onClick={() => setActiveTab('workflows')}
-                                className={`px-3 py-1.5 text-xs rounded-lg transition ${
+                                className={`px-3 py-2 sm:py-1.5 text-xs rounded-lg transition whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
                                     activeTab === 'workflows'
                                         ? 'bg-primary-600 text-white'
 										: isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                 }`}
                             >
                                 <i className="fas fa-project-diagram mr-1"></i>
-                                Workflows
+                                <span className="hidden sm:inline">Workflows</span>
+                                <span className="sm:hidden">Work</span>
                             </button>
                             <button
                                 onClick={() => setActiveTab('checklists')}
-                                className={`px-3 py-1.5 text-xs rounded-lg transition ${
+                                className={`px-3 py-2 sm:py-1.5 text-xs rounded-lg transition whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
                                     activeTab === 'checklists'
                                         ? 'bg-primary-600 text-white'
 										: isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                 }`}
                             >
                                 <i className="fas fa-tasks mr-1"></i>
-                                Checklists
+                                <span className="hidden sm:inline">Checklists</span>
+                                <span className="sm:hidden">Check</span>
                             </button>
                             <button
                                 onClick={() => setActiveTab('notices')}
-                                className={`px-3 py-1.5 text-xs rounded-lg transition ${
+                                className={`px-3 py-2 sm:py-1.5 text-xs rounded-lg transition whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
                                     activeTab === 'notices'
                                         ? 'bg-primary-600 text-white'
 										: isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                 }`}
                             >
                                 <i className="fas fa-bullhorn mr-1"></i>
-                                Notices
+                                <span className="hidden sm:inline">Notices</span>
+                                <span className="sm:hidden">Notice</span>
                             </button>
                             {selectedTeam?.id === 'management' && (
                                 <button
                                     onClick={() => setActiveTab('meeting-notes')}
-                                    className={`px-3 py-1.5 text-xs rounded-lg transition ${
+                                    className={`px-3 py-2 sm:py-1.5 text-xs rounded-lg transition whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
                                         activeTab === 'meeting-notes'
                                             ? 'bg-primary-600 text-white'
 											: isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                                 >
                                     <i className="fas fa-clipboard-list mr-1"></i>
-                                    Meeting Notes
+                                    <span className="hidden sm:inline">Meeting Notes</span>
+                                    <span className="sm:hidden">Notes</span>
                                 </button>
                             )}
                         </div>
@@ -899,7 +906,7 @@ const Teams = () => {
             {!selectedTeam && (
                 <div className="space-y-3">
                     {/* Quick Stats */}
-						<div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+						<div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
 						<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                             <div className="flex items-center justify-between">
                                 <div>
@@ -949,7 +956,7 @@ const Teams = () => {
                     {/* Teams Grid */}
 					<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
 						<h2 className={`text-sm font-semibold mb-3 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Department Teams</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
                             {TEAMS.map(team => {
                                 const isAccessible = isTeamAccessible(team.id);
                                 const counts = getTeamCounts(team.id);
@@ -1039,7 +1046,7 @@ const Teams = () => {
                                 <p className="text-xs opacity-90">{selectedTeam.description}</p>
                             </div>
                         </div>
-                        <div className="flex gap-4 text-sm">
+                        <div className="flex flex-wrap gap-3 sm:gap-4 text-xs sm:text-sm">
                             <div>
                                 <span className="opacity-75">Documents: </span>
                                 <span className="font-bold">{filteredDocuments.length}</span>
@@ -1060,7 +1067,7 @@ const Teams = () => {
                     </div>
 
                     {/* Action Buttons */}
-                    <div className="flex gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-2">
                         <button
                             onClick={() => {
                                 console.log('🟢 Add Document button clicked');
@@ -1070,10 +1077,11 @@ const Teams = () => {
                                 setShowDocumentModal(true);
                                 console.log('  - showDocumentModal set to: true');
                             }}
-                            className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-xs font-medium"
+                            className="px-3 py-2.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-xs font-medium min-h-[44px] sm:min-h-0"
                         >
                             <i className="fas fa-plus mr-1.5"></i>
-                            Add Document
+                            <span className="hidden sm:inline">Add Document</span>
+                            <span className="sm:hidden">Document</span>
                         </button>
                         <button
                             onClick={() => {
@@ -1084,10 +1092,11 @@ const Teams = () => {
                                 setShowWorkflowModal(true);
                                 console.log('  - showWorkflowModal set to: true');
                             }}
-                            className="flex-1 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-xs font-medium"
+                            className="px-3 py-2.5 sm:py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-xs font-medium min-h-[44px] sm:min-h-0"
                         >
                             <i className="fas fa-plus mr-1.5"></i>
-                            Create Workflow
+                            <span className="hidden sm:inline">Create Workflow</span>
+                            <span className="sm:hidden">Workflow</span>
                         </button>
                         <button
                             onClick={() => {
@@ -1098,10 +1107,11 @@ const Teams = () => {
                                 setShowChecklistModal(true);
                                 console.log('  - showChecklistModal set to: true');
                             }}
-                            className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-xs font-medium"
+                            className="px-3 py-2.5 sm:py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-xs font-medium min-h-[44px] sm:min-h-0"
                         >
                             <i className="fas fa-plus mr-1.5"></i>
-                            New Checklist
+                            <span className="hidden sm:inline">New Checklist</span>
+                            <span className="sm:hidden">Checklist</span>
                         </button>
                         <button
                             onClick={() => {
@@ -1112,10 +1122,11 @@ const Teams = () => {
                                 setShowNoticeModal(true);
                                 console.log('  - showNoticeModal set to: true');
                             }}
-                            className="flex-1 px-3 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition text-xs font-medium"
+                            className="px-3 py-2.5 sm:py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition text-xs font-medium min-h-[44px] sm:min-h-0"
                         >
                             <i className="fas fa-plus mr-1.5"></i>
-                            Post Notice
+                            <span className="hidden sm:inline">Post Notice</span>
+                            <span className="sm:hidden">Notice</span>
                         </button>
                     </div>
 
@@ -1125,7 +1136,7 @@ const Teams = () => {
                             <div>
 									<h3 className={`text-sm font-semibold mb-3 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Documents Library</h3>
                                 {displayDocuments.length > 0 ? (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
                                         {displayDocuments.map(doc => (
                                             <div key={doc.id} className={`border rounded-lg p-3 hover:shadow-md transition ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                                                 <div className="flex items-start justify-between mb-2">
@@ -1135,27 +1146,27 @@ const Teams = () => {
                                                     <div className="flex gap-1">
                                                         <button
                                                             onClick={() => handleViewDocument(doc)}
-                                                            className={`p-1 transition ${isDark ? 'text-slate-400 hover:text-blue-400' : 'text-gray-400 hover:text-blue-600'}`}
+                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-slate-400 hover:text-blue-400' : 'text-gray-400 hover:text-blue-600'}`}
                                                             title="View"
                                                         >
-                                                            <i className="fas fa-eye text-xs"></i>
+                                                            <i className="fas fa-eye text-sm sm:text-xs"></i>
                                                         </button>
                                                         <button
                                                             onClick={() => {
                                                                 setEditingDocument(doc);
                                                                 setShowDocumentModal(true);
                                                             }}
-                                                            className={`p-1 transition ${isDark ? 'text-slate-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
+                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-slate-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
                                                             title="Edit"
                                                         >
-                                                            <i className="fas fa-edit text-xs"></i>
+                                                            <i className="fas fa-edit text-sm sm:text-xs"></i>
                                                         </button>
                                                         <button
                                                             onClick={() => handleDeleteDocument(doc.id)}
-                                                            className={`p-1 transition ${isDark ? 'text-slate-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
+                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-slate-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
                                                             title="Delete"
                                                         >
-                                                            <i className="fas fa-trash text-xs"></i>
+                                                            <i className="fas fa-trash text-sm sm:text-xs"></i>
                                                         </button>
                                                     </div>
                                                 </div>
@@ -1206,31 +1217,32 @@ const Teams = () => {
 												<p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>{workflow.description}</p>
                                                         </div>
                                                     </div>
-                                                    <div className="flex gap-1">
+                                                    <div className="flex gap-1 flex-wrap">
                                                         <button
                                                             onClick={() => handleExecuteWorkflow(workflow)}
-                                                            className={`px-2 py-1 rounded text-xs transition font-medium ${isDark ? 'bg-green-900 text-green-300 hover:bg-green-800' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
+                                                            className={`px-2 py-2 sm:py-1 rounded text-xs transition font-medium min-h-[44px] sm:min-h-0 ${isDark ? 'bg-green-900 text-green-300 hover:bg-green-800' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
                                                             title="Execute Workflow"
                                                         >
                                                             <i className="fas fa-play mr-1"></i>
-                                                            Execute
+                                                            <span className="hidden sm:inline">Execute</span>
+                                                            <span className="sm:hidden">Run</span>
                                                         </button>
                                                         <button
                                                             onClick={() => {
                                                                 setEditingWorkflow(workflow);
                                                                 setShowWorkflowModal(true);
                                                             }}
-                                                            className={`p-1 transition ${isDark ? 'text-slate-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
+                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-slate-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
                                                             title="Edit"
                                                         >
-                                                            <i className="fas fa-edit text-xs"></i>
+                                                            <i className="fas fa-edit text-sm sm:text-xs"></i>
                                                         </button>
                                                         <button
                                                             onClick={() => handleDeleteWorkflow(workflow.id)}
-                                                            className={`p-1 transition ${isDark ? 'text-slate-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
+                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-slate-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
                                                             title="Delete"
                                                         >
-                                                            <i className="fas fa-trash text-xs"></i>
+                                                            <i className="fas fa-trash text-sm sm:text-xs"></i>
                                                         </button>
                                                     </div>
                                                 </div>
@@ -1282,7 +1294,7 @@ const Teams = () => {
                             <div>
 									<h3 className="text-sm font-semibold text-gray-900 mb-3 ${isDark ? 'text-slate-100' : 'text-gray-900'}">Checklists & Forms</h3>
                                 {displayChecklists.length > 0 ? (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 gap-2 sm:gap-3">
                                         {displayChecklists.map(checklist => (
                                             <div key={checklist.id} className="border border-gray-200 rounded-lg p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}">
                                                 <div className="flex items-start justify-between mb-2">
@@ -1301,17 +1313,17 @@ const Teams = () => {
                                                                 setEditingChecklist(checklist);
                                                                 setShowChecklistModal(true);
                                                             }}
-                                                            className={`p-1 transition ${isDark ? 'text-slate-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
+                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-slate-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
                                                             title="Edit"
                                                         >
-                                                            <i className="fas fa-edit text-xs"></i>
+                                                            <i className="fas fa-edit text-sm sm:text-xs"></i>
                                                         </button>
                                                         <button
                                                             onClick={() => handleDeleteChecklist(checklist.id)}
-                                                            className={`p-1 transition ${isDark ? 'text-slate-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
+                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-slate-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
                                                             title="Delete"
                                                         >
-                                                            <i className="fas fa-trash text-xs"></i>
+                                                            <i className="fas fa-trash text-sm sm:text-xs"></i>
                                                         </button>
                                                     </div>
                                                 </div>
@@ -1377,7 +1389,7 @@ const Teams = () => {
                                                         <i className={`fas fa-bullhorn ${iconClasses}`}></i>
 												<h4 className={`font-semibold text-sm ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{notice.title}</h4>
                                                     </div>
-                                                    <div className="flex gap-1">
+                                                    <div className="flex gap-1 flex-wrap items-center">
                                                         <span className={`px-2 py-1 text-xs rounded font-medium ${badgeClasses}`}>
                                                             {notice.priority}
                                                         </span>
@@ -1386,17 +1398,17 @@ const Teams = () => {
                                                                 setEditingNotice(notice);
                                                                 setShowNoticeModal(true);
                                                             }}
-                                                            className={`p-1 transition ${isDark ? 'text-slate-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
+                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-slate-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
                                                             title="Edit"
                                                         >
-                                                            <i className="fas fa-edit text-xs"></i>
+                                                            <i className="fas fa-edit text-sm sm:text-xs"></i>
                                                         </button>
                                                         <button
                                                             onClick={() => handleDeleteNotice(notice.id)}
-                                                            className={`p-1 transition ${isDark ? 'text-slate-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
+                                                            className={`p-2 sm:p-1 transition min-w-[44px] sm:min-w-0 min-h-[44px] sm:min-h-0 flex items-center justify-center ${isDark ? 'text-slate-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
                                                             title="Delete"
                                                         >
-                                                            <i className="fas fa-trash text-xs"></i>
+                                                            <i className="fas fa-trash text-sm sm:text-xs"></i>
                                                         </button>
                                                     </div>
                                                 </div>
@@ -1548,12 +1560,12 @@ const Teams = () => {
 
             {/* Document View Modal */}
             {showDocumentViewModal && viewingDocument && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className={`rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
-                        <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-10 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}">
-                            <div>
-                                <h3 className="text-lg font-semibold text-gray-900 ${isDark ? 'text-slate-100' : 'text-gray-900'}">{viewingDocument.title}</h3>
-                                <p className="text-xs text-gray-600 ${isDark ? 'text-slate-400' : 'text-gray-600'}">
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+                    <div className={`rounded-lg max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
+                        <div className={`sticky top-0 border-b px-3 sm:px-4 py-2 sm:py-3 flex items-center justify-between z-10 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                            <div className="flex-1 min-w-0 pr-2">
+                                <h3 className={`text-base sm:text-lg font-semibold truncate ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{viewingDocument.title}</h3>
+                                <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
                                     {viewingDocument.category} • Version {viewingDocument.version}
                                 </p>
                             </div>
@@ -1562,13 +1574,13 @@ const Teams = () => {
                                     setShowDocumentViewModal(false);
                                     setViewingDocument(null);
                                 }}
-                                className={`text-gray-400 transition ${isDark ? 'hover:text-slate-200 text-slate-400' : 'hover:text-gray-600'}`}
+                                className={`text-gray-400 transition min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0 ${isDark ? 'hover:text-slate-200 text-slate-400' : 'hover:text-gray-600'}`}
                             >
                                 <i className="fas fa-times text-lg"></i>
                             </button>
                         </div>
 
-                        <div className="p-4 space-y-4">
+                        <div className="p-3 sm:p-4 space-y-3 sm:space-y-4">
                             {viewingDocument.description && (
                                 <div className={`border rounded-lg p-3 ${isDark ? 'bg-blue-900/30 border-blue-700' : 'bg-blue-50 border-blue-200'}`}>
                                     <p className={`text-sm ${isDark ? 'text-blue-200' : 'text-blue-900'}`}>{viewingDocument.description}</p>
