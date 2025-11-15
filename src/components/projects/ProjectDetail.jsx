@@ -1098,7 +1098,10 @@ function initializeProjectDetail() {
         console.log('  - hasDocumentCollectionProcess:', hasDocumentCollectionProcess);
         console.log('  - activeSection:', activeSection);
         
-        const [trackerReady, setTrackerReady] = useState(() => !!window.MonthlyDocumentCollectionTracker);
+        // CRITICAL: Declare MonthlyDocumentCollectionTracker before hooks to avoid initialization errors
+        const MonthlyDocumentCollectionTracker = window.MonthlyDocumentCollectionTracker;
+        
+        const [trackerReady, setTrackerReady] = useState(() => !!MonthlyDocumentCollectionTracker);
         const [loadAttempts, setLoadAttempts] = useState(0);
         const maxAttempts = 50; // 5 seconds (50 * 100ms)
         
@@ -1150,8 +1153,6 @@ function initializeProjectDetail() {
                 window.removeEventListener('viteProjectsReady', handleViteReady);
             };
         }, [trackerReady]);
-        
-        const MonthlyDocumentCollectionTracker = window.MonthlyDocumentCollectionTracker;
         console.log('  - MonthlyDocumentCollectionTracker:', typeof MonthlyDocumentCollectionTracker);
         console.log('  - trackerReady:', trackerReady);
         console.log('  - loadAttempts:', loadAttempts);
