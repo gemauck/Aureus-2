@@ -4908,7 +4908,7 @@ const Clients = React.memo(() => {
                 </div>
                 
                 {/* Modern Action Buttons */}
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 pr-4 sm:pr-6">
                     <button 
                     onClick={() => {
                         stopSync();
