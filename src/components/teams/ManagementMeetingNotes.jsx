@@ -2115,11 +2115,11 @@ const ManagementMeetingNotes = () => {
                                                         );
                                                     }
 
-                                                        const allocations = currentMonthlyNotes.userAllocations?.filter(
-                                                            (a) => a.departmentId === dept.id
-                                                        ) || [];
-                                                        return (
-                                                            <div key={dept.id} className={`border rounded-lg p-3 transition-all duration-200 ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
+                                                    const allocations = currentMonthlyNotes.userAllocations?.filter(
+                                                        (a) => a.departmentId === dept.id
+                                                    ) || [];
+                                                    return (
+                                                        <div key={dept.id} className={`border rounded-lg p-3 transition-all duration-200 ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
                                                                 <div className="flex items-center justify-between mb-3">
                                                                     <h4 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? `text-${dept.color}-300` : `text-${dept.color}-700`}`}>
                                                                         <i className={`fas ${dept.icon} ${isDark ? `text-${dept.color}-400` : `text-${dept.color}-600`}`}></i>
@@ -2352,7 +2352,7 @@ const ManagementMeetingNotes = () => {
                                                                                     }
                                                                                     
                                                                                     return (
-                                                                                        <div key={comment.id} className={`p-2 rounded ${isDark ? 'bg-slate-700' : 'bg-gray-50'}`}>
+                                                                                        <div key={comment.id} className={`p-2 rounded transition-all duration-200 ${isDark ? 'bg-slate-700' : 'bg-gray-50'}`}>
                                                                                             <p 
                                                                                                 className={`text-xs ${isDark ? 'text-slate-100' : 'text-gray-900'}`}
                                                                                                 dangerouslySetInnerHTML={{ __html: displayContent }}
@@ -2402,7 +2402,7 @@ const ManagementMeetingNotes = () => {
                                                                 </div>
                                                             </div>
                                                         );
-                                                    })
+                                                    })}
                                                 )}
                                             </div>
                         </div>
