@@ -1009,25 +1009,6 @@ const Teams = () => {
                         </div>
                     </div>
 
-                    {selectedTeam.permissions?.length > 0 && (
-                        <div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
-                            <h3 className={`text-sm font-semibold mb-2 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
-                                Key Permissions & Access
-                            </h3>
-                            <ul className="space-y-2">
-                                {selectedTeam.permissions.map((permission) => (
-                                    <li
-                                        key={permission}
-                                        className={`flex items-start gap-2 text-xs ${isDark ? 'text-slate-300' : 'text-gray-600'}`}
-                                    >
-                                        <i className={`fas fa-check-circle mt-0.5 text-${selectedTeam.color}-500`}></i>
-                                        <span className="leading-relaxed">{permission}</span>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                    )}
-
                     {/* Action Buttons */}
                     <div className="flex gap-2">
                         <button

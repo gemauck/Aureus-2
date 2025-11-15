@@ -232,8 +232,26 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     console.log('✅ ProjectProgressTracker: Loaded', normalizedProjects.length, 'total projects from API');
                     console.log('📋 ProjectProgressTracker: Filtered to', monthlyProjects.length, 'projects with monthly progress');
                     
+                    // Log monthlyProgress data for each project to verify data is loaded
+                    monthlyProjects.forEach((p, idx) => {
+                        const progressKeys = p.monthlyProgress ? Object.keys(p.monthlyProgress) : [];
+                        console.log(`📋 ProjectProgressTracker: Project ${idx + 1} (${p.name || p.id}):`, {
+                            id: p.id,
+                            name: p.name,
+                            monthlyProgressKeys: progressKeys,
+                            monthlyProgressType: typeof p.monthlyProgress,
+                            hasMonthlyProgress: !!p.monthlyProgress && Object.keys(p.monthlyProgress).length > 0,
+                            sampleMonthData: progressKeys.length > 0 ? p.monthlyProgress[progressKeys[0]] : null
+                        });
+                    });
+                    
                     if (monthlyProjects.length > 0) {
-                        console.log('📋 ProjectProgressTracker: First project sample:', monthlyProjects[0]);
+                        console.log('📋 ProjectProgressTracker: First project sample:', {
+                            id: monthlyProjects[0].id,
+                            name: monthlyProjects[0].name,
+                            monthlyProgress: monthlyProjects[0].monthlyProgress,
+                            monthlyProgressKeys: Object.keys(monthlyProjects[0].monthlyProgress || {})
+                        });
                     } else if (normalizedProjects.length > 0) {
                         console.warn('⚠️ ProjectProgressTracker: No projects with monthly progress found');
                     } else {
@@ -798,36 +816,56 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             let savedProject = null;
             
             try {
+                // Verify API is available
+                if (!window.DatabaseAPI && !window.api) {
+                    throw new Error('Database API not available. Please refresh the page.');
+                }
+                
+                if (!window.DatabaseAPI?.updateProject && !window.api?.updateProject) {
+                    throw new Error('updateProject method not available. Please refresh the page.');
+                }
+                
+                console.log('💾 ProjectProgressTracker: Calling updateProject with payload:', {
+                    projectId: project.id,
+                    payloadKeys: Object.keys(updatePayload),
+                    monthlyProgressType: typeof updatePayload.monthlyProgress,
+                    monthlyProgressLength: updatePayload.monthlyProgress?.length || 0,
+                    monthlyProgressPreview: updatePayload.monthlyProgress?.substring(0, 100) || 'N/A'
+                });
+                
+                let response;
                 if (window.DatabaseAPI && window.DatabaseAPI.updateProject) {
-                    const response = await window.DatabaseAPI.updateProject(project.id, updatePayload);
-                    console.log('✅ ProjectProgressTracker: API update response:', response);
-                    console.log('🔍 ProjectProgressTracker: Response structure:', {
-                        hasData: !!response?.data,
-                        hasProject: !!response?.data?.project,
-                        hasDirectProject: !!response?.project,
-                        dataKeys: response?.data ? Object.keys(response.data) : [],
-                        responseKeys: Object.keys(response || {}),
-                        monthlyProgressType: typeof (response?.data?.project?.monthlyProgress || response?.project?.monthlyProgress),
-                        monthlyProgressValue: response?.data?.project?.monthlyProgress || response?.project?.monthlyProgress
-                    });
-                    savedProject = response?.data?.project || response?.project || response?.data;
-                    updateSuccess = true;
+                    response = await window.DatabaseAPI.updateProject(project.id, updatePayload);
                 } else if (window.api && window.api.updateProject) {
-                    const response = await window.api.updateProject(project.id, updatePayload);
-                    console.log('✅ ProjectProgressTracker: API update response:', response);
-                    console.log('🔍 ProjectProgressTracker: Response structure:', {
-                        hasData: !!response?.data,
-                        hasProject: !!response?.data?.project,
-                        hasDirectProject: !!response?.project,
-                        dataKeys: response?.data ? Object.keys(response.data) : [],
-                        responseKeys: Object.keys(response || {}),
-                        monthlyProgressType: typeof (response?.data?.project?.monthlyProgress || response?.project?.monthlyProgress),
-                        monthlyProgressValue: response?.data?.project?.monthlyProgress || response?.project?.monthlyProgress
-                    });
-                    savedProject = response?.data?.project || response?.project || response?.data;
-                    updateSuccess = true;
+                    response = await window.api.updateProject(project.id, updatePayload);
                 } else {
                     throw new Error('Update API not available');
+                }
+                
+                console.log('✅ ProjectProgressTracker: API update response received:', response);
+                console.log('🔍 ProjectProgressTracker: Response structure:', {
+                    hasData: !!response?.data,
+                    hasProject: !!response?.data?.project,
+                    hasDirectProject: !!response?.project,
+                    dataKeys: response?.data ? Object.keys(response.data) : [],
+                    responseKeys: Object.keys(response || {}),
+                    monthlyProgressType: typeof (response?.data?.project?.monthlyProgress || response?.project?.monthlyProgress),
+                    monthlyProgressValue: response?.data?.project?.monthlyProgress || response?.project?.monthlyProgress
+                });
+                
+                // Validate response
+                if (!response) {
+                    throw new Error('API returned empty response');
+                }
+                
+                savedProject = response?.data?.project || response?.project || response?.data;
+                
+                if (!savedProject) {
+                    console.warn('⚠️ ProjectProgressTracker: API response does not contain project data');
+                    // Still mark as success if we got a response - the data might be in the database
+                    updateSuccess = true;
+                } else {
+                    updateSuccess = true;
                 }
             } catch (apiErr) {
                 apiError = apiErr;
@@ -835,7 +873,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 console.error('❌ ProjectProgressTracker: Error details:', {
                     message: apiErr?.message,
                     stack: apiErr?.stack,
-                    name: apiErr?.name
+                    name: apiErr?.name,
+                    projectId: project.id,
+                    payload: updatePayload
                 });
                 
                 // Restore backup on failure
@@ -918,7 +958,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 // This ensures that when the component remounts or user navigates away and back, data is there
                 try {
                     // Wait a bit for the database to commit the transaction
-                    await new Promise(resolve => setTimeout(resolve, 100));
+                    // Increased delay to ensure database has time to commit
+                    await new Promise(resolve => setTimeout(resolve, 500));
                     
                     console.log('🔄 ProjectProgressTracker: Reloading projects from database after save...');
                     
@@ -984,6 +1025,35 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             return false;
                         });
                         
+                        // Verify the saved data is in the reloaded projects
+                        const reloadedProject = monthlyReloaded.find(p => String(p?.id) === String(project.id));
+                        if (reloadedProject) {
+                            const reloadedMonthlyProgress = reloadedProject.monthlyProgress || {};
+                            const savedMonthKey = key;
+                            const savedFieldValue = reloadedMonthlyProgress[savedMonthKey]?.[field];
+                            console.log('🔍 ProjectProgressTracker: Verifying saved data in reloaded project:', {
+                                projectId: project.id,
+                                monthKey: savedMonthKey,
+                                field: field,
+                                savedValue: savedFieldValue,
+                                expectedValue: sanitizedValue,
+                                matches: savedFieldValue === sanitizedValue,
+                                reloadedProgressKeys: Object.keys(reloadedMonthlyProgress)
+                            });
+                            
+                            if (savedFieldValue !== sanitizedValue) {
+                                console.warn('⚠️ ProjectProgressTracker: Saved value does not match reloaded value!', {
+                                    saved: sanitizedValue,
+                                    reloaded: savedFieldValue
+                                });
+                            }
+                        } else {
+                            console.warn('⚠️ ProjectProgressTracker: Saved project not found in reloaded projects!', {
+                                projectId: project.id,
+                                reloadedCount: monthlyReloaded.length
+                            });
+                        }
+                        
                         // Update state with reloaded data
                         setProjects(Array.isArray(monthlyReloaded) ? monthlyReloaded : []);
                         console.log('✅ ProjectProgressTracker: Successfully reloaded projects from database, count:', monthlyReloaded.length);
@@ -993,15 +1063,31 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     // Don't fail the save if reload fails - the local state update above should be sufficient
                 }
                 
+                // Show success notification
+                console.log('✅ ProjectProgressTracker: Save completed successfully');
+                
                 // Close modal after successful save
                 setIsModalOpen(false);
                 setModalData(null);
+                
+                // Optional: Show a brief success message (you can replace with a toast notification)
+                // For now, we'll just log it - the UI update should be visible immediately
             }
         } catch (e) {
             console.error('❌ ProjectProgressTracker: Error saving progress data:', e);
             const errorMessage = e.message || 'Failed to save. Please try again.';
-            alert(`Save failed: ${errorMessage}`);
+            
+            // Show detailed error to user
+            const detailedError = `Save failed: ${errorMessage}\n\n` +
+                `Project: ${project?.name || project?.id || 'Unknown'}\n` +
+                `Month: ${month}\n` +
+                `Field: ${field}\n\n` +
+                `Please check the browser console for more details.`;
+            
+            alert(detailedError);
+            
             // Don't close modal on error - let user retry or cancel
+            // Keep the modal open so user can see their data and try again
         } finally {
             setSaving(false);
         }
@@ -1038,7 +1124,21 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     
     // Handle save from modal
     const handleModalSave = async () => {
-        if (!modalData || saving) return;
+        if (!modalData || saving) {
+            console.warn('⚠️ ProjectProgressTracker: handleModalSave called but modalData is missing or already saving', {
+                hasModalData: !!modalData,
+                saving: saving
+            });
+            return;
+        }
+        
+        console.log('💾 ProjectProgressTracker: handleModalSave called', {
+            projectId: modalData.project?.id,
+            projectName: modalData.project?.name,
+            month: modalData.month,
+            field: modalData.field,
+            valueLength: modalData.tempValue?.length || 0
+        });
         
         const { project, month, field, tempValue } = modalData;
         await saveProgressData(project, month, field, tempValue);
