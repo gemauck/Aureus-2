@@ -4819,7 +4819,7 @@ const Clients = React.memo(() => {
 
     return (
         <div className="flex flex-col h-full w-full max-w-full overflow-hidden" style={{ width: '100%', maxWidth: '100%', minWidth: '100%', height: '100%', minHeight: '100%' }}>
-            <div className="flex-shrink-0 space-y-5 sm:space-y-8 pl-4 sm:pl-72 md:pl-80 pr-4 sm:pr-6 pt-5 sm:pt-6 pb-2 w-full max-w-full" style={{ width: '100%', maxWidth: '100%' }}>
+            <div className="flex-shrink-0 space-y-5 sm:space-y-8 pl-4 sm:pl-80 md:pl-96 pr-4 sm:pr-6 pt-5 sm:pt-6 pb-2 w-full max-w-full" style={{ width: '100%', maxWidth: '100%' }}>
             {/* Modern Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6 pb-2">
                 <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
@@ -5096,7 +5096,7 @@ const Clients = React.memo(() => {
             </div>
 
             {/* Content based on view mode */}
-            <div className="flex-1 overflow-hidden pl-4 sm:pl-72 md:pl-80 pr-4 sm:pr-6 pb-5 sm:pb-6 pt-2 min-h-0">
+            <div className="flex-1 overflow-hidden pl-4 sm:pl-80 md:pl-96 pr-4 sm:pr-6 pb-5 sm:pb-6 pt-2 min-h-0">
             {viewMode === 'clients' && <ClientsListView />}
             {viewMode === 'leads' && <LeadsListView />}
             {viewMode === 'pipeline' && (
