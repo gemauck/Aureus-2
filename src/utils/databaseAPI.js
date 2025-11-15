@@ -553,6 +553,12 @@ const DatabaseAPI = {
                 if (i === candidateBases.length - 1 || !shouldFallback) {
                     throw error;
                 }
+                // Silently fallback - this is expected behavior, not an error
+                // Only log if it's the last attempt or if it's not a fallback-able error
+                if (i < candidateBases.length - 1 && shouldFallback) {
+                    // Expected fallback, don't log as error
+                    continue;
+                }
                 console.warn(
                     `⚠️ Purchase orders endpoint ${endpoint} unavailable - falling back to alternate route...`,
                     error?.message || error

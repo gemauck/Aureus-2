@@ -90,25 +90,45 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
     const previousProjectIdRef = useRef(project?.id);
     const editingSectionIdRef = useRef(null); // Ref to store current editingSectionId
     
-    // ULTRA AGGRESSIVE: Initialize sections from props, but check sessionStorage first to preserve saved sections
+    // ULTRA AGGRESSIVE: Initialize sections from props, but check localStorage first to preserve saved sections
     const [sections, setSections] = useState(() => {
         console.log('📋 Initializing sections from project.documentSections:', project.documentSections);
         
-        // CRITICAL: Check sessionStorage first - if we have saved sections, use them instead of stale prop data
+        // CRITICAL: Check localStorage first - if we have saved sections, use them instead of stale prop data
+        // localStorage persists across browser sessions, unlike sessionStorage which is cleared after ~4 hours
         const storageKey = `documentSections_${project?.id}`;
         try {
-            const savedSections = sessionStorage.getItem(storageKey);
+            // Try localStorage first (persists across sessions)
+            const savedSections = localStorage.getItem(storageKey);
             if (savedSections) {
                 const parsed = JSON.parse(savedSections);
                 if (Array.isArray(parsed) && parsed.length > 0) {
-                    console.log('🛡️ Using saved sections from sessionStorage:', parsed.length, 'sections');
+                    console.log('🛡️ Using saved sections from localStorage:', parsed.length, 'sections');
+                    hasInitializedRef.current = true;
+                    console.log('🛑 ULTRA AGGRESSIVE: Initialized with saved sections - BLOCKING all future syncs');
+                    return parsed;
+                }
+            }
+            // Fallback to sessionStorage for backward compatibility
+            const sessionSections = sessionStorage.getItem(storageKey);
+            if (sessionSections) {
+                const parsed = JSON.parse(sessionSections);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    console.log('🛡️ Using saved sections from sessionStorage (fallback):', parsed.length, 'sections');
+                    // Migrate to localStorage
+                    try {
+                        localStorage.setItem(storageKey, sessionSections);
+                        console.log('📦 Migrated sections from sessionStorage to localStorage');
+                    } catch (e) {
+                        console.warn('Failed to migrate to localStorage:', e);
+                    }
                     hasInitializedRef.current = true;
                     console.log('🛑 ULTRA AGGRESSIVE: Initialized with saved sections - BLOCKING all future syncs');
                     return parsed;
                 }
             }
         } catch (e) {
-            console.warn('Failed to load sections from sessionStorage:', e);
+            console.warn('Failed to load sections from storage:', e);
         }
         
         // Fallback to prop data
@@ -219,15 +239,29 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                 });
             }
             
-            // CRITICAL: Save to sessionStorage IMMEDIATELY to prevent overwrites
+            // CRITICAL: Save to localStorage IMMEDIATELY to prevent overwrites
             // This ensures that even if the component re-mounts or re-renders,
             // it will use the saved sections instead of stale prop data
+            // localStorage persists across browser sessions, unlike sessionStorage which is cleared after ~4 hours
             const storageKey = `documentSections_${project.id}`;
             try {
-                sessionStorage.setItem(storageKey, JSON.stringify(sectionsToSave));
-                console.log('💾 Saved sections to sessionStorage:', sectionsToSave.length, 'sections');
+                localStorage.setItem(storageKey, JSON.stringify(sectionsToSave));
+                console.log('💾 Saved sections to localStorage:', sectionsToSave.length, 'sections');
+                // Also save to sessionStorage for fast access during current session
+                try {
+                    sessionStorage.setItem(storageKey, JSON.stringify(sectionsToSave));
+                } catch (e) {
+                    // Ignore sessionStorage errors - localStorage is primary
+                }
             } catch (e) {
-                console.warn('Failed to save sections to sessionStorage:', e);
+                console.warn('Failed to save sections to localStorage:', e);
+                // Fallback to sessionStorage if localStorage fails
+                try {
+                    sessionStorage.setItem(storageKey, JSON.stringify(sectionsToSave));
+                    console.log('⚠️ Saved sections to sessionStorage (localStorage unavailable)');
+                } catch (e2) {
+                    console.warn('Failed to save sections to sessionStorage:', e2);
+                }
             }
             
             // Update localStorage for consistency
@@ -379,30 +413,50 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
             previousDocumentSectionsRef.current = null; // Reset to allow sync for new project
         }
         
-        // CRITICAL: Check sessionStorage FIRST - if we have saved sections, NEVER sync from props
+        // CRITICAL: Check localStorage FIRST - if we have saved sections, NEVER sync from props
         // This prevents stale prop data from overwriting user changes
+        // localStorage persists across browser sessions, unlike sessionStorage which is cleared after ~4 hours
         const storageKey = `documentSections_${project?.id}`;
-        let hasSessionStorageData = false;
+        let hasSavedData = false;
         try {
-            const savedSections = sessionStorage.getItem(storageKey);
+            // Try localStorage first (persists across sessions)
+            let savedSections = localStorage.getItem(storageKey);
+            let source = 'localStorage';
+            
+            // Fallback to sessionStorage if localStorage is empty
+            if (!savedSections) {
+                savedSections = sessionStorage.getItem(storageKey);
+                source = 'sessionStorage';
+                // If found in sessionStorage, migrate to localStorage
+                if (savedSections) {
+                    try {
+                        localStorage.setItem(storageKey, savedSections);
+                        console.log('📦 Migrated sections from sessionStorage to localStorage');
+                        source = 'localStorage (migrated)';
+                    } catch (e) {
+                        console.warn('Failed to migrate to localStorage:', e);
+                    }
+                }
+            }
+            
             if (savedSections) {
                 const parsed = JSON.parse(savedSections);
                 if (Array.isArray(parsed) && parsed.length > 0) {
-                    hasSessionStorageData = true;
+                    hasSavedData = true;
                     // CRITICAL: Mark as initialized IMMEDIATELY to prevent any sync from props
                     // This must happen before setSections to prevent race conditions
                     hasInitializedRef.current = true;
                     isInitialMount.current = false;
                     
-                    // We have saved sections in sessionStorage - check if we need to restore them
+                    // We have saved sections - check if we need to restore them
                     setSections(currentSections => {
-                        // If local state is empty but sessionStorage has data, restore from sessionStorage
+                        // If local state is empty but storage has data, restore from storage
                         // This handles the case where the component remounted and lost state
                         if (currentSections.length === 0 && parsed.length > 0) {
-                            console.log('🔄 Restoring sections from sessionStorage:', parsed.length, 'sections');
+                            console.log(`🔄 Restoring sections from ${source}:`, parsed.length, 'sections');
                             return parsed;
                         }
-                        // If local state has data, keep it (it's more recent than sessionStorage)
+                        // If local state has data, keep it (it's more recent than storage)
                         // hasInitializedRef is already set above, so sync from props is blocked
                         if (currentSections.length > 0) {
                             console.log('🛡️ Local state has sections - keeping local state and blocking syncs from props');
@@ -410,13 +464,13 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                         return currentSections;
                     });
                     
-                    // NEVER sync from props if sessionStorage has data
-                    console.log('🛡️ sessionStorage has saved sections - BLOCKING all syncs from props');
+                    // NEVER sync from props if storage has data
+                    console.log(`🛡️ ${source} has saved sections - BLOCKING all syncs from props`);
                     return;
                 }
             }
         } catch (e) {
-            console.warn('Failed to check sessionStorage:', e);
+            console.warn('Failed to check storage:', e);
         }
         
         // ULTRA AGGRESSIVE: If already initialized, NEVER sync - even if prop changes
@@ -1261,13 +1315,26 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                     }
                 }
                 
-                // Save to sessionStorage for persistence
+                // Save to localStorage for persistence across browser sessions
                 const storageKey = `documentSections_${project.id}`;
                 try {
-                    sessionStorage.setItem(storageKey, JSON.stringify(updatedSections));
-                    console.log('💾 Saved sections to sessionStorage (comment save):', updatedSections.length, 'sections');
+                    localStorage.setItem(storageKey, JSON.stringify(updatedSections));
+                    console.log('💾 Saved sections to localStorage (comment save):', updatedSections.length, 'sections');
+                    // Also save to sessionStorage for fast access during current session
+                    try {
+                        sessionStorage.setItem(storageKey, JSON.stringify(updatedSections));
+                    } catch (e) {
+                        // Ignore sessionStorage errors - localStorage is primary
+                    }
                 } catch (e) {
-                    console.warn('Failed to save sections to sessionStorage:', e);
+                    console.warn('Failed to save sections to localStorage:', e);
+                    // Fallback to sessionStorage if localStorage fails
+                    try {
+                        sessionStorage.setItem(storageKey, JSON.stringify(updatedSections));
+                        console.log('⚠️ Saved sections to sessionStorage (localStorage unavailable)');
+                    } catch (e2) {
+                        console.warn('Failed to save sections to sessionStorage:', e2);
+                    }
                 }
                 
                 // CRITICAL: Update previousDocumentSectionsRef to track the value we just saved

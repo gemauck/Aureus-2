@@ -54,7 +54,9 @@ async function handler(req, res) {
     // GET /api/user-tasks - List all tasks for the user
     if (req.method === 'GET' && !taskId) {
       try {
-        const { status, category, clientId, projectId, tagId, priority, view } = req.query || {}
+        // Safely parse query parameters - handle empty query strings
+        const queryParams = req.query || {}
+        const { status, category, clientId, projectId, tagId, priority, view } = queryParams
         
         const where = { ownerId: userId }
         
@@ -87,16 +89,30 @@ async function handler(req, res) {
 
         const parsedTasks = tasks.map(parseUserTaskJsonFields)
         
-        // Get categories for filter
-        const categories = await prisma.userTask.findMany({
-          where: { ownerId: userId },
-          select: { category: true },
-          distinct: ['category']
-        })
+        // Get categories for filter - use groupBy instead of distinct
+        let categories = []
+        try {
+          const categoryGroups = await prisma.userTask.groupBy({
+            by: ['category'],
+            where: { 
+              ownerId: userId,
+              category: { not: null }
+            }
+          })
+          categories = categoryGroups.map(c => c.category).filter(Boolean)
+        } catch (error) {
+          // Fallback: extract unique categories from tasks
+          console.warn('⚠️ Failed to group categories, using fallback:', error.message)
+          const categorySet = new Set()
+          parsedTasks.forEach(task => {
+            if (task.category) categorySet.add(task.category)
+          })
+          categories = Array.from(categorySet)
+        }
 
         return ok(res, {
           tasks: parsedTasks,
-          categories: categories.map(c => c.category).filter(Boolean),
+          categories: categories,
           stats: {
             total: parsedTasks.length,
             todo: parsedTasks.filter(t => t.status === 'todo').length,

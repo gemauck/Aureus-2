@@ -72,7 +72,9 @@ const TaskManagement = () => {
             if (filterTag !== 'all') params.append('tagId', filterTag);
             if (filterPriority !== 'all') params.append('priority', filterPriority);
 
-            const response = await fetch(`/api/user-tasks?${params.toString()}`, {
+            const queryString = params.toString();
+            const url = queryString ? `/api/user-tasks?${queryString}` : '/api/user-tasks';
+            const response = await fetch(url, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
