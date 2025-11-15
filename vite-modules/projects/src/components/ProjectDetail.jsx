@@ -112,56 +112,20 @@ export function ProjectDetail({ project, onBack, onDelete }) {
         console.log('✅ ProjectDetail: All required components loaded');
     }
     
-    // Tab navigation state - restore from sessionStorage if available, otherwise start with overview
-    // Only restore 'documentCollection' if the project has the Document Collection process enabled
-    const [activeSection, setActiveSection] = useState(() => {
-        const saved = sessionStorage.getItem(`project-${project.id}-activeSection`);
-        // Normalize hasDocumentCollectionProcess to check if it's enabled
-        const hasProcess = project.hasDocumentCollectionProcess === true || 
-                          project.hasDocumentCollectionProcess === 'true' ||
-                          project.hasDocumentCollectionProcess === 1 ||
-                          (typeof project.hasDocumentCollectionProcess === 'string' && project.hasDocumentCollectionProcess.toLowerCase() === 'true');
-        
-        // If saved section is 'documentCollection' but process is not enabled, default to 'overview'
-        if (saved === 'documentCollection' && !hasProcess) {
-            console.log('🔄 Document Collection tab saved but process not enabled, defaulting to overview');
-            return 'overview';
-        }
-        
-        // Restore the saved section if valid, otherwise default to 'overview'
-        // This allows Document Collection to persist if user explicitly navigated to it
-        return saved || 'overview';
-    });
+    // Tab navigation state - always default to overview when opening a project
+    const [activeSection, setActiveSection] = useState('overview');
     
-    // Persist activeSection to sessionStorage
+    // Persist activeSection to sessionStorage (for navigation within the same session)
     useEffect(() => {
         sessionStorage.setItem(`project-${project.id}-activeSection`, activeSection);
         console.log('🟢 Active section changed to:', activeSection);
     }, [activeSection, project.id]);
     
-    // Sync activeSection when project prop changes (e.g., after reloading from database)
-    // This ensures we restore the correct tab even if project data loads asynchronously
+    // Reset to overview when project changes (opening a different project)
     useEffect(() => {
-        const saved = sessionStorage.getItem(`project-${project.id}-activeSection`);
-        if (saved) {
-            // Normalize hasDocumentCollectionProcess to check if it's enabled
-            const hasProcess = project.hasDocumentCollectionProcess === true || 
-                              project.hasDocumentCollectionProcess === 'true' ||
-                              project.hasDocumentCollectionProcess === 1 ||
-                              (typeof project.hasDocumentCollectionProcess === 'string' && project.hasDocumentCollectionProcess.toLowerCase() === 'true');
-            
-            // Only restore if valid
-            if (saved === 'documentCollection' && !hasProcess) {
-                console.log('🔄 Project prop changed: Document Collection not enabled, defaulting to overview');
-                setActiveSection('overview');
-                return;
-            }
-            
-            // Restore saved section
-            console.log('🔄 Project prop changed: Restoring saved section from sessionStorage:', saved, 'current:', activeSection);
-            setActiveSection(saved);
-        }
-    }, [project.id, project.hasDocumentCollectionProcess]); // Only run when project ID or hasDocumentCollectionProcess changes
+        setActiveSection('overview');
+        console.log('🔄 Project changed, defaulting to overview');
+    }, [project.id]);
     
     // Track if document collection process exists
     // Normalize the value from project prop (handle boolean, string, number, undefined)
