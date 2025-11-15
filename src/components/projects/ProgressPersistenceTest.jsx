@@ -377,3 +377,4 @@ try {
     console.error('❌ Failed to register ProgressPersistenceTest:', error);
 }
 
+

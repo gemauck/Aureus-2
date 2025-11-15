@@ -67,3 +67,4 @@ If the script fails:
 With these steps in place you can rotate secrets safely, redeploy with confidence, and confirm that transactional emails are functioning.
 
 
+

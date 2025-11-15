@@ -1,5 +1,15 @@
-// Get React hooks from window
-const { useState, useEffect, useRef, memo } = React;
+// Get React hooks from window - with safety checks
+let useState, useEffect, useRef, memo;
+if (typeof React !== 'undefined') {
+    ({ useState, useEffect, useRef, memo } = React);
+} else {
+    console.error('❌ ProjectProgressTracker: React is not available when component loads');
+    // Create fallback functions to prevent errors
+    useState = function(initial) { return [initial, function() {}]; };
+    useEffect = function() {};
+    useRef = function(initial) { return { current: initial }; };
+    memo = function(component) { return component; };
+}
 const storage = window.storage;
 
 // Main component - completely rebuilt for reliability
@@ -117,9 +127,23 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
 
     // Load projects
     useEffect(() => {
-        const load = async () => {
+        const load = async (retryCount = 0) => {
             try {
-                console.log('📋 ProjectProgressTracker: Loading projects from database...');
+                console.log('📋 ProjectProgressTracker: Loading projects from database... (attempt ' + (retryCount + 1) + ')');
+                
+                // Wait for DatabaseAPI to be available
+                if (!window.DatabaseAPI || !window.DatabaseAPI.getProjects) {
+                    if (retryCount < 10) {
+                        console.warn('⚠️ ProjectProgressTracker: DatabaseAPI not available yet, retrying in 200ms...');
+                        setTimeout(() => load(retryCount + 1), 200);
+                        return;
+                    } else {
+                        console.error('❌ ProjectProgressTracker: DatabaseAPI.getProjects not available after retries');
+                        setLoadError('Database API not available');
+                        return;
+                    }
+                }
+                
                 if (window.DatabaseAPI && window.DatabaseAPI.getProjects) {
                     const response = await window.DatabaseAPI.getProjects();
                     console.log('📋 ProjectProgressTracker: Raw response:', response);
@@ -741,10 +765,18 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             const backupProgress = JSON.parse(JSON.stringify(parsedProgress));
             
             // Clear cache BEFORE updating to ensure fresh data after save
-            if (window.DatabaseAPI && window.DatabaseAPI._responseCache) {
-                window.DatabaseAPI._responseCache.delete('GET:/projects');
-                window.DatabaseAPI._responseCache.delete(`GET:/projects/${project.id}`);
-                console.log('🗑️ ProjectProgressTracker: Cleared project caches before save');
+            if (window.DatabaseAPI) {
+                // Clear response cache
+                if (window.DatabaseAPI._responseCache) {
+                    window.DatabaseAPI._responseCache.delete('GET:/projects');
+                    window.DatabaseAPI._responseCache.delete(`GET:/projects/${project.id}`);
+                    console.log('🗑️ ProjectProgressTracker: Cleared project caches before save');
+                }
+                // Also clear any pending requests to avoid stale data
+                if (window.DatabaseAPI._pendingRequests) {
+                    window.DatabaseAPI._pendingRequests.delete('/projects');
+                    window.DatabaseAPI._pendingRequests.delete(`/projects/${project.id}`);
+                }
             }
             
             // Update project via API - only send monthlyProgress field to prevent overwriting other fields
@@ -885,7 +917,23 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 // CRITICAL: Reload projects from database after successful save to ensure persistence
                 // This ensures that when the component remounts or user navigates away and back, data is there
                 try {
+                    // Wait a bit for the database to commit the transaction
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
                     console.log('🔄 ProjectProgressTracker: Reloading projects from database after save...');
+                    
+                    // Clear cache again before reload to ensure fresh data
+                    if (window.DatabaseAPI) {
+                        if (window.DatabaseAPI._responseCache) {
+                            window.DatabaseAPI._responseCache.delete('GET:/projects');
+                            window.DatabaseAPI._responseCache.delete(`GET:/projects/${project.id}`);
+                        }
+                        if (window.DatabaseAPI._pendingRequests) {
+                            window.DatabaseAPI._pendingRequests.delete('/projects');
+                            window.DatabaseAPI._pendingRequests.delete(`/projects/${project.id}`);
+                        }
+                    }
+                    
                     if (window.DatabaseAPI && window.DatabaseAPI.getProjects) {
                         const reloadResponse = await window.DatabaseAPI.getProjects();
                         let reloadedProjs = [];
@@ -1057,20 +1105,20 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 : defaultBgColor;
         // Uniform cell size for all fields - better visual consistency
         const cellStyle = {
-            padding: '8px 12px',
+            padding: '6px 8px',
             border: 'none',
             borderBottom: '1px solid #e5e7eb',
             backgroundColor: calculatedBackground,
-            minHeight: '70px', // Uniform height for all cells
-            height: '70px', // Fixed height for consistency
+            minHeight: '60px', // Uniform height for all cells
+            height: '60px', // Fixed height for consistency
             verticalAlign: 'top',
-            width: '150px', // Uniform width for all cells
-            minWidth: '150px', // Uniform min width
-            maxWidth: '150px', // Uniform max width
+            width: '120px', // Uniform width for all cells - narrower
+            minWidth: '120px', // Uniform min width
+            maxWidth: '120px', // Uniform max width
             transition: 'all 0.2s ease',
             position: 'relative',
             boxShadow: isFocusedCell ? '0 0 0 2px rgba(59, 130, 246, 0.35)' : 'none',
-            borderRadius: '8px',
+            borderRadius: '6px',
             cursor: 'pointer'
         };
         
@@ -1106,27 +1154,28 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             React.createElement('div', {
                 style: {
                     width: '100%',
-                    height: field === 'comments' ? '54px' : '54px', // Uniform height for all fields
-                    padding: '8px 10px',
-                    paddingRight: hasValue && field !== 'comments' ? '28px' : '10px',
-                    fontSize: '12px',
+                    height: '48px', // Uniform height for all fields
+                    padding: '6px 8px',
+                    paddingRight: hasValue && field !== 'comments' ? '24px' : '8px',
+                    fontSize: '11px',
                     fontFamily: 'inherit',
                     border: '1px solid #e5e7eb',
-                    borderRadius: '6px',
+                    borderRadius: '4px',
                     backgroundColor: '#ffffff',
                     color: hasValue ? '#111827' : '#9ca3af',
-                    lineHeight: '1.4',
+                    lineHeight: '1.3',
                     transition: 'all 0.2s ease',
                     whiteSpace: field === 'comments' ? 'pre-wrap' : 'nowrap',
                     wordWrap: field === 'comments' ? 'break-word' : 'normal',
                     overflow: 'hidden',
-                    textOverflow: field === 'comments' ? 'ellipsis' : 'ellipsis',
+                    textOverflow: 'ellipsis',
                     display: field === 'comments' ? '-webkit-box' : 'flex',
-                    WebkitLineClamp: field === 'comments' ? 3 : undefined,
+                    WebkitLineClamp: field === 'comments' ? 2 : undefined,
                     WebkitBoxOrient: field === 'comments' ? 'vertical' : undefined,
                     alignItems: field === 'comments' ? 'flex-start' : 'center',
                     flex: 1,
-                    minHeight: '54px'
+                    minHeight: '48px',
+                    maxHeight: '48px'
                 },
                 className: 'hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm',
                 title: hasValue ? displayValue : 'Click to ' + placeholderText.toLowerCase()
@@ -1137,13 +1186,13 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 rel: 'noopener noreferrer',
                 style: {
                     position: 'absolute',
-                    right: '18px',
-                    top: '18px',
+                    right: '8px',
+                    top: '8px',
                     color: '#3b82f6',
-                    fontSize: '11px',
+                    fontSize: '10px',
                     textDecoration: 'none',
-                    padding: '4px 6px',
-                    borderRadius: '4px',
+                    padding: '3px 5px',
+                    borderRadius: '3px',
                     transition: 'all 0.2s ease',
                     zIndex: 10,
                     backgroundColor: 'rgba(255, 255, 255, 0.9)',
@@ -1328,9 +1377,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                     border: 'none',
                                     borderLeft: idx === 0 ? '2px solid #374151' : '1px solid #e5e7eb',
                                     borderBottom: '2px solid ' + (isWorking ? '#1e40af' : '#e5e7eb'),
-                                    minWidth: '450px',
-                                    width: '450px',
-                                    maxWidth: '450px',
+                                    minWidth: '360px',
+                                    width: '360px',
+                                    maxWidth: '360px',
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.05em',
                                     position: 'relative'
@@ -1416,7 +1465,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             return React.createElement(React.Fragment, { key: safeMonth + '-subheaders' },
                                 React.createElement('th', { 
                                     style: {
-                                        padding: '8px 12px',
+                                        padding: '6px 8px',
                                         fontSize: '11px',
                                         fontWeight: '600',
                                         textAlign: 'left',
@@ -1425,9 +1474,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                         border: 'none',
                                         borderLeft: idx === 0 ? '2px solid #374151' : '1px solid #e5e7eb',
                                         borderBottom: '1px solid #e5e7eb',
-                                        minWidth: '150px',
-                                        width: '150px',
-                                        maxWidth: '150px',
+                                        minWidth: '120px',
+                                        width: '120px',
+                                        maxWidth: '120px',
                                         textTransform: 'uppercase',
                                         letterSpacing: '0.03em'
                                     }
@@ -1439,7 +1488,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                 ),
                                 React.createElement('th', { 
                                     style: {
-                                        padding: '8px 12px',
+                                        padding: '6px 8px',
                                         fontSize: '11px',
                                         fontWeight: '600',
                                         textAlign: 'left',
@@ -1447,9 +1496,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                         color: isWorking ? '#1e40af' : '#6b7280',
                                         border: 'none',
                                         borderBottom: '1px solid #e5e7eb',
-                                        minWidth: '150px',
-                                        width: '150px',
-                                        maxWidth: '150px',
+                                        minWidth: '120px',
+                                        width: '120px',
+                                        maxWidth: '120px',
                                         textTransform: 'uppercase',
                                         letterSpacing: '0.03em'
                                     }
@@ -1461,7 +1510,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                 ),
                                 React.createElement('th', {
                                     style: {
-                                        padding: '8px 12px',
+                                        padding: '6px 8px',
                                         fontSize: '11px',
                                         fontWeight: '600',
                                         textAlign: 'left',
@@ -1469,9 +1518,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                         color: isWorking ? '#1e40af' : '#6b7280',
                                         border: 'none',
                                         borderBottom: '1px solid #e5e7eb',
-                                        minWidth: '150px',
-                                        width: '150px',
-                                        maxWidth: '150px',
+                                        minWidth: '120px',
+                                        width: '120px',
+                                        maxWidth: '120px',
                                         textTransform: 'uppercase',
                                         letterSpacing: '0.03em'
                                     }
@@ -1818,15 +1867,48 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
 };
 
 // Memoize component to prevent unnecessary re-renders
-const ProjectProgressTrackerMemo = memo(ProjectProgressTracker);
-
-// Register globally
+let ProjectProgressTrackerMemo;
 try {
-    window.ProjectProgressTracker = ProjectProgressTrackerMemo;
-    console.log('✅ ProjectProgressTracker registered successfully');
+    if (typeof memo === 'function' && memo !== null && memo !== undefined) {
+        ProjectProgressTrackerMemo = memo(ProjectProgressTracker);
+    } else {
+        ProjectProgressTrackerMemo = ProjectProgressTracker;
+    }
+} catch (memoError) {
+    console.warn('⚠️ ProjectProgressTracker: Failed to memoize, using component directly:', memoError);
+    ProjectProgressTrackerMemo = ProjectProgressTracker;
+}
+
+// Register globally - simplified and more robust
+try {
+    if (typeof window !== 'undefined') {
+        window.ProjectProgressTracker = ProjectProgressTrackerMemo;
+        console.log('✅ ProjectProgressTracker registered successfully');
+        
+        // Dispatch componentLoaded event so other components know it's available
+        try {
+            window.dispatchEvent(new CustomEvent('componentLoaded', { 
+                detail: { component: 'ProjectProgressTracker' } 
+            }));
+            console.log('✅ ProjectProgressTracker: componentLoaded event dispatched');
+        } catch (eventError) {
+            console.warn('⚠️ ProjectProgressTracker: Failed to dispatch componentLoaded event:', eventError);
+        }
+    } else {
+        console.error('❌ ProjectProgressTracker: window is not available');
+    }
 } catch (error) {
     console.error('❌ Failed to register ProjectProgressTracker:', error);
-    window.ProjectProgressTracker = () => React.createElement('div', { className: 'p-4 bg-red-50' },
-        React.createElement('p', { className: 'text-red-800' }, 'Component registration failed')
-    );
+    // Fallback: register a simple error component
+    if (typeof window !== 'undefined' && typeof React !== 'undefined') {
+        window.ProjectProgressTracker = function() {
+            try {
+                return React.createElement('div', { className: 'p-4 bg-red-50' },
+                    React.createElement('p', { className: 'text-red-800' }, 'Component registration failed: ' + (error?.message || 'Unknown error'))
+                );
+            } catch (e) {
+                return null;
+            }
+        };
+    }
 }

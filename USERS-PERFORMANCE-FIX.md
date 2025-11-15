@@ -97,3 +97,4 @@ You should see:
 - Indexes improve read performance but have minimal impact on write performance
 - The users API queries are already optimized (using WHERE clauses, not fetching all then filtering)
 
+

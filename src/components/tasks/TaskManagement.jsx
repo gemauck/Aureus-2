@@ -756,6 +756,7 @@ const TaskCard = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clients
     };
 
     const [isDragging, setIsDragging] = React.useState(false);
+    const [isHovered, setIsHovered] = React.useState(false);
 
     const handleDragStart = (e) => {
         if (draggable) {
@@ -787,99 +788,96 @@ const TaskCard = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clients
         onEdit(task);
     };
 
+    // Check if due date is urgent (within 3 days or overdue)
+    const isDueDateUrgent = () => {
+        if (!task.dueDate) return false;
+        const due = new Date(task.dueDate);
+        const now = new Date();
+        const diff = due - now;
+        const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
+        return days <= 3;
+    };
+
+    // Get priority indicator color
+    const getPriorityIndicatorColor = () => {
+        const priority = (task.priority || 'medium').toLowerCase();
+        if (priority === 'urgent' || priority === 'high') return 'bg-red-500';
+        if (priority === 'medium') return 'bg-yellow-500';
+        return 'bg-gray-400';
+    };
+
     return (
         <div
             draggable={draggable}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
-            className={`${isDark ? 'bg-gray-700 border-gray-600 hover:bg-gray-600' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'} rounded-lg border p-3 cursor-pointer transition-all duration-200 ease-in-out ${compact ? '' : 'mb-2'} ${draggable ? 'cursor-move' : ''} ${isDragging ? 'opacity-50 scale-95' : 'opacity-100 scale-100'}`}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+            className={`group ${isDark ? 'bg-gray-800 border-gray-700 hover:border-blue-500' : 'bg-white border-gray-200 hover:border-blue-400'} rounded-lg border shadow-sm hover:shadow-md p-4 cursor-pointer transition-all duration-200 ease-in-out ${compact ? '' : 'mb-2'} ${draggable ? 'cursor-move' : ''} ${isDragging ? 'opacity-50 scale-95' : 'opacity-100 scale-100'}`}
             onClick={handleClick}
         >
-            <div className="flex items-start justify-between gap-2">
+            <div className="flex items-start gap-3">
+                {/* Priority Indicator */}
+                <div className={`w-1 h-full min-h-[40px] rounded-full flex-shrink-0 ${getPriorityIndicatorColor()}`}></div>
+                
                 <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                        <h4 className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>
+                    {/* Title Row */}
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                        <h4 className={`font-semibold text-base ${isDark ? 'text-white' : 'text-gray-900'} leading-tight`}>
                             {task.title}
                         </h4>
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${getPriorityColor(task.priority)} ${getPriorityTextColor(task.priority)}`}>
-                            {task.priority}
-                        </span>
-                    </div>
-                    {!compact && task.description && (
-                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} line-clamp-2 mb-2`}>
-                            {task.description}
-                        </p>
-                    )}
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                        {task.category && (
-                            <span className={`px-2 py-0.5 rounded ${isDark ? 'bg-gray-600 text-gray-300' : 'bg-gray-200 text-gray-700'}`}>
-                                {task.category}
-                            </span>
-                        )}
-                        {taskTags.map(tag => (
-                            <span
-                                key={tag.id}
-                                className="px-2 py-0.5 rounded text-white"
-                                style={{ backgroundColor: tag.color || '#3B82F6' }}
+                        {/* Action Buttons - Show on hover */}
+                        <div className={`flex items-center gap-1 flex-shrink-0 transition-opacity duration-200 ${isHovered ? 'opacity-100' : 'opacity-0'}`}>
+                            {onQuickStatusToggle && (
+                                <button
+                                    onClick={handleStatusClick}
+                                    className={`p-1.5 rounded ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'} transition-colors`}
+                                    title={`Change status (current: ${task.status})`}
+                                >
+                                    <i className={`fas ${task.status === 'completed' ? 'fa-check-circle text-green-600' : task.status === 'in-progress' ? 'fa-spinner text-blue-600' : 'fa-circle text-gray-400'} text-sm`}></i>
+                                </button>
+                            )}
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onEdit(task);
+                                }}
+                                className={`p-1.5 rounded ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'} transition-colors`}
+                                title="Edit"
                             >
-                                {tag.name}
-                            </span>
-                        ))}
-                        {client && (
-                            <span className={`px-2 py-0.5 rounded ${isDark ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700'}`}>
-                                <i className="fas fa-user mr-1"></i>{client.name}
+                                <i className={`fas fa-edit ${isDark ? 'text-gray-300' : 'text-gray-600'} text-sm`}></i>
+                            </button>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onDelete(task.id);
+                                }}
+                                className={`p-1.5 rounded ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-100'} transition-colors`}
+                                title="Delete"
+                            >
+                                <i className={`fas fa-trash ${isDark ? 'text-red-500' : 'text-red-500'} text-sm`}></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Essential Info Only */}
+                    <div className={`flex items-center gap-3 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {/* Due Date - Only show if urgent */}
+                        {task.dueDate && isDueDateUrgent() && (
+                            <span className={`flex items-center gap-1 ${isDueDateUrgent() && new Date(task.dueDate) < new Date() ? 'text-red-600 font-medium' : 'text-orange-600'}`}>
+                                <i className="fas fa-calendar text-[10px]"></i>
+                                {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                             </span>
                         )}
-                        {project && (
-                            <span className={`px-2 py-0.5 rounded ${isDark ? 'bg-purple-600 text-white' : 'bg-purple-100 text-purple-700'}`}>
-                                <i className="fas fa-project-diagram mr-1"></i>{project.name}
-                            </span>
-                        )}
-                        {task.dueDate && (
-                            <span className={`${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                <i className="fas fa-calendar mr-1"></i>
-                                {new Date(task.dueDate).toLocaleDateString()}
-                            </span>
-                        )}
+                        
+                        {/* Checklist Progress - Only if exists */}
                         {task.checklist && task.checklist.length > 0 && (
-                            <span className={`${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                <i className="fas fa-check-square mr-1"></i>
-                                {task.checklist.filter(item => item.completed).length}/{task.checklist.length}
+                            <span className={`flex items-center gap-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <i className="fas fa-check-square text-[10px]"></i>
+                                <span>{task.checklist.filter(item => item.completed).length}/{task.checklist.length}</span>
                             </span>
                         )}
                     </div>
-                </div>
-                    <div className="flex items-center gap-1">
-                    {onQuickStatusToggle && (
-                        <button
-                            onClick={handleStatusClick}
-                            className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(task.status)} ${isDark ? 'text-white' : 'text-gray-700'} hover:opacity-80 transition-opacity`}
-                            title={`Click to change status (current: ${task.status})`}
-                        >
-                            <i className={`fas ${task.status === 'completed' ? 'fa-check-circle' : task.status === 'in-progress' ? 'fa-spinner' : 'fa-circle'} mr-1`}></i>
-                            {task.status}
-                        </button>
-                    )}
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onEdit(task);
-                        }}
-                        className={`p-1 rounded ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-200'} transition-colors`}
-                        title="Edit"
-                    >
-                        <i className={`fas fa-edit ${isDark ? 'text-gray-400' : 'text-gray-600'}`}></i>
-                    </button>
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onDelete(task.id);
-                        }}
-                        className={`p-1 rounded ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-200'} transition-colors`}
-                        title="Delete"
-                    >
-                        <i className={`fas fa-trash ${isDark ? 'text-red-400' : 'text-red-600'}`}></i>
-                    </button>
                 </div>
             </div>
         </div>

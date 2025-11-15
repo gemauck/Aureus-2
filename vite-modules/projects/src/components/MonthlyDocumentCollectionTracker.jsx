@@ -262,6 +262,12 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                 }
             }
             
+            // CRITICAL: Update previousDocumentSectionsRef to track the value we just saved
+            // This prevents LiveDataSync or other background refreshes from triggering a sync
+            // if they update the project prop with the same value we just saved
+            previousDocumentSectionsRef.current = JSON.stringify(sectionsToSave);
+            console.log('📝 Updated previousDocumentSectionsRef to match saved value');
+            
             // DISABLED: Don't dispatch projectUpdated event - it causes parent to refresh
             // which then triggers sync and overwrites user input
             // Instead, we use window.updateViewingProject to update parent state directly
@@ -284,12 +290,36 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         yearOptions.push(i);
     }
 
-    // Status options with color progression from red to green
+    // Status options with color progression from red to green (with dark mode support)
     const statusOptions = [
-        { value: 'not-collected', label: 'Not Collected', color: 'bg-red-100 text-red-800', cellColor: 'bg-red-50' },
-        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-yellow-100 text-yellow-800', cellColor: 'bg-yellow-50' },
-        { value: 'collected', label: 'Collected', color: 'bg-green-100 text-green-800', cellColor: 'bg-green-50' },
-        { value: 'unavailable', label: 'Unavailable', color: 'bg-gray-100 text-gray-800', cellColor: 'bg-gray-50' }
+        { 
+            value: 'not-collected', 
+            label: 'Not Collected', 
+            color: 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-100', 
+            cellColor: 'bg-red-50 dark:bg-red-950',
+            textColor: 'text-red-800 dark:text-red-100'
+        },
+        { 
+            value: 'ongoing', 
+            label: 'Collection Ongoing', 
+            color: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-100', 
+            cellColor: 'bg-yellow-50 dark:bg-yellow-950',
+            textColor: 'text-yellow-800 dark:text-yellow-100'
+        },
+        { 
+            value: 'collected', 
+            label: 'Collected', 
+            color: 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-100', 
+            cellColor: 'bg-green-50 dark:bg-green-950',
+            textColor: 'text-green-800 dark:text-green-100'
+        },
+        { 
+            value: 'unavailable', 
+            label: 'Unavailable', 
+            color: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200', 
+            cellColor: 'bg-gray-50 dark:bg-gray-900',
+            textColor: 'text-gray-800 dark:text-gray-200'
+        }
     ];
 
     // DISABLED: No automatic refresh on mount - only use data from props
@@ -384,12 +414,42 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         // ULTRA AGGRESSIVE: If already initialized, NEVER sync - even if prop changes
         // Local state is the source of truth after initialization
         if (hasInitializedRef.current) {
-            console.log('🛑 ULTRA AGGRESSIVE: Component initialized - BLOCKING all syncs to preserve user input');
+            // DOUBLE CHECK: Even if initialized, verify that documentSections hasn't changed
+            // This prevents any edge cases where the effect might run despite our safeguards
+            const currentPropValue = project?.documentSections;
+            const lastSyncedValue = previousDocumentSectionsRef.current;
+            
+            // If the prop value is the same as what we last synced, definitely don't sync
+            if (currentPropValue === lastSyncedValue || 
+                (currentPropValue && lastSyncedValue && 
+                 JSON.stringify(parseSections(currentPropValue)) === JSON.stringify(parseSections(lastSyncedValue)))) {
+                console.log('🛑 ULTRA AGGRESSIVE: Component initialized - BLOCKING all syncs (prop value unchanged)');
+                return;
+            }
+            
+            // If prop value changed but we're initialized, still block sync
+            // This prevents LiveDataSync or other background refreshes from overwriting user input
+            console.log('🛑 ULTRA AGGRESSIVE: Component initialized - BLOCKING all syncs to preserve user input (prop changed but ignoring)');
             return;
         }
             
         // Only sync on the very first mount when local state is empty AND we haven't initialized
+        // CRITICAL: Also check that documentSections has actually changed from last synced value
         if (project && project.documentSections !== undefined && isInitialMount.current && !hasInitializedRef.current) {
+            const currentPropValue = project.documentSections;
+            const lastSyncedValue = previousDocumentSectionsRef.current;
+            
+            // If the prop value is the same as what we last synced, don't sync again
+            if (currentPropValue === lastSyncedValue || 
+                (currentPropValue && lastSyncedValue && 
+                 JSON.stringify(parseSections(currentPropValue)) === JSON.stringify(parseSections(lastSyncedValue)))) {
+                console.log('🛡️ Prop value unchanged from last sync - skipping sync');
+                // Still mark as initialized to prevent future syncs
+                hasInitializedRef.current = true;
+                isInitialMount.current = false;
+                return;
+            }
+            
             const parsed = parseSections(project.documentSections);
             
             setSections(currentSections => {
@@ -407,11 +467,13 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                     console.log('✅ Component initialized with empty sections');
                     hasInitializedRef.current = true; // Mark as initialized - NEVER sync again
                     isInitialMount.current = false;
+                    previousDocumentSectionsRef.current = project.documentSections; // Track empty state too
                 } else if (currentSections.length > 0) {
                     // ULTRA AGGRESSIVE: If we have ANY sections, mark initialized and NEVER sync
                     console.log('🛑 ULTRA AGGRESSIVE: Local sections exist - marking initialized, BLOCKING all future syncs');
                     hasInitializedRef.current = true; // Mark as initialized - NEVER sync again
                     isInitialMount.current = false;
+                    previousDocumentSectionsRef.current = project.documentSections; // Track current prop value
                 }
                 return currentSections;
             });
@@ -1184,6 +1246,12 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                 } catch (e) {
                     console.warn('Failed to save sections to sessionStorage:', e);
                 }
+                
+                // CRITICAL: Update previousDocumentSectionsRef to track the value we just saved
+                // This prevents LiveDataSync or other background refreshes from triggering a sync
+                // if they update the project prop with the same value we just saved
+                previousDocumentSectionsRef.current = JSON.stringify(updatedSections);
+                console.log('📝 Updated previousDocumentSectionsRef to match saved value (comment save)');
                 
                 // DISABLED: Don't dispatch projectUpdated event - it causes parent to refresh
                 // which then triggers sync and overwrites user input
@@ -2109,19 +2177,21 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
 
         return (
             <td 
-                className={`px-2 py-1 text-xs border-l border-gray-100 ${
+                className={`px-2 py-1 text-xs border-l border-gray-100 dark:border-gray-700 ${
                     workingMonths.includes(months.indexOf(month)) && selectedYear === currentYear
-                        ? 'bg-primary-50 bg-opacity-30'
+                        ? 'bg-primary-50 dark:bg-primary-900 bg-opacity-30 dark:bg-opacity-30'
                         : ''
                 } ${statusConfig ? statusConfig.cellColor : ''}`}
             >
-                <div className="min-w-[160px] relative">
+                <div className="min-w-[160px] relative h-full">
                     {/* Status Dropdown */}
                     <select
                         value={status || ''}
                         onChange={(e) => handleUpdateStatus(section.id, document.id, month, e.target.value)}
-                        className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none ${
-                            status ? statusConfig.color : 'bg-white text-gray-400 hover:bg-gray-50'
+                        className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent dark:bg-transparent ${
+                            status 
+                                ? statusConfig.textColor
+                                : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400'
                         }`}
                     >
                         <option value="">Select Status</option>
@@ -2155,7 +2225,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                                     setHoverCommentCell(cellKey);
                                 }
                             }}
-                            className="text-gray-500 hover:text-gray-700 transition-colors relative p-1"
+                            className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors relative p-1"
                             title={hasComments ? `${comments.length} comment(s)` : 'Add comment'}
                             type="button"
                         >
@@ -2351,37 +2421,37 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
             </div>
 
             {/* Legend */}
-            <div className="bg-white rounded-lg border border-gray-200 p-2.5">
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-2.5">
                 <div className="space-y-1.5">
                     {/* Working Months Info */}
-                    <div className="flex items-center gap-2 pb-1.5 border-b border-gray-100">
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 text-[10px] font-medium">
+                    <div className="flex items-center gap-2 pb-1.5 border-b border-gray-100 dark:border-gray-700">
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-primary-50 dark:bg-primary-900 text-primary-700 dark:text-primary-300 text-[10px] font-medium">
                             <i className="fas fa-calendar-check mr-1 text-[10px]"></i>
                             Working Months
                         </span>
-                        <span className="text-[10px] text-gray-500">
+                        <span className="text-[10px] text-gray-500 dark:text-gray-400">
                             Highlighted columns show current focus months (2 months in arrears)
                         </span>
                     </div>
                     
                     {/* Status Legend */}
                     <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-medium text-gray-600">Status Progression:</span>
+                        <span className="text-[10px] font-medium text-gray-600 dark:text-gray-300">Status Progression:</span>
                         {statusOptions.slice(0, 3).map((option, idx) => (
                             <React.Fragment key={option.value}>
                                 <div className="flex items-center gap-1">
-                                    <div className={`w-3 h-3 rounded ${option.cellColor} border border-gray-300`}></div>
-                                    <span className="text-[10px] text-gray-600">{option.label}</span>
+                                    <div className={`w-3 h-3 rounded ${option.cellColor} border border-gray-300 dark:border-gray-600`}></div>
+                                    <span className="text-[10px] text-gray-600 dark:text-gray-300">{option.label}</span>
                                 </div>
                                 {idx < 2 && (
-                                    <i className="fas fa-arrow-right text-[8px] text-gray-400"></i>
+                                    <i className="fas fa-arrow-right text-[8px] text-gray-400 dark:text-gray-500"></i>
                                 )}
                             </React.Fragment>
                         ))}
-                        <span className="text-gray-300 mx-1">|</span>
+                        <span className="text-gray-300 dark:text-gray-600 mx-1">|</span>
                         <div className="flex items-center gap-1">
-                            <div className={`w-3 h-3 rounded ${statusOptions[3].cellColor} border border-gray-300`}></div>
-                            <span className="text-[10px] text-gray-600">{statusOptions[3].label}</span>
+                            <div className={`w-3 h-3 rounded ${statusOptions[3].cellColor} border border-gray-300 dark:border-gray-600`}></div>
+                            <span className="text-[10px] text-gray-600 dark:text-gray-300">{statusOptions[3].label}</span>
                         </div>
                     </div>
                 </div>

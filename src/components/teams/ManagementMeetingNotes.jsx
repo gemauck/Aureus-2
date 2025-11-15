@@ -1976,7 +1976,8 @@ const ManagementMeetingNotes = () => {
                             style={{
                                 gridTemplateColumns: `repeat(${weeks.length}, minmax(520px, 560px))`,
                                 gridTemplateRows: `auto repeat(${DEPARTMENTS.length}, minmax(200px, max-content))`,
-                                alignItems: 'stretch' // Stretch items to fill row height - ensures Compliance aligns with Management
+                                alignItems: 'stretch', // Stretch items to fill row height - ensures Compliance aligns with Management
+                                gridAutoFlow: 'row' // Ensure items flow row by row
                             }}
                         >
                             {/* Week headers row */}
@@ -1998,6 +1999,10 @@ const ManagementMeetingNotes = () => {
                                             if (node && index === 0) {
                                                 weekCardRefs.current[identifier] = node;
                                             }
+                                        }}
+                                        style={{
+                                            gridRow: '1',
+                                            gridColumn: `${index + 1}`
                                         }}
                                         className={`rounded-lg border p-4 transition-all duration-200 ${
                                             isActualCurrentWeek
@@ -2088,7 +2093,11 @@ const ManagementMeetingNotes = () => {
                                                     ? `border-dashed opacity-60 ${isDark ? 'border-slate-600' : 'border-gray-300'}`
                                                     : `${isDark ? 'border-slate-700' : 'border-gray-200'}`
                                             } ${isDark ? 'bg-slate-800' : 'bg-white'}`}
-                                            style={{ minHeight: '200px' }}
+                                            style={{ 
+                                                minHeight: '200px',
+                                                gridRow: `${deptIndex + 2}`, // +2 because row 1 is headers
+                                                gridColumn: `${weekIndex + 1}` // +1 because columns start at 1
+                                            }}
                                         >
                                             {!deptNote ? (
                                                 <>

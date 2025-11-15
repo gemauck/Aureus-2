@@ -174,10 +174,22 @@ const Projects = () => {
             setWaitingForTracker(true);
             let attempts = 0;
             const maxAttempts = 20; // 2 seconds max
+            
+            // Listen for componentLoaded event
+            const handleComponentLoaded = (event) => {
+                if (event.detail && event.detail.component === 'ProjectProgressTracker') {
+                    console.log('✅ ProjectProgressTracker loaded via componentLoaded event');
+                    setWaitingForTracker(false);
+                    setForceRender(prev => prev + 1);
+                }
+            };
+            window.addEventListener('componentLoaded', handleComponentLoaded);
+            
             const checkInterval = setInterval(() => {
                 attempts++;
                 if (window.ProjectProgressTracker || attempts >= maxAttempts) {
                     clearInterval(checkInterval);
+                    window.removeEventListener('componentLoaded', handleComponentLoaded);
                     setWaitingForTracker(false);
                     if (window.ProjectProgressTracker) {
                         console.log('✅ ProjectProgressTracker became available');
@@ -186,7 +198,12 @@ const Projects = () => {
                     }
                 }
             }, 100);
-            return () => clearInterval(checkInterval);
+            
+            // Cleanup function
+            return () => {
+                clearInterval(checkInterval);
+                window.removeEventListener('componentLoaded', handleComponentLoaded);
+            };
         }
     }, [showProgressTracker, waitingForTracker]);
     
