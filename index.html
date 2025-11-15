@@ -71,6 +71,51 @@
         })();
     </script>
     
+    <!-- Cache Clearing Script - Runs early to clear stale cache -->
+    <script>
+        (function() {
+            // Check if we need to force clear cache (via URL parameter or localStorage flag)
+            try {
+                var urlParams = new URLSearchParams(window.location.search);
+                var hashParams = new URLSearchParams((window.location.hash || '').split('?')[1] || '');
+                var shouldClearCache = urlParams.has('clearCache') || 
+                                      urlParams.has('forceRefresh') || 
+                                      hashParams.has('clearCache') || 
+                                      hashParams.has('forceRefresh') ||
+                                      localStorage.getItem('abcotronics_force_clear_cache') === 'true';
+                
+                if (shouldClearCache) {
+                    console.log('🧹 Force clearing cache on page load...');
+                    // Clear localStorage cache flags
+                    localStorage.removeItem('abcotronics_force_clear_cache');
+                    
+                    // Clear sessionStorage
+                    try {
+                        sessionStorage.clear();
+                    } catch (e) {
+                        console.warn('Could not clear sessionStorage:', e);
+                    }
+                    
+                    // Set a flag for when DatabaseAPI loads to clear its cache
+                    window.__CLEAR_DATABASE_CACHE_ON_LOAD__ = true;
+                    
+                    // Remove refresh parameters from URL
+                    if (urlParams.has('clearCache') || urlParams.has('forceRefresh')) {
+                        urlParams.delete('clearCache');
+                        urlParams.delete('forceRefresh');
+                        var newSearch = urlParams.toString();
+                        var newUrl = window.location.pathname + (newSearch ? '?' + newSearch : '') + window.location.hash;
+                        window.history.replaceState({}, '', newUrl);
+                    }
+                    
+                    console.log('✅ Cache clear flag set - will clear when DatabaseAPI loads');
+                }
+            } catch (e) {
+                console.warn('Error in cache clearing script:', e);
+            }
+        })();
+    </script>
+    
     <!-- Mobile Optimizations CSS -->
     <link rel="stylesheet" href="mobile-optimizations.css">
     

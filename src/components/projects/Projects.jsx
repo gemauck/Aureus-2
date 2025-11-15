@@ -227,6 +227,27 @@ const Projects = () => {
             setIsLoading(true);
             setLoadError(null);
             
+            // Check for refresh parameter in URL - clear cache if present
+            const hash = window.location.hash || '';
+            const urlParams = new URLSearchParams(hash.split('?')[1] || '');
+            const shouldRefresh = urlParams.has('refresh') || urlParams.has('forceRefresh');
+            
+            if (shouldRefresh) {
+                console.log('🔄 Projects: Refresh parameter detected, clearing cache...');
+                // Clear projects cache
+                if (window.DatabaseAPI?.clearEndpointCache) {
+                    window.DatabaseAPI.clearEndpointCache('/projects', 'GET');
+                }
+                if (window.DatabaseAPI?._responseCache) {
+                    window.DatabaseAPI._responseCache.delete('GET:/projects');
+                }
+                // Clear ComponentCache for projects
+                if (window.ComponentCache?.clear) {
+                    window.ComponentCache.clear('projects');
+                }
+                console.log('✅ Projects cache cleared');
+            }
+            
             try {
                 const token = window.storage?.getToken?.();
                 if (!token) {

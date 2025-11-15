@@ -1875,11 +1875,63 @@ const DatabaseAPI = {
         });
         console.log('✅ Meeting notes purge request completed');
         return response;
+    },
+    
+    // Clear all caches - useful for forcing fresh data loads
+    clearCache() {
+        console.log('🧹 Clearing DatabaseAPI caches...');
+        let cleared = 0;
+        
+        if (this._responseCache) {
+            cleared += this._responseCache.size;
+            this._responseCache.clear();
+        }
+        
+        if (this._pendingRequests) {
+            cleared += this._pendingRequests.size;
+            this._pendingRequests.clear();
+        }
+        
+        if (this.cache) {
+            cleared += this.cache.size;
+            this.cache.clear();
+        }
+        
+        console.log(`✅ DatabaseAPI cache cleared (${cleared} entries)`);
+        return cleared;
+    },
+    
+    // Clear cache for a specific endpoint
+    clearEndpointCache(endpoint, method = 'GET') {
+        const cacheKey = `${method.toUpperCase()}:${endpoint}`;
+        let cleared = 0;
+        
+        if (this._responseCache?.has(cacheKey)) {
+            this._responseCache.delete(cacheKey);
+            cleared++;
+            console.log(`✅ Cleared cache for ${cacheKey}`);
+        }
+        
+        if (this._pendingRequests?.has(cacheKey)) {
+            this._pendingRequests.delete(cacheKey);
+            cleared++;
+            console.log(`✅ Cleared pending request for ${cacheKey}`);
+        }
+        
+        return cleared;
     }
 };
 
 // Make available globally
 window.DatabaseAPI = DatabaseAPI;
+
+// Check if we need to clear cache on load (set by early cache clearing script)
+if (window.__CLEAR_DATABASE_CACHE_ON_LOAD__) {
+    console.log('🧹 Clearing DatabaseAPI cache on load (flag detected)...');
+    DatabaseAPI.clearCache();
+    delete window.__CLEAR_DATABASE_CACHE_ON_LOAD__;
+    console.log('✅ DatabaseAPI cache cleared on load');
+}
 
 // Update the existing API object to use database operations
 if (window.api) {
