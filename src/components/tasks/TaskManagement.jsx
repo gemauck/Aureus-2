@@ -806,6 +806,10 @@ const TaskCard = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clients
         return 'bg-gray-400';
     };
 
+    // Compute due date info
+    const isUrgent = task.dueDate ? isDueDateUrgent() : false;
+    const isOverdue = task.dueDate ? new Date(task.dueDate) < new Date() : false;
+
     return (
         <div
             draggable={draggable}
@@ -863,8 +867,8 @@ const TaskCard = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clients
                     {/* Essential Info Only */}
                     <div className={`flex items-center gap-3 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         {/* Due Date - Only show if urgent */}
-                        {task.dueDate && isDueDateUrgent() && (
-                            <span className={`flex items-center gap-1 ${isDueDateUrgent() && new Date(task.dueDate) < new Date() ? 'text-red-600 font-medium' : 'text-orange-600'}`}>
+                        {isUrgent && (
+                            <span className={`flex items-center gap-1 ${isOverdue ? 'text-red-600 font-medium' : 'text-orange-600'}`}>
                                 <i className="fas fa-calendar text-[10px]"></i>
                                 {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                             </span>
