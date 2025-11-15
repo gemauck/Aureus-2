@@ -668,7 +668,13 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         }, []);
 
         const handleEmployeeClick = useCallback((employee) => {
-            setViewingEmployeeId(employee.id);
+            console.log('👤 Employee clicked:', employee);
+            if (employee && employee.id) {
+                console.log('✅ Setting viewingEmployeeId to:', employee.id);
+                setViewingEmployeeId(employee.id);
+            } else {
+                console.error('❌ Employee missing or missing id:', employee);
+            }
         }, []);
 
         const handleBackFromEmployeeDetail = useCallback(() => {
@@ -739,31 +745,45 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                         return <AccessNotice />;
                     }
                     // Show employee detail view if an employee is selected
-                    if (viewingEmployeeId && EmployeeDetailComponent && typeof EmployeeDetailComponent === 'function') {
-                        try {
-                            const Component = EmployeeDetailComponent;
+                    if (viewingEmployeeId) {
+                        console.log('🔍 Attempting to render EmployeeDetail for employee:', viewingEmployeeId);
+                        console.log('🔍 EmployeeDetailComponent available:', !!EmployeeDetailComponent);
+                        console.log('🔍 EmployeeDetailComponent type:', typeof EmployeeDetailComponent);
+                        
+                        if (EmployeeDetailComponent && typeof EmployeeDetailComponent === 'function') {
+                            try {
+                                const Component = EmployeeDetailComponent;
+                                return (
+                                    <Component
+                                        employeeId={viewingEmployeeId}
+                                        onBack={handleBackFromEmployeeDetail}
+                                        user={user}
+                                        isAdmin={isAdmin}
+                                    />
+                                );
+                            } catch (err) {
+                                console.error('LeavePlatform: error rendering EmployeeDetail component', err);
+                            }
+                        } else {
+                            console.warn('⚠️ EmployeeDetailComponent not available, showing loading message');
                             return (
-                                <Component
-                                    employeeId={viewingEmployeeId}
-                                    onBack={handleBackFromEmployeeDetail}
-                                    user={user}
-                                    isAdmin={isAdmin}
-                                />
+                                <div className="text-center py-12">
+                                    <i className="fas fa-spinner fa-spin text-3xl text-primary-600 mb-4"></i>
+                                    <p className="text-gray-600">Loading employee details...</p>
+                                    <button
+                                        onClick={handleBackFromEmployeeDetail}
+                                        className="mt-4 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                                    >
+                                        <i className="fas fa-arrow-left mr-2"></i>
+                                        Back to Employees
+                                    </button>
+                                </div>
                             );
-                        } catch (err) {
-                            console.error('LeavePlatform: error rendering EmployeeDetail component', err);
                         }
                     }
-                    // Use EmployeeManagement component if available
-                    if (EmployeeManagementComponent && typeof EmployeeManagementComponent === 'function') {
-                        try {
-                            const Component = EmployeeManagementComponent;
-                            return <Component />;
-                        } catch (err) {
-                            console.error('LeavePlatform: error rendering EmployeeManagement component', err);
-                        }
-                    }
-                    // Fallback: Show employees list directly if EmployeeManagement component is not available
+                    // Skip EmployeeManagement component and use our own table with click handlers
+                    // This allows us to navigate to the full EmployeeDetail page
+                    // Fallback: Show employees list directly with click handlers
                     const SortableHeader = ({ columnKey, label }) => (
                         <th 
                             className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100 select-none"

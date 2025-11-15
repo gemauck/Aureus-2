@@ -696,7 +696,18 @@ const EmployeeDetail = ({ employeeId, onBack, user, isAdmin }) => {
 };
 
 // Export for use in LeavePlatform
-if (typeof window !== 'undefined') {
-    window.EmployeeDetail = EmployeeDetail;
-}
+// Wrap in IIFE to ensure proper loading
+(function() {
+    if (typeof window !== 'undefined') {
+        window.EmployeeDetail = EmployeeDetail;
+        console.log('✅ EmployeeDetail component registered on window');
+        
+        // Dispatch event to notify that component is loaded
+        if (typeof window.dispatchEvent !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('componentLoaded', { 
+                detail: { component: 'EmployeeDetail' } 
+            }));
+        }
+    }
+})();
 
