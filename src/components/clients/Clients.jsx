@@ -3449,6 +3449,7 @@ const Clients = React.memo(() => {
             comments: lead.comments || [],
             sites: [],
             opportunities: [],
+            services: lead.services || [],
             activityLog: [{
                 id: Date.now(),
                 type: 'Lead Converted',
