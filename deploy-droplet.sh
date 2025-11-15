@@ -58,6 +58,10 @@ echo "🎨 Building CSS..."
 npm run build:css || echo "⚠️ CSS build had warnings but continuing..."
 
 echo ""
+echo "🏗️  Building Vite Projects module..."
+npm run build:vite-projects || echo "⚠️ Vite projects build had warnings but continuing..."
+
+echo ""
 echo "🔧 Generating Prisma client..."
 npx prisma generate || echo "⚠️ Prisma generate had warnings but continuing..."
 
