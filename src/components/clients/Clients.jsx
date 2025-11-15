@@ -1456,6 +1456,7 @@ const Clients = React.memo(() => {
                 opportunities: parseArrayField(c.opportunities, 'opportunities'),
                 contracts: parseArrayField(c.contracts, 'contracts'),
                 activityLog: parseArrayField(c.activityLog, 'activityLog'),
+                services: parseArrayField(c.services, 'services'),
                 billingTerms: parseObjectField(c.billingTerms, 'billingTerms', {
                     paymentTerms: 'Net 30',
                     billingFrequency: 'Monthly',
