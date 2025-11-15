@@ -575,15 +575,50 @@
                 typeof window.React.useState === 'function' &&
                 typeof window.React.useEffect === 'function' &&
                 typeof window.React.useRef === 'function') {
+                
+                // Check if already loaded
+                if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                    console.log('✅ Vite Projects module already loaded');
+                    return;
+                }
+                
+                // Check if script already exists
+                const existingScript = document.querySelector('script[src*="projects-module.js"]');
+                if (existingScript) {
+                    console.log('✅ Vite Projects module script already added, waiting for load...');
+                    // Check if module loaded after a delay
+                    setTimeout(() => {
+                        if (!window.MonthlyDocumentCollectionTracker) {
+                            console.warn('⚠️ Vite Projects module script exists but component not loaded after 2s');
+                        }
+                    }, 2000);
+                    return;
+                }
+                
                 const script = document.createElement('script');
                 script.type = 'module';
-                script.src = './dist/vite-projects/projects-module.js?v=20251114-vite-integration';
-                script.onerror = () => console.error('❌ Failed to load Vite Projects module');
+                script.src = './dist/vite-projects/projects-module.js?v=' + Date.now();
+                script.onload = () => {
+                    console.log('✅ Vite Projects module script loaded successfully');
+                    // Give it a moment to execute
+                    setTimeout(() => {
+                        if (window.MonthlyDocumentCollectionTracker) {
+                            console.log('✅ MonthlyDocumentCollectionTracker available after script load');
+                        } else {
+                            console.warn('⚠️ Script loaded but MonthlyDocumentCollectionTracker not yet available');
+                        }
+                    }, 500);
+                };
+                script.onerror = (error) => {
+                    console.error('❌ Failed to load Vite Projects module script:', error);
+                    console.error('❌ Script URL:', script.src);
+                };
                 document.head.appendChild(script);
                 
                 const link = document.createElement('link');
                 link.rel = 'stylesheet';
-                link.href = './dist/vite-projects/projects-index.css?v=20251114-vite-integration';
+                link.href = './dist/vite-projects/projects-index.css?v=' + Date.now();
+                link.onerror = () => console.warn('⚠️ Failed to load Vite Projects CSS');
                 document.head.appendChild(link);
                 console.log('✅ Vite Projects module loading...');
             } else {
