@@ -265,7 +265,42 @@ const Teams = () => {
     };
     
     const [activeTab, setActiveTab] = useState(getTabFromURL());
-    const [selectedTeam, setSelectedTeam] = useState(null);
+    const [selectedTeam, setSelectedTeam] = useState(() => {
+        // Initialize from URL if available
+        const urlParams = new URLSearchParams(window.location.search);
+        const teamId = urlParams.get('team');
+        if (teamId) {
+            const team = TEAMS.find(t => t.id === teamId);
+            if (team) {
+                // Return team - accessibility will be checked in useEffect
+                return team;
+            }
+        }
+        return null;
+    });
+    
+    // Validate selectedTeam from URL after component mounts and isAdminUser is computed
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const teamId = urlParams.get('team');
+        if (teamId) {
+            const team = TEAMS.find(t => t.id === teamId);
+            if (team) {
+                // If team is accessible, set it; otherwise clear it
+                if (isTeamAccessible(team.id)) {
+                    if (!selectedTeam || selectedTeam.id !== team.id) {
+                        setSelectedTeam(team);
+                    }
+                } else {
+                    // Team not accessible, clear selection
+                    if (selectedTeam) {
+                        setSelectedTeam(null);
+                        setActiveTab('overview');
+                    }
+                }
+            }
+        }
+    }, [isAdminUser, isTeamAccessible]);
     
     // Update URL when tab changes
     useEffect(() => {
@@ -299,20 +334,28 @@ const Teams = () => {
     // Listen for browser back/forward
     useEffect(() => {
         const handlePopState = (event) => {
-            if (event.state && event.state.tab) {
-                setActiveTab(event.state.tab);
+            // Read tab from URL
+            const urlTab = getTabFromURL();
+            setActiveTab(urlTab);
+            
+            // Read team from URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const teamId = urlParams.get('team');
+            if (teamId) {
+                const team = TEAMS.find(t => t.id === teamId);
+                if (team && isTeamAccessible(team.id)) {
+                    setSelectedTeam(team);
+                } else {
+                    setSelectedTeam(null);
+                }
             } else {
-                setActiveTab(getTabFromURL());
-            }
-            if (event.state && event.state.team) {
-                const team = TEAMS.find(t => t.id === event.state.team);
-                if (team) setSelectedTeam(team);
+                setSelectedTeam(null);
             }
         };
         
         window.addEventListener('popstate', handlePopState);
         return () => window.removeEventListener('popstate', handlePopState);
-    }, []);
+    }, [isTeamAccessible]);
     const [searchTerm, setSearchTerm] = useState('');
     const [isReady, setIsReady] = useState(false);
     
@@ -601,7 +644,14 @@ const Teams = () => {
             return;
         }
         setSelectedTeam(team);
-        setActiveTab('documents');
+        // Only set tab to 'documents' if not already set from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlTab = urlParams.get('tab');
+        if (!urlTab || urlTab === 'overview') {
+            setActiveTab('documents');
+        } else {
+            setActiveTab(urlTab);
+        }
     }, [isTeamAccessible]);
 
     // Save handlers
