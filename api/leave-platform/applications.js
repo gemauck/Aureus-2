@@ -10,7 +10,32 @@ async function handler(req, res) {
     // List all leave applications (GET /api/leave-platform/applications)
     if (req.method === 'GET') {
       try {
+        // Get current user ID and role
+        const currentUserId = req.user?.sub || req.user?.id
+        const userRole = req.user?.role?.toLowerCase()
+
+        // If no user ID, return unauthorized
+        if (!currentUserId) {
+          return badRequest(res, 'User not authenticated')
+        }
+
+        // Get user from database to verify role
+        const currentUser = await prisma.user.findUnique({
+          where: { id: currentUserId },
+          select: { id: true, role: true }
+        })
+
+        if (!currentUser) {
+          return badRequest(res, 'User not found')
+        }
+
+        const isAdmin = currentUser.role?.toLowerCase() === 'admin'
+
+        // Build where clause: admins see all, regular users see only their own
+        const whereClause = isAdmin ? {} : { userId: currentUserId }
+
         const applications = await prisma.leaveApplication.findMany({
+          where: whereClause,
           include: {
             user: {
               select: {

@@ -1,0 +1,85 @@
+/* ============================================
+   CLIENTS COMPONENT FULL WIDTH FIX
+   Critical fix to ensure Clients component uses full screen width
+   ============================================ */
+
+/* GLOBAL: Ensure main content wrapper is full width on desktop */
+@media (min-width: 769px) {
+  /* Fix the main content flex container */
+  .flex.h-screen > .flex-1,
+  .flex.h-screen > div.flex-1 {
+    flex: 1 1 auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+  
+  /* Ensure main element is full width */
+  main.flex-1 {
+    flex: 1 1 auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+}
+
+/* Desktop: Force full width - AGGRESSIVE FIX */
+@media (min-width: 769px) {
+  /* Ensure main content area takes full remaining width */
+  main.flex-1,
+  .flex-1.flex.flex-col {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+  }
+  
+  /* Target the Clients component directly and all wrappers */
+  div[class*="Clients"],
+  div:has([class*="Clients"]),
+  main:has(div[class*="Clients"]),
+  main:has(div[class*="Clients"]) > div,
+  main:has(div[class*="Clients"]) > div > div,
+  main:has(div[class*="Clients"]) > div > div > div {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+  
+  /* Override any max-width constraints */
+  [class*="Clients"][class*="max-w"],
+  [class*="Clients"] [class*="max-w"],
+  [class*="Clients"] [class*="max-w-"] {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+  
+  /* Ensure flex containers take full width */
+  [class*="Clients"] [class*="flex"],
+  [class*="Clients"].flex {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+  
+  /* Reset any negative margins that might constrain width */
+  [class*="Clients"] {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+  
+  /* Force all direct children to be full width */
+  [class*="Clients"] > * {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  
+  /* Override any inline styles that might constrain width */
+  [class*="Clients"][style*="width"],
+  [class*="Clients"][style*="max-width"] {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+

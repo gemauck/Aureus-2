@@ -4851,8 +4851,8 @@ const Clients = React.memo(() => {
     // Removed render logging to reduce console spam during infinite loops
 
     return (
-        <div className="flex flex-col h-full w-full max-w-full overflow-hidden" style={{ height: '100%', minHeight: '100%' }}>
-            <div className="flex-shrink-0 space-y-4 sm:space-y-6 px-4 sm:px-6 pt-4 sm:pt-6">
+        <div className="flex flex-col h-full w-full max-w-full overflow-hidden" style={{ width: '100%', maxWidth: '100%', minWidth: '100%', height: '100%', minHeight: '100%' }}>
+            <div className="flex-shrink-0 space-y-4 sm:space-y-6 px-4 sm:px-6 pt-4 sm:pt-6 w-full max-w-full" style={{ width: '100%', maxWidth: '100%' }}>
             {/* Modern Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
                 <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">

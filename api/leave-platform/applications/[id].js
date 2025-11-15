@@ -12,6 +12,24 @@ async function handler(req, res) {
       return badRequest(res, 'Leave application ID required')
     }
 
+    // Get current user ID and role
+    const currentUserId = req.user?.sub || req.user?.id
+    if (!currentUserId) {
+      return badRequest(res, 'User not authenticated')
+    }
+
+    // Get user from database to verify role
+    const currentUser = await prisma.user.findUnique({
+      where: { id: currentUserId },
+      select: { id: true, role: true }
+    })
+
+    if (!currentUser) {
+      return badRequest(res, 'User not found')
+    }
+
+    const isAdmin = currentUser.role?.toLowerCase() === 'admin'
+
     // Get the application
     const application = await prisma.leaveApplication.findUnique({
       where: { id },
@@ -30,6 +48,11 @@ async function handler(req, res) {
       return notFound(res, 'Leave application not found')
     }
 
+    // Check permissions: users can only access their own applications unless admin
+    if (!isAdmin && application.userId !== currentUserId) {
+      return badRequest(res, 'You can only access your own leave applications')
+    }
+
     // Update leave application (PATCH)
     if (req.method === 'PATCH' || req.method === 'PUT') {
       try {
@@ -39,6 +62,11 @@ async function handler(req, res) {
         // Validate that only pending applications can be edited
         if (application.status !== 'pending') {
           return badRequest(res, 'Only pending leave applications can be edited')
+        }
+
+        // Check permissions: users can only edit their own applications unless admin
+        if (!isAdmin && application.userId !== currentUserId) {
+          return badRequest(res, 'You can only edit your own leave applications')
         }
 
         const updateData = {}
@@ -132,6 +160,11 @@ async function handler(req, res) {
         // Only pending applications can be deleted
         if (application.status !== 'pending') {
           return badRequest(res, 'Only pending leave applications can be deleted')
+        }
+
+        // Check permissions: users can only delete their own applications unless admin
+        if (!isAdmin && application.userId !== currentUserId) {
+          return badRequest(res, 'You can only delete your own leave applications')
         }
 
         await prisma.leaveApplication.delete({

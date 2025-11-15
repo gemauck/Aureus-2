@@ -16,6 +16,29 @@ async function handler(req, res) {
       return badRequest(res, 'Leave application ID required')
     }
 
+    // Get current user ID and role
+    const currentUserId = req.user?.sub || req.user?.id
+    if (!currentUserId) {
+      return badRequest(res, 'User not authenticated')
+    }
+
+    // Get user from database to verify role
+    const currentUser = await prisma.user.findUnique({
+      where: { id: currentUserId },
+      select: { id: true, role: true }
+    })
+
+    if (!currentUser) {
+      return badRequest(res, 'User not found')
+    }
+
+    const isAdmin = currentUser.role?.toLowerCase() === 'admin'
+
+    // Only admins can reject leave applications
+    if (!isAdmin) {
+      return badRequest(res, 'Only administrators can reject leave applications')
+    }
+
     const body = await parseJsonBody(req)
     const { rejectedBy, reason } = body
 

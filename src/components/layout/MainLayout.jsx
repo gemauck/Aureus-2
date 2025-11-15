@@ -1017,7 +1017,7 @@ const MainLayout = () => {
             </div>
             
             {/* Main Content - ALWAYS FULL WIDTH */}
-            <div className="flex-1 flex flex-col overflow-hidden" style={{ minWidth: 0, width: '100%' }}>
+            <div className="flex-1 flex flex-col overflow-hidden" style={{ minWidth: 0, width: '100%', maxWidth: '100%', flex: '1 1 auto' }}>
                 {/* Header - STICKY on mobile */}
                 <header 
                     className={`
@@ -1109,8 +1109,8 @@ const MainLayout = () => {
                 </header>
 
                 {/* Page Content - SCROLLABLE */}
-                <main className={`flex-1 overflow-y-auto overflow-x-hidden ${currentPage === 'clients' ? 'p-0' : 'p-4'}`} style={{ width: '100%', maxWidth: '100%' }}>
-                    <div className="w-full max-w-full">
+                <main className={`flex-1 overflow-y-auto overflow-x-hidden ${currentPage === 'clients' ? 'p-0' : 'p-4'}`} style={{ width: '100%', maxWidth: '100%', minWidth: '100%', flex: '1 1 auto' }}>
+                    <div className="w-full max-w-full min-w-full" style={{ width: '100%', maxWidth: '100%', minWidth: '100%', flex: '1 1 auto' }}>
                         {renderPage}
                     </div>
                 </main>

@@ -3421,11 +3421,30 @@
    CLIENTS COMPONENT MOBILE OPTIMIZATIONS
    ============================================ */
 
-/* Ensure Clients component is full width on desktop */
+/* Ensure Clients component is full width on desktop - CRITICAL FIX */
 @media (min-width: 769px) {
-  [class*="Clients"] {
+  /* Force full width for Clients component and all children */
+  [class*="Clients"],
+  [class*="Clients"] > *,
+  [class*="Clients"] > div,
+  [class*="Clients"] > div > div {
     width: 100% !important;
     max-width: 100% !important;
+    min-width: 100% !important;
+    flex: 1 1 100% !important;
+  }
+  
+  /* Ensure main content wrapper is full width when Clients is rendered */
+  main:has([class*="Clients"]) {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+  }
+  
+  main:has([class*="Clients"]) > div {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
   }
   
   [class*="Clients"] > div:first-child {
@@ -3439,6 +3458,20 @@
     margin-right: 0 !important;
     padding-left: 0 !important;
     padding-right: 0 !important;
+  }
+  
+  /* Override any container constraints */
+  [class*="Clients"].container,
+  [class*="Clients"] .container,
+  [class*="Clients"] [class*="max-w"] {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+  
+  /* Override any flex constraints */
+  [class*="Clients"] [class*="flex-1"] {
+    flex: 1 1 100% !important;
+    min-width: 100% !important;
   }
 }
 

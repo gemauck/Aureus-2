@@ -19,6 +19,24 @@ async function handler(req, res) {
     const body = await parseJsonBody(req)
     const { cancelledBy } = body
 
+    // Get current user ID and role
+    const currentUserId = req.user?.sub || req.user?.id
+    if (!currentUserId) {
+      return badRequest(res, 'User not authenticated')
+    }
+
+    // Get user from database to verify role
+    const currentUser = await prisma.user.findUnique({
+      where: { id: currentUserId },
+      select: { id: true, role: true }
+    })
+
+    if (!currentUser) {
+      return badRequest(res, 'User not found')
+    }
+
+    const isAdmin = currentUser.role?.toLowerCase() === 'admin'
+
     // Get the application
     const application = await prisma.leaveApplication.findUnique({
       where: { id },
@@ -35,6 +53,11 @@ async function handler(req, res) {
 
     if (!application) {
       return notFound(res, 'Leave application not found')
+    }
+
+    // Check permissions: users can only cancel their own applications unless admin
+    if (!isAdmin && application.userId !== currentUserId) {
+      return badRequest(res, 'You can only cancel your own leave applications')
     }
 
     // Only pending or approved applications can be cancelled
