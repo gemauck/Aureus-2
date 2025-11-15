@@ -784,16 +784,32 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             
             // Clear cache BEFORE updating to ensure fresh data after save
             if (window.DatabaseAPI) {
-                // Clear response cache
+                // Clear response cache - clear ALL project-related caches
                 if (window.DatabaseAPI._responseCache) {
-                    window.DatabaseAPI._responseCache.delete('GET:/projects');
-                    window.DatabaseAPI._responseCache.delete(`GET:/projects/${project.id}`);
-                    console.log('🗑️ ProjectProgressTracker: Cleared project caches before save');
+                    // Clear all project caches
+                    const keysToDelete = [];
+                    window.DatabaseAPI._responseCache.forEach((value, key) => {
+                        if (key.includes('/projects')) {
+                            keysToDelete.push(key);
+                        }
+                    });
+                    keysToDelete.forEach(key => {
+                        window.DatabaseAPI._responseCache.delete(key);
+                    });
+                    console.log('🗑️ ProjectProgressTracker: Cleared ALL project caches before save:', keysToDelete.length, 'caches cleared');
                 }
                 // Also clear any pending requests to avoid stale data
                 if (window.DatabaseAPI._pendingRequests) {
-                    window.DatabaseAPI._pendingRequests.delete('/projects');
-                    window.DatabaseAPI._pendingRequests.delete(`/projects/${project.id}`);
+                    const pendingKeysToDelete = [];
+                    window.DatabaseAPI._pendingRequests.forEach((value, key) => {
+                        if (key.includes('/projects')) {
+                            pendingKeysToDelete.push(key);
+                        }
+                    });
+                    pendingKeysToDelete.forEach(key => {
+                        window.DatabaseAPI._pendingRequests.delete(key);
+                    });
+                    console.log('🗑️ ProjectProgressTracker: Cleared pending project requests:', pendingKeysToDelete.length);
                 }
             }
             
@@ -807,8 +823,12 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 month: month,
                 field: field,
                 valueLength: sanitizedValue.length,
+                valuePreview: sanitizedValue.substring(0, 50),
                 progressKeys: Object.keys(updatedProgress),
-                monthKey: key
+                monthKey: key,
+                monthData: updatedProgress[key],
+                fullPayload: updatePayload,
+                payloadStringLength: updatePayload.monthlyProgress.length
             });
             
             let updateSuccess = false;
@@ -850,8 +870,42 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     dataKeys: response?.data ? Object.keys(response.data) : [],
                     responseKeys: Object.keys(response || {}),
                     monthlyProgressType: typeof (response?.data?.project?.monthlyProgress || response?.project?.monthlyProgress),
-                    monthlyProgressValue: response?.data?.project?.monthlyProgress || response?.project?.monthlyProgress
+                    monthlyProgressValue: response?.data?.project?.monthlyProgress || response?.project?.monthlyProgress,
+                    fullResponse: JSON.stringify(response).substring(0, 500)
                 });
+                
+                // Verify the response contains the saved data
+                const responseMonthlyProgress = response?.data?.project?.monthlyProgress || response?.project?.monthlyProgress;
+                if (responseMonthlyProgress) {
+                    let parsedResponseProgress = responseMonthlyProgress;
+                    if (typeof parsedResponseProgress === 'string') {
+                        try {
+                            parsedResponseProgress = JSON.parse(parsedResponseProgress);
+                        } catch (e) {
+                            console.error('❌ ProjectProgressTracker: Failed to parse monthlyProgress from API response:', e);
+                        }
+                    }
+                    const responseValue = parsedResponseProgress?.[key]?.[field];
+                    console.log('🔍 ProjectProgressTracker: Verifying saved data in API response:', {
+                        monthKey: key,
+                        field: field,
+                        responseValue: responseValue,
+                        expectedValue: sanitizedValue,
+                        matches: responseValue === sanitizedValue,
+                        fullResponseProgress: parsedResponseProgress
+                    });
+                    
+                    if (responseValue !== sanitizedValue) {
+                        console.error('❌ ProjectProgressTracker: CRITICAL - API response does not contain saved data!', {
+                            expected: sanitizedValue,
+                            received: responseValue,
+                            monthKey: key,
+                            field: field
+                        });
+                    }
+                } else {
+                    console.warn('⚠️ ProjectProgressTracker: API response does not contain monthlyProgress field');
+                }
                 
                 // Validate response
                 if (!response) {
@@ -860,11 +914,24 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 
                 savedProject = response?.data?.project || response?.project || response?.data;
                 
+                // Log the full response to debug
+                console.log('🔍 ProjectProgressTracker: Full API response:', JSON.stringify(response, null, 2));
+                
                 if (!savedProject) {
                     console.warn('⚠️ ProjectProgressTracker: API response does not contain project data');
                     // Still mark as success if we got a response - the data might be in the database
                     updateSuccess = true;
                 } else {
+                    // Verify monthlyProgress is in the response
+                    const responseMonthlyProgress = savedProject.monthlyProgress;
+                    console.log('🔍 ProjectProgressTracker: Saved project monthlyProgress in response:', {
+                        hasMonthlyProgress: !!responseMonthlyProgress,
+                        type: typeof responseMonthlyProgress,
+                        isString: typeof responseMonthlyProgress === 'string',
+                        preview: typeof responseMonthlyProgress === 'string' 
+                            ? responseMonthlyProgress.substring(0, 200) 
+                            : JSON.stringify(responseMonthlyProgress).substring(0, 200)
+                    });
                     updateSuccess = true;
                 }
             } catch (apiErr) {
@@ -975,6 +1042,56 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         }
                     }
                     
+                    // First, directly fetch the updated project to verify it's in the database
+                    if (window.DatabaseAPI && window.DatabaseAPI.getProject) {
+                        try {
+                            console.log('🔍 ProjectProgressTracker: Directly fetching updated project from database...');
+                            const directProjectResponse = await window.DatabaseAPI.getProject(project.id);
+                            const directProject = directProjectResponse?.data?.project || directProjectResponse?.project || directProjectResponse?.data;
+                            
+                            if (directProject) {
+                                let directMonthlyProgress = directProject.monthlyProgress;
+                                if (typeof directMonthlyProgress === 'string' && directMonthlyProgress.trim()) {
+                                    try {
+                                        directMonthlyProgress = JSON.parse(directMonthlyProgress);
+                                    } catch (e) {
+                                        console.warn('⚠️ ProjectProgressTracker: Failed to parse direct project monthlyProgress:', e);
+                                        directMonthlyProgress = {};
+                                    }
+                                }
+                                
+                                const directMonthData = directMonthlyProgress?.[key];
+                                const directFieldValue = directMonthData?.[field];
+                                
+                                console.log('🔍 ProjectProgressTracker: Direct project fetch verification:', {
+                                    projectId: project.id,
+                                    monthKey: key,
+                                    field: field,
+                                    savedValue: sanitizedValue,
+                                    databaseValue: directFieldValue,
+                                    matches: directFieldValue === sanitizedValue,
+                                    monthlyProgressKeys: Object.keys(directMonthlyProgress || {}),
+                                    hasMonthKey: !!directMonthlyProgress?.[key]
+                                });
+                                
+                                if (directFieldValue !== sanitizedValue) {
+                                    console.error('❌ ProjectProgressTracker: CRITICAL - Saved value does not match database value!', {
+                                        expected: sanitizedValue,
+                                        actual: directFieldValue,
+                                        monthKey: key,
+                                        field: field
+                                    });
+                                } else {
+                                    console.log('✅ ProjectProgressTracker: Database verification successful - data matches!');
+                                }
+                            } else {
+                                console.warn('⚠️ ProjectProgressTracker: Direct project fetch returned no data');
+                            }
+                        } catch (directFetchErr) {
+                            console.warn('⚠️ ProjectProgressTracker: Failed to directly fetch project (non-critical):', directFetchErr);
+                        }
+                    }
+                    
                     if (window.DatabaseAPI && window.DatabaseAPI.getProjects) {
                         const reloadResponse = await window.DatabaseAPI.getProjects();
                         let reloadedProjs = [];
@@ -1038,19 +1155,64 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                 savedValue: savedFieldValue,
                                 expectedValue: sanitizedValue,
                                 matches: savedFieldValue === sanitizedValue,
-                                reloadedProgressKeys: Object.keys(reloadedMonthlyProgress)
+                                reloadedProgressKeys: Object.keys(reloadedMonthlyProgress),
+                                fullReloadedProgress: reloadedMonthlyProgress
                             });
                             
                             if (savedFieldValue !== sanitizedValue) {
-                                console.warn('⚠️ ProjectProgressTracker: Saved value does not match reloaded value!', {
+                                console.error('❌ ProjectProgressTracker: CRITICAL - Saved value does not match reloaded value!', {
                                     saved: sanitizedValue,
-                                    reloaded: savedFieldValue
+                                    reloaded: savedFieldValue,
+                                    monthKey: savedMonthKey,
+                                    field: field,
+                                    fullMonthData: reloadedMonthlyProgress[savedMonthKey]
                                 });
+                                
+                                // Try fetching the project directly from the database
+                                try {
+                                    console.log('🔍 ProjectProgressTracker: Fetching project directly from database to verify...');
+                                    if (window.DatabaseAPI && window.DatabaseAPI.getProject) {
+                                        const directProject = await window.DatabaseAPI.getProject(project.id);
+                                        const directMonthlyProgress = directProject?.data?.project?.monthlyProgress || directProject?.project?.monthlyProgress;
+                                        let parsedDirect = directMonthlyProgress;
+                                        if (typeof parsedDirect === 'string') {
+                                            parsedDirect = JSON.parse(parsedDirect);
+                                        }
+                                        const directValue = parsedDirect?.[savedMonthKey]?.[field];
+                                        console.log('🔍 ProjectProgressTracker: Direct database fetch result:', {
+                                            hasProject: !!directProject,
+                                            monthlyProgressType: typeof directMonthlyProgress,
+                                            directValue: directValue,
+                                            expectedValue: sanitizedValue,
+                                            directMatches: directValue === sanitizedValue,
+                                            fullDirectProgress: parsedDirect
+                                        });
+                                        
+                                        if (directValue === sanitizedValue) {
+                                            console.log('✅ ProjectProgressTracker: Data IS in database! Issue is with reload parsing.');
+                                            // Update the reloaded project with correct data
+                                            const correctedProject = {
+                                                ...reloadedProject,
+                                                monthlyProgress: parsedDirect
+                                            };
+                                            setProjects(prevProjects => prevProjects.map(p => 
+                                                String(p?.id) === String(project.id) ? correctedProject : p
+                                            ));
+                                        } else {
+                                            console.error('❌ ProjectProgressTracker: Data NOT in database! Save may have failed.');
+                                        }
+                                    }
+                                } catch (directFetchErr) {
+                                    console.error('❌ ProjectProgressTracker: Failed to fetch project directly:', directFetchErr);
+                                }
+                            } else {
+                                console.log('✅ ProjectProgressTracker: Saved data verified in reloaded project!');
                             }
                         } else {
                             console.warn('⚠️ ProjectProgressTracker: Saved project not found in reloaded projects!', {
                                 projectId: project.id,
-                                reloadedCount: monthlyReloaded.length
+                                reloadedCount: monthlyReloaded.length,
+                                reloadedIds: monthlyReloaded.map(p => p.id)
                             });
                         }
                         

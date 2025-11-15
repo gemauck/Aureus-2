@@ -406,9 +406,54 @@ async function handler(req, res) {
           // This ensures we can explicitly set it to false if needed
           hasDocumentCollectionProcess: body.hasDocumentCollectionProcess !== undefined 
             ? Boolean(body.hasDocumentCollectionProcess === true || body.hasDocumentCollectionProcess === 'true' || body.hasDocumentCollectionProcess === 1) 
-            : undefined,
-          documentSections: typeof body.documentSections === 'string' ? body.documentSections : JSON.stringify(body.documentSections)
+            : undefined
         }
+        
+        // Handle documentSections separately if provided - ensure it's properly saved
+        if (body.documentSections !== undefined && body.documentSections !== null) {
+          try {
+            if (typeof body.documentSections === 'string') {
+              // Already a string, validate it's valid JSON
+              const trimmed = body.documentSections.trim();
+              if (trimmed === '') {
+                // Empty string means empty array
+                updateData.documentSections = JSON.stringify([]);
+              } else {
+                try {
+                  // Validate it's valid JSON
+                  const parsed = JSON.parse(trimmed);
+                  // If it parsed successfully, use it as-is (it's already a stringified JSON)
+                  updateData.documentSections = trimmed;
+                } catch (parseError) {
+                  console.error('❌ Invalid documentSections JSON string:', parseError);
+                  // If string is invalid JSON, stringify it (might be double-encoded or corrupted)
+                  updateData.documentSections = JSON.stringify(body.documentSections);
+                }
+              }
+            } else if (Array.isArray(body.documentSections)) {
+              // It's an array, stringify it
+              updateData.documentSections = JSON.stringify(body.documentSections);
+            } else if (typeof body.documentSections === 'object') {
+              // It's an object, stringify it
+              updateData.documentSections = JSON.stringify(body.documentSections);
+            } else {
+              // It's something else (number, boolean, etc.), stringify it
+              updateData.documentSections = JSON.stringify(body.documentSections);
+            }
+            console.log('✅ documentSections will be saved:', {
+              type: typeof body.documentSections,
+              isString: typeof body.documentSections === 'string',
+              length: typeof body.documentSections === 'string' ? body.documentSections.length : 'N/A',
+              preview: typeof body.documentSections === 'string' ? body.documentSections.substring(0, 100) : 'N/A'
+            });
+          } catch (error) {
+            console.error('❌ Error processing documentSections:', error);
+            // Don't fail the entire update, but log the error
+          }
+        } else {
+          console.log('⚠️ documentSections not provided in update - will not be updated');
+        }
+        
         Object.keys(updateData).forEach(key => {
           if (updateData[key] === undefined) {
             delete updateData[key]

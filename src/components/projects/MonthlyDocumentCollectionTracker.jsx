@@ -2042,23 +2042,28 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const hasComments = comments.length > 0;
         const cellKey = `${section.id}-${document.id}-${month}`;
         const isPopupOpen = hoverCommentCell === cellKey;
+        
+        // Determine cell background - prioritize status color over working month highlight
+        const isWorkingMonth = workingMonths.includes(months.indexOf(month)) && selectedYear === currentYear;
+        const cellBackgroundClass = statusConfig 
+            ? statusConfig.cellColor 
+            : (isWorkingMonth ? 'bg-primary-50' : '');
+        
+        // Extract text color from status config (e.g., "bg-red-100 text-red-800" -> "text-red-800")
+        const textColorClass = statusConfig && statusConfig.color 
+            ? statusConfig.color.split(' ').find(cls => cls.startsWith('text-')) || 'text-gray-900'
+            : 'text-gray-400';
 
         return (
             <td 
-                className={`px-2 py-1 text-xs border-l border-gray-100 ${
-                    workingMonths.includes(months.indexOf(month)) && selectedYear === currentYear
-                        ? 'bg-primary-50 bg-opacity-30'
-                        : ''
-                } ${statusConfig ? statusConfig.cellColor : ''}`}
+                className={`px-2 py-1 text-xs border-l border-gray-100 ${cellBackgroundClass}`}
             >
                 <div className="min-w-[160px] relative">
                     {/* Status Dropdown */}
                     <select
                         value={status || ''}
                         onChange={(e) => handleUpdateStatus(section.id, document.id, month, e.target.value)}
-                        className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none ${
-                            status ? statusConfig.color : 'bg-white text-gray-400 hover:bg-gray-50'
-                        }`}
+                        className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80`}
                     >
                         <option value="">Select Status</option>
                         {statusOptions.map(option => (

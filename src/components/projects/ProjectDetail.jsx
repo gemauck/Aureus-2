@@ -2721,58 +2721,105 @@ function initializeProjectDetail() {
                                                 <article
                                                     key={task.id}
                                                     onClick={() => handleViewTaskDetail(task)}
-                                                    className="py-2 px-3 hover:bg-primary-50/40 transition-colors cursor-pointer"
+                                                    className="py-1 px-3 hover:bg-primary-50/40 transition-colors cursor-pointer"
                                                 >
-                                                    <div className="grid grid-cols-12 gap-2 items-center" style={{ display: 'grid', gridTemplateColumns: 'repeat(12, minmax(0, 1fr))' }}>
-                                                        <div className="col-span-3 min-w-0" style={{ gridColumn: 'span 3 / span 3' }}>
-                                                            <h4 className="text-sm font-semibold text-gray-900 truncate">
+                                                    <div className="grid grid-cols-12 gap-1.5 items-center" style={{ display: 'grid', gridTemplateColumns: 'repeat(12, minmax(0, 1fr))' }}>
+                                                        <div className="col-span-2 min-w-0" style={{ gridColumn: 'span 2 / span 2' }}>
+                                                            <h4 className="text-xs font-semibold text-gray-900 truncate">
                                                                 {task.title || 'Untitled task'}
                                                             </h4>
+                                                            {(task.description || (task.tags && task.tags.length > 0)) && (
+                                                                <div className="flex items-center gap-1 mt-0.5">
+                                                                    {task.description && (
+                                                                        <p className="text-[9px] text-gray-500 truncate max-w-[150px]">
+                                                                            {task.description}
+                                                                        </p>
+                                                                    )}
+                                                                    {task.tags && task.tags.length > 0 && (
+                                                                        <div className="flex gap-0.5">
+                                                                            {task.tags.slice(0, 2).map(tag => (
+                                                                                <span key={tag} className="inline-flex items-center gap-0.5 px-1 py-0.5 text-[8px] font-medium rounded-full bg-purple-100 text-purple-700">
+                                                                                    <i className="fas fa-tag text-[7px]"></i>
+                                                                                    {tag}
+                                                                                </span>
+                                                                            ))}
+                                                                            {task.tags.length > 2 && (
+                                                                                <span className="text-[8px] text-gray-400">+{task.tags.length - 2}</span>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                         <div className="col-span-1 flex items-center" style={{ gridColumn: 'span 1 / span 1' }}>
-                                                            <span className={`px-2 py-0.5 text-[11px] font-semibold rounded-full ${getStatusColor(task.status || 'To Do')}`}>
+                                                            <span className={`px-1 py-0.5 text-[9px] font-semibold rounded-full ${getStatusColor(task.status || 'To Do')}`}>
                                                                 {task.status || 'To Do'}
                                                             </span>
                                                         </div>
-                                                        <div className="col-span-2 flex items-center text-[11px] text-gray-500" style={{ gridColumn: 'span 2 / span 2' }}>
+                                                        <div className="col-span-2 flex items-center text-[9px] text-gray-500" style={{ gridColumn: 'span 2 / span 2' }}>
                                                             {task.assignee ? (
-                                                                <span className="inline-flex items-center gap-1 truncate">
-                                                                    <i className="fas fa-user text-gray-400"></i>
-                                                                    {task.assignee}
+                                                                <span className="inline-flex items-center gap-0.5 truncate">
+                                                                    <i className="fas fa-user text-[8px] text-gray-400"></i>
+                                                                    <span className="truncate">{task.assignee}</span>
                                                                 </span>
                                                             ) : (
                                                                 <span className="text-gray-400">—</span>
                                                             )}
                                                         </div>
                                                         <div className="col-span-1 flex items-center" style={{ gridColumn: 'span 1 / span 1' }}>
-                                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${getPriorityColor(task.priority || 'Medium')}`}>
-                                                                <i className="fas fa-bolt text-[10px]"></i>
+                                                            <span className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[9px] font-medium ${getPriorityColor(task.priority || 'Medium')}`}>
+                                                                <i className="fas fa-bolt text-[8px]"></i>
                                                                 {task.priority || 'Medium'}
                                                             </span>
                                                         </div>
                                                         <div className="col-span-2 flex items-center" style={{ gridColumn: 'span 2 / span 2' }}>
-                                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${dueMeta.pillClass}`}>
-                                                                <i className="fas fa-calendar-alt text-[10px]"></i>
+                                                            <span className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[9px] font-medium ${dueMeta.pillClass}`}>
+                                                                <i className="fas fa-calendar-alt text-[8px]"></i>
                                                                 {dueMeta.label}
                                                             </span>
                                                         </div>
-                                                        <div className="col-span-1 flex items-center justify-center text-[11px] text-gray-500" style={{ gridColumn: 'span 1 / span 1' }}>
+                                                        <div className="col-span-1 flex items-center justify-center text-[9px] text-gray-500" style={{ gridColumn: 'span 1 / span 1' }}>
                                                             {task.comments?.length > 0 ? (
-                                                                <span className="inline-flex items-center gap-1">
-                                                                    <i className="fas fa-comments text-gray-400"></i>
+                                                                <span className="inline-flex items-center gap-0.5">
+                                                                    <i className="fas fa-comments text-[8px] text-gray-400"></i>
                                                                     {task.comments.length}
                                                                 </span>
                                                             ) : (
                                                                 <span className="text-gray-400">—</span>
                                                             )}
                                                         </div>
-                                                        <div className="col-span-2 flex items-center justify-end gap-1.5" style={{ gridColumn: 'span 2 / span 2' }}>
+                                                        {((task.customFields && customFieldDefinitions.length > 0) || (task.checklist && task.checklist.length > 0)) && (
+                                                            <div className="col-span-1 flex items-center gap-1 text-[8px] text-gray-500" style={{ gridColumn: 'span 1 / span 1' }}>
+                                                                {task.customFields && customFieldDefinitions.length > 0 ? (
+                                                                    customFieldDefinitions.slice(0, 1).map(field => {
+                                                                        const value = task.customFields?.[field.name];
+                                                                        if (!value) return null;
+                                                                        return (
+                                                                            <span key={field.name} className="px-1 py-0.5 text-[8px] bg-gray-100 text-gray-600 rounded truncate max-w-[70px]" title={`${field.name}: ${value}`}>
+                                                                                {value}
+                                                                            </span>
+                                                                        );
+                                                                    })
+                                                                ) : task.checklist && task.checklist.length > 0 ? (
+                                                                    <div className="flex items-center gap-0.5">
+                                                                        <div className="w-12 h-1 bg-gray-200 rounded-full overflow-hidden">
+                                                                            <div
+                                                                                className="h-full bg-primary-500"
+                                                                                style={{ width: `${checklistMeta.percent}%` }}
+                                                                            ></div>
+                                                                        </div>
+                                                                        <span>{checklistMeta.percent}%</span>
+                                                                    </div>
+                                                                ) : null}
+                                                            </div>
+                                                        )}
+                                                        <div className="col-span-2 flex items-center justify-end gap-0.5" style={{ gridColumn: 'span 2 / span 2' }}>
                                                             <button
                                                                 onClick={(e) => openTaskComments(e, task)}
-                                                                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-primary-500 text-white rounded-lg hover:bg-primary-600 hover:shadow-md transition-all font-medium"
+                                                                className="inline-flex items-center gap-0.5 px-1 py-0.5 text-[9px] bg-primary-500 text-white rounded hover:bg-primary-600 transition-all font-medium"
                                                                 title="Open comments"
                                                             >
-                                                                <i className="fas fa-comments text-[10px]"></i>
+                                                                <i className="fas fa-comments text-[8px]"></i>
                                                                 {task.comments?.length || 0}
                                                             </button>
                                                             <button
@@ -2780,10 +2827,10 @@ function initializeProjectDetail() {
                                                                     e.stopPropagation();
                                                                     handleAddSubtask(task);
                                                                 }}
-                                                                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-primary-500 text-white rounded-lg hover:bg-primary-600 hover:shadow-md transition-all font-medium"
+                                                                className="inline-flex items-center gap-0.5 px-1 py-0.5 text-[9px] bg-primary-500 text-white rounded hover:bg-primary-600 transition-all font-medium"
                                                                 title="Add subtask"
                                                             >
-                                                                <i className="fas fa-level-down-alt text-[10px]"></i>
+                                                                <i className="fas fa-level-down-alt text-[8px]"></i>
                                                                 {task.subtasks?.length || 0}
                                                             </button>
                                                             <button
@@ -2791,7 +2838,7 @@ function initializeProjectDetail() {
                                                                     e.stopPropagation();
                                                                     handleViewTaskDetail(task);
                                                                 }}
-                                                                className="text-[11px] text-primary-600 hover:text-primary-700 font-semibold"
+                                                                className="text-[9px] text-primary-600 hover:text-primary-700 font-semibold px-0.5"
                                                             >
                                                                 View
                                                             </button>
@@ -2800,59 +2847,31 @@ function initializeProjectDetail() {
                                                                     e.stopPropagation();
                                                                     handleDeleteTask(task.id);
                                                                 }}
-                                                                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] bg-red-500 text-white rounded-lg hover:bg-red-600 hover:shadow-md transition-all font-medium"
+                                                                className="inline-flex items-center gap-0.5 px-1 py-0.5 text-[9px] bg-red-500 text-white rounded hover:bg-red-600 transition-all font-medium"
                                                                 title="Delete task"
                                                             >
-                                                                <i className="fas fa-trash text-[10px]"></i>
+                                                                <i className="fas fa-trash text-[8px]"></i>
                                                             </button>
                                                         </div>
                                                     </div>
-                                                    {(task.description || (task.tags && task.tags.length > 0) || (task.customFields && customFieldDefinitions.length > 0) || (task.checklist && task.checklist.length > 0) || matchedBySubtasks) && (
-                                                        <div className="mt-2 pt-2 border-t border-gray-100 grid grid-cols-12 gap-3">
-                                                            {task.description && (
-                                                                <div className="col-span-4">
-                                                                    <p className="text-xs text-gray-600 line-clamp-1">
-                                                                        {task.description}
-                                                                    </p>
-                                                                </div>
-                                                            )}
-                                                            {task.tags && task.tags.length > 0 && (
-                                                                <div className="col-span-3 flex flex-wrap gap-1.5">
-                                                                    {task.tags.map(tag => (
-                                                                        <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-purple-100 text-purple-700">
-                                                                            <i className="fas fa-tag text-[9px]"></i>
-                                                                            {tag}
-                                                                        </span>
-                                                                    ))}
-                                                                </div>
-                                                            )}
-                                                            {task.customFields && customFieldDefinitions.length > 0 && (
-                                                                <div className="col-span-3 flex flex-wrap gap-2">
-                                                                    {customFieldDefinitions.map(field => {
+                                                    {((task.customFields && customFieldDefinitions.length > 1) || matchedBySubtasks) && (
+                                                        <div className="mt-1 pt-1 border-t border-gray-100 grid grid-cols-12 gap-2">
+                                                            {task.customFields && customFieldDefinitions.length > 1 && (
+                                                                <div className="col-span-10 flex flex-wrap gap-1.5">
+                                                                    {customFieldDefinitions.slice(1).map(field => {
                                                                         const value = task.customFields?.[field.name];
                                                                         if (!value) return null;
                                                                         return (
-                                                                            <span key={field.name} className="px-2 py-0.5 text-[10px] bg-gray-100 text-gray-600 rounded">
+                                                                            <span key={field.name} className="px-1.5 py-0.5 text-[9px] bg-gray-100 text-gray-600 rounded">
                                                                                 <span className="font-semibold text-gray-700">{field.name}:</span> {value}
                                                                             </span>
                                                                         );
                                                                     })}
                                                                 </div>
                                                             )}
-                                                            {task.checklist && task.checklist.length > 0 && (
-                                                                <div className="col-span-2 flex items-center gap-2 text-[11px] text-gray-500">
-                                                                    <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                                                                        <div
-                                                                            className="h-full bg-primary-500"
-                                                                            style={{ width: `${checklistMeta.percent}%` }}
-                                                                        ></div>
-                                                                    </div>
-                                                                    <span>{checklistMeta.label}</span>
-                                                                </div>
-                                                            )}
                                                             {matchedBySubtasks && (
                                                                 <div className="col-span-12">
-                                                                    <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-amber-100 text-amber-700">
+                                                                    <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded-full bg-amber-100 text-amber-700">
                                                                         Matches subtask filter
                                                                     </span>
                                                                 </div>

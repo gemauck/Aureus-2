@@ -6,6 +6,23 @@ module.exports = {
     "./*.html",
     "./*.js"
   ],
+  safelist: [
+    // Document Collection Tracker cell colors - these are used dynamically
+    'bg-red-50',
+    'bg-yellow-50',
+    'bg-green-50',
+    'bg-gray-50',
+    'bg-red-100',
+    'bg-yellow-100',
+    'bg-green-100',
+    'bg-gray-100',
+    'text-red-800',
+    'text-yellow-800',
+    'text-green-800',
+    'text-gray-800',
+    // Status badge colors
+    'bg-primary-50',
+  ],
   theme: {
     extend: {
       colors: {
