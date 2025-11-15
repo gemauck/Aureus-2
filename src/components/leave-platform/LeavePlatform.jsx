@@ -146,9 +146,82 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             return () => window.removeEventListener('leavePlatform:setTab', handleTabEvent);
         }, []);
 
+        // State for dynamically loaded components - these update when components load
+        const [EmployeeDetailComponent, setEmployeeDetailComponent] = useState(() => window.EmployeeDetail);
+        const [EmployeeManagementComponent, setEmployeeManagementComponent] = useState(() => window.EmployeeManagement);
+
+        // Listen for component loaded events to update component references
+        useEffect(() => {
+            const handleComponentLoaded = (event) => {
+                if (event.detail?.component === 'EmployeeDetail') {
+                    console.log('✅ EmployeeDetail component loaded, updating reference');
+                    setEmployeeDetailComponent(window.EmployeeDetail);
+                }
+                if (event.detail?.component === 'EmployeeManagement') {
+                    console.log('✅ EmployeeManagement component loaded, updating reference');
+                    setEmployeeManagementComponent(window.EmployeeManagement);
+                }
+            };
+
+            window.addEventListener('componentLoaded', handleComponentLoaded);
+            
+            // Also check immediately in case component loaded before this listener was set up
+            if (!EmployeeDetailComponent && window.EmployeeDetail) {
+                setEmployeeDetailComponent(window.EmployeeDetail);
+            }
+            if (!EmployeeManagementComponent && window.EmployeeManagement) {
+                setEmployeeManagementComponent(window.EmployeeManagement);
+            }
+
+            // Fallback: Poll for components if they're not loaded yet (in case event wasn't fired)
+            let pollInterval = null;
+            let pollCount = 0;
+            const maxPollAttempts = 20; // Stop after 10 seconds (20 * 500ms)
+            
+            pollInterval = setInterval(() => {
+                pollCount++;
+                
+                if (!window.EmployeeDetail && !window.EmployeeManagement && pollCount >= maxPollAttempts) {
+                    console.warn('⚠️ EmployeeDetail/EmployeeManagement components not loaded after polling timeout');
+                    clearInterval(pollInterval);
+                    return;
+                }
+                
+                if (window.EmployeeDetail) {
+                    setEmployeeDetailComponent(prev => {
+                        if (!prev) {
+                            console.log('✅ EmployeeDetail component found via polling, updating reference');
+                            return window.EmployeeDetail;
+                        }
+                        return prev;
+                    });
+                }
+                
+                if (window.EmployeeManagement) {
+                    setEmployeeManagementComponent(prev => {
+                        if (!prev) {
+                            console.log('✅ EmployeeManagement component found via polling, updating reference');
+                            return window.EmployeeManagement;
+                        }
+                        return prev;
+                    });
+                }
+                
+                // Clear interval if both components are now loaded
+                if (window.EmployeeDetail && window.EmployeeManagement) {
+                    clearInterval(pollInterval);
+                }
+            }, 500); // Check every 500ms
+
+            return () => {
+                window.removeEventListener('componentLoaded', handleComponentLoaded);
+                if (pollInterval) {
+                    clearInterval(pollInterval);
+                }
+            };
+        }, []);
+
         const leaveUtils = window.leaveUtils || {};
-        const EmployeeManagementComponent = useMemo(() => window.EmployeeManagement, []);
-        const EmployeeDetailComponent = useMemo(() => window.EmployeeDetail, []);
         const isAdmin = user?.role?.toLowerCase() === 'admin';
 
         // South African BCEA leave types (centralised in leaveUtils)

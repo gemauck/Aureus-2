@@ -122,6 +122,11 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
     });
     const [showSectionModal, setShowSectionModal] = useState(false);
     const [showDocumentModal, setShowDocumentModal] = useState(false);
+    const [hoverCommentCell, setHoverCommentCell] = useState(null); // Track which cell's popup is open
+    const [quickComment, setQuickComment] = useState(''); // For quick comment input
+    const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 }); // Store popup position
+    const commentPopupContainerRef = useRef(null); // Ref for comment popup scrollable container
+    const isInteractingRef = useRef(false); // Track if user is interacting with status/comment controls
 
   // Pause LiveDataSync when modals are open OR when user is interacting with status/comment controls
   useEffect(() => {
@@ -157,11 +162,6 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
     const [draggedSection, setDraggedSection] = useState(null);
     const [dragOverIndex, setDragOverIndex] = useState(null);
     const [isExporting, setIsExporting] = useState(false);
-    const [hoverCommentCell, setHoverCommentCell] = useState(null); // Track which cell's popup is open
-    const [quickComment, setQuickComment] = useState(''); // For quick comment input
-    const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 }); // Store popup position
-    const commentPopupContainerRef = useRef(null); // Ref for comment popup scrollable container
-    const isInteractingRef = useRef(false); // Track if user is interacting with status/comment controls
     
     // Helper function to immediately save documentSections to database
     const immediatelySaveDocumentSections = async (sectionsToSave) => {

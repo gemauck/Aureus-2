@@ -3041,12 +3041,6 @@ function initializeProjectDetail() {
             
             {activeSection === 'tasks' && (
                 <>
-                    {/* DEBUG: TASKS SECTION ACTIVE - VERSION 3.0 */}
-                    <div style={{ background: 'yellow', padding: '10px', marginBottom: '10px', border: '3px solid red' }}>
-                        <strong>🔍 DEBUG: Tasks section is rendering - Version 3.0</strong>
-                        <br />ViewMode: {viewMode}
-                        <br />ListView should render below
-                    </div>
                     {/* Task View Controls */}
                     <div className="flex justify-between items-center">
                         <div className="flex gap-2">
