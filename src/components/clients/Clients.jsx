@@ -2387,7 +2387,6 @@ const Clients = React.memo(() => {
             
             // Handle post-save actions (only if not staying in edit mode)
             if (!stayInEditMode) {
-                setRefreshKey(k => k + 1);
                 handlePauseSync(false);
                 if (window.LiveDataSync && window.LiveDataSync.start) {
                     window.LiveDataSync.start();
