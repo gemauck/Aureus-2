@@ -1003,6 +1003,10 @@ const TaskModal = ({ task, isDark, onClose, onSave, onTagCreated, clients, proje
     const [showTagManager, setShowTagManager] = useState(false);
     const [newTagName, setNewTagName] = useState('');
     const [newTagColor, setNewTagColor] = useState('#3B82F6');
+    const [isGoogleCalendarAuthenticated, setIsGoogleCalendarAuthenticated] = useState(false);
+    const [isSyncingToGoogle, setIsSyncingToGoogle] = useState(false);
+    const [googleEventId, setGoogleEventId] = useState(null);
+    const [googleEventUrl, setGoogleEventUrl] = useState(null);
     
     // Use tags prop, which will update when parent reloads tags
     const tags = tagsProp || [];
@@ -1025,8 +1029,28 @@ const TaskModal = ({ task, isDark, onClose, onSave, onTagCreated, clients, proje
             });
             setSelectedPhotos(task.photos || []);
             setSelectedFiles(task.files || []);
+            setGoogleEventId(task.googleEventId || null);
+            setGoogleEventUrl(task.googleEventUrl || null);
+        } else {
+            setGoogleEventId(null);
+            setGoogleEventUrl(null);
         }
     }, [task]);
+
+    // Check Google Calendar authentication on mount
+    useEffect(() => {
+        const checkGoogleAuth = async () => {
+            try {
+                if (window.GoogleCalendarService) {
+                    const authenticated = await window.GoogleCalendarService.checkAuthentication();
+                    setIsGoogleCalendarAuthenticated(authenticated);
+                }
+            } catch (error) {
+                console.error('Error checking Google Calendar auth:', error);
+            }
+        };
+        checkGoogleAuth();
+    }, []);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -1039,13 +1063,20 @@ const TaskModal = ({ task, isDark, onClose, onSave, onTagCreated, clients, proje
             const url = task ? `/api/user-tasks/${task.id}` : '/api/user-tasks';
             const method = task ? 'PUT' : 'POST';
 
+            // Include Google Calendar fields in the payload
+            const payload = {
+                ...formData,
+                googleEventId: googleEventId || undefined,
+                googleEventUrl: googleEventUrl || undefined
+            };
+
             const response = await fetch(url, {
                 method,
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify(formData)
+                body: JSON.stringify(payload)
             });
 
             if (response.ok) {
@@ -1059,6 +1090,146 @@ const TaskModal = ({ task, isDark, onClose, onSave, onTagCreated, clients, proje
             alert('Error saving task: ' + error.message);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleGoogleCalendarAuth = async () => {
+        setIsSyncingToGoogle(true);
+        try {
+            if (window.GoogleCalendarService) {
+                await window.GoogleCalendarService.openAuthPopup();
+                setIsGoogleCalendarAuthenticated(true);
+            } else {
+                alert('Google Calendar service not available. Please refresh the page.');
+            }
+        } catch (error) {
+            console.error('Google Calendar authentication error:', error);
+            alert('Failed to authenticate with Google Calendar: ' + error.message);
+        } finally {
+            setIsSyncingToGoogle(false);
+        }
+    };
+
+    const handleSyncToGoogleCalendar = async () => {
+        if (!formData.dueDate) {
+            alert('Please set a due date for the task to sync with Google Calendar.');
+            return;
+        }
+
+        if (!isGoogleCalendarAuthenticated) {
+            await handleGoogleCalendarAuth();
+            return;
+        }
+
+        setIsSyncingToGoogle(true);
+        try {
+            if (!window.GoogleCalendarService) {
+                alert('Google Calendar service not available. Please refresh the page.');
+                return;
+            }
+
+            const client = clients.find(c => c.id === formData.clientId);
+            const project = projects.find(p => p.id === formData.projectId);
+            
+            const eventData = {
+                id: task?.id || 'new',
+                title: formData.title,
+                description: formData.description || `Task: ${formData.title}${formData.category ? `\nCategory: ${formData.category}` : ''}${client ? `\nClient: ${client.name}` : ''}${project ? `\nProject: ${project.name}` : ''}`,
+                date: formData.dueDate,
+                time: '09:00', // Default time, can be enhanced later
+                clientName: client?.name || '',
+                clientId: formData.clientId || '',
+                type: 'Task'
+            };
+
+            let googleEvent;
+            if (googleEventId) {
+                // Update existing event
+                googleEvent = await window.GoogleCalendarService.updateEvent(googleEventId, {
+                    summary: eventData.title,
+                    description: eventData.description,
+                    start: {
+                        dateTime: window.GoogleCalendarService.formatDateTime(eventData.date, eventData.time),
+                        timeZone: 'Africa/Johannesburg'
+                    },
+                    end: {
+                        dateTime: window.GoogleCalendarService.formatDateTime(
+                            eventData.date,
+                            window.GoogleCalendarService.getEndTime(eventData.time)
+                        ),
+                        timeZone: 'Africa/Johannesburg'
+                    }
+                });
+            } else {
+                // Create new event
+                googleEvent = await window.GoogleCalendarService.createEvent(eventData);
+            }
+
+            setGoogleEventId(googleEvent.id);
+            setGoogleEventUrl(googleEvent.htmlLink || googleEvent.url);
+            
+            // Update the task with Google Calendar info
+            if (task?.id) {
+                const token = storage?.getToken?.();
+                if (token) {
+                    await fetch(`/api/user-tasks/${task.id}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            googleEventId: googleEvent.id,
+                            googleEventUrl: googleEvent.htmlLink || googleEvent.url
+                        })
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Failed to sync to Google Calendar:', error);
+            alert('Failed to sync to Google Calendar: ' + (error.message || 'Unknown error'));
+        } finally {
+            setIsSyncingToGoogle(false);
+        }
+    };
+
+    const handleRemoveFromGoogleCalendar = async () => {
+        if (!googleEventId || !isGoogleCalendarAuthenticated) return;
+
+        if (!confirm('Are you sure you want to remove this task from Google Calendar?')) {
+            return;
+        }
+
+        setIsSyncingToGoogle(true);
+        try {
+            if (window.GoogleCalendarService) {
+                await window.GoogleCalendarService.deleteEvent(googleEventId);
+                setGoogleEventId(null);
+                setGoogleEventUrl(null);
+                
+                // Update the task to remove Google Calendar info
+                if (task?.id) {
+                    const token = storage?.getToken?.();
+                    if (token) {
+                        await fetch(`/api/user-tasks/${task.id}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            },
+                            body: JSON.stringify({
+                                googleEventId: null,
+                                googleEventUrl: null
+                            })
+                        });
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Failed to remove from Google Calendar:', error);
+            alert('Failed to remove from Google Calendar: ' + (error.message || 'Unknown error'));
+        } finally {
+            setIsSyncingToGoogle(false);
         }
     };
 
@@ -1560,6 +1731,78 @@ const TaskModal = ({ task, isDark, onClose, onSave, onTagCreated, clients, proje
                             onChange={handleFileUpload}
                             className="w-full"
                         />
+                    </div>
+
+                    {/* Google Calendar Sync Section */}
+                    <div className={`p-4 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-300'}`}>
+                        <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                            <i className="fab fa-google mr-2"></i>Google Calendar Sync
+                        </label>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            {googleEventId ? (
+                                <>
+                                    <span className={`text-sm ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                                        <i className="fas fa-check-circle mr-1"></i>Synced
+                                    </span>
+                                    {googleEventUrl && (
+                                        <a
+                                            href={googleEventUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className={`text-sm px-3 py-1 rounded ${isDark ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-100 hover:bg-blue-200 text-blue-700'}`}
+                                        >
+                                            <i className="fas fa-external-link-alt mr-1"></i>Open in Calendar
+                                        </a>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={handleSyncToGoogleCalendar}
+                                        disabled={isSyncingToGoogle || !formData.dueDate}
+                                        className={`text-sm px-3 py-1 rounded ${isDark ? 'bg-gray-600 hover:bg-gray-500 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                                    >
+                                        <i className={`fas ${isSyncingToGoogle ? 'fa-spinner fa-spin' : 'fa-sync-alt'} mr-1`}></i>
+                                        {isSyncingToGoogle ? 'Syncing...' : 'Update'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleRemoveFromGoogleCalendar}
+                                        disabled={isSyncingToGoogle}
+                                        className={`text-sm px-3 py-1 rounded ${isDark ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-red-100 hover:bg-red-200 text-red-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                                    >
+                                        <i className="fas fa-trash mr-1"></i>Remove
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    {!isGoogleCalendarAuthenticated ? (
+                                        <button
+                                            type="button"
+                                            onClick={handleGoogleCalendarAuth}
+                                            disabled={isSyncingToGoogle}
+                                            className={`text-sm px-3 py-1 rounded ${isDark ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-green-100 hover:bg-green-200 text-green-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                                        >
+                                            <i className={`fab fa-google mr-1 ${isSyncingToGoogle ? 'fa-spinner fa-spin' : ''}`}></i>
+                                            {isSyncingToGoogle ? 'Connecting...' : 'Connect Google Calendar'}
+                                        </button>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={handleSyncToGoogleCalendar}
+                                            disabled={isSyncingToGoogle || !formData.dueDate}
+                                            className={`text-sm px-3 py-1 rounded ${isDark ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-100 hover:bg-blue-200 text-blue-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                                        >
+                                            <i className={`fas ${isSyncingToGoogle ? 'fa-spinner fa-spin' : 'fa-calendar-plus'} mr-1`}></i>
+                                            {isSyncingToGoogle ? 'Syncing...' : 'Sync to Google Calendar'}
+                                        </button>
+                                    )}
+                                    {!formData.dueDate && (
+                                        <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                            (Set a due date to enable sync)
+                                        </span>
+                                    )}
+                                </>
+                            )}
+                        </div>
                     </div>
 
                     <div className="flex justify-end gap-2 pt-4 border-t">

@@ -154,7 +154,9 @@ async function handler(req, res) {
           checklist = [],
           photos = [],
           files = [],
-          tagIds = []
+          tagIds = [],
+          googleEventId,
+          googleEventUrl
         } = payload
 
         if (!title || !title.trim()) {
@@ -173,7 +175,9 @@ async function handler(req, res) {
           files: JSON.stringify(Array.isArray(files) ? files : []),
           ...(dueDate && { dueDate: new Date(dueDate) }),
           ...(clientId && { clientId }),
-          ...(projectId && { projectId })
+          ...(projectId && { projectId }),
+          ...(googleEventId && { googleEventId }),
+          ...(googleEventUrl && { googleEventUrl })
         }
 
         const task = await prisma.userTask.create({
@@ -226,7 +230,9 @@ async function handler(req, res) {
           photos,
           files,
           tagIds,
-          completedDate
+          completedDate,
+          googleEventId,
+          googleEventUrl
         } = payload
 
         // Verify task exists and belongs to user
@@ -262,6 +268,8 @@ async function handler(req, res) {
         if (photos !== undefined) updateData.photos = JSON.stringify(Array.isArray(photos) ? photos : [])
         if (files !== undefined) updateData.files = JSON.stringify(Array.isArray(files) ? files : [])
         if (completedDate !== undefined) updateData.completedDate = completedDate ? new Date(completedDate) : null
+        if (googleEventId !== undefined) updateData.googleEventId = googleEventId || null
+        if (googleEventUrl !== undefined) updateData.googleEventUrl = googleEventUrl || null
 
         const task = await prisma.userTask.update({
           where: { id: taskId },

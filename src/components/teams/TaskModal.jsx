@@ -12,6 +12,8 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
         tags: []
     });
     const [tagInput, setTagInput] = useState('');
+    const [employees, setEmployees] = useState([]);
+    const [loadingEmployees, setLoadingEmployees] = useState(false);
 
     useEffect(() => {
         if (task) {
@@ -36,6 +38,47 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
             });
         }
     }, [task, isOpen]);
+
+    // Load employees when modal opens
+    useEffect(() => {
+        if (isOpen) {
+            loadEmployees();
+        }
+    }, [isOpen]);
+
+    const loadEmployees = async () => {
+        try {
+            setLoadingEmployees(true);
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                console.error('❌ No token available');
+                setEmployees([]);
+                setLoadingEmployees(false);
+                return;
+            }
+
+            const response = await fetch('/api/users', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (response.ok) {
+                const responseData = await response.json();
+                const userData = responseData.data?.users || responseData.users || [];
+                console.log('✅ Loaded employees for TaskModal:', userData.length);
+                setEmployees(userData);
+            } else {
+                console.error('❌ Failed to load users:', response);
+                setEmployees([]);
+            }
+        } catch (error) {
+            console.error('❌ TaskModal: Error loading employees:', error);
+            setEmployees([]);
+        } finally {
+            setLoadingEmployees(false);
+        }
+    };
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -171,16 +214,27 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-slate-300">
-                                Assignee ID
+                                Assignee
                             </label>
-                            <input
-                                type="text"
-                                name="assigneeId"
-                                value={formData.assigneeId}
-                                onChange={handleChange}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
-                                placeholder="User ID"
-                            />
+                            {loadingEmployees ? (
+                                <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 dark:bg-slate-700 dark:border-slate-600 text-gray-500 dark:text-slate-400 text-sm">
+                                    Loading employee details...
+                                </div>
+                            ) : (
+                                <select
+                                    name="assigneeId"
+                                    value={formData.assigneeId}
+                                    onChange={handleChange}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                                >
+                                    <option value="">Select an assignee</option>
+                                    {employees.map((employee) => (
+                                        <option key={employee.id} value={employee.id}>
+                                            {employee.name || employee.email || employee.id}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
                         </div>
 
                         <div>

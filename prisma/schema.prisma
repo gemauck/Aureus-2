@@ -1148,24 +1148,26 @@ model MeetingUserAllocation {
 
 // User Task Management - Personal task tracking system
 model UserTask {
-  id            String                @id @default(cuid())
-  title         String
-  description   String                @default("")
-  status        String                @default("todo") // todo, in-progress, completed, cancelled
-  priority      String                @default("medium") // low, medium, high, urgent
-  category      String                @default("") // User-defined category
-  dueDate       DateTime?
-  completedDate DateTime?
-  ownerId       String
-  owner         User                  @relation("UserTaskOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  clientId      String? // Optional link to client
-  projectId     String? // Optional link to project
-  checklist     String                @default("[]") // JSON array of {id, text, completed}
-  photos        String                @default("[]") // JSON array of photo URLs
-  files         String                @default("[]") // JSON array of file objects {name, url, size, type}
-  tags          UserTaskTagRelation[]
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
+  id              String                @id @default(cuid())
+  title           String
+  description     String                @default("")
+  status          String                @default("todo") // todo, in-progress, completed, cancelled
+  priority        String                @default("medium") // low, medium, high, urgent
+  category        String                @default("") // User-defined category
+  dueDate         DateTime?
+  completedDate   DateTime?
+  ownerId         String
+  owner           User                  @relation("UserTaskOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  clientId        String? // Optional link to client
+  projectId       String? // Optional link to project
+  checklist       String                @default("[]") // JSON array of {id, text, completed}
+  photos          String                @default("[]") // JSON array of photo URLs
+  files           String                @default("[]") // JSON array of file objects {name, url, size, type}
+  googleEventId   String? // Google Calendar event ID
+  googleEventUrl  String? // Google Calendar event URL
+  tags            UserTaskTagRelation[]
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
 
   @@index([ownerId])
   @@index([status])

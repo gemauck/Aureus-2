@@ -88,6 +88,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
     const debouncedSaveTimeoutRef = useRef(null);
     const previousDocumentSectionsRef = useRef(project?.documentSections);
     const previousProjectIdRef = useRef(project?.id);
+    const editingSectionIdRef = useRef(null); // Ref to store current editingSectionId
     
     // ULTRA AGGRESSIVE: Initialize sections from props, but check sessionStorage first to preserve saved sections
     const [sections, setSections] = useState(() => {
@@ -755,12 +756,16 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
     };
 
     const handleAddDocument = (sectionId) => {
+        // Store in both state and ref to ensure handleSaveDocument always has access
+        editingSectionIdRef.current = sectionId;
         setEditingSectionId(sectionId);
         setEditingDocument(null);
         setShowDocumentModal(true);
     };
 
     const handleEditDocument = (section, document) => {
+        // Store in both state and ref to ensure handleSaveDocument always has access
+        editingSectionIdRef.current = section.id;
         setEditingSectionId(section.id);
         setEditingDocument(document);
         setShowDocumentModal(true);
@@ -775,12 +780,22 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         
         let updatedSections;
         
+        // Use ref value to ensure we always have the current section ID
+        const currentSectionId = editingSectionIdRef.current || editingSectionId;
+        
+        // Validate that we have a section ID
+        if (!currentSectionId) {
+            console.error('❌ handleSaveDocument called without sectionId');
+            alert('Error: Cannot save document. Section ID is missing.');
+            return;
+        }
+        
         // Use functional update to avoid race conditions
         setSections(currentSections => {
-            const section = currentSections.find(s => s.id === editingSectionId);
+            const section = currentSections.find(s => s.id === currentSectionId);
             
             updatedSections = currentSections.map(s => {
-                if (s.id === editingSectionId) {
+                if (s.id === currentSectionId) {
                     if (editingDocument) {
                         // Update existing document - preserve ALL existing fields and merge new data
                         const updated = {
@@ -873,6 +888,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         setShowDocumentModal(false);
         setEditingDocument(null);
         setEditingSectionId(null);
+        editingSectionIdRef.current = null; // Clear ref as well
         
         // Immediately save to database to ensure persistence
         if (updatedSections) {
@@ -1774,9 +1790,17 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
     // Modals
     const SectionModal = () => {
         const [sectionFormData, setSectionFormData] = useState({
-            name: editingSection?.name || '',
-            description: editingSection?.description || ''
+            name: '',
+            description: ''
         });
+
+        // Reset form when editingSection changes
+        useEffect(() => {
+            setSectionFormData({
+                name: editingSection?.name || '',
+                description: editingSection?.description || ''
+            });
+        }, [editingSection]);
 
         const handleSubmit = (e) => {
             e.preventDefault();
@@ -1853,12 +1877,20 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
 
     const DocumentModal = () => {
         const [documentFormData, setDocumentFormData] = useState({
-            name: editingDocument?.name || '',
-            description: editingDocument?.description || '',
-            attachments: editingDocument?.attachments || []
+            name: '',
+            description: '',
+            attachments: []
         });
         const [selectedFiles, setSelectedFiles] = useState([]);
         const [uploadingFiles, setUploadingFiles] = useState(false);
+
+        // Close handler that clears both state and ref
+        const handleCloseModal = () => {
+            setShowDocumentModal(false);
+            setEditingDocument(null);
+            setEditingSectionId(null);
+            editingSectionIdRef.current = null; // Clear ref when modal closes
+        };
 
         // Reset form when editingDocument changes
         useEffect(() => {
@@ -1969,7 +2001,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                             {editingDocument ? 'Edit Document/Data' : 'Add Document/Data'}
                         </h2>
                         <button 
-                            onClick={() => setShowDocumentModal(false)} 
+                            onClick={handleCloseModal} 
                             className="text-gray-400 hover:text-gray-600 p-1"
                         >
                             <i className="fas fa-times text-sm"></i>
@@ -2084,7 +2116,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                         <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
                             <button
                                 type="button"
-                                onClick={() => setShowDocumentModal(false)}
+                                onClick={handleCloseModal}
                                 className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
                             >
                                 Cancel
