@@ -35,7 +35,16 @@ const Projects = () => {
     const [selectedClient, setSelectedClient] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
-    const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
+    // Always default to 'grid' view for recent upgrades - ensure consistent loading
+    const [viewMode, setViewMode] = useState(() => {
+        // Check localStorage but default to 'grid' to ensure recent upgrades are shown
+        if (typeof window !== 'undefined' && window.localStorage) {
+            const saved = window.localStorage.getItem('projectsViewMode');
+            // Only use saved value if it's valid, otherwise default to 'grid'
+            return (saved === 'grid' || saved === 'list') ? saved : 'grid';
+        }
+        return 'grid';
+    });
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
     const [waitingForProjectDetail, setWaitingForProjectDetail] = useState(false);
@@ -170,6 +179,19 @@ const Projects = () => {
             console.log('✅ Projects: Storage is available');
         }
     }, []);
+
+    // Persist viewMode to localStorage and ensure it defaults to 'grid' for recent upgrades
+    useEffect(() => {
+        if (typeof window !== 'undefined' && window.localStorage) {
+            // Always default to 'grid' to ensure recent upgrades are shown
+            if (!viewMode || (viewMode !== 'grid' && viewMode !== 'list')) {
+                setViewMode('grid');
+                window.localStorage.setItem('projectsViewMode', 'grid');
+            } else {
+                window.localStorage.setItem('projectsViewMode', viewMode);
+            }
+        }
+    }, [viewMode]);
     
     // Ensure ProjectModal is loaded
     useEffect(() => {
@@ -2007,14 +2029,14 @@ const Projects = () => {
                                 console.log('🔄 Manual reload button clicked');
                                 window.location.reload();
                             }}
-                            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium mr-2"
+                            className="bg-blue-600 text-white px-4 py-2.5 sm:py-2 rounded-lg hover:bg-blue-700 text-sm font-medium min-h-[44px] sm:min-h-0"
                         >
                             <i className="fas fa-sync-alt mr-2"></i>
                             Reload Page
                         </button>
                         <button 
                             onClick={() => setViewingProject(null)}
-                            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm font-medium"
+                            className="bg-gray-600 text-white px-4 py-2.5 sm:py-2 rounded-lg hover:bg-gray-700 text-sm font-medium min-h-[44px] sm:min-h-0"
                         >
                             <i className="fas fa-arrow-left mr-2"></i>
                             Back to Projects
@@ -2039,17 +2061,17 @@ const Projects = () => {
                         <p className="text-sm text-red-600 mb-4">
                             The ProjectDetail component is not available. Check the browser console for more details.
                         </p>
-                        <div className="flex gap-2 justify-center">
+                        <div className="flex flex-col sm:flex-row gap-2 justify-center">
                             <button 
                                 onClick={() => window.location.reload()}
-                                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm font-medium"
+                                className="bg-red-600 text-white px-4 py-2.5 sm:py-2 rounded-lg hover:bg-red-700 text-sm font-medium min-h-[44px] sm:min-h-0"
                             >
                                 <i className="fas fa-sync-alt mr-2"></i>
                                 Reload Page
                             </button>
                             <button 
                                 onClick={() => setViewingProject(null)}
-                                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm font-medium"
+                                className="bg-gray-600 text-white px-4 py-2.5 sm:py-2 rounded-lg hover:bg-gray-700 text-sm font-medium min-h-[44px] sm:min-h-0"
                             >
                                 <i className="fas fa-arrow-left mr-2"></i>
                                 Back to Projects
@@ -2083,26 +2105,33 @@ const Projects = () => {
     }
 
     return (
-        <div className="space-y-4">
-            <div className="flex justify-between items-center">
+        <div className="space-y-3 sm:space-y-4">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0">
                 <div className="flex-1 flex items-center justify-between">
-                    <div>
-                        <h1 className="text-lg font-semibold text-gray-900">Projects</h1>
+                    <div className="flex-1 min-w-0">
+                        <h1 className="text-base sm:text-lg font-semibold text-gray-900">Projects</h1>
                         <p className="text-xs text-gray-600">Manage and track all your projects</p>
                     </div>
                     {SectionCommentWidget && (
-                        <SectionCommentWidget 
-                            sectionId="projects-main"
-                            sectionName="Projects"
-                        />
+                        <div className="hidden sm:block ml-2">
+                            <SectionCommentWidget 
+                                sectionId="projects-main"
+                                sectionName="Projects"
+                            />
+                        </div>
                     )}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap sm:flex-nowrap gap-2">
                     {/* View Toggle */}
                     <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden shrink-0">
                         <button
-                            onClick={() => setViewMode('grid')}
-                            className={`px-3 py-2 text-sm font-medium transition-colors shrink-0 ${
+                            onClick={() => {
+                                setViewMode('grid');
+                                if (typeof window !== 'undefined' && window.localStorage) {
+                                    window.localStorage.setItem('projectsViewMode', 'grid');
+                                }
+                            }}
+                            className={`px-3 py-2 sm:py-2 text-sm font-medium transition-colors shrink-0 min-h-[44px] sm:min-h-0 ${
                                 viewMode === 'grid'
                                     ? 'bg-primary-600 text-white'
                                     : 'bg-white text-gray-600 hover:bg-gray-50'
@@ -2112,8 +2141,13 @@ const Projects = () => {
                             <i className="fas fa-th"></i>
                         </button>
                         <button
-                            onClick={() => setViewMode('list')}
-                            className={`px-3 py-2 text-sm font-medium transition-colors border-l border-gray-300 shrink-0 ${
+                            onClick={() => {
+                                setViewMode('list');
+                                if (typeof window !== 'undefined' && window.localStorage) {
+                                    window.localStorage.setItem('projectsViewMode', 'list');
+                                }
+                            }}
+                            className={`px-3 py-2 sm:py-2 text-sm font-medium transition-colors border-l border-gray-300 shrink-0 min-h-[44px] sm:min-h-0 ${
                                 viewMode === 'list'
                                     ? 'bg-primary-600 text-white'
                                     : 'bg-white text-gray-600 hover:bg-gray-50'
@@ -2133,37 +2167,39 @@ const Projects = () => {
                                 console.log('🔍 window.ProjectProgressTracker after setShowProgressTracker:', window.ProjectProgressTracker);
                             }, 100);
                         }}
-                        className="px-3 py-1.5 border border-primary-600 text-primary-600 rounded-lg hover:bg-primary-50 transition-colors flex items-center text-sm font-medium"
+                        className="px-3 py-2 sm:py-1.5 border border-primary-600 text-primary-600 rounded-lg hover:bg-primary-50 transition-colors flex items-center text-sm font-medium min-h-[44px] sm:min-h-0 whitespace-nowrap"
                     >
                         <i className="fas fa-chart-line mr-1.5 text-xs"></i>
-                        Progress Tracker
+                        <span className="hidden sm:inline">Progress Tracker</span>
+                        <span className="sm:hidden">Tracker</span>
                     </button>
                     <button 
                         onClick={handleAddProject}
-                        className="bg-primary-600 text-white px-3 py-1.5 rounded-lg hover:bg-primary-700 transition-colors flex items-center text-sm font-medium"
+                        className="bg-primary-600 text-white px-3 py-2 sm:py-1.5 rounded-lg hover:bg-primary-700 transition-colors flex items-center text-sm font-medium min-h-[44px] sm:min-h-0 whitespace-nowrap"
                     >
                         <i className="fas fa-plus mr-1.5 text-xs"></i>
-                        New Project
+                        <span className="hidden sm:inline">New Project</span>
+                        <span className="sm:hidden">New</span>
                     </button>
                 </div>
             </div>
 
             {/* Search and Filters */}
             <div className="bg-white rounded-lg border border-gray-200 p-3">
-                <div className="flex gap-2.5">
-                    <div className="flex-1">
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5">
+                    <div className="flex-1 w-full min-w-0">
                         <input
                             type="text"
-                            placeholder="Search projects by name, client, type, or team member..."
+                            placeholder="Search projects..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            className="w-full px-3 py-2 sm:py-1.5 text-sm sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent min-h-[44px] sm:min-h-0"
                         />
                     </div>
                     <select
                         value={selectedClient}
                         onChange={(e) => setSelectedClient(e.target.value)}
-                        className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className="px-3 py-2 sm:py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent min-h-[44px] sm:min-h-0 w-full sm:w-auto"
                     >
                         <option value="all">All Clients ({projects.length})</option>
                         {uniqueClients.map(client => {
@@ -2178,7 +2214,7 @@ const Projects = () => {
                     <select
                         value={filterStatus}
                         onChange={(e) => setFilterStatus(e.target.value)}
-                        className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className="px-3 py-2 sm:py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent min-h-[44px] sm:min-h-0 w-full sm:w-auto"
                     >
                         <option value="all">All Statuses</option>
                         <option value="Active">Active</option>
@@ -2248,7 +2284,7 @@ const Projects = () => {
                             )}
                         </div>
                     ) : viewMode === 'grid' ? (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
                             {filteredProjects.map((project, index) => (
                                 <div 
                                     key={project.id}
@@ -2321,7 +2357,7 @@ const Projects = () => {
                                         handleViewProject(project);
                                         mouseDownRef.current = null;
                                     }}
-                                    className="bg-white rounded-lg border border-gray-200 hover:border-primary-300 hover:shadow-md transition-all p-4 cursor-pointer"
+                                    className="bg-white rounded-lg border border-gray-200 hover:border-primary-300 hover:shadow-md transition-all p-3 sm:p-4 cursor-pointer"
                                 >
                                     <div className="flex justify-between items-start mb-3">
                                         <div className="flex-1">
@@ -2344,20 +2380,34 @@ const Projects = () => {
 
                                     <div className="space-y-2 mb-3">
                                         <div className="flex items-center text-xs text-gray-600">
-                                            <i className="fas fa-tag mr-2 w-3 text-[10px]"></i>
-                                            {project.type}
+                                            {project.type === 'Monthly Review' ? (
+                                                <i className="fas fa-comments mr-2 w-3 text-[10px] text-primary-500"></i>
+                                            ) : project.type === 'Audit' ? (
+                                                <i className="fas fa-clipboard-list mr-2 w-3 text-[10px] text-primary-500"></i>
+                                            ) : (
+                                                <i className="fas fa-tag mr-2 w-3 text-[10px]"></i>
+                                            )}
+                                            {project.type || 'Monthly Review'}
                                         </div>
                                         <div className="flex items-center text-xs text-gray-600">
                                             <i className="fas fa-calendar mr-2 w-3 text-[10px]"></i>
-                                            {project.startDate} - {project.dueDate}
+                                            {project.startDate && project.dueDate 
+                                                ? `${project.startDate} - ${project.dueDate}`
+                                                : project.dueDate 
+                                                    ? project.dueDate
+                                                    : project.startDate 
+                                                        ? project.startDate
+                                                        : project.date || 'No due date'}
                                         </div>
-                                        <div className="flex items-center text-xs text-gray-600">
-                                            <i className="fas fa-user mr-2 w-3 text-[10px]"></i>
-                                            {project.assignedTo}
-                                        </div>
+                                        {project.assignedTo && (
+                                            <div className="flex items-center text-xs text-gray-600">
+                                                <i className="fas fa-user mr-2 w-3 text-[10px]"></i>
+                                                {project.assignedTo}
+                                            </div>
+                                        )}
                                         <div className="flex items-center text-xs text-gray-600">
                                             <i className="fas fa-tasks mr-2 w-3 text-[10px]"></i>
-                                            {project.tasksCount || 0} tasks
+                                            {project.tasksCount || 0} {project.tasksCount === 1 ? 'task' : 'tasks'}
                                         </div>
                                     </div>
                                 </div>
@@ -2365,8 +2415,8 @@ const Projects = () => {
                         </div>
                     ) : (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
+                            <div className="overflow-x-auto -mx-3 sm:mx-0">
+                                <table className="w-full min-w-[640px] sm:min-w-0">
                                     <thead className="bg-gray-50 border-b border-gray-200">
                                         <tr>
                                             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Project</th>
@@ -2448,8 +2498,8 @@ const Projects = () => {
                     );
                 } else {
                     return (
-                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                            <div className="bg-white rounded-lg p-4 w-full max-w-md">
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+                            <div className="bg-white rounded-lg p-3 sm:p-4 w-full max-w-md max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
                                 <h2 className="text-lg font-semibold text-gray-900 mb-2">Loading Project Editor</h2>
                                 <p className="text-sm text-gray-600 mb-3">Please wait while the project editor loads...</p>
                                 <div className="flex justify-end">
@@ -2482,17 +2532,20 @@ try {
         delete window.Projects;
     }
     window.Projects = Projects;
-    window.Projects._version = '20251112-list-view';
+    window.Projects._version = '20251112-upgraded-cards';
     window.Projects._hasListView = true;
-    console.log('✅ Projects component registered on window.Projects (version: 20251112-list-view)');
+    window.Projects._hasUpgradedCards = true;
+    console.log('✅ Projects component registered on window.Projects (version: 20251112-upgraded-cards)');
     console.log('✅ Projects component includes list view toggle buttons');
+    console.log('✅ Projects component includes upgraded project cards with review type icons');
     console.log('✅ Projects component version:', window.Projects._version);
     console.log('✅ Projects component has list view:', window.Projects._hasListView);
+    console.log('✅ Projects component has upgraded cards:', window.Projects._hasUpgradedCards);
     
     // Dispatch event to notify that Projects component is ready
     if (typeof window.dispatchEvent === 'function') {
         window.dispatchEvent(new CustomEvent('projectsComponentReady', { 
-            detail: { version: '20251112-list-view', hasListView: true } 
+            detail: { version: '20251112-upgraded-cards', hasListView: true, hasUpgradedCards: true } 
         }));
     }
 } catch (error) {

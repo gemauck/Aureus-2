@@ -179,7 +179,7 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com", "https://cdnjs.cloudflare.com"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://unpkg.com", "https://cdnjs.cloudflare.com", "blob:"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://unpkg.com", "https://cdnjs.cloudflare.com", "https://cdn.sheetjs.com", "blob:"],
       scriptSrcAttr: ["'unsafe-inline'"], // Allow inline event handlers
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", "https://unpkg.com"],
@@ -687,6 +687,25 @@ app.all('/api/user-task-tags', async (req, res, next) => {
 app.all('/api/user-task-tags/:id', async (req, res, next) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'user-task-tags.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
+// Explicit mapping for leave application operations with ID (GET, PATCH, PUT, DELETE /api/leave-platform/applications/:id)
+// Must be before specific action routes (approve, reject, cancel) to avoid conflicts
+app.all('/api/leave-platform/applications/:id', async (req, res, next) => {
+  try {
+    // Skip if it's a nested route (approve, reject, cancel)
+    const urlPath = req.url.split('?')[0].split('#')[0]
+    if (urlPath.includes('/approve') || urlPath.includes('/reject') || urlPath.includes('/cancel')) {
+      return next()
+    }
+    req.params = req.params || {}
+    req.params.id = req.params.id || urlPath.split('/').pop()
+    const handler = await loadHandler(path.join(apiDir, 'leave-platform', 'applications', '[id].js'))
     if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
     return handler(req, res)
   } catch (e) {

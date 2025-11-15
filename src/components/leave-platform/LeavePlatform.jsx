@@ -284,6 +284,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
     // Load remaining data in background
     const loadRemainingData = async () => {
         try {
+            console.log('🔍 Leave Platform: loadRemainingData called');
             const headers = getAuthHeaders();
             if (!headers.Authorization) {
                 console.warn('⚠️ Leave Platform: No auth token for remaining data');
@@ -303,11 +304,31 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             if (employeesResponse.status === 'fulfilled' && employeesResponse.value.ok) {
                 try {
                     const users = await employeesResponse.value.json();
-                    setEmployees(users.users || users.data?.users || []);
-                    console.log(`✅ Loaded ${users.users?.length || users.data?.users?.length || 0} employees`);
+                    const employeesData = users.users || users.data?.users || [];
+                    setEmployees(employeesData);
+                    console.log(`✅ Loaded ${employeesData.length} employees`);
+                    if (employeesData.length === 0) {
+                        console.warn('⚠️ Leave Platform: No employees found in API response. Response structure:', users);
+                    }
                 } catch (e) {
-                    console.warn('Error parsing employees:', e);
+                    console.error('❌ Error parsing employees response:', e);
+                    console.error('Response status:', employeesResponse.value?.status);
+                    setEmployees([]);
                 }
+            } else {
+                // Log error details when API call fails
+                if (employeesResponse.status === 'fulfilled') {
+                    console.error('❌ Failed to load employees. Response status:', employeesResponse.value?.status);
+                    try {
+                        const errorData = await employeesResponse.value?.json?.();
+                        console.error('Error details:', errorData);
+                    } catch (e) {
+                        // Response might not be JSON
+                    }
+                } else {
+                    console.error('❌ Employees API call rejected:', employeesResponse.reason);
+                }
+                setEmployees([]);
             }
 
             if (deptsResponse.status === 'fulfilled' && deptsResponse.value.ok) {
@@ -399,6 +420,10 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                 const users = await parseArray(employeesResponse, ['users', 'data.users']);
                 if (users.length || employeesResponse.status === 'fulfilled') {
                     setEmployees(users);
+                    console.log(`✅ Reloaded ${users.length} employees`);
+                    if (users.length === 0 && employeesResponse.status === 'fulfilled' && employeesResponse.value?.ok) {
+                        console.warn('⚠️ Leave Platform: No employees found after reload');
+                    }
                 }
 
                 const depts = await parseArray(deptsResponse, ['departments', 'data.departments']);
@@ -509,6 +534,76 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             }
         ), [mutateApplication, user?.id]);
 
+        const handleEdit = useCallback(async (application) => {
+            return application; // Return application for editing
+        }, []);
+
+        const handleUpdate = useCallback(async (id, updates = {}) => {
+            try {
+                const headers = getAuthHeaders();
+                if (!headers.Authorization) {
+                    alert('You must be logged in to update leave requests.');
+                    return false;
+                }
+
+                const endpoint = `/api/leave-platform/applications/${id}`;
+                const response = await fetch(endpoint, {
+                    method: 'PATCH',
+                    headers,
+                    body: JSON.stringify(updates)
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    await loadData({ silent: true });
+                    return true;
+                }
+
+                const errorPayload = await response.json().catch(() => ({}));
+                console.warn('LeavePlatform: Update request failed', response.status, errorPayload);
+                alert(errorPayload.message || 'Failed to update leave application');
+                return false;
+            } catch (error) {
+                console.error('LeavePlatform: Error updating application', error);
+                alert('Error updating leave application');
+                return false;
+            }
+        }, [loadData]);
+
+        const handleDelete = useCallback(async (id) => {
+            if (!confirm('Are you sure you want to delete this leave application? This action cannot be undone.')) {
+                return false;
+            }
+
+            try {
+                const headers = getAuthHeaders();
+                if (!headers.Authorization) {
+                    alert('You must be logged in to delete leave requests.');
+                    return false;
+                }
+
+                const endpoint = `/api/leave-platform/applications/${id}`;
+                const response = await fetch(endpoint, {
+                    method: 'DELETE',
+                    headers
+                });
+
+                if (response.ok) {
+                    await loadData({ silent: true });
+                    return true;
+                }
+
+                const errorPayload = await response.json().catch(() => ({}));
+                console.warn('LeavePlatform: Delete request failed', response.status, errorPayload);
+                alert(errorPayload.message || 'Failed to delete leave application');
+                return false;
+            } catch (error) {
+                console.error('LeavePlatform: Error deleting application', error);
+                alert('Error deleting leave application');
+                return false;
+            }
+        }, [loadData]);
+
         const tabs = useMemo(() => {
             const sharedTabs = [
                 { id: 'overview', label: 'Overview', icon: 'fa-clipboard-list' },
@@ -553,18 +648,75 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                     if (!isAdmin) {
                         return <AccessNotice />;
                     }
+                    // Try to load EmployeeManagement component if available
                     if (EmployeeManagementComponent && typeof EmployeeManagementComponent === 'function') {
                         try {
                             const Component = EmployeeManagementComponent;
                             return <Component />;
                         } catch (err) {
                             console.error('LeavePlatform: error rendering EmployeeManagement component', err);
+                            // Fall through to show fallback
                         }
                     }
+                    // Fallback: Show employees list directly if EmployeeManagement component is not available
                     return (
-                        <div className="text-center py-12 text-gray-500">
-                            <i className="fas fa-users mb-2 text-3xl"></i>
-                            <p>Employee directory is not available right now.</p>
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-lg font-semibold text-gray-900">Employees</h3>
+                                    <p className="text-sm text-gray-500">View and manage employee information</p>
+                                </div>
+                                <button
+                                    onClick={() => loadData()}
+                                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                                >
+                                    <i className="fas fa-sync-alt mr-1.5"></i>
+                                    Refresh
+                                </button>
+                            </div>
+                            {employees.length > 0 ? (
+                                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full divide-y divide-gray-200">
+                                            <thead className="bg-gray-50">
+                                                <tr>
+                                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="bg-white divide-y divide-gray-200">
+                                                {employees.map(emp => (
+                                                    <tr key={emp.id} className="hover:bg-gray-50">
+                                                        <td className="px-4 py-3 text-sm font-medium text-gray-900">{emp.name || 'N/A'}</td>
+                                                        <td className="px-4 py-3 text-sm text-gray-500">{emp.email || 'N/A'}</td>
+                                                        <td className="px-4 py-3 text-sm text-gray-500">{emp.role || 'N/A'}</td>
+                                                        <td className="px-4 py-3 text-sm">
+                                                            <span className={`px-2 py-1 text-xs rounded ${emp.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                                                {emp.status || 'active'}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="text-center py-12 text-gray-500">
+                                    <i className="fas fa-users mb-2 text-3xl"></i>
+                                    <p className="mb-2">No employees found</p>
+                                    <p className="text-xs text-gray-400">Employees will appear here once they are loaded from the system.</p>
+                                    <button
+                                        onClick={() => loadData()}
+                                        className="mt-4 px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                                    >
+                                        <i className="fas fa-sync-alt mr-1.5"></i>
+                                        Retry Loading
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     );
                 case 'team':
@@ -577,9 +729,13 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                             getLeaveTypeBadgeClass={getLeaveTypeBadgeClass}
                             getStatusLabel={getStatusLabel}
                             getStatusColor={(status) => statusColors[status] || statusColors.pending}
+                            leaveTypes={leaveTypes}
                             onApprove={handleApprove}
                             onReject={handleReject}
                             onCancel={handleCancel}
+                            onEdit={handleEdit}
+                            onUpdate={handleUpdate}
+                            onDelete={handleDelete}
                             loading={loading}
                         />
                     ) : (
@@ -594,7 +750,11 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                             statusColors={statusColors}
                             getStatusLabel={getStatusLabel}
                             getLeaveTypeInfo={getLeaveTypeInfo}
+                            leaveTypes={leaveTypes}
                             onCancel={handleCancel}
+                            onEdit={handleEdit}
+                            onUpdate={handleUpdate}
+                            onDelete={handleDelete}
                             onRequestApply={() => setCurrentTab('apply')}
                             onRefresh={() => loadData()}
                         />
@@ -922,11 +1082,23 @@ const TeamLeaveView = ({
     getLeaveTypeBadgeClass,
     getStatusLabel,
     getStatusColor,
+    leaveTypes,
     onApprove,
     onReject,
     onCancel,
+    onEdit,
+    onUpdate,
+    onDelete,
     loading
 }) => {
+    const [editingApplication, setEditingApplication] = useState(null);
+    const [editFormData, setEditFormData] = useState({
+        leaveType: '',
+        startDate: '',
+        endDate: '',
+        reason: '',
+        emergency: false
+    });
     const [filterStatus, setFilterStatus] = useState('all');
     const [filterEmployee, setFilterEmployee] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
@@ -1067,16 +1239,44 @@ const TeamLeaveView = ({
                                             </span>
                                         </td>
                                         <td className="px-4 py-4 text-sm">
-                                            <div className="flex gap-2">
+                                            <div className="flex gap-2 flex-wrap">
                                                 {app.status === 'pending' && (
                                                     <>
+                                                        <button
+                                                            disabled={loading}
+                                                            onClick={() => {
+                                                                if (onEdit) {
+                                                                    const appToEdit = onEdit(app);
+                                                                    setEditingApplication(appToEdit);
+                                                                    setEditFormData({
+                                                                        leaveType: app.leaveType,
+                                                                        startDate: app.startDate,
+                                                                        endDate: app.endDate,
+                                                                        reason: app.reason || '',
+                                                                        emergency: app.emergency || false
+                                                                    });
+                                                                }
+                                                            }}
+                                                            className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+                                                            title="Edit"
+                                                        >
+                                                            <i className="fas fa-edit"></i>
+                                                        </button>
+                                                        <button
+                                                            disabled={loading}
+                                                            onClick={() => onDelete && onDelete(app.id)}
+                                                            className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+                                                            title="Delete"
+                                                        >
+                                                            <i className="fas fa-trash"></i>
+                                                        </button>
                                                         <button
                                                             disabled={loading}
                                                             onClick={() => onApprove && onApprove(app.id)}
                                                             className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
                                                         >
                                                             Approve
-                </button>
+                                                        </button>
                                                         <button
                                                             disabled={loading}
                                                             onClick={() => {
@@ -1086,7 +1286,7 @@ const TeamLeaveView = ({
                                                                     onReject(app.id, reason);
                                                                 }
                                                             }}
-                                                            className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+                                                            className="px-2 py-1 text-xs bg-orange-600 text-white rounded hover:bg-orange-700 disabled:opacity-50"
                                                         >
                                                             Reject
                                                         </button>
@@ -1117,6 +1317,133 @@ const TeamLeaveView = ({
                     </div>
                 )}
             </div>
+
+            {/* Edit Modal for Team View */}
+            {editingApplication && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold text-gray-900">Edit Leave Application</h3>
+                            <button
+                                onClick={() => setEditingApplication(null)}
+                                className="text-gray-400 hover:text-gray-600"
+                            >
+                                <i className="fas fa-times"></i>
+                            </button>
+                        </div>
+                        
+                        <form onSubmit={async (e) => {
+                            e.preventDefault();
+                            const workingDays = calculateWorkingDays(editFormData.startDate, editFormData.endDate);
+                            const success = await onUpdate(editingApplication.id, {
+                                ...editFormData,
+                                days: workingDays
+                            });
+                            if (success) {
+                                setEditingApplication(null);
+                            }
+                        }} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Leave Type *
+                                </label>
+                                <select
+                                    value={editFormData.leaveType}
+                                    onChange={(e) => setEditFormData({...editFormData, leaveType: e.target.value})}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                    required
+                                >
+                                    {leaveTypes.map(type => (
+                                        <option key={type.value} value={type.value}>
+                                            {type.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Start Date *
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={editFormData.startDate}
+                                        onChange={(e) => setEditFormData({...editFormData, startDate: e.target.value})}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        End Date *
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={editFormData.endDate}
+                                        onChange={(e) => setEditFormData({...editFormData, endDate: e.target.value})}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Working Days
+                                </label>
+                                <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <span className="text-2xl font-bold text-blue-600">
+                                        {calculateWorkingDays(editFormData.startDate, editFormData.endDate)}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="flex items-center">
+                                    <input
+                                        type="checkbox"
+                                        checked={editFormData.emergency}
+                                        onChange={(e) => setEditFormData({...editFormData, emergency: e.target.checked})}
+                                        className="mr-2"
+                                    />
+                                    <span className="text-sm text-gray-700">Emergency Leave</span>
+                                </label>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Reason *
+                                </label>
+                                <textarea
+                                    value={editFormData.reason}
+                                    onChange={(e) => setEditFormData({...editFormData, reason: e.target.value})}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                    rows="4"
+                                    required
+                                />
+                            </div>
+
+                            <div className="flex justify-end gap-2 pt-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setEditingApplication(null)}
+                                    className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                                >
+                                    Save Changes
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -1135,10 +1462,22 @@ const MyLeaveView = ({
     statusColors,
     getStatusLabel,
     getLeaveTypeInfo,
+    leaveTypes,
     onCancel,
+    onEdit,
+    onUpdate,
+    onDelete,
     onRequestApply,
     onRefresh
 }) => {
+    const [editingApplication, setEditingApplication] = useState(null);
+    const [editFormData, setEditFormData] = useState({
+        leaveType: '',
+        startDate: '',
+        endDate: '',
+        reason: '',
+        emergency: false
+    });
     const myApplications = useMemo(
         () => applications.filter(app => matchUserRecord(app, user)),
         [applications, user]
@@ -1227,15 +1566,46 @@ const MyLeaveView = ({
                                         </span>
                                     </td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm">
-                                        {app.status === 'pending' && (
-                                                <button
-                                                    onClick={() => onCancel && onCancel(app.id)}
-                                                    className="text-red-600 hover:text-red-700 font-medium"
-                                                >
-                                                    <i className="fas fa-times mr-1"></i>
-                                                    Cancel
-                                            </button>
-                                        )}
+                                        <div className="flex gap-2">
+                                            {app.status === 'pending' && (
+                                                <>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (onEdit) {
+                                                                const appToEdit = onEdit(app);
+                                                                setEditingApplication(appToEdit);
+                                                                setEditFormData({
+                                                                    leaveType: app.leaveType,
+                                                                    startDate: app.startDate,
+                                                                    endDate: app.endDate,
+                                                                    reason: app.reason || '',
+                                                                    emergency: app.emergency || false
+                                                                });
+                                                            }
+                                                        }}
+                                                        className="text-blue-600 hover:text-blue-700 font-medium"
+                                                        title="Edit"
+                                                    >
+                                                        <i className="fas fa-edit"></i>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => onDelete && onDelete(app.id)}
+                                                        className="text-red-600 hover:text-red-700 font-medium"
+                                                        title="Delete"
+                                                    >
+                                                        <i className="fas fa-trash"></i>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => onCancel && onCancel(app.id)}
+                                                        className="text-gray-600 hover:text-gray-700 font-medium"
+                                                        title="Cancel"
+                                                    >
+                                                        <i className="fas fa-times mr-1"></i>
+                                                        Cancel
+                                                    </button>
+                                                </>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                                 );
@@ -1247,6 +1617,133 @@ const MyLeaveView = ({
                 <div className="text-center py-12 text-gray-500">
                     <i className="fas fa-calendar-times text-4xl mb-4"></i>
                     <p>No leave applications found</p>
+                </div>
+            )}
+
+            {/* Edit Modal */}
+            {editingApplication && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold text-gray-900">Edit Leave Application</h3>
+                            <button
+                                onClick={() => setEditingApplication(null)}
+                                className="text-gray-400 hover:text-gray-600"
+                            >
+                                <i className="fas fa-times"></i>
+                            </button>
+                        </div>
+                        
+                        <form onSubmit={async (e) => {
+                            e.preventDefault();
+                            const workingDays = calculateWorkingDays(editFormData.startDate, editFormData.endDate);
+                            const success = await onUpdate(editingApplication.id, {
+                                ...editFormData,
+                                days: workingDays
+                            });
+                            if (success) {
+                                setEditingApplication(null);
+                            }
+                        }} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Leave Type *
+                                </label>
+                                <select
+                                    value={editFormData.leaveType}
+                                    onChange={(e) => setEditFormData({...editFormData, leaveType: e.target.value})}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                    required
+                                >
+                                    {leaveTypes.map(type => (
+                                        <option key={type.value} value={type.value}>
+                                            {type.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Start Date *
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={editFormData.startDate}
+                                        onChange={(e) => setEditFormData({...editFormData, startDate: e.target.value})}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        End Date *
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={editFormData.endDate}
+                                        onChange={(e) => setEditFormData({...editFormData, endDate: e.target.value})}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Working Days
+                                </label>
+                                <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <span className="text-2xl font-bold text-blue-600">
+                                        {calculateWorkingDays(editFormData.startDate, editFormData.endDate)}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="flex items-center">
+                                    <input
+                                        type="checkbox"
+                                        checked={editFormData.emergency}
+                                        onChange={(e) => setEditFormData({...editFormData, emergency: e.target.checked})}
+                                        className="mr-2"
+                                    />
+                                    <span className="text-sm text-gray-700">Emergency Leave</span>
+                                </label>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Reason *
+                                </label>
+                                <textarea
+                                    value={editFormData.reason}
+                                    onChange={(e) => setEditFormData({...editFormData, reason: e.target.value})}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                    rows="4"
+                                    required
+                                />
+                            </div>
+
+                            <div className="flex justify-end gap-2 pt-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setEditingApplication(null)}
+                                    className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                                >
+                                    Save Changes
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             )}
         </div>

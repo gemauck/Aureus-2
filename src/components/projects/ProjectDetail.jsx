@@ -2669,277 +2669,224 @@ function initializeProjectDetail() {
                                         </button>
                                     </div>
                                 </header>
-                                <div className="flex-1 divide-y divide-gray-100">
-                                    {list.tasks.length > 0 && (
-                                        <div className="py-2 px-3 bg-gray-50 border-b border-gray-200" data-task-list-version="column-layout-v2">
-                                            <div className="grid grid-cols-12 gap-3 items-center">
-                                                <div className="col-span-3">
-                                                    <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">Task</span>
-                                                </div>
-                                                <div className="col-span-1">
-                                                    <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">Status</span>
-                                                </div>
-                                                <div className="col-span-2">
-                                                    <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">Assignee</span>
-                                                </div>
-                                                <div className="col-span-1">
-                                                    <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">Priority</span>
-                                                </div>
-                                                <div className="col-span-2">
-                                                    <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">Due Date</span>
-                                                </div>
-                                                <div className="col-span-1">
-                                                    <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">Comments</span>
-                                                </div>
-                                                <div className="col-span-2">
-                                                    <span className="text-[11px] font-semibold text-gray-600 uppercase tracking-wide text-right">Actions</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                    {list.tasks.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center text-center text-gray-400 py-12 px-6">
-                                            <i className="fas fa-clipboard-list text-3xl mb-3"></i>
-                                            <p className="text-sm font-medium">
-                                                {hasActiveTaskFilters ? 'No tasks match your filters.' : 'No tasks yet. Start by adding one.'}
-                                            </p>
-                                            {!hasActiveTaskFilters && (
-                                                <button
-                                                    onClick={() => handleAddTask(list.id)}
-                                                    className="mt-4 px-3 py-1.5 text-xs font-semibold bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition-colors"
-                                                >
-                                                    Add your first task
-                                                </button>
+                                <div className="flex-1">
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full divide-y divide-gray-200">
+                                            {list.tasks.length > 0 && (
+                                                <thead className="bg-gray-50">
+                                                    <tr>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Task</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assignee</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Comments</th>
+                                                        <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                                    </tr>
+                                                </thead>
                                             )}
-                                        </div>
-                                    ) : (
-                                        list.tasks.map(({ task, matchingSubtasks, matchedBySubtasks }) => {
-                                            const dueMeta = getDueDateMeta(task.dueDate);
-                                            const checklistMeta = formatChecklistProgress(task.checklist);
-                                            const subtasksForCard = matchingSubtasks || [];
-                                            return (
-                                                <article
-                                                    key={task.id}
-                                                    onClick={() => handleViewTaskDetail(task)}
-                                                    className="py-1 px-3 hover:bg-primary-50/40 transition-colors cursor-pointer border-b border-gray-100"
-                                                >
-                                                    <div className="grid grid-cols-[200px_80px_120px_80px_120px_50px_80px_1fr] gap-2 items-center">
-                                                        <div className="min-w-0">
-                                                            <h4 className="text-xs font-semibold text-gray-900 truncate">
-                                                                {task.title || 'Untitled task'}
-                                                            </h4>
-                                                            {(task.description || (task.tags && task.tags.length > 0)) && (
-                                                                <div className="flex items-center gap-1 mt-0.5">
-                                                                    {task.description && (
-                                                                        <p className="text-[9px] text-gray-500 truncate">
-                                                                            {task.description}
-                                                                        </p>
-                                                                    )}
-                                                                    {task.tags && task.tags.length > 0 && (
-                                                                        <div className="flex gap-0.5">
-                                                                            {task.tags.slice(0, 2).map(tag => (
-                                                                                <span key={tag} className="inline-flex items-center gap-0.5 px-1 py-0.5 text-[8px] font-medium rounded-full bg-purple-100 text-purple-700">
-                                                                                    <i className="fas fa-tag text-[7px]"></i>
-                                                                                    {tag}
-                                                                                </span>
-                                                                            ))}
-                                                                            {task.tags.length > 2 && (
-                                                                                <span className="text-[8px] text-gray-400">+{task.tags.length - 2}</span>
-                                                                            )}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        <div>
-                                                            <span className={`px-1 py-0.5 text-[9px] font-semibold rounded-full ${getStatusColor(task.status || 'To Do')}`}>
-                                                                {task.status || 'To Do'}
-                                                            </span>
-                                                        </div>
-                                                        <div className="min-w-0">
-                                                            {task.assignee ? (
-                                                                <span className="inline-flex items-center gap-0.5 text-[9px] text-gray-500 truncate">
-                                                                    <i className="fas fa-user text-[8px] text-gray-400"></i>
-                                                                    <span className="truncate">{task.assignee}</span>
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-[9px] text-gray-400">—</span>
-                                                            )}
-                                                        </div>
-                                                        <div>
-                                                            <span className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[9px] font-medium ${getPriorityColor(task.priority || 'Medium')}`}>
-                                                                <i className="fas fa-bolt text-[8px]"></i>
-                                                                {task.priority || 'Medium'}
-                                                            </span>
-                                                        </div>
-                                                        <div>
-                                                            <span className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full text-[9px] font-medium ${dueMeta.pillClass}`}>
-                                                                <i className="fas fa-calendar-alt text-[8px]"></i>
-                                                                {dueMeta.label}
-                                                            </span>
-                                                        </div>
-                                                        <div className="text-center">
-                                                            {task.comments?.length > 0 ? (
-                                                                <span className="inline-flex items-center gap-0.5 text-[9px] text-gray-500">
-                                                                    <i className="fas fa-comments text-[8px] text-gray-400"></i>
-                                                                    {task.comments.length}
-                                                                </span>
-                                                            ) : (
-                                                                <span className="text-[9px] text-gray-400">—</span>
-                                                            )}
-                                                        </div>
-                                                        <div className="min-w-0">
-                                                            {((task.customFields && customFieldDefinitions.length > 0) || (task.checklist && task.checklist.length > 0)) && (
-                                                                <>
-                                                                    {task.customFields && customFieldDefinitions.length > 0 ? (
-                                                                        customFieldDefinitions.slice(0, 1).map(field => {
-                                                                            const value = task.customFields?.[field.name];
-                                                                            if (!value) return null;
-                                                                            return (
-                                                                                <span key={field.name} className="px-1 py-0.5 text-[8px] bg-gray-100 text-gray-600 rounded truncate block" title={`${field.name}: ${value}`}>
-                                                                                    {value}
-                                                                                </span>
-                                                                            );
-                                                                        })
-                                                                    ) : task.checklist && task.checklist.length > 0 ? (
-                                                                        <div className="flex items-center gap-0.5">
-                                                                            <div className="w-12 h-1 bg-gray-200 rounded-full overflow-hidden">
-                                                                                <div
-                                                                                    className="h-full bg-primary-500"
-                                                                                    style={{ width: `${checklistMeta.percent}%` }}
-                                                                                ></div>
+                                            <tbody className="bg-white divide-y divide-gray-200">
+                                                {list.tasks.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan="7" className="px-6 py-12 text-center">
+                                                            <div className="flex flex-col items-center justify-center text-center text-gray-400">
+                                                                <i className="fas fa-clipboard-list text-3xl mb-3"></i>
+                                                                <p className="text-sm font-medium">
+                                                                    {hasActiveTaskFilters ? 'No tasks match your filters.' : 'No tasks yet. Start by adding one.'}
+                                                                </p>
+                                                                {!hasActiveTaskFilters && (
+                                                                    <button
+                                                                        onClick={() => handleAddTask(list.id)}
+                                                                        className="mt-4 px-3 py-1.5 text-xs font-semibold bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition-colors"
+                                                                    >
+                                                                        Add your first task
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ) : (
+                                                    list.tasks.map(({ task, matchingSubtasks, matchedBySubtasks }) => {
+                                                        const dueMeta = getDueDateMeta(task.dueDate);
+                                                        const checklistMeta = formatChecklistProgress(task.checklist);
+                                                        const subtasksForCard = matchingSubtasks || [];
+                                                        return (
+                                                            <React.Fragment key={task.id}>
+                                                                <tr
+                                                                    onClick={() => handleViewTaskDetail(task)}
+                                                                    className="hover:bg-gray-50 cursor-pointer transition"
+                                                                >
+                                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                                        <div className="text-sm font-medium text-gray-900">{task.title || 'Untitled task'}</div>
+                                                                    </td>
+                                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(task.status || 'To Do')}`}>
+                                                                            {task.status || 'To Do'}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                                        {task.assignee ? (
+                                                                            <div className="flex items-center text-sm text-gray-500">
+                                                                                <i className="fas fa-user text-xs text-gray-400 mr-1"></i>
+                                                                                {task.assignee}
                                                                             </div>
-                                                                            <span className="text-[8px] text-gray-500">{checklistMeta.percent}%</span>
-                                                                        </div>
-                                                                    ) : <span className="text-[9px] text-gray-400">—</span>}
-                                                                </>
-                                                            )}
-                                                        </div>
-                                                        <div className="flex items-center justify-end gap-0.5">
-                                                            <button
-                                                                onClick={(e) => openTaskComments(e, task)}
-                                                                className="inline-flex items-center gap-0.5 px-1 py-0.5 text-[9px] bg-primary-500 text-white rounded hover:bg-primary-600 transition-all font-medium"
-                                                                title="Open comments"
-                                                            >
-                                                                <i className="fas fa-comments text-[8px]"></i>
-                                                                {task.comments?.length || 0}
-                                                            </button>
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleAddSubtask(task);
-                                                                }}
-                                                                className="inline-flex items-center gap-0.5 px-1 py-0.5 text-[9px] bg-primary-500 text-white rounded hover:bg-primary-600 transition-all font-medium"
-                                                                title="Add subtask"
-                                                            >
-                                                                <i className="fas fa-level-down-alt text-[8px]"></i>
-                                                                {task.subtasks?.length || 0}
-                                                            </button>
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleViewTaskDetail(task);
-                                                                }}
-                                                                className="text-[9px] text-primary-600 hover:text-primary-700 font-semibold px-0.5"
-                                                            >
-                                                                View
-                                                            </button>
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleDeleteTask(task.id);
-                                                                }}
-                                                                className="inline-flex items-center gap-0.5 px-1 py-0.5 text-[9px] bg-red-500 text-white rounded hover:bg-red-600 transition-all font-medium"
-                                                                title="Delete task"
-                                                            >
-                                                                <i className="fas fa-trash text-[8px]"></i>
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                    {((task.customFields && customFieldDefinitions.length > 1) || matchedBySubtasks) && (
-                                                        <div className="mt-1 pt-1 border-t border-gray-100 grid grid-cols-12 gap-2">
-                                                            {task.customFields && customFieldDefinitions.length > 1 && (
-                                                                <div className="col-span-10 flex flex-wrap gap-1.5">
-                                                                    {customFieldDefinitions.slice(1).map(field => {
-                                                                        const value = task.customFields?.[field.name];
-                                                                        if (!value) return null;
-                                                                        return (
-                                                                            <span key={field.name} className="px-1.5 py-0.5 text-[9px] bg-gray-100 text-gray-600 rounded">
-                                                                                <span className="font-semibold text-gray-700">{field.name}:</span> {value}
+                                                                        ) : (
+                                                                            <span className="text-sm text-gray-400">—</span>
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(task.priority || 'Medium')}`}>
+                                                                            <i className="fas fa-bolt text-[10px] mr-1"></i>
+                                                                            {task.priority || 'Medium'}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${dueMeta.pillClass}`}>
+                                                                            <i className="fas fa-calendar-alt text-[10px] mr-1"></i>
+                                                                            {dueMeta.label}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                                                                        {task.comments?.length > 0 ? (
+                                                                            <span className="inline-flex items-center text-sm text-gray-500">
+                                                                                <i className="fas fa-comments text-xs text-gray-400 mr-1"></i>
+                                                                                {task.comments.length}
                                                                             </span>
-                                                                        );
-                                                                    })}
-                                                                </div>
-                                                            )}
-                                                            {matchedBySubtasks && (
-                                                                <div className="col-span-12">
-                                                                    <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded-full bg-amber-100 text-amber-700">
-                                                                        Matches subtask filter
-                                                                    </span>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    )}
-                                                    {subtasksForCard.length > 0 && (
-                                                        <div className="mt-3 pt-3 border-t border-gray-100">
-                                                            <p className="text-[11px] font-semibold text-gray-500 mb-2 flex items-center gap-2">
-                                                                <i className="fas fa-level-up-alt fa-rotate-90 text-gray-400"></i>
-                                                                Subtasks
-                                                            </p>
-                                                            <div className="space-y-1.5">
-                                                                {subtasksForCard.map(subtask => {
-                                                                    const subtaskDue = getDueDateMeta(subtask.dueDate);
-                                                                    return (
-                                                                        <div
-                                                                            key={subtask.id}
-                                                                            className="group bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors"
-                                                                        >
+                                                                        ) : (
+                                                                            <span className="text-sm text-gray-400">—</span>
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                                                                        <div className="flex items-center justify-end gap-1">
                                                                             <button
                                                                                 onClick={(e) => {
                                                                                     e.stopPropagation();
-                                                                                    handleViewTaskDetail(subtask, task);
+                                                                                    openTaskComments(e, task);
                                                                                 }}
-                                                                                className="w-full text-left px-3 py-2 flex flex-col gap-1"
+                                                                                className="inline-flex items-center px-2 py-1 text-xs bg-primary-500 text-white rounded hover:bg-primary-600 transition-all font-medium"
+                                                                                title="Open comments"
                                                                             >
-                                                                                <div className="flex items-center justify-between gap-2">
-                                                                                    <span className="text-[12px] font-medium text-gray-700 truncate">
-                                                                                        {subtask.title || 'Untitled subtask'}
-                                                                                    </span>
-                                                                                    <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${getStatusColor(subtask.status || 'To Do')}`}>
-                                                                                        {subtask.status || 'To Do'}
-                                                                                    </span>
-                                                                                </div>
-                                                                                <div className="flex flex-wrap items-center gap-2 text-[10px] text-gray-500">
-                                                                                    {subtask.assignee && (
-                                                                                        <span className="inline-flex items-center gap-1">
-                                                                                            <i className="fas fa-user"></i>
-                                                                                            {subtask.assignee}
-                                                                                        </span>
-                                                                                    )}
-                                                                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${subtaskDue.pillClass}`}>
-                                                                                        <i className="fas fa-calendar-alt"></i>
-                                                                                        {subtaskDue.label}
-                                                                                    </span>
-                                                                                    <button
-                                                                                        onClick={(e) => openTaskComments(e, subtask, { parentTask: task, isSubtask: true })}
-                                                                                        className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] bg-white text-gray-600 rounded border border-gray-200 hover:bg-primary-600 hover:text-white transition-colors"
-                                                                                        title="Open subtask comments"
-                                                                                    >
-                                                                                        <i className="fas fa-comments text-[9px]"></i>
-                                                                                        {subtask.comments?.length || 0}
-                                                                                    </button>
-                                                                                </div>
+                                                                                <i className="fas fa-comments text-[10px] mr-1"></i>
+                                                                                {task.comments?.length || 0}
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    handleAddSubtask(task);
+                                                                                }}
+                                                                                className="inline-flex items-center px-2 py-1 text-xs bg-primary-500 text-white rounded hover:bg-primary-600 transition-all font-medium"
+                                                                                title="Add subtask"
+                                                                            >
+                                                                                <i className="fas fa-level-down-alt text-[10px] mr-1"></i>
+                                                                                {task.subtasks?.length || 0}
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    handleViewTaskDetail(task);
+                                                                                }}
+                                                                                className="text-xs text-primary-600 hover:text-primary-700 font-semibold px-2"
+                                                                            >
+                                                                                View
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    handleDeleteTask(task.id);
+                                                                                }}
+                                                                                className="inline-flex items-center px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 transition-all font-medium"
+                                                                                title="Delete task"
+                                                                            >
+                                                                                <i className="fas fa-trash text-[10px]"></i>
                                                                             </button>
                                                                         </div>
+                                                                    </td>
+                                                                </tr>
+                                                                {subtasksForCard.length > 0 && subtasksForCard.map(subtask => {
+                                                                    const subtaskDue = getDueDateMeta(subtask.dueDate);
+                                                                    return (
+                                                                        <tr
+                                                                            key={`subtask-${subtask.id}`}
+                                                                            onClick={() => handleViewTaskDetail(subtask, task)}
+                                                                            className="bg-gray-50 hover:bg-gray-100 cursor-pointer transition"
+                                                                        >
+                                                                            <td className="px-6 py-2 whitespace-nowrap pl-12">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <i className="fas fa-level-up-alt fa-rotate-90 text-xs text-gray-400"></i>
+                                                                                    <div className="text-xs font-medium text-gray-700">{subtask.title || 'Untitled subtask'}</div>
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="px-6 py-2 whitespace-nowrap">
+                                                                                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${getStatusColor(subtask.status || 'To Do')}`}>
+                                                                                    {subtask.status || 'To Do'}
+                                                                                </span>
+                                                                            </td>
+                                                                            <td className="px-6 py-2 whitespace-nowrap">
+                                                                                {subtask.assignee ? (
+                                                                                    <div className="flex items-center text-xs text-gray-500">
+                                                                                        <i className="fas fa-user text-[10px] text-gray-400 mr-1"></i>
+                                                                                        {subtask.assignee}
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <span className="text-xs text-gray-400">—</span>
+                                                                                )}
+                                                                            </td>
+                                                                            <td className="px-6 py-2 whitespace-nowrap">
+                                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(subtask.priority || 'Medium')}`}>
+                                                                                    <i className="fas fa-bolt text-[10px] mr-1"></i>
+                                                                                    {subtask.priority || 'Medium'}
+                                                                                </span>
+                                                                            </td>
+                                                                            <td className="px-6 py-2 whitespace-nowrap">
+                                                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${subtaskDue.pillClass}`}>
+                                                                                    <i className="fas fa-calendar-alt text-[10px] mr-1"></i>
+                                                                                    {subtaskDue.label}
+                                                                                </span>
+                                                                            </td>
+                                                                            <td className="px-6 py-2 whitespace-nowrap text-center">
+                                                                                {subtask.comments?.length > 0 ? (
+                                                                                    <span className="inline-flex items-center text-xs text-gray-500">
+                                                                                        <i className="fas fa-comments text-[10px] text-gray-400 mr-1"></i>
+                                                                                        {subtask.comments.length}
+                                                                                    </span>
+                                                                                ) : (
+                                                                                    <span className="text-xs text-gray-400">—</span>
+                                                                                )}
+                                                                            </td>
+                                                                            <td className="px-6 py-2 whitespace-nowrap text-right">
+                                                                                <div className="flex items-center justify-end gap-1">
+                                                                                    <button
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            openTaskComments(e, subtask, { parentTask: task, isSubtask: true });
+                                                                                        }}
+                                                                                        className="inline-flex items-center px-2 py-1 text-xs bg-primary-500 text-white rounded hover:bg-primary-600 transition-all font-medium"
+                                                                                        title="Open comments"
+                                                                                    >
+                                                                                        <i className="fas fa-comments text-[10px] mr-1"></i>
+                                                                                        {subtask.comments?.length || 0}
+                                                                                    </button>
+                                                                                    <button
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            handleViewTaskDetail(subtask, task);
+                                                                                        }}
+                                                                                        className="text-xs text-primary-600 hover:text-primary-700 font-semibold px-2"
+                                                                                    >
+                                                                                        View
+                                                                                    </button>
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
                                                                     );
                                                                 })}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </article>
-                                            );
-                                        })
-                                    )}
+                                                            </React.Fragment>
+                                                        );
+                                                    })
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             </section>
                         );

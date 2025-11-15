@@ -3141,4 +3141,435 @@
   }
 }
 
+/* ============================================
+   TEAMS COMPONENT MOBILE OPTIMIZATIONS
+   ============================================ */
+
+@media (max-width: 768px) {
+  /* Teams header - ensure proper stacking */
+  [class*="Teams"] > div:first-child,
+  .teams-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+  
+  /* Teams search and filter bar */
+  [class*="Teams"] .flex.flex-col,
+  [class*="Teams"] .flex.flex-row {
+    gap: 12px !important;
+  }
+  
+  /* Teams tab buttons - ensure they wrap and scroll */
+  [class*="Teams"] .flex.flex-wrap {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+  
+  [class*="Teams"] .flex.flex-wrap::-webkit-scrollbar {
+    display: none !important;
+  }
+  
+  /* Teams action buttons grid */
+  [class*="Teams"] .grid.grid-cols-2 {
+    gap: 8px !important;
+  }
+  
+  /* Teams cards - ensure proper spacing */
+  [class*="Teams"] .border.rounded-lg {
+    padding: 12px !important;
+    margin-bottom: 12px !important;
+  }
+  
+  /* Teams document/workflow/checklist cards */
+  [class*="Teams"] .grid.grid-cols-1 > div {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  
+  /* Teams modal optimizations */
+  [class*="Teams"] .fixed.inset-0 {
+    padding: 8px !important;
+  }
+  
+  [class*="Teams"] .max-w-4xl {
+    max-width: calc(100% - 16px) !important;
+    width: 100% !important;
+  }
+  
+  /* Teams button touch targets */
+  [class*="Teams"] button {
+    min-height: 44px !important;
+    min-width: 44px !important;
+  }
+  
+  /* Teams icon buttons - slightly larger on mobile */
+  [class*="Teams"] button[title] {
+    padding: 10px !important;
+  }
+  
+  /* Teams stats grid - ensure 2 columns on mobile */
+  [class*="Teams"] .grid.grid-cols-2 {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  
+  /* Teams grid - single column on mobile */
+  [class*="Teams"] .grid.grid-cols-1 {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  
+  /* Teams team header gradient - ensure it doesn't overflow */
+  [class*="Teams"] .bg-gradient-to-r {
+    padding: 16px !important;
+    border-radius: 8px !important;
+  }
+  
+  /* Teams recent activity - ensure proper spacing */
+  [class*="Teams"] .space-y-2 > div {
+    padding: 8px 0 !important;
+  }
+  
+  /* Teams search input - ensure proper sizing */
+  [class*="Teams"] input[type="text"] {
+    font-size: 16px !important; /* Prevents iOS zoom */
+    min-height: 44px !important;
+    padding: 12px 16px !important;
+  }
+}
+
+/* Additional Teams optimizations for very small screens */
+@media (max-width: 480px) {
+  /* Teams header text */
+  [class*="Teams"] h1 {
+    font-size: 1.125rem !important;
+  }
+  
+  /* Teams cards - reduce padding */
+  [class*="Teams"] .border.rounded-lg {
+    padding: 10px !important;
+  }
+  
+  /* Teams buttons - ensure they fit */
+  [class*="Teams"] .grid.grid-cols-2 button {
+    font-size: 11px !important;
+    padding: 10px 8px !important;
+  }
+  
+  /* Teams tab buttons - smaller text */
+  [class*="Teams"] .flex.flex-wrap button {
+    font-size: 11px !important;
+    padding: 10px 12px !important;
+  }
+  
+  /* Teams stats - smaller text */
+  [class*="Teams"] .text-xl {
+    font-size: 1.125rem !important;
+  }
+}
+
+/* Teams optimizations for extra small screens */
+@media (max-width: 375px) {
+  /* Teams header - even more compact */
+  [class*="Teams"] > div:first-child {
+    gap: 8px !important;
+  }
+  
+  /* Teams cards - minimal padding */
+  [class*="Teams"] .border.rounded-lg {
+    padding: 8px !important;
+  }
+  
+  /* Teams buttons - minimal padding */
+  [class*="Teams"] button {
+    padding: 8px 12px !important;
+    font-size: 10px !important;
+  }
+  
+  /* Teams grid - reduce gap */
+  [class*="Teams"] .grid {
+    gap: 8px !important;
+  }
+}
+
+/* ============================================
+   PROJECTS COMPONENT MOBILE OPTIMIZATIONS
+   ============================================ */
+
+@media (max-width: 768px) {
+  /* Projects header - ensure proper stacking */
+  [class*="Projects"] > div:first-child {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+  
+  /* Projects action buttons - ensure they wrap */
+  [class*="Projects"] .flex.flex-wrap {
+    gap: 8px !important;
+  }
+  
+  /* Projects search and filters - stack vertically */
+  [class*="Projects"] .flex.flex-col {
+    gap: 12px !important;
+  }
+  
+  /* Projects grid cards - ensure proper spacing */
+  [class*="Projects"] .grid.grid-cols-1 > div {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  
+  /* Projects table - ensure horizontal scroll */
+  [class*="Projects"] .overflow-x-auto {
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: thin !important;
+  }
+  
+  /* Projects table cells - reduce padding on mobile */
+  [class*="Projects"] table th,
+  [class*="Projects"] table td {
+    padding: 8px 12px !important;
+    font-size: 12px !important;
+  }
+  
+  /* Projects buttons - touch-friendly */
+  [class*="Projects"] button {
+    min-height: 44px !important;
+    min-width: 44px !important;
+  }
+  
+  /* Projects input fields - prevent iOS zoom */
+  [class*="Projects"] input[type="text"],
+  [class*="Projects"] select {
+    font-size: 16px !important;
+    min-height: 44px !important;
+    padding: 12px 16px !important;
+  }
+  
+  /* Projects modal - ensure proper sizing */
+  [class*="Projects"] .fixed.inset-0 {
+    padding: 8px !important;
+  }
+  
+  /* Projects grid - single column on mobile */
+  [class*="Projects"] .grid.grid-cols-1 {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  
+  /* Projects cards - reduce padding */
+  [class*="Projects"] .border.rounded-lg {
+    padding: 12px !important;
+  }
+}
+
+/* Additional Projects optimizations for very small screens */
+@media (max-width: 480px) {
+  /* Projects header text */
+  [class*="Projects"] h1 {
+    font-size: 1.125rem !important;
+  }
+  
+  /* Projects cards - reduce padding */
+  [class*="Projects"] .border.rounded-lg {
+    padding: 10px !important;
+  }
+  
+  /* Projects buttons - ensure they fit */
+  [class*="Projects"] button {
+    font-size: 12px !important;
+    padding: 10px 12px !important;
+  }
+  
+  /* Projects table - smaller text */
+  [class*="Projects"] table th,
+  [class*="Projects"] table td {
+    padding: 6px 8px !important;
+    font-size: 11px !important;
+  }
+}
+
+/* Projects optimizations for extra small screens */
+@media (max-width: 375px) {
+  /* Projects header - even more compact */
+  [class*="Projects"] > div:first-child {
+    gap: 8px !important;
+  }
+  
+  /* Projects cards - minimal padding */
+  [class*="Projects"] .border.rounded-lg {
+    padding: 8px !important;
+  }
+  
+  /* Projects buttons - minimal padding */
+  [class*="Projects"] button {
+    padding: 8px 10px !important;
+    font-size: 11px !important;
+  }
+  
+  /* Projects grid - reduce gap */
+  [class*="Projects"] .grid {
+    gap: 8px !important;
+  }
+}
+
+/* ============================================
+   CLIENTS COMPONENT MOBILE OPTIMIZATIONS
+   ============================================ */
+
+/* Ensure Clients component is full width on desktop */
+@media (min-width: 769px) {
+  [class*="Clients"] {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  
+  [class*="Clients"] > div:first-child {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  
+  /* Reset negative margins on desktop for scrolling containers */
+  [class*="Clients"] .overflow-x-auto {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Clients header - ensure proper stacking */
+  [class*="Clients"] > div:first-child {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+  
+  /* Clients action buttons - stack vertically */
+  [class*="Clients"] .flex.flex-col {
+    gap: 8px !important;
+  }
+  
+  /* Clients view tabs - ensure horizontal scroll */
+  [class*="Clients"] .flex.overflow-x-auto {
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+  
+  [class*="Clients"] .flex.overflow-x-auto::-webkit-scrollbar {
+    display: none !important;
+  }
+  
+  /* Clients pipeline board - ensure proper scrolling */
+  [class*="Clients"] .flex.gap-4.overflow-x-auto {
+    -webkit-overflow-scrolling: touch !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+  
+  /* Clients pipeline columns - wider on mobile */
+  [class*="Clients"] .min-w-\[250px\] {
+    min-width: 280px !important;
+  }
+  
+  /* Clients table - ensure horizontal scroll */
+  [class*="Clients"] .overflow-x-auto {
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: thin !important;
+  }
+  
+  /* Clients table cells - reduce padding on mobile */
+  [class*="Clients"] table th,
+  [class*="Clients"] table td {
+    padding: 8px 12px !important;
+    font-size: 12px !important;
+  }
+  
+  /* Clients buttons - touch-friendly */
+  [class*="Clients"] button {
+    min-height: 44px !important;
+    min-width: 44px !important;
+  }
+  
+  /* Clients stats cards - ensure 2 columns */
+  [class*="Clients"] .grid.grid-cols-2 {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  
+  /* Clients cards - reduce padding */
+  [class*="Clients"] .border.rounded-lg,
+  [class*="Clients"] .border.rounded-xl {
+    padding: 12px !important;
+  }
+  
+  /* Clients header text - responsive sizing */
+  [class*="Clients"] h1 {
+    font-size: 1.125rem !important;
+  }
+}
+
+/* Additional Clients optimizations for very small screens */
+@media (max-width: 480px) {
+  /* Clients header text */
+  [class*="Clients"] h1 {
+    font-size: 1rem !important;
+  }
+  
+  /* Clients cards - reduce padding */
+  [class*="Clients"] .border.rounded-lg,
+  [class*="Clients"] .border.rounded-xl {
+    padding: 10px !important;
+  }
+  
+  /* Clients buttons - ensure they fit */
+  [class*="Clients"] button {
+    font-size: 12px !important;
+    padding: 10px 12px !important;
+  }
+  
+  /* Clients table - smaller text */
+  [class*="Clients"] table th,
+  [class*="Clients"] table td {
+    padding: 6px 8px !important;
+    font-size: 11px !important;
+  }
+  
+  /* Clients pipeline columns - slightly narrower */
+  [class*="Clients"] .min-w-\[280px\] {
+    min-width: 260px !important;
+  }
+}
+
+/* Clients optimizations for extra small screens */
+@media (max-width: 375px) {
+  /* Clients header - even more compact */
+  [class*="Clients"] > div:first-child {
+    gap: 8px !important;
+  }
+  
+  /* Clients cards - minimal padding */
+  [class*="Clients"] .border.rounded-lg,
+  [class*="Clients"] .border.rounded-xl {
+    padding: 8px !important;
+  }
+  
+  /* Clients buttons - minimal padding */
+  [class*="Clients"] button {
+    padding: 8px 10px !important;
+    font-size: 11px !important;
+  }
+  
+  /* Clients pipeline columns - minimum width */
+  [class*="Clients"] .min-w-\[280px\] {
+    min-width: 240px !important;
+  }
+}
+
 

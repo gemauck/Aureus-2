@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mobile Optimization Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+        }
+        .test-section h2 {
+            margin-top: 0;
+            color: #1f2937;
+        }
+        .test-item {
+            margin: 15px 0;
+            padding: 15px;
+            background: #f9fafb;
+            border-radius: 6px;
+        }
+        .test-item h3 {
+            margin: 0 0 10px 0;
+            color: #374151;
+        }
+        .test-item p {
+            margin: 5px 0;
+            color: #6b7280;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .status.pass {
+            background: #10b981;
+            color: white;
+        }
+        .status.fail {
+            background: #ef4444;
+            color: white;
+        }
+        .status.pending {
+            background: #f59e0b;
+            color: white;
+        }
+        iframe {
+            width: 100%;
+            height: 600px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+        .mobile-frame {
+            width: 375px;
+            height: 667px;
+            border: 3px solid #1f2937;
+            border-radius: 20px;
+            overflow: hidden;
+            margin: 20px auto;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        .mobile-frame iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>📱 Mobile Optimization Test Results</h1>
+    <p>This page helps verify that mobile optimizations are working correctly.</p>
+    
+    <div class="test-section">
+        <h2>✅ Completed Optimizations</h2>
+        
+        <div class="test-item">
+            <h3>1. Teams Component</h3>
+            <p><span class="status pass">COMPLETED</span></p>
+            <p><strong>Changes:</strong></p>
+            <ul>
+                <li>✅ Header stacks vertically on mobile</li>
+                <li>✅ Search and filter bars stack properly</li>
+                <li>✅ Tab buttons wrap and scroll horizontally</li>
+                <li>✅ Action buttons use 2-column grid on mobile</li>
+                <li>✅ Grid layouts stack to single column</li>
+                <li>✅ Touch-friendly buttons (44px minimum)</li>
+                <li>✅ Modals optimized for mobile</li>
+            </ul>
+        </div>
+        
+        <div class="test-item">
+            <h3>2. Projects Component</h3>
+            <p><span class="status pass">COMPLETED</span></p>
+            <p><strong>Changes:</strong></p>
+            <ul>
+                <li>✅ Header stacks vertically on mobile</li>
+                <li>✅ Action buttons wrap with shortened labels</li>
+                <li>✅ Search/filters stack vertically</li>
+                <li>✅ Grid view: responsive (1 → 2 → 3 columns)</li>
+                <li>✅ List view: horizontal scroll for tables</li>
+                <li>✅ Touch-friendly inputs and buttons</li>
+            </ul>
+        </div>
+        
+        <div class="test-item">
+            <h3>3. Clients Component</h3>
+            <p><span class="status pass">COMPLETED</span></p>
+            <p><strong>Changes:</strong></p>
+            <ul>
+                <li>✅ Header stacks vertically on mobile</li>
+                <li>✅ Action buttons stack with full-width</li>
+                <li>✅ View tabs scroll horizontally</li>
+                <li>✅ Pipeline board: touch-friendly horizontal scroll</li>
+                <li>✅ Stats cards: 2-column grid on mobile</li>
+                <li>✅ Tables: horizontal scroll with touch scrolling</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>🧪 Manual Testing Checklist</h2>
+        
+        <div class="test-item">
+            <h3>Teams Component Testing</h3>
+            <p><strong>Test Steps:</strong></p>
+            <ol>
+                <li>Navigate to Teams page</li>
+                <li>Resize browser to 375px width (iPhone SE size)</li>
+                <li>✅ Verify header stacks vertically</li>
+                <li>✅ Verify "Back" button shows shortened text</li>
+                <li>✅ Verify search bar is full width</li>
+                <li>✅ Verify tab buttons scroll horizontally</li>
+                <li>✅ Verify action buttons are in 2-column grid</li>
+                <li>✅ Verify team cards stack in single column</li>
+                <li>✅ Verify all buttons are at least 44px tall</li>
+                <li>✅ Verify no horizontal overflow</li>
+            </ol>
+        </div>
+        
+        <div class="test-item">
+            <h3>Projects Component Testing</h3>
+            <p><strong>Test Steps:</strong></p>
+            <ol>
+                <li>Navigate to Projects page</li>
+                <li>Resize browser to 375px width</li>
+                <li>✅ Verify header stacks vertically</li>
+                <li>✅ Verify "New Project" button shows "New" on mobile</li>
+                <li>✅ Verify search and filters stack vertically</li>
+                <li>✅ Verify grid view shows single column</li>
+                <li>✅ Verify list view table scrolls horizontally</li>
+                <li>✅ Verify all inputs are at least 44px tall</li>
+                <li>✅ Verify no horizontal overflow</li>
+            </ol>
+        </div>
+        
+        <div class="test-item">
+            <h3>Clients Component Testing</h3>
+            <p><strong>Test Steps:</strong></p>
+            <ol>
+                <li>Navigate to Clients page</li>
+                <li>Resize browser to 375px width</li>
+                <li>✅ Verify header stacks vertically</li>
+                <li>✅ Verify action buttons stack vertically</li>
+                <li>✅ Verify view tabs scroll horizontally</li>
+                <li>✅ Verify pipeline board scrolls horizontally</li>
+                <li>✅ Verify stats cards show in 2 columns</li>
+                <li>✅ Verify table scrolls horizontally</li>
+                <li>✅ Verify no horizontal overflow</li>
+            </ol>
+        </div>
+    </div>
+    
+    <div class="test-section">
+        <h2>📏 Breakpoint Testing</h2>
+        <p>Test at these screen widths:</p>
+        <ul>
+            <li><strong>768px and below:</strong> Base mobile fixes</li>
+            <li><strong>640px and below:</strong> Reduced spacing, smaller buttons</li>
+            <li><strong>480px and below:</strong> Ultra-compact, stats grids collapse</li>
+            <li><strong>375px and below:</strong> Minimal spacing</li>
+            <li><strong>350px and below:</strong> Critical fixes, ultra-minimal spacing</li>
+        </ul>
+    </div>
+    
+    <div class="test-section">
+        <h2>🔍 CSS Files Modified</h2>
+        <ul>
+            <li><code>mobile-optimizations.css</code> - Added Teams, Projects, and Clients specific rules</li>
+            <li><code>src/components/teams/Teams.jsx</code> - Mobile responsive classes</li>
+            <li><code>src/components/projects/Projects.jsx</code> - Mobile responsive classes</li>
+            <li><code>src/components/clients/Clients.jsx</code> - Mobile responsive classes</li>
+        </ul>
+    </div>
+    
+    <div class="test-section">
+        <h2>📱 Mobile Frame Preview</h2>
+        <p>Use browser DevTools to test at mobile sizes:</p>
+        <ol>
+            <li>Open Chrome DevTools (F12 or Cmd+Option+I)</li>
+            <li>Click the device toolbar icon (or Cmd+Shift+M)</li>
+            <li>Select "iPhone SE" (375x667) or "iPhone 12 Pro" (390x844)</li>
+            <li>Navigate to Teams, Projects, or Clients pages</li>
+            <li>Verify all optimizations are working</li>
+        </ol>
+    </div>
+    
+    <script>
+        // Add some interactive testing
+        console.log('📱 Mobile Optimization Test Page Loaded');
+        console.log('✅ Teams Component: Optimized');
+        console.log('✅ Projects Component: Optimized');
+        console.log('✅ Clients Component: Optimized');
+        
+        // Check if we're on mobile
+        const isMobile = window.innerWidth <= 768;
+        if (isMobile) {
+            console.log('📱 Currently viewing on mobile size:', window.innerWidth + 'px');
+        } else {
+            console.log('💻 Currently viewing on desktop size:', window.innerWidth + 'px');
+            console.log('💡 Resize browser to test mobile view');
+        }
+    </script>
+</body>
+</html>
+

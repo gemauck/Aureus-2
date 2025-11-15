@@ -3709,21 +3709,21 @@ const Clients = React.memo(() => {
         return (
             <div className="space-y-6">
                 {/* Stats */}
-                <div className="flex gap-4">
-                    <div className={`flex-1 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-4`}>
-                        <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Active Leads</div>
-                        <div className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{activeLeads.length}</div>
+                <div className="grid grid-cols-2 sm:flex sm:gap-4 gap-2 sm:gap-4">
+                    <div className={`flex-1 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-3 sm:p-4`}>
+                        <div className={`text-xs sm:text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Active Leads</div>
+                        <div className={`text-xl sm:text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{activeLeads.length}</div>
                         <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>New prospects</div>
                     </div>
-                    <div className={`flex-1 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-4`}>
-                        <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Active Opportunities</div>
-                        <div className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-primary-600'}`}>{activeOpportunities.length}</div>
+                    <div className={`flex-1 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-3 sm:p-4`}>
+                        <div className={`text-xs sm:text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Active Opportunities</div>
+                        <div className={`text-xl sm:text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-primary-600'}`}>{activeOpportunities.length}</div>
                         <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>Client expansions</div>
                     </div>
                 </div>
 
                 {/* Enhanced Pipeline Board */}
-                <div className="flex gap-4 overflow-x-auto pb-6">
+                <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-6 -mx-3 sm:mx-0 px-3 sm:px-0" style={{ WebkitOverflowScrolling: 'touch' }}>
                     {pipelineStages.map(stage => {
                         const stageLeads = activeLeads.filter(lead => lead.stage === stage);
                         const stageOpps = activeOpportunities.filter(opp => opp.stage === stage);
@@ -3748,7 +3748,7 @@ const Clients = React.memo(() => {
                             <div 
                                 key={stage} 
                                 data-pipeline-stage={stage}
-                                className={`flex-1 min-w-[250px] ${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl shadow-lg border transition-all duration-300 ${
+                                className={`flex-1 min-w-[280px] sm:min-w-[250px] ${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl shadow-lg border transition-all duration-300 ${
                                     isDark ? 'border-gray-700' : 'border-gray-200'
                                 } ${
                                     isDraggedOver ? `ring-2 ring-primary-500 ${isDark ? 'bg-primary-900' : 'bg-primary-50'} transform scale-105` : 'hover:shadow-xl'
@@ -3867,9 +3867,9 @@ const Clients = React.memo(() => {
 
     // Clients List View
     const ClientsListView = () => (
-        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border`}>
-            <div className="overflow-x-auto">
-                <table className={`min-w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
+        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border flex flex-col h-full`}>
+            <div className="flex-1 overflow-auto -mx-3 sm:mx-0 px-3 sm:px-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <table className={`min-w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`} style={{ minWidth: '640px' }}>
                     <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
                         <tr>
                             <th 
@@ -4031,7 +4031,7 @@ const Clients = React.memo(() => {
             </div>
             {/* Pagination Controls */}
             {sortedClients.length > 0 && (
-                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t px-6 py-4 flex items-center justify-between pr-32`}>
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t px-6 py-4 flex items-center justify-between pr-32 flex-shrink-0`}>
                     <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Showing {clientsStartIndex + 1} to {Math.min(clientsEndIndex, sortedClients.length)} of {sortedClients.length} clients
                     </div>
@@ -4501,8 +4501,8 @@ const Clients = React.memo(() => {
     // Note: Lead status is now hardcoded as 'active' - removed handleLeadStatusChange function
 
     const LeadsListView = () => (
-        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border`}>
-            <div className="overflow-x-auto">
+        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border flex flex-col h-full`}>
+            <div className="flex-1 overflow-auto">
                 <table className={`min-w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
                     <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
                         <tr>
@@ -4626,7 +4626,7 @@ const Clients = React.memo(() => {
             </div>
             {/* Pagination Controls */}
             {sortedLeads.length > 0 && (
-                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t px-6 py-4 flex items-center justify-between pr-32`}>
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t px-6 py-4 flex items-center justify-between pr-32 flex-shrink-0`}>
                     <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Showing {leadsStartIndex + 1} to {Math.min(leadsEndIndex, sortedLeads.length)} of {sortedLeads.length} leads
                     </div>
@@ -4851,19 +4851,20 @@ const Clients = React.memo(() => {
     // Removed render logging to reduce console spam during infinite loops
 
     return (
-        <div className="space-y-6">
+        <div className="flex flex-col h-screen w-full max-w-full overflow-hidden">
+            <div className="flex-shrink-0 space-y-4 sm:space-y-6 px-4 sm:px-6 pt-4 sm:pt-6">
             {/* Modern Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-                        <i className="fas fa-users text-white text-lg"></i>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+                <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+                        <i className="fas fa-users text-white text-sm sm:text-lg"></i>
                     </div>
-                    <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                            <div>
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="flex-1 min-w-0">
                                 <h1 
                                     id="clients-leads-heading"
-                                    className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
+                                    className={`text-lg sm:text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
                                     style={{ 
                                         color: isDark ? '#f3f4f6' : '#111827',
                                         WebkitTextFillColor: isDark ? '#f3f4f6' : '#111827'
@@ -4872,24 +4873,26 @@ const Clients = React.memo(() => {
                                     Clients and Leads
                                 </h1>
                                 <p 
-                                    className={`${isDark ? 'text-gray-400' : 'text-gray-600'}`}
+                                    className={`text-xs sm:text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}
                                     style={{ color: isDark ? '#9ca3af' : '#4b5563' }}
                                 >
                                     Manage clients and leads
                                 </p>
                             </div>
                             {SectionCommentWidget && (
-                                <SectionCommentWidget 
-                                    sectionId="clients-main"
-                                    sectionName="Clients and Leads"
-                                />
+                                <div className="hidden sm:block flex-shrink-0">
+                                    <SectionCommentWidget 
+                                        sectionId="clients-main"
+                                        sectionName="Clients and Leads"
+                                    />
+                                </div>
                             )}
                         </div>
                     </div>
                 </div>
                 
                 {/* Modern Action Buttons */}
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
                     <button 
                     onClick={() => {
                         stopSync();
@@ -4901,7 +4904,7 @@ const Clients = React.memo(() => {
                         setCurrentTab('overview');
                         setViewMode('client-detail');
                     }}
-                        className={`inline-flex items-center gap-2 px-4 py-2.5 border rounded-lg text-sm font-medium transition-all duration-200 shadow-sm hover:shadow-md ${
+                        className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2.5 border rounded-lg text-sm font-medium transition-all duration-200 shadow-sm hover:shadow-md min-h-[44px] sm:min-h-0 ${
                             isDark 
                                 ? 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600' 
                                 : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
@@ -4927,7 +4930,7 @@ const Clients = React.memo(() => {
                         setCurrentLeadTab('overview');
                         setViewMode('lead-detail');
                     }}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-all duration-200 shadow-sm hover:shadow-md"
+                        className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-all duration-200 shadow-sm hover:shadow-md min-h-[44px] sm:min-h-0"
                     >
                         <div className="w-5 h-5 bg-blue-500 rounded-md flex items-center justify-center">
                             <i className="fas fa-plus text-xs"></i>
@@ -4938,10 +4941,10 @@ const Clients = React.memo(() => {
             </div>
 
             {/* Modern View Tabs */}
-            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border p-1 inline-flex shadow-sm`}>
+            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border p-1 flex sm:inline-flex shadow-sm overflow-x-auto sm:overflow-x-visible`}>
                 <button
                     onClick={() => setViewMode('clients')}
-                    className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    className={`px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
                         viewMode === 'clients' 
                             ? 'bg-blue-600 text-white shadow-sm' 
                             : isDark 
@@ -4950,11 +4953,12 @@ const Clients = React.memo(() => {
                     }`}
                 >
                     <i className="fas fa-building mr-2"></i>
-                    Clients ({clients.length})
+                    <span className="hidden sm:inline">Clients ({clients.length})</span>
+                    <span className="sm:hidden">Clients</span>
                 </button>
                 <button
                     onClick={() => setViewMode('leads')}
-                    className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    className={`px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
                         viewMode === 'leads' 
                             ? 'bg-blue-600 text-white shadow-sm' 
                             : isDark 
@@ -4963,7 +4967,8 @@ const Clients = React.memo(() => {
                     }`}
                 >
                     <i className="fas fa-star mr-2"></i>
-                    Leads ({leadsCount})
+                    <span className="hidden sm:inline">Leads ({leadsCount})</span>
+                    <span className="sm:hidden">Leads</span>
                 </button>
                 <button
                     onClick={() => {
@@ -5121,8 +5126,10 @@ const Clients = React.memo(() => {
                     )}
                 </div>
             )}
+            </div>
 
             {/* Content based on view mode */}
+            <div className="flex-1 overflow-hidden px-4 sm:px-6 pb-4 sm:pb-6 min-h-0">
             {viewMode === 'clients' && <ClientsListView />}
             {viewMode === 'leads' && <LeadsListView />}
             {viewMode === 'pipeline' && (
@@ -5175,6 +5182,7 @@ const Clients = React.memo(() => {
                     }}
                 />
             )}
+            </div>
         </div>
     );
 });

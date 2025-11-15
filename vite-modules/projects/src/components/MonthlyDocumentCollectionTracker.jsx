@@ -1552,75 +1552,13 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
     const handleExportToExcel = async () => {
         setIsExporting(true);
         try {
-            // Check if XLSX is already loaded
+            // Get XLSX from global scope (loaded in index.html)
             let XLSX = window.XLSX;
             
-            // If not loaded, dynamically load it
+            // Wait for XLSX to be available if it's still loading
             if (!XLSX || !XLSX.utils) {
-                // Remove existing script if present
-                const existingScript = document.querySelector('script[src*="xlsx"]');
-                if (existingScript) {
-                    existingScript.remove();
-                }
-                
-                // Try multiple CDN sources in order of preference
-                const cdnUrls = [
-                    'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
-                    'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js',
-                    'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js'
-                ];
-                
-                let loadError = null;
-                
-                for (const cdnUrl of cdnUrls) {
-                    try {
-                        await new Promise((resolve, reject) => {
-                            const script = document.createElement('script');
-                            script.src = cdnUrl;
-                            script.onload = () => {
-                                // Wait a bit more to ensure XLSX is fully exposed
-                                setTimeout(() => {
-                                    XLSX = window.XLSX;
-                                    if (!XLSX || !XLSX.utils) {
-                                        reject(new Error('XLSX library failed to load properly'));
-                                    } else {
-                                        resolve();
-                                    }
-                                }, 150);
-                            };
-                            script.onerror = () => {
-                                reject(new Error(`Failed to load XLSX from ${cdnUrl}`));
-                            };
-                            document.head.appendChild(script);
-                        });
-                        
-                        XLSX = window.XLSX;
-                        if (XLSX && XLSX.utils) {
-                            break; // Successfully loaded
-                        }
-                    } catch (error) {
-                        loadError = error;
-                        // Remove the failed script
-                        const failedScript = document.querySelector(`script[src="${cdnUrl}"]`);
-                        if (failedScript) {
-                            failedScript.remove();
-                        }
-                        continue; // Try next CDN
-                    }
-                }
-                
-                if (!XLSX || !XLSX.utils) {
-                    throw new Error(`Failed to load XLSX library from any CDN. Last error: ${loadError?.message || 'Unknown error'}`);
-                }
-            }
-            
-            // Ensure we're using the globally loaded XLSX
-            XLSX = window.XLSX;
-            
-            // Wait a bit more if XLSX is still not ready
-            if (!XLSX || !XLSX.utils) {
-                // Wait up to 2 seconds for XLSX to be fully loaded
-                for (let waitAttempt = 0; waitAttempt < 20 && (!XLSX || !XLSX.utils); waitAttempt++) {
+                // Wait up to 3 seconds for XLSX to be fully loaded from the script tag
+                for (let waitAttempt = 0; waitAttempt < 30 && (!XLSX || !XLSX.utils); waitAttempt++) {
                     await new Promise(resolve => setTimeout(resolve, 100));
                     XLSX = window.XLSX;
                 }
@@ -1628,19 +1566,19 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
             
             // Verify XLSX is available and has required methods
             if (!XLSX) {
-                throw new Error('XLSX library failed to load. window.XLSX is undefined.');
+                throw new Error('XLSX library failed to load. window.XLSX is undefined. Please check your internet connection and refresh the page.');
             }
             if (!XLSX.utils) {
-                throw new Error('XLSX library loaded but utils is missing. Try refreshing and exporting again.');
+                throw new Error('XLSX library loaded but utils is missing. Please refresh the page and try again.');
             }
             if (!XLSX.utils.book_new) {
-                throw new Error('XLSX.utils.book_new is missing. The library may not be fully loaded.');
+                throw new Error('XLSX.utils.book_new is missing. The library may not be fully loaded. Please refresh the page.');
             }
             if (!XLSX.utils.aoa_to_sheet) {
-                throw new Error('XLSX.utils.aoa_to_sheet is missing. The library may not be fully loaded.');
+                throw new Error('XLSX.utils.aoa_to_sheet is missing. The library may not be fully loaded. Please refresh the page.');
             }
             if (!XLSX.writeFile) {
-                throw new Error('XLSX.writeFile is missing. The library may not be fully loaded.');
+                throw new Error('XLSX.writeFile is missing. The library may not be fully loaded. Please refresh the page.');
             }
         
             // Prepare data for Excel
@@ -1768,7 +1706,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         } catch (error) {
             console.error('Error exporting to Excel:', error);
             const errorMessage = error.message || 'Unknown error occurred';
-            alert(`Failed to export to Excel: ${errorMessage}\n\nPlease check your internet connection and try again.`);
+            alert(`Failed to export to Excel: ${errorMessage}`);
         } finally {
             setIsExporting(false);
         }
