@@ -264,7 +264,7 @@
             }
 
             if (path.includes('components/clients/Clients.jsx')) {
-                applyDynamicCacheBust('clients-sidebar-spacing-20251115');
+                applyDynamicCacheBust('clients-button-spacing-20251115');
             }
 
             if (path.includes('components/service-maintenance/ServiceAndMaintenance.jsx')) {
