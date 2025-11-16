@@ -482,7 +482,7 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
                         </div>
                     </div>
 
-                    <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-slate-700">
+                    <div className="flex gap-3 border-t border-gray-200 dark:border-slate-700 pt-2">
                         <button
                             type="button"
                             onClick={onClose}
