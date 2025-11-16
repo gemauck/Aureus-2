@@ -127,9 +127,20 @@ const ClientsMobile = () => {
 
     // Initialize data
     useEffect(() => {
+        console.log('🔄 ClientsMobile: Initializing, viewMode:', viewMode);
         loadClients();
         loadLeads();
     }, []);
+    
+    // Debug: Log when clients/leads change
+    useEffect(() => {
+        console.log('📊 ClientsMobile: State update', {
+            viewMode,
+            clientsCount: clients.length,
+            leadsCount: leads.length,
+            filteredClientsCount: filteredClients.length
+        });
+    }, [viewMode, clients.length, leads.length, filteredClients.length]);
 
     // Save data
     useEffect(() => {
