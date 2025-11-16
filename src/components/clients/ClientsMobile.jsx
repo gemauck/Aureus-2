@@ -8,7 +8,13 @@ const ClientsMobile = () => {
     const [clients, setClients] = useState(() => {
         // Initialize with localStorage data if available
         const savedClients = storage.getClients();
-        return savedClients || [];
+        if (savedClients && savedClients.length > 0) {
+            // Filter to only include clients (not leads)
+            return savedClients.filter(c => 
+                c.type === 'client' || c.type === null || c.type === undefined
+            );
+        }
+        return [];
     });
     const [leads, setLeads] = useState([]); // Leads are database-only
     const [projects, setProjects] = useState([]);
@@ -32,14 +38,22 @@ const ClientsMobile = () => {
                 console.log('API clients:', apiClients);
                 
                 if (apiClients && apiClients.length > 0) {
-                    setClients(apiClients);
-                    console.log('✅ Using API clients:', apiClients.length);
+                    // Filter to only include clients (type === 'client' or null/undefined for legacy)
+                    const clientsOnly = apiClients.filter(c => 
+                        c.type === 'client' || c.type === null || c.type === undefined
+                    );
+                    console.log(`✅ Filtered ${clientsOnly.length} clients from ${apiClients.length} total items`);
+                    setClients(clientsOnly);
                 } else {
                     // If API returns no clients, use localStorage clients
                     const savedClients = storage.getClients();
                     if (savedClients && savedClients.length > 0) {
-                        console.log('✅ No API clients, using localStorage clients');
-                        setClients(savedClients);
+                        // Filter to only include clients
+                        const clientsOnly = savedClients.filter(c => 
+                            c.type === 'client' || c.type === null || c.type === undefined
+                        );
+                        console.log('✅ No API clients, using localStorage clients:', clientsOnly.length);
+                        setClients(clientsOnly);
                         return;
                     }
                 }
@@ -47,7 +61,11 @@ const ClientsMobile = () => {
                 // No token, use localStorage
                 const savedClients = storage.getClients();
                 if (savedClients) {
-                    setClients(savedClients);
+                    // Filter to only include clients
+                    const clientsOnly = savedClients.filter(c => 
+                        c.type === 'client' || c.type === null || c.type === undefined
+                    );
+                    setClients(clientsOnly);
                 }
             }
         } catch (error) {
@@ -55,14 +73,48 @@ const ClientsMobile = () => {
             // Fallback to localStorage
             const savedClients = storage.getClients();
             if (savedClients) {
-                setClients(savedClients);
+                // Filter to only include clients
+                const clientsOnly = savedClients.filter(c => 
+                    c.type === 'client' || c.type === null || c.type === undefined
+                );
+                setClients(clientsOnly);
             }
+        }
+    };
+
+    // Load leads from API and localStorage
+    const loadLeads = async () => {
+        try {
+            // Try localStorage first
+            const savedLeads = storage.getLeads?.();
+            if (savedLeads && savedLeads.length > 0) {
+                setLeads(savedLeads);
+            }
+
+            // Then load from API
+            const token = storage.getToken();
+            if (token && window.api?.getLeads) {
+                const apiLeads = await window.api.getLeads();
+                if (apiLeads?.data?.leads || apiLeads?.leads) {
+                    const leadsData = apiLeads.data?.leads || apiLeads.leads;
+                    if (leadsData.length > 0) {
+                        setLeads(leadsData);
+                        // Save to localStorage
+                        if (storage.setLeads) {
+                            storage.setLeads(leadsData);
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error loading leads:', error);
         }
     };
 
     // Initialize data
     useEffect(() => {
         loadClients();
+        loadLeads();
     }, []);
 
     // Save data
@@ -151,6 +203,10 @@ const ClientsMobile = () => {
     };
 
     const filteredClients = clients.filter(client => {
+        // Ensure we only show clients (not leads)
+        const isClient = client.type === 'client' || client.type === null || client.type === undefined;
+        if (!isClient) return false;
+        
         const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             client.industry.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesIndustry = filterIndustry === 'All Industries' || client.industry === filterIndustry;

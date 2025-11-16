@@ -5,7 +5,13 @@ const ClientsMobileOptimized = () => {
     const [viewMode, setViewMode] = useState('clients');
     const [clients, setClients] = useState(() => {
         const savedClients = window.storage?.getClients?.();
-        return savedClients || [];
+        if (savedClients && savedClients.length > 0) {
+            // Filter to only include clients (not leads)
+            return savedClients.filter(c => 
+                c.type === 'client' || c.type === null || c.type === undefined
+            );
+        }
+        return [];
     });
     const [leads, setLeads] = useState([]); // Leads are database-only
     const [projects, setProjects] = useState([]);
@@ -29,21 +35,43 @@ const ClientsMobileOptimized = () => {
             if (token) {
                 const apiClients = await window.api.getClients();
                 if (apiClients && apiClients.length > 0) {
-                    setClients(apiClients);
+                    // Filter to only include clients (type === 'client' or null/undefined for legacy)
+                    const clientsOnly = apiClients.filter(c => 
+                        c.type === 'client' || c.type === null || c.type === undefined
+                    );
+                    console.log(`✅ Filtered ${clientsOnly.length} clients from ${apiClients.length} total items`);
+                    setClients(clientsOnly);
                 } else {
                     const savedClients = window.storage?.getClients?.();
                     if (savedClients && savedClients.length > 0) {
-                        setClients(savedClients);
+                        // Filter to only include clients
+                        const clientsOnly = savedClients.filter(c => 
+                            c.type === 'client' || c.type === null || c.type === undefined
+                        );
+                        setClients(clientsOnly);
                     }
                 }
             } else {
                 const savedClients = window.storage?.getClients?.();
                 if (savedClients) {
-                    setClients(savedClients);
+                    // Filter to only include clients
+                    const clientsOnly = savedClients.filter(c => 
+                        c.type === 'client' || c.type === null || c.type === undefined
+                    );
+                    setClients(clientsOnly);
                 }
             }
         } catch (error) {
             console.error('Error loading clients:', error);
+            // Fallback to localStorage
+            const savedClients = window.storage?.getClients?.();
+            if (savedClients) {
+                // Filter to only include clients
+                const clientsOnly = savedClients.filter(c => 
+                    c.type === 'client' || c.type === null || c.type === undefined
+                );
+                setClients(clientsOnly);
+            }
         } finally {
             setIsLoading(false);
         }
@@ -267,6 +295,10 @@ const ClientsMobileOptimized = () => {
 
     // Filter and search
     const filteredClients = clients.filter(client => {
+        // Ensure we only show clients (not leads)
+        const isClient = client.type === 'client' || client.type === null || client.type === undefined;
+        if (!isClient) return false;
+        
         const matchesSearch = client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             client.industry.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesIndustry = filterIndustry === 'All Industries' || client.industry === filterIndustry;
