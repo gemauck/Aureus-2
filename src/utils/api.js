@@ -79,18 +79,19 @@ async function request(path, options = {}) {
       
       // Handle 401 errors
       if (res.status === 401) {
-        const permissionLikely = path.startsWith('/users') || path.startsWith('/admin')
-        const isCoreAuthEndpoint = path === '/me' || path === '/auth/refresh'
-        // Only clear tokens and redirect for core auth endpoints, not for login failures
-        if ((isCoreAuthEndpoint || (!isAuthEndpoint && !permissionLikely)) && path !== '/auth/login' && path !== '/login') {
-          // Token likely invalid and refresh failed → clear and redirect
-          if (window.storage?.removeToken) window.storage.removeToken();
-          if (window.storage?.removeUser) window.storage.removeUser();
-          if (window.LiveDataSync) {
-            window.LiveDataSync.stop();
-          }
-          if (!window.location.hash.includes('#/login')) {
-            window.location.hash = '#/login';
+        // Any unauthorized after optional refresh -> force logout and redirect
+        if (!isAuthEndpoint && path !== '/auth/login' && path !== '/login') {
+          if (window.forceLogout) {
+            window.forceLogout('SESSION_EXPIRED');
+          } else {
+            if (window.storage?.removeToken) window.storage.removeToken();
+            if (window.storage?.removeUser) window.storage.removeUser();
+            if (window.LiveDataSync) {
+              window.LiveDataSync.stop();
+            }
+            if (!window.location.hash.includes('#/login')) {
+              window.location.hash = '#/login';
+            }
           }
         }
       }

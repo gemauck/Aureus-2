@@ -172,9 +172,10 @@ class EnhancedAPIWrapper {
 
             if (!response.ok) {
                 if (response.status === 401) {
-                    // Avoid logging out for permission endpoints like /users
-                    const permissionLikely = endpoint.startsWith('/users') || endpoint.startsWith('/admin');
-                    if (!permissionLikely) {
+                    // Any unauthorized after optional refresh -> force logout and redirect
+                    if (window.forceLogout) {
+                        window.forceLogout('SESSION_EXPIRED');
+                    } else {
                         if (window.storage?.removeToken) window.storage.removeToken();
                         if (window.storage?.removeUser) window.storage.removeUser();
                         if (window.LiveDataSync) {

@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
+    <title>iPhone 13 Mobile Test - Sidebar & Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f3f4f6;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .test-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+            color: #1f2937;
+        }
+        
+        .subtitle {
+            color: #6b7280;
+            margin-bottom: 24px;
+            font-size: 14px;
+        }
+        
+        .test-section {
+            margin-bottom: 32px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .test-section:last-child {
+            border-bottom: none;
+        }
+        
+        h2 {
+            font-size: 18px;
+            margin-bottom: 16px;
+            color: #374151;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        .icon.check { background: #10b981; color: white; }
+        .icon.warn { background: #f59e0b; color: white; }
+        .icon.error { background: #ef4444; color: white; }
+        
+        .test-item {
+            background: #f9fafb;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            border-left: 3px solid #e5e7eb;
+        }
+        
+        .test-item.pass {
+            border-left-color: #10b981;
+            background: #ecfdf5;
+        }
+        
+        .test-item.fail {
+            border-left-color: #ef4444;
+            background: #fef2f2;
+        }
+        
+        .test-item.warn {
+            border-left-color: #f59e0b;
+            background: #fffbeb;
+        }
+        
+        .test-label {
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 4px;
+        }
+        
+        .test-value {
+            color: #6b7280;
+            font-size: 14px;
+            font-family: 'Monaco', 'Courier New', monospace;
+        }
+        
+        .instructions {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .instructions h3 {
+            color: #1e40af;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+        
+        .instructions ol {
+            margin-left: 20px;
+            color: #1e3a8a;
+        }
+        
+        .instructions li {
+            margin-bottom: 4px;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status.pass {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .status.fail {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .status.warn {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 16px;
+        }
+        
+        button:hover {
+            background: #2563eb;
+        }
+        
+        .metrics {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 16px;
+        }
+        
+        .metric {
+            background: #f9fafb;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .metric-label {
+            font-size: 12px;
+            color: #6b7280;
+            margin-bottom: 4px;
+        }
+        
+        .metric-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1f2937;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>📱 iPhone 13 Mobile Test</h1>
+        <p class="subtitle">Sidebar & Dashboard UI Review</p>
+        
+        <div class="instructions">
+            <h3>How to Test on iPhone 13 (390×844):</h3>
+            <ol>
+                <li>Open Chrome DevTools (F12 or Cmd+Opt+I)</li>
+                <li>Click the device toolbar icon (or press Cmd+Shift+M)</li>
+                <li>Select "iPhone 13" from the device dropdown</li>
+                <li>Or manually set viewport to 390×844</li>
+                <li>Navigate to <code>http://localhost:3000</code></li>
+                <li>Test sidebar open/close functionality</li>
+                <li>Test dashboard content visibility and scrolling</li>
+            </ol>
+        </div>
+        
+        <div class="test-section">
+            <h2>
+                <span class="icon check">✓</span>
+                Viewport Detection
+            </h2>
+            <div class="test-item" id="viewport-test">
+                <div class="test-label">Current Viewport</div>
+                <div class="test-value" id="viewport-value">Detecting...</div>
+            </div>
+            <div class="test-item" id="device-test">
+                <div class="test-label">Device Type</div>
+                <div class="test-value" id="device-value">Detecting...</div>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h2>
+                <span class="icon warn">⚠</span>
+                Sidebar Tests
+            </h2>
+            <div class="test-item" id="sidebar-exists">
+                <div class="test-label">Sidebar Element Exists</div>
+                <div class="test-value">Not tested - Open app to test</div>
+            </div>
+            <div class="test-item" id="sidebar-toggle">
+                <div class="test-label">Hamburger Menu Button</div>
+                <div class="test-value">Not tested - Open app to test</div>
+            </div>
+            <div class="test-item" id="sidebar-overlay">
+                <div class="test-label">Sidebar Overlay</div>
+                <div class="test-value">Not tested - Open app to test</div>
+            </div>
+            <div class="test-item" id="sidebar-width">
+                <div class="test-label">Sidebar Width (should be ~280px or 85vw max)</div>
+                <div class="test-value">Not tested - Open app to test</div>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h2>
+                <span class="icon check">✓</span>
+                Dashboard Tests
+            </h2>
+            <div class="test-item" id="dashboard-exists">
+                <div class="test-label">Dashboard Content Visible</div>
+                <div class="test-value">Not tested - Open app to test</div>
+            </div>
+            <div class="test-item" id="dashboard-scroll">
+                <div class="test-label">Dashboard Scrollable</div>
+                <div class="test-value">Not tested - Open app to test</div>
+            </div>
+            <div class="test-item" id="calendar-component">
+                <div class="test-label">Calendar Component</div>
+                <div class="test-value">Not tested - Open app to test</div>
+            </div>
+            <div class="test-item" id="content-width">
+                <div class="test-label">Content Width (should be 100% viewport)</div>
+                <div class="test-value">Not tested - Open app to test</div>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h2>
+                <span class="icon warn">⚠</span>
+                Touch Targets
+            </h2>
+            <div class="test-item" id="touch-targets">
+                <div class="test-label">All Interactive Elements ≥ 44×44px</div>
+                <div class="test-value">Not tested - Open app to test</div>
+            </div>
+            <div class="test-item" id="button-sizes">
+                <div class="test-label">Button Sizes</div>
+                <div class="test-value">Not tested - Open app to test</div>
+            </div>
+        </div>
+        
+        <div class="test-section">
+            <h2>
+                <span class="icon check">✓</span>
+                Layout Metrics
+            </h2>
+            <div class="metrics">
+                <div class="metric">
+                    <div class="metric-label">Viewport Width</div>
+                    <div class="metric-value" id="vp-width">-</div>
+                </div>
+                <div class="metric">
+                    <div class="metric-label">Viewport Height</div>
+                    <div class="metric-value" id="vp-height">-</div>
+                </div>
+            </div>
+        </div>
+        
+        <button onclick="window.location.href='http://localhost:3000'">Open App in New Tab</button>
+    </div>
+    
+    <script>
+        // Detect viewport
+        function updateViewport() {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            const isIPhone13 = width === 390 && height >= 844;
+            const isMobile = width < 1024;
+            
+            document.getElementById('viewport-value').textContent = `${width}×${height}px`;
+            document.getElementById('vp-width').textContent = `${width}px`;
+            document.getElementById('vp-height').textContent = `${height}px`;
+            
+            const viewportTest = document.getElementById('viewport-test');
+            if (isIPhone13) {
+                viewportTest.className = 'test-item pass';
+                document.getElementById('device-value').textContent = '✓ iPhone 13 viewport detected (390×844)';
+            } else if (isMobile) {
+                viewportTest.className = 'test-item warn';
+                document.getElementById('device-value').textContent = `⚠ Mobile viewport (${width}×${height}) - Adjust to 390×844 for iPhone 13`;
+            } else {
+                viewportTest.className = 'test-item fail';
+                document.getElementById('device-value').textContent = `✗ Desktop viewport (${width}×${height}) - Switch to mobile device emulation`;
+            }
+        }
+        
+        // Check for app context (if opened from within the app)
+        if (window.opener) {
+            console.log('Test page opened from app context');
+        }
+        
+        // Update viewport on load and resize
+        updateViewport();
+        window.addEventListener('resize', updateViewport);
+        
+        // Check if localStorage has test data
+        if (typeof Storage !== 'undefined') {
+            const lastTest = localStorage.getItem('iphone13_test_last_run');
+            if (lastTest) {
+                console.log('Last test run:', new Date(parseInt(lastTest)));
+            }
+        }
+        
+        console.log('📱 iPhone 13 Mobile Test Utility Loaded');
+        console.log('📐 Current viewport:', window.innerWidth, '×', window.innerHeight);
+        console.log('💡 Tip: Use Chrome DevTools device emulation (Cmd+Shift+M) and select "iPhone 13"');
+    </script>
+</body>
+</html>
+

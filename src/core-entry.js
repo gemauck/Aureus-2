@@ -18,6 +18,7 @@ import './utils/api.js';
 import './utils/localStorage.js';
 import './utils/dataService.js';
 import './utils/authStorage.js';
+import './utils/forceLogout.js';
 import './utils/permissions.js';
 import './utils/databaseAPI.js';
 import './utils/cache-manager.js';

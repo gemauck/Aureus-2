@@ -221,13 +221,17 @@ const DatabaseAPI = {
 
             if (!token) {
                 // Still no token → ensure clean state and redirect to login
-                if (window.storage?.removeToken) window.storage.removeToken();
-                if (window.storage?.removeUser) window.storage.removeUser();
-                if (window.LiveDataSync) {
-                    window.LiveDataSync.stop();
-                }
-                if (!window.location.hash.includes('#/login')) {
-                    window.location.hash = '#/login';
+                if (window.forceLogout) {
+                    window.forceLogout('SESSION_MISSING');
+                } else {
+                    if (window.storage?.removeToken) window.storage.removeToken();
+                    if (window.storage?.removeUser) window.storage.removeUser();
+                    if (window.LiveDataSync) {
+                        window.LiveDataSync.stop();
+                    }
+                    if (!window.location.hash.includes('#/login')) {
+                        window.location.hash = '#/login';
+                    }
                 }
                 throw new Error('No authentication token found. Please log in.');
             }
@@ -399,11 +403,10 @@ const DatabaseAPI = {
                     }
 
                     if (response.status === 401) {
-                        // Avoid logging out for pure permission denials or notification endpoints
-                        // /users, /admin = permission issues
-                        // /notifications = notification polling, shouldn't redirect
-                        const permissionLikely = endpoint.startsWith('/users') || endpoint.startsWith('/admin') || endpoint.startsWith('/notifications');
-                        if (!permissionLikely) {
+                        // Any unauthorized after optional refresh -> force logout and redirect
+                        if (window.forceLogout) {
+                            window.forceLogout('SESSION_EXPIRED');
+                        } else {
                             if (window.storage?.removeToken) window.storage.removeToken();
                             if (window.storage?.removeUser) window.storage.removeUser();
                             if (window.LiveDataSync) {

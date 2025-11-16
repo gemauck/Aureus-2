@@ -23,8 +23,19 @@ const Settings = () => {
     const [saveStatus, setSaveStatus] = useState('');
     const { isDark } = window.useTheme();
 
+    // Resolve Notification Settings component from global window (registered by NotificationSettings.jsx)
+    const NotificationsComponent = React.useMemo(() => {
+        const Comp = window.NotificationSettings;
+        if (Comp && typeof Comp === 'function') {
+            return Comp;
+        }
+        // Fallback placeholder while component loads
+        return () => <div className="text-center py-12 text-gray-500">Notifications settings loading...</div>;
+    }, []);
+
     const tabs = [
         { id: 'general', label: 'General', icon: 'fa-cog' },
+        { id: 'notifications', label: 'Notifications', icon: 'fa-bell' },
         { id: 'security', label: 'Security', icon: 'fa-shield-alt' },
         { id: 'integrations', label: 'Integrations', icon: 'fa-plug' },
         { id: 'data', label: 'Data Management', icon: 'fa-database' }
@@ -820,6 +831,8 @@ const Settings = () => {
         switch (activeTab) {
             case 'general':
                 return renderGeneralSettings();
+            case 'notifications':
+                return <NotificationsComponent />;
             case 'security':
                 return renderSecuritySettings();
             case 'integrations':
