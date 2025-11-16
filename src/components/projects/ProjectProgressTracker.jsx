@@ -278,6 +278,146 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         };
         load();
     }, []);
+
+    /**
+     * Lightweight self-test for monthlyProgress persistence.
+     *
+     * Triggered only when:
+     *  - URL search or hash contains "progressSelfTest=1"
+     *  - And there is at least one project loaded
+     *
+     * This avoids affecting normal users and production traffic.
+     */
+    useEffect(() => {
+        try {
+            if (!projects || projects.length === 0) return;
+
+            const href = window.location?.href || '';
+            let selfTestEnabled = false;
+
+            try {
+                const url = new URL(href);
+                const searchParams = url.searchParams;
+                const hash = window.location.hash || '';
+                const [, hashQuery = ''] = (hash.startsWith('#') ? hash.substring(1) : hash).split('?');
+                const hashParams = new URLSearchParams(hashQuery);
+
+                selfTestEnabled =
+                    searchParams.get('progressSelfTest') === '1' ||
+                    hashParams.get('progressSelfTest') === '1';
+            } catch (urlErr) {
+                console.warn('⚠️ ProjectProgressTracker: Self-test URL parsing error:', urlErr);
+            }
+
+            if (!selfTestEnabled) return;
+
+            // Run only once per page load
+            if (window.__PROJECT_PROGRESS_SELFTEST_RAN__) {
+                return;
+            }
+            window.__PROJECT_PROGRESS_SELFTEST_RAN__ = true;
+
+            (async () => {
+                try {
+                    console.log('🧪 ProjectProgressTracker: Starting monthlyProgress persistence self-test...');
+
+                    const project = projects[0];
+                    if (!project || !project.id) {
+                        console.warn('⚠️ ProjectProgressTracker: Self-test aborted, no valid project found');
+                        return;
+                    }
+
+                    // Normalize existing monthlyProgress
+                    let monthlyProgress = project.monthlyProgress || {};
+                    if (typeof monthlyProgress === 'string' && monthlyProgress.trim()) {
+                        try {
+                            monthlyProgress = JSON.parse(monthlyProgress);
+                        } catch (e) {
+                            console.warn(
+                                '⚠️ ProjectProgressTracker: Self-test failed to parse existing monthlyProgress, starting fresh',
+                                e
+                            );
+                            monthlyProgress = {};
+                        }
+                    }
+
+                    const monthKey = `${months[currentMonth]}-${selectedYear}`;
+                    const testComment = `Self-test at ${new Date().toISOString()}`;
+
+                    const updated = {
+                        ...monthlyProgress,
+                        [monthKey]: {
+                            ...(monthlyProgress[monthKey] || {}),
+                            comments: testComment
+                        }
+                    };
+
+                    console.log('💾 ProjectProgressTracker: Self-test saving monthlyProgress payload:', {
+                        projectId: project.id,
+                        monthKey,
+                        testComment,
+                        payloadPreview: JSON.stringify(updated).substring(0, 200)
+                    });
+
+                    if (!window.DatabaseAPI || !window.DatabaseAPI.updateProject || !window.DatabaseAPI.getProject) {
+                        console.error(
+                            '❌ ProjectProgressTracker: Self-test aborted, DatabaseAPI update/getProject not available'
+                        );
+                        return;
+                    }
+
+                    await window.DatabaseAPI.updateProject(project.id, {
+                        monthlyProgress: JSON.stringify(updated)
+                    });
+
+                    console.log('⏳ ProjectProgressTracker: Self-test waiting before verification...');
+                    await new Promise((resolve) => setTimeout(resolve, 800));
+
+                    const verifyResp = await window.DatabaseAPI.getProject(project.id);
+                    const savedProject =
+                        verifyResp?.data?.project || verifyResp?.project || verifyResp?.data || verifyResp;
+
+                    let savedProgress = savedProject?.monthlyProgress || {};
+                    if (typeof savedProgress === 'string' && savedProgress.trim()) {
+                        try {
+                            savedProgress = JSON.parse(savedProgress);
+                        } catch (e) {
+                            console.error(
+                                '❌ ProjectProgressTracker: Self-test failed to parse saved monthlyProgress',
+                                e
+                            );
+                            savedProgress = {};
+                        }
+                    }
+
+                    const savedComment = savedProgress?.[monthKey]?.comments;
+
+                    console.log('🔍 ProjectProgressTracker: Self-test verification result:', {
+                        projectId: project.id,
+                        monthKey,
+                        expected: testComment,
+                        actual: savedComment,
+                        matches: savedComment === testComment,
+                        fullSavedMonth: savedProgress?.[monthKey]
+                    });
+
+                    if (savedComment === testComment) {
+                        console.log(
+                            '✅✅✅ ProjectProgressTracker: MONTHLY PROGRESS PERSISTENCE SELF-TEST PASSED'
+                        );
+                    } else {
+                        console.error(
+                            '❌❌❌ ProjectProgressTracker: MONTHLY PROGRESS PERSISTENCE SELF-TEST FAILED - value mismatch'
+                        );
+                    }
+                } catch (err) {
+                    console.error('❌ ProjectProgressTracker: Error during persistence self-test:', err);
+                }
+            })();
+        } catch (outerErr) {
+            console.error('❌ ProjectProgressTracker: Self-test setup error:', outerErr);
+        }
+    }, [projects, months, currentMonth, selectedYear]);
     
     useEffect(() => {
         fetchUsersSafe().catch(error => {
