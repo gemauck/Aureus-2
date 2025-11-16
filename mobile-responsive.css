@@ -1,0 +1,703 @@
+/* =====================================================================
+   ABCOTRONICS ERP - COMPLETE MOBILE FIX
+   Single, clean mobile stylesheet that actually works
+   Replace your 3 mobile CSS files with this ONE file
+   ===================================================================== */
+
+/* =====================================================================
+   1. BASE SETUP - Critical foundation
+   ===================================================================== */
+
+/* Ensure proper box model everywhere */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+/* Prevent horizontal scroll at root level */
+html {
+  overflow-x: hidden;
+  width: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  overflow-x: hidden;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* =====================================================================
+   2. MOBILE-ONLY STYLES (1024px and below)
+   ===================================================================== */
+
+@media (max-width: 1024px) {
+  
+  /* Root container setup */
+  #root {
+    width: 100%;
+    min-height: 100vh;
+  }
+  
+  /* ===== HEADER ===== */
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    width: 100%;
+    height: 56px;
+    padding: 8px 12px;
+    background: white;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  
+  .dark header {
+    background: #1f2937;
+    border-bottom-color: #374151;
+  }
+  
+  header .flex {
+    gap: 8px;
+  }
+  
+  /* Make hamburger menu prominent */
+  header button[aria-label*="menu"],
+  header button[aria-label*="Menu"] {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  /* ===== SIDEBAR ===== */
+  aside {
+    position: fixed;
+    top: 0;
+    left: -280px; /* Start hidden */
+    width: 280px;
+    max-width: 85vw;
+    height: 100vh;
+    z-index: 200;
+    transition: left 0.3s ease;
+    overflow-y: auto;
+    background: white;
+    box-shadow: 4px 0 12px rgba(0, 0, 0, 0.15);
+  }
+  
+  .dark aside {
+    background: #1f2937;
+  }
+  
+  /* Sidebar open state */
+  aside.sidebar-open,
+  aside:not([style*="display: none"]) {
+    left: 0;
+  }
+  
+  /* Overlay when sidebar is open */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 199;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+  
+  body.sidebar-open::before {
+    opacity: 1;
+    pointer-events: all;
+  }
+  
+  /* Sidebar navigation items */
+  aside nav button,
+  aside nav a {
+    width: 100%;
+    min-height: 52px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 16px;
+    text-align: left;
+    border: none;
+    background: transparent;
+    transition: background 0.15s ease;
+  }
+  
+  aside nav button:hover,
+  aside nav a:hover {
+    background: rgba(0, 0, 0, 0.05);
+  }
+  
+  .dark aside nav button:hover,
+  .dark aside nav a:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+  
+  /* ===== MAIN CONTENT ===== */
+  main {
+    width: 100%;
+    min-height: calc(100vh - 56px);
+    padding: 16px;
+    overflow-x: hidden;
+  }
+  
+  /* Ensure all content fits */
+  main > * {
+    max-width: 100%;
+  }
+  
+  /* ===== FORMS ===== */
+  
+  /* All inputs should be touch-friendly */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  input[type="search"],
+  input[type="url"],
+  textarea,
+  select {
+    width: 100%;
+    min-height: 48px;
+    padding: 12px 16px;
+    font-size: 16px; /* Prevents iOS zoom */
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: white;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  
+  .dark input,
+  .dark textarea,
+  .dark select {
+    background: #374151;
+    border-color: #4b5563;
+    color: #f9fafb;
+  }
+  
+  /* Focus states */
+  input:focus,
+  textarea:focus,
+  select:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+  
+  /* Labels */
+  label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #374151;
+  }
+  
+  .dark label {
+    color: #e5e7eb;
+  }
+  
+  /* Select dropdown arrow */
+  select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23374151' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 12px;
+    padding-right: 40px;
+  }
+  
+  /* Textareas */
+  textarea {
+    min-height: 120px;
+    resize: vertical;
+  }
+  
+  /* Checkboxes and radios */
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+  }
+  
+  /* Form grids become single column */
+  form .grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  /* ===== BUTTONS ===== */
+  
+  button,
+  .btn,
+  a[role="button"] {
+    min-height: 48px;
+    padding: 12px 20px;
+    font-size: 16px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.15s ease;
+    cursor: pointer;
+  }
+  
+  /* Touch feedback */
+  button:active,
+  .btn:active {
+    transform: scale(0.97);
+  }
+  
+  /* Button groups stack vertically */
+  .flex:has(> button) {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .flex:has(> button) > button {
+    width: 100%;
+  }
+  
+  /* Exception: horizontal button groups */
+  .btn-group .flex,
+  nav .flex:has(> button) {
+    flex-direction: row;
+  }
+  
+  /* ===== MODALS ===== */
+  
+  /* Modal backdrop */
+  [role="dialog"],
+  .modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 300;
+    overflow: hidden;
+  }
+  
+  /* Modal content wrapper */
+  [role="dialog"] > div,
+  .modal > div {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: white;
+  }
+  
+  .dark [role="dialog"] > div,
+  .dark .modal > div {
+    background: #1f2937;
+  }
+  
+  /* Modal header - sticky at top */
+  .modal-header,
+  [role="dialog"] > div > div:first-child {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    padding: 16px;
+    border-bottom: 1px solid #e5e7eb;
+    background: white;
+    flex-shrink: 0;
+  }
+  
+  .dark .modal-header {
+    background: #1f2937;
+    border-bottom-color: #374151;
+  }
+  
+  /* Modal body - scrollable */
+  .modal-body,
+  [role="dialog"] form {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 16px;
+  }
+  
+  /* Modal footer - sticky at bottom */
+  .modal-footer,
+  [role="dialog"] > div > div:last-child:has(button) {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    padding: 16px;
+    border-top: 1px solid #e5e7eb;
+    background: white;
+    flex-shrink: 0;
+  }
+  
+  .dark .modal-footer {
+    background: #1f2937;
+    border-top-color: #374151;
+  }
+  
+  /* Modal buttons stack vertically */
+  .modal-footer .flex {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .modal-footer button {
+    width: 100%;
+  }
+  
+  /* ===== TABLES TO CARDS ===== */
+  
+  /* Hide tables on mobile */
+  table {
+    display: none;
+  }
+  
+  /* Show mobile card replacements */
+  .mobile-cards {
+    display: block;
+  }
+  
+  .mobile-card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  
+  .dark .mobile-card {
+    background: #1f2937;
+    border-color: #374151;
+  }
+  
+  .mobile-card:active {
+    transform: scale(0.98);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+  
+  /* ===== GRIDS ===== */
+  
+  .grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  /* Exception: stats can be 2 columns */
+  .grid.stats,
+  .grid.metrics {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  
+  /* ===== CARDS ===== */
+  
+  .card,
+  .bg-white.rounded-lg {
+    padding: 16px;
+    margin-bottom: 12px;
+    border-radius: 12px;
+    width: 100%;
+  }
+  
+  /* ===== TYPOGRAPHY ===== */
+  
+  h1 {
+    font-size: 24px;
+    margin-bottom: 12px;
+  }
+  
+  h2 {
+    font-size: 20px;
+    margin-bottom: 10px;
+  }
+  
+  h3 {
+    font-size: 18px;
+    margin-bottom: 8px;
+  }
+  
+  h4, h5, h6 {
+    font-size: 16px;
+    margin-bottom: 8px;
+  }
+  
+  /* Prevent text overflow */
+  p, span, div, h1, h2, h3, h4, h5, h6 {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+  
+  /* ===== SPACING ===== */
+  
+  /* Reduce excessive Tailwind padding */
+  .p-6, .px-6, .py-6 {
+    padding: 16px;
+  }
+  
+  .p-8, .px-8, .py-8 {
+    padding: 20px;
+  }
+  
+  /* ===== NAVIGATION TABS ===== */
+  
+  .nav-tabs {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 8px;
+  }
+  
+  .nav-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .nav-tabs button {
+    flex-shrink: 0;
+    white-space: nowrap;
+    min-width: max-content;
+  }
+  
+  /* ===== DROPDOWNS ===== */
+  
+  .dropdown-menu {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    width: auto;
+    max-height: 60vh;
+    overflow-y: auto;
+    z-index: 250;
+  }
+  
+  /* ===== LOGIN PAGE ===== */
+  
+  body.login-page header {
+    display: none;
+  }
+  
+  body.login-page #root {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  
+  .login-container {
+    width: 100%;
+    max-width: 400px;
+  }
+  
+  /* ===== SCROLLBARS ===== */
+  
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+  
+  .dark ::-webkit-scrollbar-track {
+    background: #374151;
+  }
+  
+  .dark ::-webkit-scrollbar-thumb {
+    background: #4b5563;
+  }
+  
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: #6b7280;
+  }
+  
+  /* ===== UTILITIES ===== */
+  
+  /* All images should be responsive */
+  img {
+    max-width: 100%;
+    height: auto;
+  }
+  
+  /* Touch feedback for interactive elements */
+  button, a, input, select {
+    -webkit-tap-highlight-color: rgba(59, 130, 246, 0.3);
+  }
+  
+  /* Prevent zoom on input focus (iOS) */
+  @supports (-webkit-touch-callout: none) {
+    input, select, textarea {
+      font-size: 16px;
+    }
+  }
+}
+
+/* =====================================================================
+   3. SMALL SCREENS (640px and below)
+   ===================================================================== */
+
+@media (max-width: 640px) {
+  
+  main {
+    padding: 12px;
+  }
+  
+  .card,
+  .mobile-card {
+    padding: 12px;
+  }
+  
+  h1 {
+    font-size: 20px;
+  }
+  
+  h2 {
+    font-size: 18px;
+  }
+  
+  h3 {
+    font-size: 16px;
+  }
+  
+  /* Stats grid to single column */
+  .grid.stats,
+  .grid.metrics {
+    grid-template-columns: 1fr;
+  }
+  
+  button,
+  .btn {
+    min-height: 44px;
+    padding: 10px 16px;
+    font-size: 15px;
+  }
+  
+  input,
+  textarea,
+  select {
+    min-height: 44px;
+    padding: 10px 14px;
+  }
+}
+
+/* =====================================================================
+   4. VERY SMALL SCREENS (400px and below)
+   ===================================================================== */
+
+@media (max-width: 400px) {
+  
+  header {
+    padding: 6px 8px;
+  }
+  
+  main {
+    padding: 8px;
+  }
+  
+  .card,
+  .mobile-card {
+    padding: 10px;
+  }
+  
+  h1 {
+    font-size: 18px;
+  }
+  
+  h2 {
+    font-size: 16px;
+  }
+}
+
+/* =====================================================================
+   5. DESKTOP (1025px and above) - Keep desktop layout
+   ===================================================================== */
+
+@media (min-width: 1025px) {
+  
+  /* Hide mobile-specific elements */
+  .mobile-only {
+    display: none;
+  }
+  
+  /* Show desktop tables */
+  table {
+    display: table;
+  }
+  
+  .mobile-cards {
+    display: none;
+  }
+  
+  /* Sidebar is always visible */
+  aside {
+    position: relative;
+    left: 0;
+  }
+  
+  /* No overlay needed */
+  body::before {
+    display: none;
+  }
+}
+
+/* =====================================================================
+   6. PRINT STYLES
+   ===================================================================== */
+
+@media print {
+  
+  header,
+  aside,
+  .sidebar,
+  button:not([type="submit"]),
+  .no-print {
+    display: none;
+  }
+  
+  main {
+    width: 100%;
+    max-width: 100%;
+    padding: 0;
+  }
+  
+  .card {
+    box-shadow: none;
+    border: 1px solid #000;
+  }
+}
