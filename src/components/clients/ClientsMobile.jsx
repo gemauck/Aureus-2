@@ -34,8 +34,22 @@ const ClientsMobile = () => {
         try {
             const token = storage.getToken();
             if (token) {
-                const apiClients = await window.api.getClients();
-                console.log('API clients:', apiClients);
+                const apiResponse = await window.api.getClients();
+                console.log('API response:', apiResponse);
+                
+                // Extract clients from response - handle different response structures
+                let apiClients = [];
+                if (Array.isArray(apiResponse)) {
+                    apiClients = apiResponse;
+                } else if (apiResponse?.data?.clients) {
+                    apiClients = apiResponse.data.clients;
+                } else if (apiResponse?.clients) {
+                    apiClients = apiResponse.clients;
+                } else if (apiResponse?.data && Array.isArray(apiResponse.data)) {
+                    apiClients = apiResponse.data;
+                }
+                
+                console.log('Extracted clients:', apiClients.length, apiClients);
                 
                 if (apiClients && apiClients.length > 0) {
                     // Filter to only include clients (type === 'client' or null/undefined for legacy)
