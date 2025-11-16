@@ -1014,6 +1014,10 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         lastLocalUpdateRef.current = Date.now();
 
         let updatedSections;
+        // Hoist audit variables for use after state update
+        let auditSectionName = 'Unknown';
+        let auditDocumentName = 'Unknown';
+        let auditOldStatus = 'Not Set';
 
         // Use functional update to avoid race conditions
         setSections(currentSections => {
@@ -1021,6 +1025,10 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
             const section = currentSections.find(s => s.id === sectionId);
             const document = section?.documents.find(d => d.id === documentId);
             const oldStatus = document?.collectionStatus?.[`${month}-${selectedYear}`];
+            // Capture details for audit logging after state update
+            auditSectionName = section?.name || 'Unknown';
+            auditDocumentName = document?.name || 'Unknown';
+            auditOldStatus = oldStatus || 'Not Set';
 
             updatedSections = currentSections.map(s => {
                 if (s.id === sectionId) {
@@ -1062,11 +1070,11 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                     action: 'Status Updated',
                     projectId: project.id,
                     projectName: project.name,
-                    sectionName: section?.name || 'Unknown',
-                    documentName: document?.name || 'Unknown',
+                    sectionName: auditSectionName,
+                    documentName: auditDocumentName,
                     month: month,
                     year: selectedYear,
-                    oldStatus: oldStatus || 'Not Set',
+                    oldStatus: auditOldStatus,
                     newStatus: statusLabel
                 },
                 currentUser

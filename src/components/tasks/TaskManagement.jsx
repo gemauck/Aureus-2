@@ -4,11 +4,15 @@ const storage = window.storage;
 
 const TaskManagement = () => {
     const { isDark } = window.useTheme();
+    const authHook = window.useAuth || (() => ({ user: null }));
+    const { user: authUser } = authHook();
     const [tasks, setTasks] = useState([]);
     const [tags, setTags] = useState([]);
     const [clients, setClients] = useState([]);
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [errorMessage, setErrorMessage] = useState(null);
+    const [offlineMode, setOfflineMode] = useState(false);
     const [view, setView] = useState('list'); // Default to 'list', will be updated from localStorage
     const [filterStatus, setFilterStatus] = useState('all');
     const [filterCategory, setFilterCategory] = useState('all');
@@ -34,6 +38,32 @@ const TaskManagement = () => {
         } catch (e) {
             console.warn('Failed to save view preference to localStorage:', e);
         }
+    };
+
+    // Helpers: Offline storage
+    const getCurrentUserId = () => {
+        const fromAuth = authUser?.id || authUser?.email || authUser?.username;
+        if (fromAuth) return String(fromAuth);
+        try {
+            const stored = storage?.getUser?.();
+            if (stored?.id || stored?.email) return String(stored.id || stored.email);
+        } catch {}
+        return 'anonymous';
+    };
+    const getOfflineKey = () => `offline_user_tasks_${getCurrentUserId()}`;
+    const readOfflineTasks = () => {
+        try {
+            const raw = localStorage.getItem(getOfflineKey());
+            const parsed = raw ? JSON.parse(raw) : [];
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    };
+    const writeOfflineTasks = (list) => {
+        try {
+            localStorage.setItem(getOfflineKey(), JSON.stringify(Array.isArray(list) ? list : []));
+        } catch {}
     };
 
     // Load view preference from localStorage on mount
@@ -63,6 +93,8 @@ const TaskManagement = () => {
     const loadTasks = async () => {
         try {
             setLoading(true);
+            setErrorMessage(null);
+            setOfflineMode(false);
             const token = storage?.getToken?.();
             if (!token) return;
 
@@ -80,12 +112,59 @@ const TaskManagement = () => {
 
             if (response.ok) {
                 const data = await response.json();
-                setTasks(data.data?.tasks || []);
-                setCategories(data.data?.categories || []);
-                setStats(data.data?.stats || { total: 0, todo: 0, inProgress: 0, completed: 0 });
+                // Accept multiple possible API shapes to avoid empty UI when backend differs
+                // Prefer data.data.tasks, then data.tasks, then data.items
+                const tasksFromApi = Array.isArray(data?.data?.tasks)
+                    ? data.data.tasks
+                    : Array.isArray(data?.tasks)
+                        ? data.tasks
+                        : Array.isArray(data?.items)
+                            ? data.items
+                            : [];
+                const categoriesFromApi = Array.isArray(data?.data?.categories)
+                    ? data.data.categories
+                    : Array.isArray(data?.categories)
+                        ? data.categories
+                        : [];
+                const statsFromApi = data?.data?.stats || data?.stats || { total: 0, todo: 0, inProgress: 0, completed: 0 };
+
+                setTasks(tasksFromApi);
+                setCategories(categoriesFromApi);
+                setStats(statsFromApi);
+            } else {
+                // Log non-OK responses to aid debugging
+                console.warn('TaskManagement: Failed to load tasks', response.status, response.statusText);
+                // Fallback to offline/local storage
+                const offline = readOfflineTasks();
+                const categoriesFromLocal = Array.from(new Set(offline.map(t => t.category).filter(Boolean)));
+                const statsFromLocal = {
+                    total: offline.length,
+                    todo: offline.filter(t => t.status === 'todo').length,
+                    inProgress: offline.filter(t => t.status === 'in-progress').length,
+                    completed: offline.filter(t => t.status === 'completed').length,
+                };
+                setTasks(offline);
+                setCategories(categoriesFromLocal);
+                setStats(statsFromLocal);
+                setOfflineMode(true);
+                setErrorMessage(`Server error (HTTP ${response.status}). Showing local tasks on this device.`);
             }
         } catch (error) {
             console.error('Error loading tasks:', error);
+            // Fallback to offline/local storage
+            const offline = readOfflineTasks();
+            const categoriesFromLocal = Array.from(new Set(offline.map(t => t.category).filter(Boolean)));
+            const statsFromLocal = {
+                total: offline.length,
+                todo: offline.filter(t => t.status === 'todo').length,
+                inProgress: offline.filter(t => t.status === 'in-progress').length,
+                completed: offline.filter(t => t.status === 'completed').length,
+            };
+            setTasks(offline);
+            setCategories(categoriesFromLocal);
+            setStats(statsFromLocal);
+            setOfflineMode(true);
+            setErrorMessage(error?.message || 'Unexpected error while loading tasks. Showing local tasks.');
         } finally {
             setLoading(false);
         }
@@ -102,7 +181,17 @@ const TaskManagement = () => {
 
             if (response.ok) {
                 const data = await response.json();
-                setTags(data.data?.tags || []);
+                const tagsFromApi = Array.isArray(data?.data?.tags)
+                    ? data.data.tags
+                    : Array.isArray(data?.tags)
+                        ? data.tags
+                        : Array.isArray(data?.items)
+                            ? data.items
+                            : [];
+                setTags(tagsFromApi);
+            } else {
+                console.warn('TaskManagement: Failed to load tags', response.status, response.statusText);
+                setTags([]);
             }
         } catch (error) {
             console.error('Error loading tags:', error);
@@ -120,7 +209,17 @@ const TaskManagement = () => {
 
             if (response.ok) {
                 const data = await response.json();
-                setClients(data.data?.clients || []);
+                const clientsFromApi = Array.isArray(data?.data?.clients)
+                    ? data.data.clients
+                    : Array.isArray(data?.clients)
+                        ? data.clients
+                        : Array.isArray(data?.items)
+                            ? data.items
+                            : [];
+                setClients(clientsFromApi);
+            } else {
+                console.warn('TaskManagement: Failed to load clients', response.status, response.statusText);
+                setClients([]);
             }
         } catch (error) {
             console.error('Error loading clients:', error);
@@ -138,7 +237,17 @@ const TaskManagement = () => {
 
             if (response.ok) {
                 const data = await response.json();
-                setProjects(data.data?.projects || []);
+                const projectsFromApi = Array.isArray(data?.data?.projects)
+                    ? data.data.projects
+                    : Array.isArray(data?.projects)
+                        ? data.projects
+                        : Array.isArray(data?.items)
+                            ? data.items
+                            : [];
+                setProjects(projectsFromApi);
+            } else {
+                console.warn('TaskManagement: Failed to load projects', response.status, response.statusText);
+                setProjects([]);
             }
         } catch (error) {
             console.error('Error loading projects:', error);
@@ -211,10 +320,7 @@ const TaskManagement = () => {
 
         try {
             const token = storage?.getToken?.();
-            if (!token) {
-                alert('You must be logged in to delete tasks');
-                return;
-            }
+            if (!token) throw new Error('Not authenticated');
 
             const response = await fetch(`/api/user-tasks/${taskId}`, {
                 method: 'DELETE',
@@ -226,12 +332,20 @@ const TaskManagement = () => {
                 // Show success feedback (could be enhanced with a toast notification)
                 console.log('Task deleted successfully');
             } else {
-                const error = await response.json();
-                alert(error.error?.message || 'Failed to delete task');
+                // Fallback to offline: remove locally
+                const offline = readOfflineTasks().filter(t => String(t.id) !== String(taskId));
+                writeOfflineTasks(offline);
+                setTasks(offline);
+                setOfflineMode(true);
+                console.warn('Delete failed on server, removed locally instead');
             }
         } catch (error) {
-            console.error('Error deleting task:', error);
-            alert('Error deleting task: ' + (error.message || 'Unknown error'));
+            // Fallback to offline: remove locally
+            const offline = readOfflineTasks().filter(t => String(t.id) !== String(taskId));
+            writeOfflineTasks(offline);
+            setTasks(offline);
+            setOfflineMode(true);
+            console.warn('Delete failed due to error, removed locally instead:', error?.message);
         }
     };
 
@@ -416,6 +530,27 @@ const TaskManagement = () => {
 
     return (
         <div className="space-y-4">
+            {/* Error Banner */}
+            {errorMessage && (
+                <div className={`${isDark ? 'bg-red-900/40 border-red-700 text-red-200' : 'bg-red-50 border-red-200 text-red-700'} rounded-lg border p-3 flex items-start justify-between gap-3`}>
+                    <div className="flex items-start gap-2">
+                        <i className="fas fa-exclamation-triangle mt-0.5"></i>
+                        <div className="text-sm">
+                            <p className="font-medium">Unable to load your tasks</p>
+                            <p className="opacity-90">{errorMessage}</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={loadTasks}
+                            className={`px-3 py-1.5 rounded text-sm ${isDark ? 'bg-red-800 hover:bg-red-700 text-white' : 'bg-red-600 hover:bg-red-700 text-white'}`}
+                        >
+                            Retry
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Header */}
             <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-4`}>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -528,6 +663,12 @@ const TaskManagement = () => {
             {/* Task Views */}
             {view === 'list' && (
                 <div className="space-y-2">
+                    {/* Offline banner */}
+                    {offlineMode && (
+                        <div className={`${isDark ? 'bg-yellow-900/40 border-yellow-700 text-yellow-200' : 'bg-yellow-50 border-yellow-200 text-yellow-800'} rounded-lg border p-2 text-sm`}>
+                            You’re viewing local tasks stored on this device because the server is unavailable.
+                        </div>
+                    )}
                     <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3`}>
                         <button
                             type="button"
@@ -984,6 +1125,33 @@ const CalendarView = ({ tasks, isDark, onEdit, onDelete, clients, projects, tags
 
 // Task Modal Component
 const TaskModal = ({ task, isDark, onClose, onSave, onTagCreated, clients, projects, tags: tagsProp, categories }) => {
+    const authHook = window.useAuth || (() => ({ user: null }));
+    const { user: authUser } = authHook();
+    const getCurrentUserId = () => {
+        const fromAuth = authUser?.id || authUser?.email || authUser?.username;
+        if (fromAuth) return String(fromAuth);
+        try {
+            const stored = window.storage?.getUser?.();
+            if (stored?.id || stored?.email) return String(stored.id || stored.email);
+        } catch {}
+        return 'anonymous';
+    };
+    const getOfflineKey = () => `offline_user_tasks_${getCurrentUserId()}`;
+    const readOfflineTasks = () => {
+        try {
+            const raw = localStorage.getItem(getOfflineKey());
+            const parsed = raw ? JSON.parse(raw) : [];
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    };
+    const writeOfflineTasks = (list) => {
+        try {
+            localStorage.setItem(getOfflineKey(), JSON.stringify(Array.isArray(list) ? list : []));
+        } catch {}
+    };
+
     const [formData, setFormData] = useState({
         title: '',
         description: '',
@@ -1060,7 +1228,7 @@ const TaskModal = ({ task, isDark, onClose, onSave, onTagCreated, clients, proje
 
         try {
             const token = storage?.getToken?.();
-            if (!token) return;
+            if (!token) throw new Error('Not authenticated');
 
             const url = task ? `/api/user-tasks/${task.id}` : '/api/user-tasks';
             const method = task ? 'PUT' : 'POST';
@@ -1084,12 +1252,60 @@ const TaskModal = ({ task, isDark, onClose, onSave, onTagCreated, clients, proje
             if (response.ok) {
                 onSave();
             } else {
-                const error = await response.json();
-                alert(error.error?.message || 'Failed to save task');
+                // Fallback to offline: upsert in local storage
+                const offline = readOfflineTasks();
+                if (task) {
+                    const idx = offline.findIndex(t => String(t.id) === String(task.id));
+                    const updated = {
+                        ...(idx >= 0 ? offline[idx] : {}),
+                        ...formData,
+                        id: task.id,
+                        updatedAt: new Date().toISOString(),
+                    };
+                    if (idx >= 0) {
+                        offline[idx] = updated;
+                    } else {
+                        offline.push(updated);
+                    }
+                    writeOfflineTasks(offline);
+                } else {
+                    const newTask = {
+                        ...formData,
+                        id: Date.now().toString(),
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                    };
+                    writeOfflineTasks([...offline, newTask]);
+                }
+                onSave();
             }
         } catch (error) {
-            console.error('Error saving task:', error);
-            alert('Error saving task: ' + error.message);
+            // Fallback to offline: upsert in local storage
+            const offline = readOfflineTasks();
+            if (task) {
+                const idx = offline.findIndex(t => String(t.id) === String(task.id));
+                const updated = {
+                    ...(idx >= 0 ? offline[idx] : {}),
+                    ...formData,
+                    id: task.id,
+                    updatedAt: new Date().toISOString(),
+                };
+                if (idx >= 0) {
+                    offline[idx] = updated;
+                } else {
+                    offline.push(updated);
+                }
+                writeOfflineTasks(offline);
+            } else {
+                const newTask = {
+                    ...formData,
+                    id: Date.now().toString(),
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                };
+                writeOfflineTasks([...offline, newTask]);
+            }
+            onSave();
         } finally {
             setLoading(false);
         }

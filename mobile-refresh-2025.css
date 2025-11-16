@@ -81,14 +81,15 @@
   }
   
   header button {
-    min-width: 36px !important;
-    min-height: 36px !important;
-    padding: 6px !important;
+    /* Maintain Apple HIG minimum 44x44 even on small screens */
+    min-width: 44px !important;
+    min-height: 44px !important;
+    padding: 6px 8px !important;
   }
   
   header .hamburger-menu-btn {
-    min-width: 40px !important;
-    min-height: 40px !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
   }
 }
 
@@ -104,7 +105,7 @@
     height: 100vh !important;
     width: 280px !important;
     max-width: 85vw !important;
-    z-index: 100 !important;
+    z-index: 70 !important; /* Keep above overlay and header */
     transition: transform 0.3s ease !important;
   }
   
@@ -258,6 +259,13 @@
 @media (max-width: 640px) {
   main {
     padding: 8px !important;
+  }
+}
+
+/* iPhone-width devices: improve breathing room */
+@media (min-width: 375px) and (max-width: 420px) {
+  main {
+    padding: 12px !important;
   }
 }
 
@@ -431,6 +439,8 @@
   [class*="Modal"],
   [role="dialog"],
   .fixed.inset-0[class*="z-"] > div {
+    /* Ensure modal backdrops/overlays sit above content on mobile */
+    z-index: 60 !important;
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
@@ -773,13 +783,13 @@
   .relative > [class*="absolute"]:not([class*="tooltip"]),
   [class*="dropdown-menu"] {
     position: fixed !important;
+    z-index: 60 !important;
     left: 16px !important;
     right: 16px !important;
     width: calc(100vw - 32px) !important;
     max-width: calc(100vw - 32px) !important;
     max-height: 60vh !important;
     overflow-y: auto !important;
-    z-index: 60 !important;
     border-radius: 12px !important;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2) !important;
   }

@@ -70,6 +70,10 @@ const DashboardLive = () => {
     const { isDark } = window.useTheme();
     const [userName, setUserName] = useState('User');
     const [calendarReady, setCalendarReady] = useState(false);
+    const [manageOpen, setManageOpen] = useState(false);
+    const [availableWidgets, setAvailableWidgets] = useState([]);
+    const [selectedWidgets, setSelectedWidgets] = useState([]);
+    const [savingWidgets, setSavingWidgets] = useState(false);
 
     // Optimized real-time data loading with immediate localStorage display
     const loadDashboardData = useCallback(async (showLoading = true) => {
@@ -231,6 +235,287 @@ const DashboardLive = () => {
             setIsRefreshing(false);
         }
     }, []);
+
+    // Widget definitions (excluding finance)
+    const widgetRegistry = React.useMemo(() => {
+        const cardBase = isDark ? 'bg-gray-800 border-gray-700 text-gray-100' : 'bg-white border-gray-200 text-gray-900';
+        const subText = isDark ? 'text-gray-400' : 'text-gray-500';
+        const headerText = isDark ? 'text-gray-200' : 'text-gray-800';
+        
+        const formatCurrency = (val) => {
+            try {
+                return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val || 0);
+            } catch (_) {
+                return `$${Math.round(val || 0).toLocaleString()}`;
+            }
+        };
+        
+        return [
+            {
+                id: 'sales-overview',
+                group: 'Sales',
+                title: 'Sales Overview',
+                render: (data) => (
+                    <div className={`${cardBase} border rounded-lg p-4`}>
+                        <div className="flex items-center justify-between mb-2">
+                            <h3 className={`text-sm font-semibold ${headerText}`}>Sales Overview</h3>
+                            <i className="fas fa-chart-line text-blue-500"></i>
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                            <div>
+                                <div className={`text-xs ${subText}`}>Leads</div>
+                                <div className="text-xl font-bold">{data.stats.totalLeads}</div>
+                            </div>
+                            <div>
+                                <div className={`text-xs ${subText}`}>Clients</div>
+                                <div className="text-xl font-bold">{data.stats.totalClients}</div>
+                            </div>
+                            <div>
+                                <div className={`text-xs ${subText}`}>Weighted Pipeline</div>
+                                <div className="text-xl font-bold">{formatCurrency(data.stats.weightedPipeline)}</div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                id: 'leads-by-stage',
+                group: 'Sales',
+                title: 'Leads by Stage',
+                render: (data) => {
+                    const stageCounts = (data.leads || []).reduce((acc, lead) => {
+                        const stage = lead.stage || 'Unknown';
+                        acc[stage] = (acc[stage] || 0) + 1;
+                        return acc;
+                    }, {});
+                    const entries = Object.entries(stageCounts);
+                    return (
+                        <div className={`${cardBase} border rounded-lg p-4`}>
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className={`text-sm font-semibold ${headerText}`}>Leads by Stage</h3>
+                                <i className="fas fa-filter text-purple-500"></i>
+                            </div>
+                            {entries.length === 0 ? (
+                                <div className={`text-sm ${subText}`}>No leads data.</div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {entries.map(([stage, count]) => (
+                                        <div key={stage} className="flex items-center justify-between">
+                                            <span className={`text-sm ${headerText}`}>{stage}</span>
+                                            <span className="text-sm font-medium">{count}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    );
+                }
+            },
+            {
+                id: 'projects-overview',
+                group: 'Projects',
+                title: 'Projects Overview',
+                render: (data) => (
+                    <div className={`${cardBase} border rounded-lg p-4`}>
+                        <div className="flex items-center justify-between mb-2">
+                            <h3 className={`text-sm font-semibold ${headerText}`}>Projects Overview</h3>
+                            <i className="fas fa-project-diagram text-green-500"></i>
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                            <div>
+                                <div className={`text-xs ${subText}`}>Projects</div>
+                                <div className="text-xl font-bold">{data.stats.totalProjects}</div>
+                            </div>
+                            <div>
+                                <div className={`text-xs ${subText}`}>Active</div>
+                                <div className="text-xl font-bold">{data.stats.activeProjects}</div>
+                            </div>
+                            <div>
+                                <div className={`text-xs ${subText}`}>Due This Week</div>
+                                <div className="text-xl font-bold">
+                                    {(data.projects || []).filter(p => {
+                                        const due = p.dueDate ? new Date(p.dueDate) : null;
+                                        if (!due) return false;
+                                        const now = new Date();
+                                        const in7 = new Date();
+                                        in7.setDate(now.getDate() + 7);
+                                        return due >= now && due <= in7;
+                                    }).length}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                id: 'time-overview',
+                group: 'Time',
+                title: 'Time This Month',
+                render: (data) => (
+                    <div className={`${cardBase} border rounded-lg p-4`}>
+                        <div className="flex items-center justify-between mb-2">
+                            <h3 className={`text-sm font-semibold ${headerText}`}>Time This Month</h3>
+                            <i className="fas fa-stopwatch text-orange-500"></i>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <div className={`text-xs ${subText}`}>Hours</div>
+                                <div className="text-2xl font-bold">{Math.round(data.stats.hoursThisMonth)}</div>
+                            </div>
+                            <div>
+                                <div className={`text-xs ${subText}`}>Last Month</div>
+                                <div className="text-2xl font-bold">{Math.round(data.stats.hoursLastMonth)}</div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            },
+            {
+                id: 'my-tasks',
+                group: 'Teams',
+                title: 'My Tasks',
+                render: () => {
+                    const TaskComponent = window.TaskManagement;
+                    const tasks = (window.TaskAPI && typeof window.TaskAPI.getMyTasks === 'function')
+                        ? (window.TaskAPI.getMyTasks() || [])
+                        : [];
+                    
+                    return (
+                        <div className={`${cardBase} border rounded-lg p-4`}>
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className={`text-sm font-semibold ${headerText}`}>My Tasks</h3>
+                                <i className="fas fa-tasks text-teal-500"></i>
+                            </div>
+                            {Array.isArray(tasks) && tasks.length > 0 ? (
+                                <ul className="space-y-2">
+                                    {tasks.slice(0, 5).map(t => (
+                                        <li key={t.id} className="flex items-center justify-between">
+                                            <span className="text-sm truncate">{t.title || t.name}</span>
+                                            {t.dueDate ? (
+                                                <span className={`text-xs ${subText}`}>{new Date(t.dueDate).toLocaleDateString()}</span>
+                                            ) : null}
+                                        </li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <div className={`text-sm ${subText}`}>
+                                    {TaskComponent ? 'No tasks found for you.' : 'Tasks module not available.'}
+                                </div>
+                            )}
+                        </div>
+                    );
+                }
+            },
+            {
+                id: 'recent-activity',
+                group: 'Activity',
+                title: 'Recent Activity',
+                render: (data) => {
+                    const items = [];
+                    const pushIf = (arr, type) => {
+                        (arr || []).slice(0, 50).forEach(i => {
+                            items.push({
+                                type,
+                                name: i.name || i.title || i.clientName || i.id,
+                                updatedAt: i.updatedAt || i.createdAt || null
+                            });
+                        });
+                    };
+                    pushIf(data.clients, 'Client');
+                    pushIf(data.projects, 'Project');
+                    pushIf(data.timeEntries, 'Time');
+                    const sorted = items
+                        .filter(i => i.updatedAt)
+                        .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+                        .slice(0, 8);
+                    return (
+                        <div className={`${cardBase} border rounded-lg p-4`}>
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className={`text-sm font-semibold ${headerText}`}>Recent Activity</h3>
+                                <i className="fas fa-stream text-indigo-500"></i>
+                            </div>
+                            {sorted.length === 0 ? (
+                                <div className={`text-sm ${subText}`}>No recent activity.</div>
+                            ) : (
+                                <ul className="space-y-2">
+                                    {sorted.map((i, idx) => (
+                                        <li key={idx} className="flex items-center justify-between">
+                                            <span className="text-sm truncate">{i.type}: {i.name}</span>
+                                            <span className={`text-xs ${subText}`}>{new Date(i.updatedAt).toLocaleDateString()}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    );
+                }
+            },
+            {
+                id: 'calendar',
+                group: 'Calendar',
+                title: 'Calendar',
+                render: () => {
+                    const CalendarComponent = window.Calendar;
+                    return (
+                        <div className={`${cardBase} border rounded-lg p-4`}>
+                            {CalendarComponent && typeof CalendarComponent === 'function' ? (
+                                <CalendarComponent />
+                            ) : (
+                                <div className="text-center">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                                    <p className={`text-sm ${subText}`}>Loading calendar...</p>
+                                </div>
+                            )}
+                        </div>
+                    );
+                }
+            }
+        ];
+    }, [isDark]);
+
+    // Load and persist selected widgets
+    useEffect(() => {
+        const userId = window.storage?.getUser?.()?.id || 'anon';
+        const key = `dashboard.widgets.${userId}`;
+        try {
+            const stored = window.localStorage.getItem(key);
+            const parsed = stored ? JSON.parse(stored) : null;
+            setAvailableWidgets(widgetRegistry);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                const valid = parsed.filter(id => widgetRegistry.some(w => w.id === id));
+                setSelectedWidgets(valid);
+            } else {
+                const defaults = ['sales-overview', 'projects-overview', 'time-overview', 'calendar'];
+                const validDefaults = defaults.filter(id => widgetRegistry.some(w => w.id === id));
+                setSelectedWidgets(validDefaults);
+            }
+        } catch (_) {
+            setAvailableWidgets(widgetRegistry);
+            setSelectedWidgets(['sales-overview', 'projects-overview', 'time-overview', 'calendar']);
+        }
+    }, [widgetRegistry]);
+
+    const persistWidgets = (ids) => {
+        const userId = window.storage?.getUser?.()?.id || 'anon';
+        const key = `dashboard.widgets.${userId}`;
+        try {
+            window.localStorage.setItem(key, JSON.stringify(ids));
+        } catch (_) {}
+    };
+
+    const handleToggleWidget = (id) => {
+        setSelectedWidgets(prev => {
+            const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+            persistWidgets(next);
+            return next;
+        });
+    };
+
+    const handleResetWidgets = () => {
+        const defaults = ['sales-overview', 'projects-overview', 'time-overview', 'calendar'];
+        setSelectedWidgets(defaults);
+        persistWidgets(defaults);
+    };
 
     // Live data sync integration
     useEffect(() => {
@@ -446,23 +731,108 @@ const DashboardLive = () => {
         );
     }
 
-        // Get Calendar component - always check window.Calendar directly for latest value
-        const CalendarComponent = window.Calendar;
-        return (
+    // Customizable widgets UI
+    return (
         <div className="space-y-4">
-            {/* Calendar Widget - Always render, Calendar will appear when ready */}
-            <div className="flex justify-start">
-                {CalendarComponent && typeof CalendarComponent === 'function' ? (
-                    <CalendarComponent />
-                ) : (
-                    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-4 min-w-[280px]`}>
-                        <div className="text-center">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading calendar...</p>
+            <div className="flex items-center justify-between">
+                <div>
+                    <h2 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>Welcome, {userName}</h2>
+                    <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Last updated: {lastUpdated ? new Date(lastUpdated).toLocaleString() : '—'}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setManageOpen(true)}
+                        className="px-3 py-2 text-sm rounded-md border border-gray-300 hover:bg-gray-50"
+                    >
+                        Manage Widgets
+                    </button>
+                    <button
+                        onClick={handleRefresh}
+                        className="px-3 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                    >
+                        Refresh
+                    </button>
+                </div>
+            </div>
+
+            <div className="flex items-center gap-2 text-xs">
+                <i className={`fas ${getConnectionStatusIcon()} ${getConnectionStatusColor()}`}></i>
+                <span className={`${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Connection: {connectionStatus}</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {selectedWidgets.map(id => {
+                    const def = availableWidgets.find(w => w.id === id);
+                    if (!def) return null;
+                    return (
+                        <div key={id} className="relative">
+                            <div className="absolute right-2 top-2 z-10">
+                                <button
+                                    onClick={() => handleToggleWidget(id)}
+                                    title="Remove widget"
+                                    className="h-8 w-8 rounded-full bg-gray-900/40 hover:bg-gray-900/60 text-white flex items-center justify-center"
+                                >
+                                    <i className="fas fa-times text-xs"></i>
+                                </button>
+                            </div>
+                            {def.render(dashboardData)}
+                        </div>
+                    );
+                })}
+            </div>
+
+            {manageOpen ? (
+                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black bg-opacity-40" onClick={() => setManageOpen(false)}></div>
+                    <div className={`${isDark ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-900'} relative rounded-lg shadow-lg w-full max-w-2xl border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                        <div className={`p-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-base font-semibold">Manage Widgets</h3>
+                                <button className="p-2" onClick={() => setManageOpen(false)}>
+                                    <i className="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div className="p-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {availableWidgets.map(w => {
+                                    const checked = selectedWidgets.includes(w.id);
+                                    return (
+                                        <label key={w.id} className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'} border rounded-md p-3 flex items-start gap-3`}>
+                                            <input
+                                                type="checkbox"
+                                                className="mt-1"
+                                                checked={checked}
+                                                onChange={() => handleToggleWidget(w.id)}
+                                            />
+                                            <div>
+                                                <div className="text-sm font-medium">{w.title}</div>
+                                                <div className="text-xs text-gray-500">{w.group}</div>
+                                            </div>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                        <div className={`p-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'} flex items-center justify-between`}>
+                            <button
+                                className="text-sm px-3 py-2 rounded-md border border-gray-300 hover:bg-gray-50"
+                                onClick={handleResetWidgets}
+                            >
+                                Reset to defaults
+                            </button>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    className="text-sm px-3 py-2 rounded-md"
+                                    onClick={() => setManageOpen(false)}
+                                >
+                                    Close
+                                </button>
+                            </div>
                         </div>
                     </div>
-                )}
-            </div>
+                </div>
+            ) : null}
         </div>
     );
 };
