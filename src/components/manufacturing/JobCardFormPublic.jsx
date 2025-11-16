@@ -1288,10 +1288,17 @@ const JobCardFormPublic = () => {
     if (canvas) {
       try {
         const imageData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
-        const hasContent = imageData.data.some((channel, index) => {
-          // Check alpha channel (every 4th byte) - if any pixel is not fully transparent, there's content
-          return index % 4 === 3 && channel < 255;
-        });
+        // The canvas is filled with white (255,255,255,255). Detect any non-white pixel.
+        // Iterate RGBA in steps of 4; if any of R,G,B is not 255, we have ink.
+        let hasContent = false;
+        const data = imageData.data;
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          if (!(r === 255 && g === 255 && b === 255)) {
+            hasContent = true;
+            break;
+          }
+        }
         if (hasContent) {
           signatureExists = true;
           setHasSignature(true); // Update state if canvas has content
