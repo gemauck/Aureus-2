@@ -746,6 +746,19 @@ const DatabaseAPI = {
         return response;
     },
 
+    async updateProjectMonthlyProgress(id, monthlyProgress) {
+        console.log(`📡 Updating project ${id} monthly progress in database...`);
+        const response = await this.makeRequest(`/projects-monthly-progress/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ monthlyProgress })
+        });
+        console.log('✅ Project monthly progress updated in database');
+        // Invalidate project caches so subsequent loads pull fresh data
+        this._responseCache.delete('GET:/projects');
+        this._responseCache.delete(`GET:/projects/${id}`);
+        return response;
+    },
+
     async deleteProject(id) {
         console.log(`📡 Deleting project ${id} from database...`);
         const response = await this.makeRequest(`/projects/${id}`, {

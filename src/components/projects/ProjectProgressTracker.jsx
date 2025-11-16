@@ -981,11 +981,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     throw new Error('Database API not available. Please refresh the page.');
                 }
                 
-                if (!window.DatabaseAPI?.updateProject && !window.api?.updateProject) {
-                    throw new Error('updateProject method not available. Please refresh the page.');
-                }
-                
-                console.log('💾 ProjectProgressTracker: Calling updateProject with payload:', {
+                console.log('💾 ProjectProgressTracker: Calling update API with payload:', {
                     projectId: project.id,
                     payloadKeys: Object.keys(updatePayload),
                     monthlyProgressType: typeof updatePayload.monthlyProgress,
@@ -994,9 +990,15 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 });
                 
                 let response;
-                if (window.DatabaseAPI && window.DatabaseAPI.updateProject) {
+                // Prefer dedicated monthly progress endpoint if available
+                if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProjectMonthlyProgress === 'function') {
+                    response = await window.DatabaseAPI.updateProjectMonthlyProgress(
+                        project.id,
+                        updatePayload.monthlyProgress
+                    );
+                } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
                     response = await window.DatabaseAPI.updateProject(project.id, updatePayload);
-                } else if (window.api && window.api.updateProject) {
+                } else if (window.api && typeof window.api.updateProject === 'function') {
                     response = await window.api.updateProject(project.id, updatePayload);
                 } else {
                     throw new Error('Update API not available');
