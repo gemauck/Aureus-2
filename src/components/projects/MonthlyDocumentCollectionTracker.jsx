@@ -2573,6 +2573,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return [];
         };
 
+        // Helper to safely convert any value to a number, preventing NaN
+        const safeNumber = (value) => {
+            if (value === null || value === undefined) return 0;
+            const num = Number(value);
+            if (Number.isNaN(num) || !Number.isFinite(num)) return 0;
+            return num;
+        };
+
+        // Ensure all templates have parsed sections
+        const parsedTemplates = useMemo(() => {
+            return templates.map(t => ({
+                ...t,
+                sections: parseTemplateSections(t.sections)
+            }));
+        }, [templates]);
+
         const [templateFormData, setTemplateFormData] = useState(() => {
             // Check if we have pre-filled data from "Save as Template"
             const prefill = window.tempTemplateData;
@@ -2752,10 +2768,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                             {parsedTemplates.map(template => {
                                             // Ensure sections is an array and safely calculate totalDocs
                                             const sections = Array.isArray(template.sections) ? template.sections : [];
-                                            const totalDocs = sections.reduce((sum, s) => {
-                                                const docCount = Array.isArray(s?.documents) ? s.documents.length : 0;
-                                                return sum + docCount;
-                                            }, 0);
+                                            const sectionsCount = (() => {
+                                                const count = Number(sections.length);
+                                                return Number.isNaN(count) ? 0 : count;
+                                            })();
+                                            const totalDocs = (() => {
+                                                const total = sections.reduce((sum, s) => {
+                                                    const docCount = Array.isArray(s?.documents) ? Number(s.documents.length) : 0;
+                                                    const safeSum = Number(sum) || 0;
+                                                    const safeDocCount = Number.isNaN(docCount) ? 0 : docCount;
+                                                    return safeSum + safeDocCount;
+                                                }, 0);
+                                                return Number.isNaN(total) ? 0 : total;
+                                            })();
                                             return (
                                                 <div key={template.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
                                                     <div className="flex justify-between items-start">
@@ -2765,7 +2790,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                                 <p className="text-xs text-gray-600 mb-2">{template.description}</p>
                                                             )}
                                                             <div className="flex items-center gap-4 text-[10px] text-gray-500">
-                                                                <span><i className="fas fa-folder mr-1"></i>{sections.length} sections</span>
+                                                                <span><i className="fas fa-folder mr-1"></i>{sectionsCount} sections</span>
                                                                 <span><i className="fas fa-file mr-1"></i>{totalDocs} documents</span>
                                                                 {template.createdBy && (
                                                                     <span><i className="fas fa-user mr-1"></i>Created by {template.createdBy}</span>
@@ -2984,8 +3009,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
         // Helper to safely convert any value to a number, preventing NaN
         const safeNumber = (value) => {
+            if (value === null || value === undefined) return 0;
             const num = Number(value);
-            return Number.isNaN(num) ? 0 : num;
+            if (Number.isNaN(num) || !Number.isFinite(num)) return 0;
+            return num;
+        };
+
+        // Helper to safely render a number in JSX, ensuring it's never NaN
+        const safeRenderNumber = (value) => {
+            const safe = safeNumber(value);
+            return safe;
         };
 
         // Ensure all templates have parsed sections when modal is open
@@ -3090,7 +3123,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                             const displayCount = safeNumber(sections.length);
                                             return (
                                                 <option key={template.id} value={String(template.id)}>
-                                                    {template.name} ({displayCount} sections)
+                                                    {template.name} ({safeRenderNumber(displayCount)} sections)
                                                 </option>
                                             );
                                         })}
@@ -3160,8 +3193,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5">
                                             <p className="text-[10px] font-medium text-blue-900 mb-1">Template Preview:</p>
                                             <p className="text-[10px] text-blue-700">
-                                                • {sectionsCount} sections<br/>
-                                                • {totalDocs} documents
+                                                • {safeRenderNumber(sectionsCount)} sections<br/>
+                                                • {safeRenderNumber(totalDocs)} documents
                                             </p>
                                         </div>
                                     );
