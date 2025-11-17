@@ -97,6 +97,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const editingSectionIdRef = useRef(null);
     const isSavingRef = useRef(false);
     const debouncedSaveTimeoutRef = useRef(null);
+    const lastLocalUpdateRef = useRef(0); // Track last local update timestamp to prevent sync overwrites
     
     // Version-based conflict resolution (best practice instead of time windows)
     const [localVersion, setLocalVersion] = useState(0);
@@ -2790,8 +2791,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                                 <p className="text-xs text-gray-600 mb-2">{template.description}</p>
                                                             )}
                                                             <div className="flex items-center gap-4 text-[10px] text-gray-500">
-                                                                <span><i className="fas fa-folder mr-1"></i>{sectionsCount} sections</span>
-                                                                <span><i className="fas fa-file mr-1"></i>{totalDocs} documents</span>
+                                                                <span><i className="fas fa-folder mr-1"></i>{safeNumber(sectionsCount)} sections</span>
+                                                                <span><i className="fas fa-file mr-1"></i>{safeNumber(totalDocs)} documents</span>
                                                                 {template.createdBy && (
                                                                     <span><i className="fas fa-user mr-1"></i>Created by {template.createdBy}</span>
                                                                 )}
@@ -2988,7 +2989,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const [selectedTemplateId, setSelectedTemplateId] = useState(null);
         const [targetYear, setTargetYear] = useState(() => {
             const year = typeof selectedYear === 'number' && !Number.isNaN(selectedYear) ? selectedYear : currentYear;
-            return year;
+            // Ensure year is never NaN
+            return Number.isNaN(year) ? currentYear : year;
         });
 
         // Helper to safely parse template sections
@@ -3018,6 +3020,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         // Helper to safely render a number in JSX, ensuring it's never NaN
         const safeRenderNumber = (value) => {
             const safe = safeNumber(value);
+            // Double-check: if somehow we still get NaN, return 0
+            if (Number.isNaN(safe) || safe === null || safe === undefined) {
+                console.warn('⚠️ safeRenderNumber received invalid value, defaulting to 0:', value);
+                return 0;
+            }
             return safe;
         };
 
@@ -3120,10 +3127,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         {parsedTemplates.map(template => {
                                             // Sections are already parsed in parsedTemplates
                                             const sections = Array.isArray(template.sections) ? template.sections : [];
-                                            const displayCount = safeNumber(sections.length);
+                                            // Ensure length is a valid number
+                                            const lengthValue = sections && typeof sections.length === 'number' ? sections.length : 0;
+                                            const displayCount = safeRenderNumber(lengthValue);
                                             return (
                                                 <option key={template.id} value={String(template.id)}>
-                                                    {template.name} ({safeRenderNumber(displayCount)} sections)
+                                                    {template.name} ({displayCount} sections)
                                                 </option>
                                             );
                                         })}
@@ -3150,10 +3159,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         Target Year
                                     </label>
                                     <select
-                                        value={typeof targetYear === 'number' && !Number.isNaN(targetYear) ? targetYear : currentYear}
+                                        value={(() => {
+                                            const year = typeof targetYear === 'number' && !Number.isNaN(targetYear) ? targetYear : currentYear;
+                                            return Number.isNaN(year) ? currentYear : year;
+                                        })()}
                                         onChange={(e) => {
                                             const parsed = parseInt(e.target.value, 10);
-                                            if (Number.isNaN(parsed)) {
+                                            if (Number.isNaN(parsed) || !Number.isFinite(parsed)) {
                                                 setTargetYear(currentYear);
                                             } else {
                                                 setTargetYear(parsed);
@@ -3182,19 +3194,24 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     }
                                     // Sections are already parsed in parsedTemplates
                                     const sections = Array.isArray(template.sections) ? template.sections : [];
-                                    const sectionsCount = safeNumber(sections.length);
+                                    // Ensure length is a valid number
+                                    const lengthValue = sections && typeof sections.length === 'number' ? sections.length : 0;
+                                    const sectionsCount = safeRenderNumber(lengthValue);
                                     
                                     const totalDocs = sections.reduce((sum, s) => {
-                                        const docCount = Array.isArray(s?.documents) ? safeNumber(s.documents.length) : 0;
+                                        if (!s || !Array.isArray(s.documents)) return safeNumber(sum);
+                                        const docLength = s.documents && typeof s.documents.length === 'number' ? s.documents.length : 0;
+                                        const docCount = safeRenderNumber(docLength);
                                         return safeNumber(sum) + docCount;
                                     }, 0);
+                                    const safeTotalDocs = safeRenderNumber(totalDocs);
                                     
                                     return (
                                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5">
                                             <p className="text-[10px] font-medium text-blue-900 mb-1">Template Preview:</p>
                                             <p className="text-[10px] text-blue-700">
-                                                • {safeRenderNumber(sectionsCount)} sections<br/>
-                                                • {safeRenderNumber(totalDocs)} documents
+                                                • {sectionsCount} sections<br/>
+                                                • {safeTotalDocs} documents
                                             </p>
                                         </div>
                                     );
