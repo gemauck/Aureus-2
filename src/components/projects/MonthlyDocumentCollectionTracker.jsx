@@ -2331,6 +2331,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // Template Management Modal
     const TemplateModal = () => {
         const [showTemplateList, setShowTemplateList] = useState(!editingTemplate);
+        
+        // Debug: Log templates when they change
+        useEffect(() => {
+            console.log('🔍 TemplateModal: Templates state changed', {
+                templatesCount: templates.length,
+                templates: templates,
+                showTemplateModal: showTemplateModal,
+                showTemplateList: showTemplateList
+            });
+        }, [templates, showTemplateModal, showTemplateList]);
+        
         const [templateFormData, setTemplateFormData] = useState(() => {
             // Check if we have pre-filled data from "Save as Template"
             const prefill = window.tempTemplateData;
@@ -2465,15 +2476,24 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     </button>
                                 </div>
                                 
-                                {templates.length === 0 ? (
-                                    <div className="text-center py-8 text-gray-400">
-                                        <i className="fas fa-layer-group text-3xl mb-2 opacity-50"></i>
-                                        <p className="text-sm">No templates yet</p>
-                                        <p className="text-xs mt-1">Create your first template to get started</p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-2">
-                                        {templates.map(template => {
+                                {(() => {
+                                    console.log('🔍 Template Modal: Rendering template list', {
+                                        templatesCount: templates.length,
+                                        templates: templates,
+                                        showTemplateList: showTemplateList
+                                    });
+                                    if (templates.length === 0) {
+                                        return (
+                                            <div className="text-center py-8 text-gray-400">
+                                                <i className="fas fa-layer-group text-3xl mb-2 opacity-50"></i>
+                                                <p className="text-sm">No templates yet</p>
+                                                <p className="text-xs mt-1">Create your first template to get started</p>
+                                            </div>
+                                        );
+                                    }
+                                    return (
+                                        <div className="space-y-2">
+                                            {templates.map(template => {
                                             const totalDocs = template.sections?.reduce((sum, s) => sum + (s.documents?.length || 0), 0) || 0;
                                             return (
                                                 <div key={template.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
@@ -2519,8 +2539,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                 </div>
                                             );
                                         })}
-                                    </div>
-                                )}
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         ) : (
                             <form onSubmit={handleSubmit} className="space-y-4">
@@ -2670,11 +2691,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const [targetYear, setTargetYear] = useState(selectedYear);
 
         const handleApply = () => {
-            if (!selectedTemplateId) {
+            if (selectedTemplateId == null || Number.isNaN(selectedTemplateId)) {
                 alert('Please select a template');
                 return;
             }
-            const template = templates.find(t => t.id === selectedTemplateId);
+            const template = templates.find(t => String(t.id) === String(selectedTemplateId));
             if (!template) {
                 alert('Template not found');
                 return;
@@ -2718,19 +2739,27 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         Select Template *
                                     </label>
                                     <select
-                                        value={selectedTemplateId || ''}
-                                        onChange={(e) => setSelectedTemplateId(e.target.value ? parseInt(e.target.value) : null)}
+                                        value={selectedTemplateId != null ? String(selectedTemplateId) : ''}
+                                        onChange={(e) => {
+                                            const value = e.target.value;
+                                            if (!value) {
+                                                setSelectedTemplateId(null);
+                                            } else {
+                                                const parsed = parseInt(value, 10);
+                                                setSelectedTemplateId(Number.isNaN(parsed) ? null : parsed);
+                                            }
+                                        }}
                                         className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                     >
                                         <option value="">-- Select a template --</option>
                                         {templates.map(template => (
-                                            <option key={template.id} value={template.id}>
+                                            <option key={template.id} value={String(template.id)}>
                                                 {template.name} ({template.sections?.length || 0} sections)
                                             </option>
                                         ))}
                                     </select>
-                                    {selectedTemplateId && (() => {
-                                        const template = templates.find(t => t.id === selectedTemplateId);
+                                    {selectedTemplateId != null && (() => {
+                                        const template = templates.find(t => String(t.id) === String(selectedTemplateId));
                                         return template?.description ? (
                                             <p className="mt-1 text-[10px] text-gray-500">{template.description}</p>
                                         ) : null;
@@ -2743,7 +2772,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     </label>
                                     <select
                                         value={targetYear}
-                                        onChange={(e) => setTargetYear(parseInt(e.target.value))}
+                                        onChange={(e) => {
+                                            const parsed = parseInt(e.target.value, 10);
+                                            setTargetYear(Number.isNaN(parsed) ? selectedYear : parsed);
+                                        }}
                                         className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                     >
                                         {yearOptions.map(year => (
@@ -2757,8 +2789,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     </p>
                                 </div>
 
-                                {selectedTemplateId && (() => {
-                                    const template = templates.find(t => t.id === selectedTemplateId);
+                                {selectedTemplateId != null && (() => {
+                                    const template = templates.find(t => String(t.id) === String(selectedTemplateId));
                                     const totalDocs = template?.sections?.reduce((sum, s) => sum + (s.documents?.length || 0), 0) || 0;
                                     return (
                                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5">
