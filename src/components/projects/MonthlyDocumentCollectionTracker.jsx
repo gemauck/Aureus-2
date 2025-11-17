@@ -155,6 +155,21 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     localTemplates = JSON.parse(storedTemplates);
                     console.log(`📦 Found ${localTemplates.length} template(s) in localStorage`);
                     if (Array.isArray(localTemplates)) {
+                        // Ensure sections are arrays for all templates
+                        localTemplates = localTemplates.map(t => {
+                            if (typeof t.sections === 'string') {
+                                try {
+                                    t.sections = JSON.parse(t.sections);
+                                } catch (e) {
+                                    console.warn('Failed to parse template sections from localStorage:', e);
+                                    t.sections = [];
+                                }
+                            }
+                            if (!Array.isArray(t.sections)) {
+                                t.sections = [];
+                            }
+                            return t;
+                        });
                         setTemplates(localTemplates);
                     }
                 } catch (e) {
@@ -203,8 +218,24 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         }
                         
                         // Overwrite with API templates (they're the source of truth)
+                        // Ensure sections are parsed correctly (API may return string or array)
                         apiTemplates.forEach(t => {
-                            if (t.id) templateMap.set(t.id, t);
+                            if (t.id) {
+                                // Parse sections if they're a string
+                                if (typeof t.sections === 'string') {
+                                    try {
+                                        t.sections = JSON.parse(t.sections);
+                                    } catch (e) {
+                                        console.warn('Failed to parse template sections:', e);
+                                        t.sections = [];
+                                    }
+                                }
+                                // Ensure sections is always an array
+                                if (!Array.isArray(t.sections)) {
+                                    t.sections = [];
+                                }
+                                templateMap.set(t.id, t);
+                            }
                         });
                         
                         const mergedTemplates = Array.from(templateMap.values());
@@ -947,7 +978,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
 
     const handleApplyTemplate = async (template, targetYear) => {
-        if (!template || !template.sections || template.sections.length === 0) {
+        // Ensure sections is an array
+        const sections = Array.isArray(template?.sections) ? template.sections : [];
+        
+        if (!template || sections.length === 0) {
             alert('Template is empty or invalid');
             return;
         }
@@ -959,23 +993,23 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         lastLocalUpdateRef.current = Date.now();
 
         // Create new sections from template with unique IDs and target year
-        const newSections = template.sections.map(section => ({
+        const newSections = sections.map(section => ({
             id: Date.now() + Math.random(), // Unique ID
             name: section.name,
             description: section.description || '',
-            documents: (section.documents || []).map(doc => ({
+            documents: Array.isArray(section.documents) ? section.documents.map(doc => ({
                 id: Date.now() + Math.random(), // Unique ID
                 name: doc.name,
                 description: doc.description || '',
                 collectionStatus: {} // Initialize empty status for all months
-            }))
+            })) : []
         }));
 
         // Merge with existing sections
         setSections(currentSections => {
             const updatedSections = [...currentSections, ...newSections];
             console.log(`📋 Applied template "${template.name}" to year ${targetYear}:`, {
-                templateSections: template.sections.length,
+                templateSections: sections.length,
                 newSections: newSections.length,
                 totalSections: updatedSections.length
             });
@@ -2665,7 +2699,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     return (
                                         <div className="space-y-2">
                                             {templates.map(template => {
-                                            const totalDocs = template.sections?.reduce((sum, s) => sum + (s.documents?.length || 0), 0) || 0;
+                                            // Ensure sections is an array and safely calculate totalDocs
+                                            const sections = Array.isArray(template.sections) ? template.sections : [];
+                                            const totalDocs = sections.reduce((sum, s) => {
+                                                const docCount = Array.isArray(s?.documents) ? s.documents.length : 0;
+                                                return sum + docCount;
+                                            }, 0);
                                             return (
                                                 <div key={template.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
                                                     <div className="flex justify-between items-start">
@@ -2675,7 +2714,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                                 <p className="text-xs text-gray-600 mb-2">{template.description}</p>
                                                             )}
                                                             <div className="flex items-center gap-4 text-[10px] text-gray-500">
-                                                                <span><i className="fas fa-folder mr-1"></i>{template.sections?.length || 0} sections</span>
+                                                                <span><i className="fas fa-folder mr-1"></i>{sections.length} sections</span>
                                                                 <span><i className="fas fa-file mr-1"></i>{totalDocs} documents</span>
                                                                 {template.createdBy && (
                                                                     <span><i className="fas fa-user mr-1"></i>Created by {template.createdBy}</span>
@@ -2690,7 +2729,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                                     setTemplateFormData({
                                                                         name: template.name,
                                                                         description: template.description || '',
-                                                                        sections: template.sections || []
+                                                                        sections: Array.isArray(template.sections) ? template.sections : []
                                                                     });
                                                                 }}
                                                                 className="px-2 py-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
@@ -2937,11 +2976,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                     >
                                         <option value="">-- Select a template --</option>
-                                        {templates.map(template => (
-                                            <option key={template.id} value={String(template.id)}>
-                                                {template.name} ({template.sections?.length || 0} sections)
-                                            </option>
-                                        ))}
+                                        {templates.map(template => {
+                                            const sectionsCount = Array.isArray(template.sections) ? template.sections.length : 0;
+                                            return (
+                                                <option key={template.id} value={String(template.id)}>
+                                                    {template.name} ({sectionsCount} sections)
+                                                </option>
+                                            );
+                                        })}
                                     </select>
                                     {(() => {
                                         if (!selectedTemplateId) {
@@ -2992,13 +3034,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     if (!template) {
                                         return null;
                                     }
-                                    const sectionsCount = Array.isArray(template.sections) ? template.sections.length : 0;
-                                    const totalDocs = Array.isArray(template.sections) 
-                                        ? template.sections.reduce((sum, s) => {
-                                            const docCount = Array.isArray(s.documents) ? s.documents.length : 0;
-                                            return sum + docCount;
-                                        }, 0)
-                                        : 0;
+                                    const sections = Array.isArray(template.sections) ? template.sections : [];
+                                    const sectionsCount = sections.length;
+                                    const totalDocs = sections.reduce((sum, s) => {
+                                        const docCount = Array.isArray(s?.documents) ? s.documents.length : 0;
+                                        return sum + docCount;
+                                    }, 0);
                                     return (
                                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5">
                                             <p className="text-[10px] font-medium text-blue-900 mb-1">Template Preview:</p>
