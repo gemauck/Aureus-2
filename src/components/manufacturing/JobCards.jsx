@@ -1694,327 +1694,415 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
           </div>
         </div>
 
-        <div className="p-6 space-y-6 max-h-[calc(100vh-300px)] overflow-y-auto">
-          {/* Status Badge */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-700">Status:</span>
-            {isEditMode ? (
-              <select
-                name="status"
-                value={formData.status}
-                onChange={handleChange}
-                className="px-3 py-1 border border-gray-300 rounded-lg text-sm"
-              >
-                <option value="draft">Draft</option>
-                <option value="submitted">Submitted</option>
-                <option value="completed">Completed</option>
-              </select>
-            ) : (
-              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                displayData.status === 'completed' ? 'bg-green-100 text-green-700' :
-                displayData.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
-                'bg-gray-100 text-gray-700'
-              }`}>
-                {displayData.status || 'draft'}
-              </span>
-            )}
-          </div>
-
-          {/* Basic Information */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Agent Name</label>
-              {isEditMode ? (
-                <select
-                  name="agentName"
-                  value={formData.agentName}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                >
-                  <option value="">Select technician</option>
-                  {availableTechnicians.map(tech => (
-                    <option key={tech.id} value={tech.name || tech.email}>
-                      {tech.name || tech.email}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <p className="text-sm text-gray-900">{displayData.agentName || 'N/A'}</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Other Technicians</label>
-              {isEditMode ? (
-                <div>
-                  <div className="flex gap-2 mb-2">
-                    <select
-                      value={technicianInput}
-                      onChange={(e) => setTechnicianInput(e.target.value)}
-                      className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    >
-                      <option value="">Select technician to add</option>
-                      {availableTechnicians
-                        .filter(tech => !formData.otherTechnicians.includes(tech.name || tech.email))
-                        .map(tech => (
-                          <option key={tech.id} value={tech.name || tech.email}>
-                            {tech.name || tech.email}
-                          </option>
-                        ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={handleAddTechnician}
-                      disabled={!technicianInput}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      <i className="fas fa-plus"></i>
-                    </button>
+        <div className="p-6 space-y-6 max-h-[calc(100vh-300px)] overflow-y-auto dark:bg-slate-50">
+          {/* Helper function to extract coordinates */}
+          {(() => {
+            const locationStr = displayData.location || '';
+            const coordsMatch = locationStr.match(/(-?\d+\.?\d*),\s*(-?\d+\.?\d*)/);
+            const latitude = coordsMatch ? coordsMatch[1] : (jobCard.locationLatitude || '');
+            const longitude = coordsMatch ? coordsMatch[2] : (jobCard.locationLongitude || '');
+            const getMapUrl = () => {
+              if (latitude && longitude) {
+                return `https://www.google.com/maps?q=${latitude},${longitude}`;
+              } else if (locationStr) {
+                return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationStr)}`;
+              }
+              return null;
+            };
+            const mapUrl = getMapUrl();
+            
+            return (
+              <>
+                {/* Status & Overview Section */}
+                <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-5 border border-gray-200 dark:border-slate-700">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-4 flex items-center">
+                    <i className="fas fa-info-circle mr-2 text-primary-600 dark:text-primary-400"></i>
+                    Status & Overview
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-700 dark:text-slate-300">Status:</span>
+                    {isEditMode ? (
+                      <select
+                        name="status"
+                        value={formData.status}
+                        onChange={handleChange}
+                        className="px-3 py-1 border border-gray-300 rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="submitted">Submitted</option>
+                        <option value="completed">Completed</option>
+                      </select>
+                    ) : (
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        displayData.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
+                        displayData.status === 'submitted' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' :
+                        'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-300'
+                      }`}>
+                        {displayData.status || 'draft'}
+                      </span>
+                    )}
                   </div>
-                  {formData.otherTechnicians.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {formData.otherTechnicians.map((technician, idx) => (
-                        <span key={idx} className="flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded text-sm">
-                          {technician}
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveTechnician(technician)}
-                            className="hover:text-blue-900"
-                          >
-                            <i className="fas fa-times text-xs"></i>
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
                 </div>
-              ) : (
-                <p className="text-sm text-gray-900">
-                  {displayData.otherTechnicians && displayData.otherTechnicians.length > 0
-                    ? displayData.otherTechnicians.join(', ')
-                    : 'N/A'}
-                </p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Client</label>
-              {isEditMode ? (
-                <select
-                  name="clientId"
-                  value={formData.clientId}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                >
-                  <option value="">Select client</option>
-                  <option value="not_active_client">Not an active Client</option>
-                  {clients.map(client => (
-                    <option key={client.id} value={client.id}>{client.name}</option>
-                  ))}
-                </select>
-              ) : (
-                <p className="text-sm text-gray-900">
-                  {displayData.clientId === 'not_active_client' ? 'Not an active Client' : (displayData.clientName || 'N/A')}
-                </p>
-              )}
-            </div>
-            {formData.clientId === 'not_active_client' ? (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Details of Site Visited</label>
-                {isEditMode ? (
-                  <textarea
-                    name="nonActiveClientSiteDetails"
-                    value={formData.nonActiveClientSiteDetails}
-                    onChange={handleChange}
-                    rows={3}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg resize-y"
-                    placeholder="Enter details of the site visited"
-                  />
-                ) : (
-                  <p className="text-sm text-gray-900">{displayData.nonActiveClientSiteDetails || 'N/A'}</p>
-                )}
-              </div>
-            ) : (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Site</label>
-                {isEditMode ? (
-                  <select
-                    name="siteId"
-                    value={formData.siteId}
-                    onChange={handleChange}
-                    disabled={!formData.clientId || availableSites.length === 0}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg disabled:bg-gray-100"
-                  >
-                    <option value="">Select site</option>
-                    {availableSites.map(site => (
-                      <option key={site.id || site.name} value={site.id || site.name}>
-                        {site.name || site}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <p className="text-sm text-gray-900">{displayData.siteName || 'N/A'}</p>
-                )}
-              </div>
-            )}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
-              {isEditMode ? (
-                window.LocationPicker ? (
-                  <LocationPicker 
-                    onLocationSelect={handleLocationSelect}
-                    initialLocation={formData.location}
-                  />
-                ) : (
-                  <input
-                    type="text"
-                    name="location"
-                    value={formData.location}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                  />
-                )
-              ) : (
-                <p className="text-sm text-gray-900">{displayData.location || 'N/A'}</p>
-              )}
-            </div>
-          </div>
 
-          {/* Dates and Times */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Time of Departure</label>
-              {isEditMode ? (
-                <input
-                  type="datetime-local"
-                  name="timeOfDeparture"
-                  value={formData.timeOfDeparture}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                />
-              ) : (
-                <p className="text-sm text-gray-900">
-                  {displayData.timeOfDeparture ? new Date(displayData.timeOfDeparture).toLocaleString('en-ZA') : 'N/A'}
-                </p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Time of Arrival</label>
-              {isEditMode ? (
-                <input
-                  type="datetime-local"
-                  name="timeOfArrival"
-                  value={formData.timeOfArrival}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                />
-              ) : (
-                <p className="text-sm text-gray-900">
-                  {displayData.timeOfArrival ? new Date(displayData.timeOfArrival).toLocaleString('en-ZA') : 'N/A'}
-                </p>
-              )}
-            </div>
-          </div>
+                {/* Job Details Section */}
+                <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-5 border border-gray-200 dark:border-slate-700">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-4 flex items-center">
+                    <i className="fas fa-briefcase mr-2 text-primary-600 dark:text-primary-400"></i>
+                    Job Details
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Agent Name</label>
+                      {isEditMode ? (
+                        <select
+                          name="agentName"
+                          value={formData.agentName}
+                          onChange={handleChange}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                        >
+                          <option value="">Select technician</option>
+                          {availableTechnicians.map(tech => (
+                            <option key={tech.id} value={tech.name || tech.email}>
+                              {tech.name || tech.email}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p className="text-sm text-gray-900 dark:text-slate-100">{displayData.agentName || 'N/A'}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Other Technicians</label>
+                      {isEditMode ? (
+                        <div>
+                          <div className="flex gap-2 mb-2">
+                            <select
+                              value={technicianInput}
+                              onChange={(e) => setTechnicianInput(e.target.value)}
+                              className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            >
+                              <option value="">Select technician to add</option>
+                              {availableTechnicians
+                                .filter(tech => !formData.otherTechnicians.includes(tech.name || tech.email))
+                                .map(tech => (
+                                  <option key={tech.id} value={tech.name || tech.email}>
+                                    {tech.name || tech.email}
+                                  </option>
+                                ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={handleAddTechnician}
+                              disabled={!technicianInput}
+                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                            >
+                              <i className="fas fa-plus"></i>
+                            </button>
+                          </div>
+                          {formData.otherTechnicians.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {formData.otherTechnicians.map((technician, idx) => (
+                                <span key={idx} className="flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded text-sm dark:bg-blue-900 dark:text-blue-300">
+                                  {technician}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveTechnician(technician)}
+                                    className="hover:text-blue-900 dark:hover:text-blue-100"
+                                  >
+                                    <i className="fas fa-times text-xs"></i>
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-900 dark:text-slate-100">
+                          {displayData.otherTechnicians && displayData.otherTechnicians.length > 0
+                            ? displayData.otherTechnicians.join(', ')
+                            : 'N/A'}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Client</label>
+                      {isEditMode ? (
+                        <select
+                          name="clientId"
+                          value={formData.clientId}
+                          onChange={handleChange}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                        >
+                          <option value="">Select client</option>
+                          <option value="not_active_client">Not an active Client</option>
+                          {clients.map(client => (
+                            <option key={client.id} value={client.id}>{client.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p className="text-sm text-gray-900 dark:text-slate-100">
+                          {displayData.clientId === 'not_active_client' ? 'Not an active Client' : (displayData.clientName || 'N/A')}
+                        </p>
+                      )}
+                    </div>
+                    {formData.clientId === 'not_active_client' ? (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Details of Site Visited</label>
+                        {isEditMode ? (
+                          <textarea
+                            name="nonActiveClientSiteDetails"
+                            value={formData.nonActiveClientSiteDetails}
+                            onChange={handleChange}
+                            rows={3}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg resize-y dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            placeholder="Enter details of the site visited"
+                          />
+                        ) : (
+                          <p className="text-sm text-gray-900 dark:text-slate-100">{displayData.nonActiveClientSiteDetails || 'N/A'}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Site</label>
+                        {isEditMode ? (
+                          <select
+                            name="siteId"
+                            value={formData.siteId}
+                            onChange={handleChange}
+                            disabled={!formData.clientId || availableSites.length === 0}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg disabled:bg-gray-100 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                          >
+                            <option value="">Select site</option>
+                            {availableSites.map(site => (
+                              <option key={site.id || site.name} value={site.id || site.name}>
+                                {site.name || site}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <p className="text-sm text-gray-900 dark:text-slate-100">{displayData.siteName || 'N/A'}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-          {/* Vehicle Information */}
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Vehicle Used</label>
-              {isEditMode ? (
-                <input
-                  type="text"
-                  name="vehicleUsed"
-                  value={formData.vehicleUsed}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                />
-              ) : (
-                <p className="text-sm text-gray-900">{displayData.vehicleUsed || 'N/A'}</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">KM Reading Before</label>
-              {isEditMode ? (
-                <input
-                  type="number"
-                  step="0.1"
-                  name="kmReadingBefore"
-                  value={formData.kmReadingBefore}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                />
-              ) : (
-                <p className="text-sm text-gray-900">{displayData.kmReadingBefore || 'N/A'}</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">KM Reading After</label>
-              {isEditMode ? (
-                <input
-                  type="number"
-                  step="0.1"
-                  name="kmReadingAfter"
-                  value={formData.kmReadingAfter}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                />
-              ) : (
-                <p className="text-sm text-gray-900">{displayData.kmReadingAfter || 'N/A'}</p>
-              )}
-            </div>
-          </div>
+                {/* Location & Map Section */}
+                <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-5 border border-gray-200 dark:border-slate-700">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-4 flex items-center">
+                    <i className="fas fa-map-marker-alt mr-2 text-primary-600 dark:text-primary-400"></i>
+                    Location & Map
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Location</label>
+                      {isEditMode ? (
+                        window.LocationPicker ? (
+                          <LocationPicker 
+                            onLocationSelect={handleLocationSelect}
+                            initialLocation={formData.location}
+                          />
+                        ) : (
+                          <input
+                            type="text"
+                            name="location"
+                            value={formData.location}
+                            onChange={handleChange}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                          />
+                        )
+                      ) : (
+                        <p className="text-sm text-gray-900 dark:text-slate-100">{displayData.location || 'N/A'}</p>
+                      )}
+                    </div>
+                    {(latitude || longitude) && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Latitude</label>
+                          <p className="text-sm text-gray-900 dark:text-slate-100">{latitude || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Longitude</label>
+                          <p className="text-sm text-gray-900 dark:text-slate-100">{longitude || 'N/A'}</p>
+                        </div>
+                      </div>
+                    )}
+                    {mapUrl && (
+                      <div className="mt-4">
+                        <a
+                          href={mapUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                        >
+                          <i className="fas fa-map mr-2"></i>
+                          View on Google Maps
+                        </a>
+                      </div>
+                    )}
+                    {latitude && longitude && (
+                      <div className="mt-4 rounded-lg overflow-hidden border border-gray-300 dark:border-slate-600" style={{ height: '300px' }}>
+                        <iframe
+                          width="100%"
+                          height="100%"
+                          frameBorder="0"
+                          style={{ border: 0 }}
+                          src={`https://www.google.com/maps/embed/v1/place?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY || ''}&q=${latitude},${longitude}`}
+                          allowFullScreen
+                        ></iframe>
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-          {displayData.kmReadingBefore && displayData.kmReadingAfter && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <p className="text-sm font-medium text-blue-900">
-                Travel Distance: {Math.max(0, parseFloat(displayData.kmReadingAfter || 0) - parseFloat(displayData.kmReadingBefore || 0)).toFixed(1)} km
-              </p>
-            </div>
-          )}
+                {/* Scheduling & Travel Section */}
+                <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-5 border border-gray-200 dark:border-slate-700">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-4 flex items-center">
+                    <i className="fas fa-clock mr-2 text-primary-600 dark:text-primary-400"></i>
+                    Scheduling & Travel
+                  </h3>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Time of Departure</label>
+                        {isEditMode ? (
+                          <input
+                            type="datetime-local"
+                            name="timeOfDeparture"
+                            value={formData.timeOfDeparture}
+                            onChange={handleChange}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                          />
+                        ) : (
+                          <p className="text-sm text-gray-900 dark:text-slate-100">
+                            {displayData.timeOfDeparture ? new Date(displayData.timeOfDeparture).toLocaleString('en-ZA') : 'N/A'}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Time of Arrival</label>
+                        {isEditMode ? (
+                          <input
+                            type="datetime-local"
+                            name="timeOfArrival"
+                            value={formData.timeOfArrival}
+                            onChange={handleChange}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                          />
+                        ) : (
+                          <p className="text-sm text-gray-900 dark:text-slate-100">
+                            {displayData.timeOfArrival ? new Date(displayData.timeOfArrival).toLocaleString('en-ZA') : 'N/A'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Vehicle Used</label>
+                        {isEditMode ? (
+                          <input
+                            type="text"
+                            name="vehicleUsed"
+                            value={formData.vehicleUsed}
+                            onChange={handleChange}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                          />
+                        ) : (
+                          <p className="text-sm text-gray-900 dark:text-slate-100">{displayData.vehicleUsed || 'N/A'}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">KM Reading Before</label>
+                        {isEditMode ? (
+                          <input
+                            type="number"
+                            step="0.1"
+                            name="kmReadingBefore"
+                            value={formData.kmReadingBefore}
+                            onChange={handleChange}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                          />
+                        ) : (
+                          <p className="text-sm text-gray-900 dark:text-slate-100">{displayData.kmReadingBefore || 'N/A'}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">KM Reading After</label>
+                        {isEditMode ? (
+                          <input
+                            type="number"
+                            step="0.1"
+                            name="kmReadingAfter"
+                            value={formData.kmReadingAfter}
+                            onChange={handleChange}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                          />
+                        ) : (
+                          <p className="text-sm text-gray-900 dark:text-slate-100">{displayData.kmReadingAfter || 'N/A'}</p>
+                        )}
+                      </div>
+                    </div>
+                    {displayData.kmReadingBefore && displayData.kmReadingAfter && (
+                      <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg p-3">
+                        <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                          Travel Distance: {Math.max(0, parseFloat(displayData.kmReadingAfter || 0) - parseFloat(displayData.kmReadingBefore || 0)).toFixed(1)} km
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
 
-          {/* Work Details */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Visit</label>
-            {isEditMode ? (
-              <textarea
-                name="reasonForVisit"
-                value={formData.reasonForVisit}
-                onChange={handleChange}
-                rows={3}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-              />
-            ) : (
-              <p className="text-sm text-gray-900 whitespace-pre-wrap">{displayData.reasonForVisit || 'N/A'}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Diagnosis</label>
-            {isEditMode ? (
-              <textarea
-                name="diagnosis"
-                value={formData.diagnosis}
-                onChange={handleChange}
-                rows={4}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-              />
-            ) : (
-              <p className="text-sm text-gray-900 whitespace-pre-wrap">{displayData.diagnosis || 'N/A'}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Actions Taken</label>
-            {isEditMode ? (
-              <textarea
-                name="actionsTaken"
-                value={formData.actionsTaken}
-                onChange={handleChange}
-                rows={4}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-              />
-            ) : (
-              <p className="text-sm text-gray-900 whitespace-pre-wrap">{displayData.actionsTaken || 'N/A'}</p>
-            )}
-          </div>
+                {/* Work Details Section */}
+                <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-5 border border-gray-200 dark:border-slate-700">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-4 flex items-center">
+                    <i className="fas fa-tools mr-2 text-primary-600 dark:text-primary-400"></i>
+                    Work Details
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Reason for Visit</label>
+                      {isEditMode ? (
+                        <textarea
+                          name="reasonForVisit"
+                          value={formData.reasonForVisit}
+                          onChange={handleChange}
+                          rows={3}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                        />
+                      ) : (
+                        <p className="text-sm text-gray-900 dark:text-slate-100 whitespace-pre-wrap">{displayData.reasonForVisit || 'N/A'}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Diagnosis</label>
+                      {isEditMode ? (
+                        <textarea
+                          name="diagnosis"
+                          value={formData.diagnosis}
+                          onChange={handleChange}
+                          rows={4}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                        />
+                      ) : (
+                        <p className="text-sm text-gray-900 dark:text-slate-100 whitespace-pre-wrap">{displayData.diagnosis || 'N/A'}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Actions Taken</label>
+                      {isEditMode ? (
+                        <textarea
+                          name="actionsTaken"
+                          value={formData.actionsTaken}
+                          onChange={handleChange}
+                          rows={4}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                        />
+                      ) : (
+                        <p className="text-sm text-gray-900 dark:text-slate-100 whitespace-pre-wrap">{displayData.actionsTaken || 'N/A'}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
 
           {/* Stock Used */}
           {displayData.stockUsed && displayData.stockUsed.length > 0 && (
@@ -2130,6 +2218,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             )}
           </div>
         </div>
+              </>
       </div>
     );
   };

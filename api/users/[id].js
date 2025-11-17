@@ -218,11 +218,118 @@ async function handler(req, res) {
                 })
                 console.log('✅ Deleted starred clients')
 
+                // Delete starred opportunities
+                await prisma.starredOpportunity.deleteMany({
+                    where: { userId: userId }
+                })
+                console.log('✅ Deleted starred opportunities')
+
                 // Delete notification settings
                 await prisma.notificationSetting.deleteMany({
                     where: { userId: userId }
                 })
                 console.log('✅ Deleted notification settings')
+
+                // Delete notifications
+                await prisma.notification.deleteMany({
+                    where: { recipientId: userId }
+                })
+                console.log('✅ Deleted notifications')
+
+                // Delete audit logs
+                await prisma.auditLog.deleteMany({
+                    where: { actorId: userId }
+                })
+                console.log('✅ Deleted audit logs')
+
+                // Delete feedback
+                await prisma.feedback.deleteMany({
+                    where: { userId: userId }
+                })
+                console.log('✅ Deleted feedback')
+
+                // Delete sent messages
+                await prisma.message.deleteMany({
+                    where: { senderId: userId }
+                })
+                console.log('✅ Deleted sent messages')
+
+                // Delete calendar notes
+                await prisma.calendarNote.deleteMany({
+                    where: { userId: userId }
+                })
+                console.log('✅ Deleted calendar notes')
+
+                // Delete leave applications (all three relations)
+                await prisma.leaveApplication.updateMany({
+                    where: { userId: userId },
+                    data: { userId: null }
+                })
+                await prisma.leaveApplication.updateMany({
+                    where: { approvedById: userId },
+                    data: { approvedById: null }
+                })
+                await prisma.leaveApplication.updateMany({
+                    where: { rejectedById: userId },
+                    data: { rejectedById: null }
+                })
+                console.log('✅ Removed user from leave applications')
+
+                // Delete leave balances
+                await prisma.leaveBalance.deleteMany({
+                    where: { userId: userId }
+                })
+                console.log('✅ Deleted leave balances')
+
+                // Delete leave approvers
+                await prisma.leaveApprover.deleteMany({
+                    where: { userId: userId }
+                })
+                console.log('✅ Deleted leave approvers')
+
+                // Delete birthday
+                await prisma.birthday.deleteMany({
+                    where: { userId: userId }
+                })
+                console.log('✅ Deleted birthday')
+
+                // Delete meeting comments
+                await prisma.meetingComment.deleteMany({
+                    where: { authorId: userId }
+                })
+                console.log('✅ Deleted meeting comments')
+
+                // Delete meeting allocations
+                await prisma.meetingUserAllocation.deleteMany({
+                    where: { userId: userId }
+                })
+                console.log('✅ Deleted meeting allocations')
+
+                // Delete department notes assigned
+                await prisma.departmentNotes.updateMany({
+                    where: { assigneeId: userId },
+                    data: { assigneeId: null }
+                })
+                console.log('✅ Removed assignment from department notes')
+
+                // Delete action items assigned
+                await prisma.meetingActionItem.updateMany({
+                    where: { assigneeId: userId },
+                    data: { assigneeId: null }
+                })
+                console.log('✅ Removed assignment from action items')
+
+                // Delete user tasks
+                await prisma.userTask.deleteMany({
+                    where: { ownerId: userId }
+                })
+                console.log('✅ Deleted user tasks')
+
+                // Delete user task tags
+                await prisma.userTaskTag.deleteMany({
+                    where: { ownerId: userId }
+                })
+                console.log('✅ Deleted user task tags')
 
                 // Set owned clients to null (or delete if preferred)
                 await prisma.client.updateMany({
@@ -238,15 +345,20 @@ async function handler(req, res) {
                 })
                 console.log('✅ Removed ownership from projects')
 
-                // Set assigned tasks to empty string (or null if schema allows)
+                // Set assigned tasks to null (using correct field name: assigneeId)
                 await prisma.task.updateMany({
-                    where: { assignedTo: userId },
-                    data: { assignedTo: '' }
+                    where: { assigneeId: userId },
+                    data: { assigneeId: null }
                 })
                 console.log('✅ Removed assignment from tasks')
 
             } catch (relationError) {
-                console.error('⚠️ Error deleting related records:', relationError.message)
+                console.error('⚠️ Error deleting related records:', {
+                    message: relationError.message,
+                    code: relationError.code,
+                    meta: relationError.meta,
+                    stack: relationError.stack
+                })
                 // Continue with user deletion even if some relations fail
             }
 
