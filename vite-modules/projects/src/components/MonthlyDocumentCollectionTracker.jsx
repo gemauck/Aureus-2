@@ -102,12 +102,11 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
     const previousProjectIdRef = useRef(project?.id);
     const editingSectionIdRef = useRef(null); // Ref to store current editingSectionId
     
-    // ULTRA AGGRESSIVE: Initialize sections from props, but check localStorage first to preserve saved sections
+    // Initialize sections from props or localStorage
     const [sections, setSections] = useState(() => {
         console.log('📋 Initializing sections from project.documentSections:', project.documentSections);
         
-        // CRITICAL: Check localStorage first - if we have saved sections, use them instead of stale prop data
-        // localStorage persists across browser sessions, unlike sessionStorage which is cleared after ~4 hours
+        // Check localStorage first for saved sections (persists across sessions)
         const storageKey = `documentSections_${project?.id}`;
         try {
             // Try localStorage first (persists across sessions)
@@ -115,9 +114,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
             if (savedSections) {
                 const parsed = JSON.parse(savedSections);
                 if (Array.isArray(parsed) && parsed.length > 0) {
-                    console.log('🛡️ Using saved sections from localStorage:', parsed.length, 'sections');
-                    hasInitializedRef.current = true;
-                    console.log('🛑 ULTRA AGGRESSIVE: Initialized with saved sections - BLOCKING all future syncs');
+                    console.log('📋 Using saved sections from localStorage:', parsed.length, 'sections');
                     return parsed;
                 }
             }
@@ -126,7 +123,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
             if (sessionSections) {
                 const parsed = JSON.parse(sessionSections);
                 if (Array.isArray(parsed) && parsed.length > 0) {
-                    console.log('🛡️ Using saved sections from sessionStorage (fallback):', parsed.length, 'sections');
+                    console.log('📋 Using saved sections from sessionStorage (fallback):', parsed.length, 'sections');
                     // Migrate to localStorage
                     try {
                         localStorage.setItem(storageKey, sessionSections);
@@ -134,8 +131,6 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                     } catch (e) {
                         console.warn('Failed to migrate to localStorage:', e);
                     }
-                    hasInitializedRef.current = true;
-                    console.log('🛑 ULTRA AGGRESSIVE: Initialized with saved sections - BLOCKING all future syncs');
                     return parsed;
                 }
             }
@@ -146,11 +141,6 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         // Fallback to prop data
         const parsed = parseSections(project.documentSections);
         console.log('📋 Parsed sections from props:', parsed.length, 'sections');
-        // ULTRA AGGRESSIVE: Mark as initialized immediately if we have sections
-        if (parsed.length > 0) {
-            hasInitializedRef.current = true;
-            console.log('🛑 ULTRA AGGRESSIVE: Initialized with sections - BLOCKING all future syncs');
-        }
         return parsed;
     });
     const [showSectionModal, setShowSectionModal] = useState(false);
@@ -323,17 +313,15 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         );
     };
 
-  // COMPLETELY DISABLE LiveDataSync for this page - user wants static page after load
-  // This page has explicit save operations, so no automatic syncing needed
+  // Smart LiveDataSync management: Only pause when user is actively editing
+  // This allows background updates while protecting user input
   useEffect(() => {
-    console.log('🛑 PERMANENTLY pausing LiveDataSync for MonthlyDocumentCollectionTracker');
-    if (window.LiveDataSync && typeof window.LiveDataSync.pause === 'function') {
-      window.LiveDataSync.pause();
-    }
-
-    // Cleanup: resume on unmount so other pages still get live sync
+    // Don't pause LiveDataSync - allow background updates
+    // We'll use dirty field tracking to prevent overwrites during edits
+    console.log('✅ LiveDataSync enabled for MonthlyDocumentCollectionTracker - using smart sync protection');
+    
+    // Cleanup: ensure LiveDataSync is active on unmount
     return () => {
-      console.log('▶️ Re-enabling LiveDataSync on unmount');
       if (window.LiveDataSync && typeof window.LiveDataSync.resume === 'function') {
         window.LiveDataSync.resume();
       }
@@ -565,148 +553,77 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         }
     };
 
-    // ULTRA AGGRESSIVE: Sync sections from project prop ONLY on the very first mount
-    // NEVER sync after initialization - local state is ALWAYS the source of truth
+    // Smart Sync: Sync from project prop when data changes, but protect user edits
+    // Uses version-based conflict resolution and dirty field tracking
     useEffect(() => {
         // Check if project ID changed (switching to different project)
         const projectIdChanged = previousProjectIdRef.current !== project?.id;
         if (projectIdChanged) {
-            // Project changed - reset initialization flags for new project
+            // Project changed - reset for new project
             console.log('🔄 Project ID changed, resetting for new project');
             hasInitializedRef.current = false;
             isInitialMount.current = true;
             previousProjectIdRef.current = project?.id;
-            previousDocumentSectionsRef.current = null; // Reset to allow sync for new project
+            previousDocumentSectionsRef.current = null;
         }
         
-        // CRITICAL: Check localStorage FIRST - if we have saved sections, NEVER sync from props
-        // This prevents stale prop data from overwriting user changes
-        // localStorage persists across browser sessions, unlike sessionStorage which is cleared after ~4 hours
-        const storageKey = `documentSections_${project?.id}`;
-        let hasSavedData = false;
-        try {
-            // Try localStorage first (persists across sessions)
-            let savedSections = localStorage.getItem(storageKey);
-            let source = 'localStorage';
-            
-            // Fallback to sessionStorage if localStorage is empty
-            if (!savedSections) {
-                savedSections = sessionStorage.getItem(storageKey);
-                source = 'sessionStorage';
-                // If found in sessionStorage, migrate to localStorage
-                if (savedSections) {
-                    try {
-                        localStorage.setItem(storageKey, savedSections);
-                        console.log('📦 Migrated sections from sessionStorage to localStorage');
-                        source = 'localStorage (migrated)';
-                    } catch (e) {
-                        console.warn('Failed to migrate to localStorage:', e);
-                    }
-                }
-            }
-            
-            if (savedSections) {
-                const parsed = JSON.parse(savedSections);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    hasSavedData = true;
-                    // CRITICAL: Mark as initialized IMMEDIATELY to prevent any sync from props
-                    // This must happen before setSections to prevent race conditions
-                    hasInitializedRef.current = true;
-                    isInitialMount.current = false;
-                    
-                    // We have saved sections - check if we need to restore them
-                    setSections(currentSections => {
-                        // If local state is empty but storage has data, restore from storage
-                        // This handles the case where the component remounted and lost state
-                        if (currentSections.length === 0 && parsed.length > 0) {
-                            console.log(`🔄 Restoring sections from ${source}:`, parsed.length, 'sections');
-                            return parsed;
-                        }
-                        // If local state has data, keep it (it's more recent than storage)
-                        // hasInitializedRef is already set above, so sync from props is blocked
-                        if (currentSections.length > 0) {
-                            console.log('🛡️ Local state has sections - keeping local state and blocking syncs from props');
-                        }
-                        return currentSections;
-                    });
-                    
-                    // NEVER sync from props if storage has data
-                    console.log(`🛡️ ${source} has saved sections - BLOCKING all syncs from props`);
-                    return;
-                }
-            }
-        } catch (e) {
-            console.warn('Failed to check storage:', e);
-        }
-        
-        // ULTRA AGGRESSIVE: If already initialized, NEVER sync - even if prop changes
-        // Local state is the source of truth after initialization
-        if (hasInitializedRef.current) {
-            // DOUBLE CHECK: Even if initialized, verify that documentSections hasn't changed
-            // This prevents any edge cases where the effect might run despite our safeguards
-            const currentPropValue = project?.documentSections;
-            const lastSyncedValue = previousDocumentSectionsRef.current;
-            
-            // If the prop value is the same as what we last synced, definitely don't sync
-            if (currentPropValue === lastSyncedValue || 
-                (currentPropValue && lastSyncedValue && 
-                 JSON.stringify(parseSections(currentPropValue)) === JSON.stringify(parseSections(lastSyncedValue)))) {
-                console.log('🛑 ULTRA AGGRESSIVE: Component initialized - BLOCKING all syncs (prop value unchanged)');
-                return;
-            }
-            
-            // If prop value changed but we're initialized, still block sync
-            // This prevents LiveDataSync or other background refreshes from overwriting user input
-            console.log('🛑 ULTRA AGGRESSIVE: Component initialized - BLOCKING all syncs to preserve user input (prop changed but ignoring)');
+        // Skip sync if user is actively editing (dirty fields)
+        if (isInteractingRef.current) {
+            console.log('⏭️ Skipping sync - user is actively editing');
             return;
         }
-            
-        // Only sync on the very first mount when local state is empty AND we haven't initialized
-        // CRITICAL: Also check that documentSections has actually changed from last synced value
-        if (project && project.documentSections !== undefined && isInitialMount.current && !hasInitializedRef.current) {
-            const currentPropValue = project.documentSections;
-            const lastSyncedValue = previousDocumentSectionsRef.current;
-            
-            // If the prop value is the same as what we last synced, don't sync again
-            if (currentPropValue === lastSyncedValue || 
-                (currentPropValue && lastSyncedValue && 
-                 JSON.stringify(parseSections(currentPropValue)) === JSON.stringify(parseSections(lastSyncedValue)))) {
-                console.log('🛡️ Prop value unchanged from last sync - skipping sync');
-                // Still mark as initialized to prevent future syncs
-                hasInitializedRef.current = true;
-                isInitialMount.current = false;
-                return;
+        
+        // Skip if no project data
+        if (!project || project.documentSections === undefined) {
+            return;
+        }
+        
+        const currentPropValue = project.documentSections;
+        const lastSyncedValue = previousDocumentSectionsRef.current;
+        
+        // Skip if prop value hasn't changed
+        if (currentPropValue === lastSyncedValue || 
+            (currentPropValue && lastSyncedValue && 
+             JSON.stringify(parseSections(currentPropValue)) === JSON.stringify(parseSections(lastSyncedValue)))) {
+            return;
+        }
+        
+        // Parse new data from props
+        const parsed = parseSections(currentPropValue);
+        
+        // Smart sync: Only update if server data is newer or local state is empty
+        setSections(currentSections => {
+            // If local state is empty, always sync from props
+            if (currentSections.length === 0 && parsed.length > 0) {
+                console.log('🔄 Syncing sections from project prop:', parsed.length, 'sections');
+                previousDocumentSectionsRef.current = currentPropValue;
+                lastLocalUpdateRef.current = Date.now();
+                return parsed;
             }
             
-            const parsed = parseSections(project.documentSections);
+            // If local state has data, check if server data is newer
+            // Compare timestamps if available
+            const serverTimestamp = project.updatedAt ? new Date(project.updatedAt).getTime() : 0;
+            const localTimestamp = lastLocalUpdateRef.current || 0;
             
-            setSections(currentSections => {
-                // ULTRA AGGRESSIVE: Only sync if local state is completely empty
-                // Once we have ANY sections (even if user just added them), never sync again
-                if (currentSections.length === 0 && parsed.length > 0) {
-                    console.log('🔄 Initial sync from project prop on first mount:', parsed.length, 'sections');
-                    hasInitializedRef.current = true; // Mark as initialized - NEVER sync again
-                    isInitialMount.current = false;
-                    lastLocalUpdateRef.current = Date.now();
-                    previousDocumentSectionsRef.current = project.documentSections;
-                    return parsed;
-                } else if (currentSections.length === 0 && parsed.length === 0) {
-                    // Empty state - mark as initialized but don't change state
-                    console.log('✅ Component initialized with empty sections');
-                    hasInitializedRef.current = true; // Mark as initialized - NEVER sync again
-                    isInitialMount.current = false;
-                    previousDocumentSectionsRef.current = project.documentSections; // Track empty state too
-                } else if (currentSections.length > 0) {
-                    // ULTRA AGGRESSIVE: If we have ANY sections, mark initialized and NEVER sync
-                    console.log('🛑 ULTRA AGGRESSIVE: Local sections exist - marking initialized, BLOCKING all future syncs');
-                    hasInitializedRef.current = true; // Mark as initialized - NEVER sync again
-                    isInitialMount.current = false;
-                    previousDocumentSectionsRef.current = project.documentSections; // Track current prop value
-                }
-                return currentSections;
-            });
+            if (serverTimestamp > localTimestamp) {
+                console.log('🔄 Server data is newer, syncing from project prop:', parsed.length, 'sections');
+                previousDocumentSectionsRef.current = currentPropValue;
+                lastLocalUpdateRef.current = Date.now();
+                return parsed;
+            }
+            
+            // Local data is newer or same - keep local state
+            console.log('🛡️ Local data is newer or same - keeping local state');
+            return currentSections;
+        });
+        
+        // Mark as initialized after first sync
+        if (!hasInitializedRef.current) {
+            hasInitializedRef.current = true;
+            isInitialMount.current = false;
         }
-    }, [project?.id]); // ONLY run when project ID changes (switching projects) - we check sessionStorage on every run to prevent overwrites
+    }, [project?.id, project?.documentSections]); // Sync when project ID or documentSections changes
 
     // Restore selected year from localStorage when project changes
     useEffect(() => {
@@ -936,9 +853,8 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
             setSections(currentSections => {
                 updatedSections = [...currentSections, newSection];
                 console.log('➕ Adding new section:', sectionData.name, 'Total sections:', updatedSections.length);
-                // ULTRA AGGRESSIVE: Mark as initialized IMMEDIATELY when adding section
-                hasInitializedRef.current = true;
-                console.log('🛑 ULTRA AGGRESSIVE: Marked initialized on section add - BLOCKING all future syncs');
+                // Update last local update timestamp to protect this change
+                lastLocalUpdateRef.current = Date.now();
                 return updatedSections;
             });
             
@@ -1035,7 +951,8 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
 
         setSections(currentSections => {
             const updatedSections = [...currentSections, ...newSections];
-            hasInitializedRef.current = true;
+            // Update timestamp to protect this change from being overwritten
+            lastLocalUpdateRef.current = Date.now();
             return updatedSections;
         });
 
