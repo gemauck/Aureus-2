@@ -2465,15 +2465,24 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     </button>
                                 </div>
                                 
-                                {templates.length === 0 ? (
-                                    <div className="text-center py-8 text-gray-400">
-                                        <i className="fas fa-layer-group text-3xl mb-2 opacity-50"></i>
-                                        <p className="text-sm">No templates yet</p>
-                                        <p className="text-xs mt-1">Create your first template to get started</p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-2">
-                                        {templates.map(template => {
+                                {(() => {
+                                    console.log('🔍 Template Modal: Rendering template list', {
+                                        templatesCount: templates.length,
+                                        templates: templates,
+                                        showTemplateList: showTemplateList
+                                    });
+                                    if (templates.length === 0) {
+                                        return (
+                                            <div className="text-center py-8 text-gray-400">
+                                                <i className="fas fa-layer-group text-3xl mb-2 opacity-50"></i>
+                                                <p className="text-sm">No templates yet</p>
+                                                <p className="text-xs mt-1">Create your first template to get started</p>
+                                            </div>
+                                        );
+                                    }
+                                    return (
+                                        <div className="space-y-2">
+                                            {templates.map(template => {
                                             const totalDocs = template.sections?.reduce((sum, s) => sum + (s.documents?.length || 0), 0) || 0;
                                             return (
                                                 <div key={template.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
@@ -2519,8 +2528,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                 </div>
                                             );
                                         })}
-                                    </div>
-                                )}
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         ) : (
                             <form onSubmit={handleSubmit} className="space-y-4">
@@ -3361,7 +3371,4 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 // Make available globally
 window.MonthlyDocumentCollectionTracker = MonthlyDocumentCollectionTracker;
 console.log('✅ MonthlyDocumentCollectionTracker component loaded and registered globally');
-
-// Export as default for Vite module
-export default MonthlyDocumentCollectionTracker;
 
