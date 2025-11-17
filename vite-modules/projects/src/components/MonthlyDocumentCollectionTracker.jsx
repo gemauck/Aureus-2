@@ -155,11 +155,173 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
     });
     const [showSectionModal, setShowSectionModal] = useState(false);
     const [showDocumentModal, setShowDocumentModal] = useState(false);
+    const [showTemplateModal, setShowTemplateModal] = useState(false);
+    const [showApplyTemplateModal, setShowApplyTemplateModal] = useState(false);
+    const [editingTemplate, setEditingTemplate] = useState(null);
+    const [templates, setTemplates] = useState([]);
     const [hoverCommentCell, setHoverCommentCell] = useState(null); // Track which cell's popup is open
     const [quickComment, setQuickComment] = useState(''); // For quick comment input
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 }); // Store popup position
     const commentPopupContainerRef = useRef(null); // Ref for comment popup scrollable container
     const isInteractingRef = useRef(false); // Track if user is interacting with status/comment controls
+    const TEMPLATES_STORAGE_KEY = 'documentCollectionTemplates';
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            try {
+                const storedTemplates = localStorage.getItem(TEMPLATES_STORAGE_KEY);
+                if (storedTemplates) {
+                    const parsed = JSON.parse(storedTemplates);
+                    setTemplates(Array.isArray(parsed) ? parsed : []);
+                }
+            } catch (e) {
+                console.warn('Failed to load templates:', e);
+                setTemplates([]);
+            }
+        }
+    }, []);
+
+    const saveTemplates = (templatesToSave) => {
+        if (typeof window !== 'undefined') {
+            try {
+                localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(templatesToSave));
+                setTemplates(templatesToSave);
+            } catch (e) {
+                console.error('Failed to save templates:', e);
+            }
+        }
+    };
+
+    const ApplyTemplateModal = () => {
+        const [selectedTemplateId, setSelectedTemplateId] = useState(null);
+        const [targetYear, setTargetYear] = useState(selectedYear);
+
+        const handleApplyAction = () => {
+            if (!selectedTemplateId) {
+                alert('Please select a template');
+                return;
+            }
+            const template = templates.find(t => t.id === selectedTemplateId);
+            if (!template) {
+                alert('Template not found');
+                return;
+            }
+            handleApplyTemplate(template, targetYear);
+        };
+
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
+                        <h2 className="text-base font-semibold text-gray-900">
+                            Apply Template
+                        </h2>
+                        <button 
+                            onClick={() => setShowApplyTemplateModal(false)} 
+                            className="text-gray-400 hover:text-gray-600 p-1"
+                        >
+                            <i className="fas fa-times text-sm"></i>
+                        </button>
+                    </div>
+
+                    <div className="p-4 space-y-4">
+                        {templates.length === 0 ? (
+                            <div className="text-center py-4">
+                                <p className="text-sm text-gray-600 mb-3">No templates available</p>
+                                <button
+                                    onClick={() => {
+                                        setShowApplyTemplateModal(false);
+                                        handleCreateTemplate();
+                                    }}
+                                    className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
+                                >
+                                    Create Template
+                                </button>
+                            </div>
+                        ) : (
+                            <>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                                        Select Template *
+                                    </label>
+                                    <select
+                                        value={selectedTemplateId || ''}
+                                        onChange={(e) => setSelectedTemplateId(e.target.value ? parseInt(e.target.value) : null)}
+                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                    >
+                                        <option value="">-- Select a template --</option>
+                                        {templates.map(template => (
+                                            <option key={template.id} value={template.id}>
+                                                {template.name} ({template.sections?.length || 0} sections)
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {selectedTemplateId && (() => {
+                                        const template = templates.find(t => t.id === selectedTemplateId);
+                                        return template?.description ? (
+                                            <p className="mt-1 text-[10px] text-gray-500">{template.description}</p>
+                                        ) : null;
+                                    })()}
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                                        Target Year
+                                    </label>
+                                    <select
+                                        value={targetYear}
+                                        onChange={(e) => setTargetYear(parseInt(e.target.value))}
+                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                    >
+                                        {yearOptions.map(year => (
+                                            <option key={year} value={year}>
+                                                {year}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <p className="mt-1 text-[10px] text-gray-500">
+                                        Template will be applied to the selected year. Sections and documents will be added to the current collection.
+                                    </p>
+                                </div>
+
+                                {selectedTemplateId && (() => {
+                                    const template = templates.find(t => t.id === selectedTemplateId);
+                                    const totalDocs = template?.sections?.reduce((sum, s) => sum + (s.documents?.length || 0), 0) || 0;
+                                    return (
+                                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5">
+                                            <p className="text-[10px] font-medium text-blue-900 mb-1">Template Preview:</p>
+                                            <p className="text-[10px] text-blue-700">
+                                                • {template?.sections?.length || 0} sections<br/>
+                                                • {totalDocs} documents
+                                            </p>
+                                        </div>
+                                    );
+                                })()}
+
+                                <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowApplyTemplateModal(false)}
+                                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleApplyAction}
+                                        disabled={!selectedTemplateId}
+                                        className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Apply Template
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
   // COMPLETELY DISABLE LiveDataSync for this page - user wants static page after load
   // This page has explicit save operations, so no automatic syncing needed
@@ -182,6 +344,8 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
     const [editingSectionId, setEditingSectionId] = useState(null);
     const [draggedSection, setDraggedSection] = useState(null);
     const [dragOverIndex, setDragOverIndex] = useState(null);
+    const [draggedDocument, setDraggedDocument] = useState(null);
+    const [dragOverDocumentIndex, setDragOverDocumentIndex] = useState(null);
     const [isExporting, setIsExporting] = useState(false);
     
     // Helper function to immediately save documentSections to database
@@ -803,6 +967,128 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         }
     };
 
+    // Template Management Functions
+    const handleCreateTemplate = () => {
+        setEditingTemplate(null);
+        setShowTemplateModal(true);
+    };
+
+    const handleEditTemplate = (template) => {
+        setEditingTemplate(template);
+        setShowTemplateModal(true);
+    };
+
+    const handleDeleteTemplate = (templateId) => {
+        if (confirm('Delete this template? This action cannot be undone.')) {
+            const updatedTemplates = templates.filter(t => t.id !== templateId);
+            saveTemplates(updatedTemplates);
+        }
+    };
+
+    const handleSaveTemplate = (templateData) => {
+        const currentUser = getCurrentUser();
+        let updatedTemplates;
+        
+        if (editingTemplate) {
+            updatedTemplates = templates.map(t => 
+                t.id === editingTemplate.id 
+                    ? { ...t, ...templateData, updatedAt: new Date().toISOString(), updatedBy: currentUser.name || currentUser.email }
+                    : t
+            );
+        } else {
+            const newTemplate = {
+                id: Date.now(),
+                ...templateData,
+                createdAt: new Date().toISOString(),
+                createdBy: currentUser.name || currentUser.email,
+                updatedAt: new Date().toISOString(),
+                updatedBy: currentUser.name || currentUser.email
+            };
+            updatedTemplates = [...templates, newTemplate];
+        }
+        
+        saveTemplates(updatedTemplates);
+        setEditingTemplate(null);
+        setShowTemplateModal(true);
+    };
+
+    const handleApplyTemplate = async (template, targetYear) => {
+        if (!template || !template.sections || template.sections.length === 0) {
+            alert('Template is empty or invalid');
+            return;
+        }
+
+        const currentUser = getCurrentUser();
+        lastLocalUpdateRef.current = Date.now();
+
+        const newSections = template.sections.map(section => ({
+            id: Date.now() + Math.random(),
+            name: section.name,
+            description: section.description || '',
+            documents: (section.documents || []).map(doc => ({
+                id: Date.now() + Math.random(),
+                name: doc.name,
+                description: doc.description || '',
+                collectionStatus: {}
+            }))
+        }));
+
+        setSections(currentSections => {
+            const updatedSections = [...currentSections, ...newSections];
+            hasInitializedRef.current = true;
+            return updatedSections;
+        });
+
+        if (window.AuditLogger) {
+            window.AuditLogger.log(
+                'create',
+                'projects',
+                {
+                    action: 'Template Applied',
+                    projectId: project.id,
+                    projectName: project.name,
+                    templateName: template.name,
+                    templateId: template.id,
+                    targetYear,
+                    sectionsAdded: newSections.length
+                },
+                currentUser
+            );
+        }
+
+        setShowApplyTemplateModal(false);
+
+        setSections(currentSections => {
+            const finalSections = [...currentSections, ...newSections];
+            immediatelySaveDocumentSections(finalSections);
+            return finalSections;
+        });
+    };
+
+    const handleCreateTemplateFromCurrent = () => {
+        if (sections.length === 0) {
+            alert('No sections to create template from. Please add sections first.');
+            return;
+        }
+
+        const templateData = {
+            name: `${project.name} - ${selectedYear}`,
+            description: `Template created from ${project.name} for year ${selectedYear}`,
+            sections: sections.map(section => ({
+                name: section.name,
+                description: section.description || '',
+                documents: (section.documents || []).map(doc => ({
+                    name: doc.name,
+                    description: doc.description || ''
+                }))
+            }))
+        };
+
+        setEditingTemplate(null);
+        setShowTemplateModal(true);
+        window.tempTemplateData = templateData;
+    };
+
     const handleDeleteSection = async (sectionId) => {
         // Get current user info
         const currentUser = getCurrentUser();
@@ -1043,6 +1329,330 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         if (updatedSections) {
             await immediatelySaveDocumentSections(updatedSections);
         }
+    };
+
+    const TemplateModal = () => {
+        const [showTemplateListState, setShowTemplateListState] = useState(!editingTemplate);
+        const [templateFormData, setTemplateFormData] = useState(() => {
+            const prefill = window.tempTemplateData;
+            if (prefill) {
+                window.tempTemplateData = null;
+                return {
+                    name: prefill.name || '',
+                    description: prefill.description || '',
+                    sections: prefill.sections || []
+                };
+            }
+            return {
+                name: editingTemplate?.name || '',
+                description: editingTemplate?.description || '',
+                sections: editingTemplate?.sections || []
+            };
+        });
+
+        const handleAddSectionToTemplate = () => {
+            setTemplateFormData({
+                ...templateFormData,
+                sections: [...templateFormData.sections, { name: '', description: '', documents: [] }]
+            });
+        };
+
+        const handleRemoveSectionFromTemplate = (index) => {
+            setTemplateFormData({
+                ...templateFormData,
+                sections: templateFormData.sections.filter((_, i) => i !== index)
+            });
+        };
+
+        const handleUpdateSectionInTemplate = (index, sectionData) => {
+            const updatedSections = [...templateFormData.sections];
+            updatedSections[index] = { ...updatedSections[index], ...sectionData };
+            setTemplateFormData({ ...templateFormData, sections: updatedSections });
+        };
+
+        const handleAddDocumentToTemplateSection = (sectionIndex) => {
+            const updatedSections = [...templateFormData.sections];
+            if (!updatedSections[sectionIndex].documents) {
+                updatedSections[sectionIndex].documents = [];
+            }
+            updatedSections[sectionIndex].documents.push({ name: '', description: '' });
+            setTemplateFormData({ ...templateFormData, sections: updatedSections });
+        };
+
+        const handleRemoveDocumentFromTemplate = (sectionIndex, docIndex) => {
+            const updatedSections = [...templateFormData.sections];
+            updatedSections[sectionIndex].documents = updatedSections[sectionIndex].documents.filter((_, i) => i !== docIndex);
+            setTemplateFormData({ ...templateFormData, sections: updatedSections });
+        };
+
+        const handleUpdateDocumentInTemplate = (sectionIndex, docIndex, docData) => {
+            const updatedSections = [...templateFormData.sections];
+            updatedSections[sectionIndex].documents[docIndex] = { ...updatedSections[sectionIndex].documents[docIndex], ...docData };
+            setTemplateFormData({ ...templateFormData, sections: updatedSections });
+        };
+
+        const handleSubmitTemplate = (e) => {
+            e.preventDefault();
+            if (!templateFormData.name.trim()) {
+                alert('Please enter a template name');
+                return;
+            }
+            if (templateFormData.sections.length === 0) {
+                alert('Please add at least one section to the template');
+                return;
+            }
+            handleSaveTemplate(templateFormData);
+            setShowTemplateListState(true);
+        };
+
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
+                        <h2 className="text-base font-semibold text-gray-900">
+                            {showTemplateListState ? 'Template Management' : (editingTemplate ? 'Edit Template' : 'Create Template')}
+                        </h2>
+                        <div className="flex items-center gap-2">
+                            {!showTemplateListState && (
+                                <button
+                                    onClick={() => {
+                                        setShowTemplateListState(true);
+                                        setEditingTemplate(null);
+                                        window.tempTemplateData = null;
+                                    }}
+                                    className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800"
+                                >
+                                    <i className="fas fa-arrow-left mr-1"></i>
+                                    Back
+                                </button>
+                            )}
+                            <button
+                                onClick={() => {
+                                    setShowTemplateModal(false);
+                                    setEditingTemplate(null);
+                                    setShowTemplateListState(true);
+                                    window.tempTemplateData = null;
+                                }}
+                                className="text-gray-400 hover:text-gray-600 p-1"
+                            >
+                                <i className="fas fa-times text-sm"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-4">
+                        {showTemplateListState ? (
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center mb-4">
+                                    <p className="text-xs text-gray-600">Manage your document collection templates</p>
+                                    <button
+                                        onClick={() => {
+                                            setShowTemplateListState(false);
+                                            setEditingTemplate(null);
+                                            setTemplateFormData({ name: '', description: '', sections: [] });
+                                        }}
+                                        className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
+                                    >
+                                        <i className="fas fa-plus mr-1"></i>
+                                        Create New Template
+                                    </button>
+                                </div>
+
+                                {templates.length === 0 ? (
+                                    <div className="text-center py-8 text-gray-400">
+                                        <i className="fas fa-layer-group text-3xl mb-2 opacity-50"></i>
+                                        <p className="text-sm">No templates yet</p>
+                                        <p className="text-xs mt-1">Create your first template to get started</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {templates.map(template => {
+                                            const totalDocs = template.sections?.reduce((sum, s) => sum + (s.documents?.length || 0), 0) || 0;
+                                            return (
+                                                <div key={template.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
+                                                    <div className="flex justify-between items-start">
+                                                        <div className="flex-1">
+                                                            <h3 className="text-sm font-semibold text-gray-900 mb-1">{template.name}</h3>
+                                                            {template.description && (
+                                                                <p className="text-xs text-gray-600 mb-2">{template.description}</p>
+                                                            )}
+                                                            <div className="flex items-center gap-4 text-[10px] text-gray-500">
+                                                                <span><i className="fas fa-folder mr-1"></i>{template.sections?.length || 0} sections</span>
+                                                                <span><i className="fas fa-file mr-1"></i>{totalDocs} documents</span>
+                                                                {template.createdBy && (
+                                                                    <span><i className="fas fa-user mr-1"></i>Created by {template.createdBy}</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-1 ml-3">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setEditingTemplate(template);
+                                                                    setShowTemplateListState(false);
+                                                                    setTemplateFormData({
+                                                                        name: template.name,
+                                                                        description: template.description || '',
+                                                                        sections: template.sections || []
+                                                                    });
+                                                                }}
+                                                                className="px-2 py-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                                                            >
+                                                                <i className="fas fa-edit"></i>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteTemplate(template.id)}
+                                                                className="px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+                                                            >
+                                                                <i className="fas fa-trash"></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <form onSubmit={handleSubmitTemplate} className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                                        Template Name *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={templateFormData.name}
+                                        onChange={(e) => setTemplateFormData({ ...templateFormData, name: e.target.value })}
+                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                        placeholder="e.g., Standard Monthly Checklist"
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                                        Description (Optional)
+                                    </label>
+                                    <textarea
+                                        value={templateFormData.description}
+                                        onChange={(e) => setTemplateFormData({ ...templateFormData, description: e.target.value })}
+                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                        rows="2"
+                                        placeholder="Brief description of this template..."
+                                    ></textarea>
+                                </div>
+
+                                <div>
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="block text-xs font-medium text-gray-700">
+                                            Sections *
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={handleAddSectionToTemplate}
+                                            className="px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700"
+                                        >
+                                            <i className="fas fa-plus mr-1"></i>
+                                            Add Section
+                                        </button>
+                                    </div>
+
+                                <div className="space-y-3">
+                                    {templateFormData.sections.map((section, sectionIndex) => (
+                                        <div key={sectionIndex} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                                            <div className="flex items-start justify-between mb-2">
+                                                <div className="flex-1 space-y-2">
+                                                    <input
+                                                        type="text"
+                                                        value={section.name}
+                                                        onChange={(e) => handleUpdateSectionInTemplate(sectionIndex, { name: e.target.value })}
+                                                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
+                                                        placeholder="Section name *"
+                                                        required
+                                                    />
+                                                    <textarea
+                                                        value={section.description || ''}
+                                                        onChange={(e) => handleUpdateSectionInTemplate(sectionIndex, { description: e.target.value })}
+                                                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
+                                                        rows="1"
+                                                        placeholder="Section description (optional)"
+                                                    ></textarea>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveSectionFromTemplate(sectionIndex)}
+                                                    className="ml-2 text-red-600 hover:text-red-800 p-1"
+                                                    title="Remove section"
+                                                >
+                                                    <i className="fas fa-trash text-xs"></i>
+                                                </button>
+                                            </div>
+
+                                            <div className="mt-2">
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <label className="text-[10px] font-medium text-gray-600">Documents:</label>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleAddDocumentToTemplateSection(sectionIndex)}
+                                                        className="px-1.5 py-0.5 bg-gray-600 text-white rounded text-[9px] font-medium hover:bg-gray-700"
+                                                    >
+                                                        <i className="fas fa-plus mr-0.5"></i>
+                                                        Add
+                                                    </button>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    {(section.documents || []).map((doc, docIndex) => (
+                                                        <div key={docIndex} className="flex items-center gap-1 bg-white p-1.5 rounded border border-gray-200">
+                                                            <input
+                                                                type="text"
+                                                                value={doc.name}
+                                                                onChange={(e) => handleUpdateDocumentInTemplate(sectionIndex, docIndex, { name: e.target.value })}
+                                                                className="flex-1 px-1.5 py-0.5 text-[10px] border border-gray-300 rounded focus:ring-1 focus:ring-primary-500"
+                                                                placeholder="Document name *"
+                                                                required
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRemoveDocumentFromTemplate(sectionIndex, docIndex)}
+                                                                className="text-red-600 hover:text-red-800 p-0.5"
+                                                                title="Remove document"
+                                                            >
+                                                                <i className="fas fa-times text-[9px]"></i>
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                </div>
+
+                                <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setShowTemplateModal(false);
+                                            setEditingTemplate(null);
+                                            window.tempTemplateData = null;
+                                        }}
+                                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
+                                    >
+                                        {editingTemplate ? 'Update Template' : 'Create Template'}
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
     };
 
     const handleUpdateStatus = async (sectionId, documentId, month, status) => {
@@ -1901,6 +2511,62 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         setDragOverIndex(null);
     };
 
+    // Document drag and drop
+    const handleDocumentDragStart = (e, document, sectionId, documentIndex) => {
+        setDraggedDocument({ document, sectionId, documentIndex });
+        e.dataTransfer.effectAllowed = 'move';
+        setTimeout(() => {
+            e.currentTarget.style.opacity = '0.5';
+        }, 0);
+    };
+
+    const handleDocumentDragEnd = (e) => {
+        e.currentTarget.style.opacity = '1';
+        setDraggedDocument(null);
+        setDragOverDocumentIndex(null);
+    };
+
+    const handleDocumentDragOver = (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+    };
+
+    const handleDocumentDragEnter = (e, sectionId, documentIndex) => {
+        e.preventDefault();
+        if (draggedDocument && draggedDocument.sectionId === sectionId && draggedDocument.documentIndex !== documentIndex) {
+            setDragOverDocumentIndex({ sectionId, documentIndex });
+        }
+    };
+
+    const handleDocumentDragLeave = (e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) {
+            setDragOverDocumentIndex(null);
+        }
+    };
+
+    const handleDocumentDrop = (e, sectionId, dropIndex) => {
+        e.preventDefault();
+        if (draggedDocument && draggedDocument.sectionId === sectionId && draggedDocument.documentIndex !== dropIndex) {
+            // Update timestamp BEFORE state update to prevent sync from overwriting
+            lastLocalUpdateRef.current = Date.now();
+            
+            // Use functional update to avoid race conditions
+            setSections(currentSections => {
+                return currentSections.map(section => {
+                    if (section.id === sectionId) {
+                        const reordered = [...section.documents];
+                        const [removed] = reordered.splice(draggedDocument.documentIndex, 1);
+                        reordered.splice(dropIndex, 0, removed);
+                        console.log('🔄 Reordering documents via drag and drop');
+                        return { ...section, documents: reordered };
+                    }
+                    return section;
+                });
+            });
+        }
+        setDragOverDocumentIndex(null);
+    };
+
     // Modals
     const SectionModal = () => {
         const [sectionFormData, setSectionFormData] = useState({
@@ -2531,6 +3197,34 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                         <i className="fas fa-plus mr-1"></i>
                         Add Section
                     </button>
+                    <div className="flex items-center gap-1 border-l border-gray-300 pl-2 ml-2">
+                        <button
+                            onClick={() => setShowApplyTemplateModal(true)}
+                            className="px-3 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-[10px] font-medium"
+                            title="Apply a template to this year"
+                        >
+                            <i className="fas fa-magic mr-1"></i>
+                            Apply Template
+                        </button>
+                        <button
+                            onClick={handleCreateTemplate}
+                            className="px-3 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-[10px] font-medium"
+                            title="Create or manage templates"
+                        >
+                            <i className="fas fa-layer-group mr-1"></i>
+                            Templates
+                        </button>
+                        {sections.length > 0 && (
+                            <button
+                                onClick={handleCreateTemplateFromCurrent}
+                                className="px-3 py-1 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-[10px] font-medium"
+                                title="Create template from current sections"
+                            >
+                                <i className="fas fa-save mr-1"></i>
+                                Save as Template
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -2651,17 +3345,17 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                                                         {section.description && (
                                                             <div className="text-[10px] text-gray-500">{section.description}</div>
                                                         )}
+                                                        <button
+                                                            onClick={() => handleAddDocument(section.id)}
+                                                            className="mt-2 px-2 py-0.5 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 transition-colors"
+                                                        >
+                                                            <i className="fas fa-plus mr-1"></i>
+                                                            Add Document/Data
+                                                        </button>
                                                     </div>
                                                 </div>
                                             </td>
                                             <td colSpan={12} className="px-2 py-2">
-                                                <button
-                                                    onClick={() => handleAddDocument(section.id)}
-                                                    className="px-2 py-0.5 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 transition-colors"
-                                                >
-                                                    <i className="fas fa-plus mr-1"></i>
-                                                    Add Document/Data
-                                                </button>
                                             </td>
                                             <td className="px-2.5 py-2 border-l border-gray-200">
                                                 <div className="flex items-center gap-1">
@@ -2701,17 +3395,33 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                                                 </td>
                                             </tr>
                                         ) : (
-                                            section.documents.map((document) => (
-                                                <tr key={document.id} className="hover:bg-gray-50">
+                                            section.documents.map((document, documentIndex) => (
+                                                <tr 
+                                                    key={document.id} 
+                                                    draggable="true"
+                                                    onDragStart={(e) => handleDocumentDragStart(e, document, section.id, documentIndex)}
+                                                    onDragEnd={handleDocumentDragEnd}
+                                                    onDragOver={handleDocumentDragOver}
+                                                    onDragEnter={(e) => handleDocumentDragEnter(e, section.id, documentIndex)}
+                                                    onDragLeave={handleDocumentDragLeave}
+                                                    onDrop={(e) => handleDocumentDrop(e, section.id, documentIndex)}
+                                                    className={`hover:bg-gray-50 cursor-grab active:cursor-grabbing ${
+                                                        dragOverDocumentIndex?.sectionId === section.id && dragOverDocumentIndex?.documentIndex === documentIndex 
+                                                            ? 'border-t-2 border-primary-500' : ''
+                                                    }`}
+                                                >
                                                     <td
                                                         className="px-4 py-1.5 sticky left-0 bg-white z-50 border-r border-gray-200"
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW }}
                                                     >
-                                                        <div className="min-w-[200px]">
-                                                            <div className="text-xs font-medium text-gray-900">{document.name}</div>
-                                                            {document.description && (
-                                                                <div className="text-[10px] text-gray-500 mt-0.5">{document.description}</div>
-                                                            )}
+                                                        <div className="min-w-[200px] flex items-center gap-2">
+                                                            <i className="fas fa-grip-vertical text-gray-400 text-xs"></i>
+                                                            <div className="flex-1">
+                                                                <div className="text-xs font-medium text-gray-900">{document.name}</div>
+                                                                {document.description && (
+                                                                    <div className="text-[10px] text-gray-500 mt-0.5">{document.description}</div>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </td>
                                                     {months.map(month => (
@@ -2751,6 +3461,8 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
             {/* Modals */}
             {showSectionModal && <SectionModal />}
             {showDocumentModal && <DocumentModal />}
+            {showTemplateModal && <TemplateModal />}
+            {showApplyTemplateModal && <ApplyTemplateModal />}
         </div>
     );
 }
