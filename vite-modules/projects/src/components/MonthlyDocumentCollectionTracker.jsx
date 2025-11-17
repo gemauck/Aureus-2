@@ -313,15 +313,17 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         );
     };
 
-  // Smart LiveDataSync management: Only pause when user is actively editing
-  // This allows background updates while protecting user input
+  // CRITICAL: Pause LiveDataSync completely when viewing/editing document collection
+  // This prevents any data sync from overwriting user input while they're working
   useEffect(() => {
-    // Don't pause LiveDataSync - allow background updates
-    // We'll use dirty field tracking to prevent overwrites during edits
-    console.log('✅ LiveDataSync enabled for MonthlyDocumentCollectionTracker - using smart sync protection');
+    console.log('🛑 Pausing LiveDataSync for document collection checklist - no sync while editing');
+    if (window.LiveDataSync && typeof window.LiveDataSync.pause === 'function') {
+      window.LiveDataSync.pause();
+    }
     
-    // Cleanup: ensure LiveDataSync is active on unmount
+    // Cleanup: resume LiveDataSync when component unmounts (user leaves the page)
     return () => {
+      console.log('▶️ Resuming LiveDataSync - user left document collection page');
       if (window.LiveDataSync && typeof window.LiveDataSync.resume === 'function') {
         window.LiveDataSync.resume();
       }
@@ -2872,11 +2874,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                             // Delay to allow onChange to complete
                             setTimeout(() => {
                                 isInteractingRef.current = false;
-                                if (!hoverCommentCell && !showSectionModal && !showDocumentModal) {
-                                    if (window.LiveDataSync && typeof window.LiveDataSync.resume === 'function') {
-                                        window.LiveDataSync.resume();
-                                    }
-                                }
+                                // Don't resume LiveDataSync - keep it paused while on document collection page
                             }, 100);
                         }}
                         className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent dark:bg-transparent relative z-30 ${
