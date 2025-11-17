@@ -2533,6 +2533,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             });
         }, [templates, showTemplateModal, showTemplateList]);
         
+        // Helper to parse sections safely
+        const parseTemplateSections = (sections) => {
+            if (!sections) return [];
+            if (Array.isArray(sections)) return sections;
+            if (typeof sections === 'string') {
+                try {
+                    const parsed = JSON.parse(sections);
+                    return Array.isArray(parsed) ? parsed : [];
+                } catch (e) {
+                    console.warn('Failed to parse template sections:', e);
+                    return [];
+                }
+            }
+            return [];
+        };
+
         const [templateFormData, setTemplateFormData] = useState(() => {
             // Check if we have pre-filled data from "Save as Template"
             const prefill = window.tempTemplateData;
@@ -2541,15 +2557,26 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 return {
                     name: prefill.name || '',
                     description: prefill.description || '',
-                    sections: prefill.sections || []
+                    sections: parseTemplateSections(prefill.sections)
                 };
             }
             return {
                 name: editingTemplate?.name || '',
                 description: editingTemplate?.description || '',
-                sections: editingTemplate?.sections || []
+                sections: parseTemplateSections(editingTemplate?.sections)
             };
         });
+
+        // Update templateFormData when editingTemplate changes
+        useEffect(() => {
+            if (editingTemplate && !showTemplateList) {
+                setTemplateFormData({
+                    name: editingTemplate.name || '',
+                    description: editingTemplate.description || '',
+                    sections: parseTemplateSections(editingTemplate.sections)
+                });
+            }
+        }, [editingTemplate, showTemplateList]);
 
         const handleAddSectionToTemplate = () => {
             setTemplateFormData({
@@ -2729,7 +2756,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                                     setTemplateFormData({
                                                                         name: template.name,
                                                                         description: template.description || '',
-                                                                        sections: Array.isArray(template.sections) ? template.sections : []
+                                                                        sections: (() => {
+                                                                            if (Array.isArray(template.sections)) return template.sections;
+                                                                            if (typeof template.sections === 'string') {
+                                                                                try {
+                                                                                    const parsed = JSON.parse(template.sections);
+                                                                                    return Array.isArray(parsed) ? parsed : [];
+                                                                                } catch (e) {
+                                                                                    return [];
+                                                                                }
+                                                                            }
+                                                                            return [];
+                                                                        })()
                                                                     });
                                                                 }}
                                                                 className="px-2 py-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
