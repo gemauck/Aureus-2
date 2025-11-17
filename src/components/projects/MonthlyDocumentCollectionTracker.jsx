@@ -3042,9 +3042,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         parsedSections
                     });
                 }
+                const finalSections = Array.isArray(parsedSections) ? parsedSections : [];
+                // Validate length is a number
+                if (typeof finalSections.length !== 'number' || Number.isNaN(finalSections.length)) {
+                    console.error('❌ Invalid sections.length detected:', {
+                        templateId: t.id,
+                        length: finalSections.length,
+                        lengthType: typeof finalSections.length
+                    });
+                }
                 return {
                     ...t,
-                    sections: Array.isArray(parsedSections) ? parsedSections : []
+                    sections: finalSections
                 };
             });
             return parsed;
