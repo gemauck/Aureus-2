@@ -665,31 +665,31 @@ const Calendar = () => {
             
             {/* Calendar Widget - Always render unless DailyNotes is open */}
             {!showDailyNotes ? (
-                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border shadow-lg p-4 max-w-sm transition-all duration-200`} style={{ display: 'block', visibility: 'visible' }}>
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center space-x-2">
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border shadow-lg p-3 sm:p-4 w-full max-w-sm mx-auto transition-all duration-200`} style={{ display: 'block', visibility: 'visible' }}>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 sm:mb-4 gap-2 sm:gap-0">
+                        <div className="flex items-center space-x-2 w-full sm:w-auto justify-between sm:justify-start">
                             <button
                                 onClick={goToPreviousMonth}
-                                className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 rounded-lg transition-all duration-200 hover:scale-110 text-sm`}
+                                className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700 active:bg-gray-600' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100 active:bg-gray-200'} p-2 sm:p-2 rounded-lg transition-all duration-200 active:scale-95 text-sm min-w-[44px] min-h-[44px] flex items-center justify-center`}
                                 title="Previous month"
                             >
                                 <i className="fas fa-chevron-left"></i>
                             </button>
-                            <h2 className={`text-base font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                            <h2 className={`text-sm sm:text-base font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'} flex-1 text-center sm:text-left sm:flex-none`}>
                                 {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
                             </h2>
                             <button
                                 onClick={goToNextMonth}
-                                className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 rounded-lg transition-all duration-200 hover:scale-110 text-sm`}
+                                className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700 active:bg-gray-600' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100 active:bg-gray-200'} p-2 sm:p-2 rounded-lg transition-all duration-200 active:scale-95 text-sm min-w-[44px] min-h-[44px] flex items-center justify-center`}
                                 title="Next month"
                             >
                                 <i className="fas fa-chevron-right"></i>
                             </button>
                         </div>
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
                             <button
                                 onClick={handleOpenDailyNotes}
-                                className={`text-xs ${isDark ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'} font-medium px-3 py-1.5 rounded-lg transition-all duration-200 hover:shadow-md flex items-center space-x-1.5`}
+                                className={`text-xs sm:text-xs ${isDark ? 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white' : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white'} font-medium px-3 py-2 sm:py-1.5 rounded-lg transition-all duration-200 active:scale-95 flex items-center space-x-1.5 min-h-[44px] sm:min-h-[auto]`}
                                 title="Open Daily Notes"
                             >
                                 <i className="fas fa-sticky-note"></i>
@@ -697,7 +697,7 @@ const Calendar = () => {
                             </button>
                             <button
                                 onClick={goToToday}
-                                className={`text-xs ${isDark ? 'text-blue-400 hover:text-blue-300 hover:bg-gray-700' : 'text-blue-600 hover:text-blue-700 hover:bg-blue-50'} font-medium px-3 py-1.5 rounded-lg transition-all duration-200`}
+                                className={`text-xs sm:text-xs ${isDark ? 'text-blue-400 hover:text-blue-300 hover:bg-gray-700 active:bg-gray-600' : 'text-blue-600 hover:text-blue-700 hover:bg-blue-50 active:bg-blue-100'} font-medium px-3 py-2 sm:py-1.5 rounded-lg transition-all duration-200 active:scale-95 min-h-[44px] sm:min-h-[auto]`}
                             >
                                 Today
                             </button>
@@ -705,11 +705,11 @@ const Calendar = () => {
                     </div>
                 
                 {/* Day names header */}
-                <div className="grid grid-cols-7 mb-2" style={{ gap: '4px' }}>
+                <div className="grid grid-cols-7 mb-2" style={{ gap: '2px' }}>
                     {dayNames.map(day => (
                         <div
                             key={day}
-                            className={`text-center text-xs font-semibold py-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}
+                            className={`text-center text-[10px] sm:text-xs font-semibold py-1 sm:py-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}
                         >
                             {day.substring(0, 3)}
                         </div>
@@ -717,7 +717,7 @@ const Calendar = () => {
                 </div>
                 
                 {/* Calendar grid - improved spacing and design */}
-                <div className="grid grid-cols-7" style={{ gap: '4px' }}>
+                <div className="grid grid-cols-7" style={{ gap: '2px' }}>
                     {days.map((day, index) => {
                         if (day === null) {
                             return <div key={`empty-${index}`} className="aspect-square"></div>;
@@ -732,14 +732,14 @@ const Calendar = () => {
                                 key={day}
                                 onClick={() => handleDayClick(day)}
                                 className={`
-                                    aspect-square rounded-lg transition-all duration-200 text-sm font-medium
+                                    aspect-square rounded-lg transition-all duration-200 text-xs sm:text-sm font-medium
                                     ${dayIsToday 
                                         ? isDark 
                                             ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-lg ring-2 ring-blue-400 ring-opacity-50' 
                                             : 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg ring-2 ring-blue-300 ring-opacity-50'
                                         : isDark
-                                            ? 'text-gray-200 hover:bg-gray-700 bg-gray-800/50 hover:shadow-md hover:scale-105'
-                                            : 'text-gray-900 hover:bg-blue-50 bg-white hover:shadow-md hover:scale-105'
+                                            ? 'text-gray-200 active:bg-gray-700 bg-gray-800/50 active:shadow-md active:scale-95'
+                                            : 'text-gray-900 active:bg-blue-50 bg-white active:shadow-md active:scale-95'
                                     }
                                     ${dayHasNotes ? 'font-bold' : 'font-normal'}
                                     flex flex-col items-center justify-center relative
@@ -749,20 +749,23 @@ const Calendar = () => {
                                         : isDark ? 'border-gray-700' : 'border-gray-200'
                                     }
                                     box-border group
+                                    touch-manipulation
                                 `}
                                 style={{ 
                                     borderWidth: dayIsToday ? '2px' : '1px',
-                                    margin: 0
+                                    margin: 0,
+                                    minHeight: '44px',
+                                    WebkitTapHighlightColor: 'transparent'
                                 }}
                             >
-                                <span className={`${dayIsToday ? 'text-white' : ''} relative z-10`}>{day}</span>
+                                <span className={`${dayIsToday ? 'text-white' : ''} relative z-10 text-[11px] sm:text-sm`}>{day}</span>
                                 {dayHasNotes && (
-                                    <div className={`absolute bottom-1.5 left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 rounded-full transition-all duration-200 ${
+                                    <div className={`absolute bottom-1 left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 sm:w-1.5 sm:h-1.5 rounded-full transition-all duration-200 ${
                                         dayIsToday 
                                             ? 'bg-white shadow-sm' 
                                             : isDark 
-                                                ? 'bg-blue-400 group-hover:bg-blue-300' 
-                                                : 'bg-blue-600 group-hover:bg-blue-500'
+                                                ? 'bg-blue-400 group-active:bg-blue-300' 
+                                                : 'bg-blue-600 group-active:bg-blue-500'
                                     }`}></div>
                                 )}
                             </button>
