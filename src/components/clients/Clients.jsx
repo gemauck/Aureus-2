@@ -153,6 +153,142 @@ function normalizePipelineStage(stage) {
     return alias || PIPELINE_STAGES[0];
 }
 
+function resolveStarredState(entity) {
+    if (!entity || typeof entity !== 'object') {
+        return false;
+    }
+
+    const normalizeFlag = (value) => {
+        if (value === true || value === 1) {
+            return true;
+        }
+        if (typeof value === 'string') {
+            const normalized = value.trim().toLowerCase();
+            return normalized === 'true' || normalized === '1' || normalized === 'yes';
+        }
+        return false;
+    };
+
+    if (normalizeFlag(entity.isStarred)) {
+        return true;
+    }
+    if (normalizeFlag(entity.starred)) {
+        return true;
+    }
+    if (Array.isArray(entity.starredBy) && entity.starredBy.length > 0) {
+        return true;
+    }
+    if (Array.isArray(entity.starredClients) && entity.starredClients.length > 0) {
+        return true;
+    }
+    if (Array.isArray(entity.starred_leads) && entity.starred_leads.length > 0) {
+        return true;
+    }
+
+    return false;
+}
+
+function extractStageValue(value) {
+    if (!value) {
+        return null;
+    }
+
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed || null;
+    }
+
+    if (typeof value === 'object') {
+        const nestedCandidates = [value.stage, value.status, value.name, value.label, value.title];
+        for (const candidate of nestedCandidates) {
+            const nestedValue = extractStageValue(candidate);
+            if (nestedValue) {
+                return nestedValue;
+            }
+        }
+    }
+
+    return null;
+}
+
+function resolvePipelineStage(entity) {
+    if (!entity || typeof entity !== 'object') {
+        return PIPELINE_STAGES[0];
+    }
+
+    const candidateSources = [
+        entity.stage,
+        entity.pipelineStage,
+        entity.pipelineStageName,
+        entity.pipelineStageLabel,
+        entity.pipelineStatus,
+        entity.stageName,
+        entity.stageLabel,
+        entity.salesStage,
+        entity.currentStage,
+        entity.pipeline?.stage,
+        entity.pipeline?.status,
+        entity.pipeline?.name,
+        entity.pipeline?.label,
+        entity.pipeline?.currentStage,
+        entity.pipelineStageData,
+        entity.pipeline_stage
+    ];
+
+    for (const source of candidateSources) {
+        const value = extractStageValue(source);
+        if (value) {
+            return normalizePipelineStage(value);
+        }
+    }
+
+    if (typeof entity.pipeline === 'string') {
+        try {
+            const parsedPipeline = JSON.parse(entity.pipeline);
+            const parsedValue = extractStageValue(parsedPipeline) ||
+                extractStageValue(parsedPipeline?.currentStage) ||
+                extractStageValue(parsedPipeline?.stage) ||
+                extractStageValue(parsedPipeline?.status);
+            if (parsedValue) {
+                return normalizePipelineStage(parsedValue);
+            }
+        } catch (_error) {
+            // Ignore JSON parse errors and fall through to default
+        }
+    }
+
+    return PIPELINE_STAGES[0];
+}
+
+function ensureLeadStage(lead) {
+    if (!lead || typeof lead !== 'object') {
+        return lead;
+    }
+
+    const hasValidStage = typeof lead.stage === 'string' && lead.stage.trim().length > 0;
+    if (hasValidStage) {
+        return {
+            ...lead,
+            stage: normalizePipelineStage(lead.stage)
+        };
+    }
+
+    const resolvedStage = resolvePipelineStage(lead) || PIPELINE_STAGES[0];
+    return {
+        ...lead,
+        stage: resolvedStage
+    };
+}
+
+function normalizeLeadStages(leadsArray = []) {
+    if (!Array.isArray(leadsArray)) {
+        return [];
+    }
+    return leadsArray
+        .filter(Boolean)
+        .map((lead) => ensureLeadStage(lead));
+}
+
 function processClientData(rawClients, cacheKey) {
     // Use cached processed data if available and recent
     const now = Date.now();
@@ -173,6 +309,7 @@ function processClientData(rawClients, cacheKey) {
         const clientType = c.type; // Keep null/undefined as-is, don't default
         const isLead = clientType === 'lead';
         let status = c.status;
+        const isStarred = resolveStarredState(c);
         
         // Convert status based on type
         if (isLead) {
@@ -189,7 +326,7 @@ function processClientData(rawClients, cacheKey) {
         id: c.id,
         name: c.name,
         status: status,
-        stage: c.stage || 'Awareness',
+        stage: resolvePipelineStage(c),
         industry: c.industry || 'Other',
         type: clientType, // Preserve null/undefined - will be filtered out later
         revenue: c.revenue || 0,
@@ -216,6 +353,7 @@ function processClientData(rawClients, cacheKey) {
         services: Array.isArray(c.services) ? c.services : (typeof c.services === 'string' ? JSON.parse(c.services || '[]') : []),
         tags: Array.isArray(c.tags) ? c.tags.map(ct => ct.tag || ct).filter(Boolean) : (c.tags ? [c.tags] : []),
         ownerId: c.ownerId || null,
+        isStarred,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt
         };
@@ -839,8 +977,9 @@ const Clients = React.memo(() => {
                 
                 // Show cached leads IMMEDIATELY (this is critical for fast loading!)
                 if (cachedLeads.length > 0) {
-                    setLeads(cachedLeads);
-                    setLeadsCount(cachedLeads.length);
+                    const normalizedCachedLeads = normalizeLeadStages(cachedLeads);
+                    setLeads(normalizedCachedLeads);
+                    setLeadsCount(normalizedCachedLeads.length);
                 }
                 
                 // Only load opportunities in background if Pipeline view is active
@@ -1161,9 +1300,13 @@ const Clients = React.memo(() => {
                 }
                 
                 if (cachedLeads && Array.isArray(cachedLeads) && cachedLeads.length > 0) {
-                    console.log(`⚡ Loading ${cachedLeads.length} leads from localStorage immediately`);
-                    setLeads(cachedLeads);
-                    setLeadsCount(cachedLeads.length);
+                    const normalizedCachedLeads = normalizeLeadStages(cachedLeads);
+                    console.log(`⚡ Loading ${normalizedCachedLeads.length} leads from localStorage immediately`);
+                    setLeads(normalizedCachedLeads);
+                    setLeadsCount(normalizedCachedLeads.length);
+                    if (window.storage?.setLeads) {
+                        window.storage.setLeads(normalizedCachedLeads);
+                    }
                     return true;
                 }
             } catch (e) {
@@ -1327,9 +1470,13 @@ const Clients = React.memo(() => {
             if (prevLeads.length === 0) {
                 const cachedLeads = window.storage?.getLeads?.();
                 if (cachedLeads && Array.isArray(cachedLeads) && cachedLeads.length > 0) {
-                    console.log(`🔄 Restoring ${cachedLeads.length} leads from localStorage to state`);
-                    setLeadsCount(cachedLeads.length);
-                    return cachedLeads;
+                    const normalizedCachedLeads = normalizeLeadStages(cachedLeads);
+                    console.log(`🔄 Restoring ${normalizedCachedLeads.length} leads from localStorage to state`);
+                    setLeadsCount(normalizedCachedLeads.length);
+                    return normalizedCachedLeads.map(lead => ({
+                        ...lead,
+                        isStarred: resolveStarredState(lead)
+                    }));
                 }
             }
             return prevLeads;
@@ -1341,7 +1488,12 @@ const Clients = React.memo(() => {
         if (clients.length === 0) {
             const cachedClients = safeStorage.getClients();
             if (cachedClients && Array.isArray(cachedClients) && cachedClients.length > 0) {
-                const filteredClients = cachedClients.filter(c => c.type === 'client' || !c.type);
+                const filteredClients = cachedClients
+                    .filter(c => c.type === 'client' || !c.type)
+                    .map(client => ({
+                        ...client,
+                        isStarred: resolveStarredState(client)
+                    }));
                 if (filteredClients.length > 0) {
                     console.log(`🔄 Restoring ${filteredClients.length} clients from localStorage to state`);
                     setClients(filteredClients);
@@ -1360,6 +1512,7 @@ const Clients = React.memo(() => {
             let status = c.status;
             const normalizedIdentity = normalizeEntityId(c, isLead ? 'lead' : 'client');
             const normalizedId = String(normalizedIdentity.id);
+            const stage = resolvePipelineStage(c);
 
             if (normalizedIdentity.generated) {
                 console.warn('⚠️ mapDbClient: Entity missing primary identifier, generated fallback', {
@@ -1421,6 +1574,7 @@ const Clients = React.memo(() => {
                 id: normalizedId,
                 name: c.name,
                 status,
+                stage,
                 industry: c.industry || 'Other',
                 type: c.type, // Preserve as-is - null types will be filtered out
                 revenue: c.revenue || 0,
@@ -1446,6 +1600,7 @@ const Clients = React.memo(() => {
                     notes: ''
                 }),
                 ...(normalizedIdentity.generated ? { tempId: normalizedId, legacyId: c.id ?? c.clientId ?? null } : {}),
+                isStarred: resolveStarredState(c),
                 createdAt: c.createdAt,
                 updatedAt: c.updatedAt
             };
@@ -1756,7 +1911,10 @@ const Clients = React.memo(() => {
                     // Use functional setState to ensure it updates even if leads is empty
                     setLeads(prevLeads => {
                         if (prevLeads.length === 0) {
-                            return cachedLeads;
+                            return cachedLeads.map(lead => ({
+                                ...lead,
+                                isStarred: resolveStarredState(lead)
+                            }));
                         }
                         return prevLeads;
                     });
@@ -1934,11 +2092,11 @@ const Clients = React.memo(() => {
                     name: lead.name || '',
                     industry: lead.industry || 'Other',
                     status: lead.status || 'Potential',
-                    stage: lead.stage || 'Awareness',
+                    stage: resolvePipelineStage(lead),
                     source: lead.source || 'Website',
                     value: lead.value || lead.revenue || 0,
                     probability: lead.probability || 0,
-                    isStarred: lead.isStarred === true,
+                    isStarred: resolveStarredState(lead),
                     firstContactDate: firstContact,
                     lastContact,
                     address: lead.address || '',
@@ -3130,7 +3288,7 @@ const Clients = React.memo(() => {
                 services.some(service => filterServices.includes(service));
             
             // Check if starred filter is applied
-            const matchesStarred = !showStarredOnly || client.isStarred === true;
+            const matchesStarred = !showStarredOnly || resolveStarredState(client);
             
             return matchesSearch && matchesIndustry && matchesStatus && matchesServices && matchesStarred;
         });
@@ -3153,7 +3311,7 @@ const Clients = React.memo(() => {
             const matchesStatus = true;
             
             // Check if starred filter is applied
-            const matchesStarred = !showStarredOnly || lead.isStarred === true;
+            const matchesStarred = !showStarredOnly || resolveStarredState(lead);
             
             return matchesSearch && matchesIndustry && matchesStatus && matchesStarred;
         });
@@ -3350,15 +3508,39 @@ const Clients = React.memo(() => {
         const newStarredState = !currentStarred;
         
         // Update local state optimistically first for instant UI feedback
+        const updateLeadsState = (updater) => {
+            setLeads(prevLeads => {
+                const updated = updater(prevLeads);
+                try {
+                    window.storage?.setLeads?.(updated);
+                } catch (error) {
+                    console.warn('⚠️ Failed to persist leads to localStorage after star toggle:', error);
+                }
+                return updated;
+            });
+        };
+
+        const updateClientsState = (updater) => {
+            setClients(prevClients => {
+                const updated = updater(prevClients);
+                try {
+                    safeStorage.setClients(updated);
+                } catch (error) {
+                    console.warn('⚠️ Failed to persist clients to localStorage after star toggle:', error);
+                }
+                return updated;
+            });
+        };
+
         if (isLead) {
-            setLeads(prevLeads => 
-                prevLeads.map(l => 
+            updateLeadsState(prevLeads =>
+                prevLeads.map(l =>
                     l.id === clientId ? { ...l, isStarred: newStarredState } : l
                 )
             );
         } else {
-            setClients(prevClients => 
-                prevClients.map(c => 
+            updateClientsState(prevClients =>
+                prevClients.map(c =>
                     c.id === clientId ? { ...c, isStarred: newStarredState } : c
                 )
             );
@@ -3378,14 +3560,14 @@ const Clients = React.memo(() => {
                     console.error('❌ Failed to toggle star:', error);
                     // Revert optimistic update on error
                     if (isLead) {
-                        setLeads(prevLeads => 
-                            prevLeads.map(l => 
+                        updateLeadsState(prevLeads =>
+                            prevLeads.map(l =>
                                 l.id === clientId ? { ...l, isStarred: currentStarred } : l
                             )
                         );
                     } else {
-                        setClients(prevClients => 
-                            prevClients.map(c => 
+                        updateClientsState(prevClients =>
+                            prevClients.map(c =>
                                 c.id === clientId ? { ...c, isStarred: currentStarred } : c
                             )
                         );
@@ -3396,14 +3578,14 @@ const Clients = React.memo(() => {
                 console.error('❌ Star API not available');
                 // Revert if API not available
                 if (isLead) {
-                    setLeads(prevLeads => 
-                        prevLeads.map(l => 
+                    updateLeadsState(prevLeads =>
+                        prevLeads.map(l =>
                             l.id === clientId ? { ...l, isStarred: currentStarred } : l
                         )
                     );
                 } else {
-                    setClients(prevClients => 
-                        prevClients.map(c => 
+                    updateClientsState(prevClients =>
+                        prevClients.map(c =>
                             c.id === clientId ? { ...c, isStarred: currentStarred } : c
                         )
                     );
@@ -3413,14 +3595,14 @@ const Clients = React.memo(() => {
             console.error('❌ Failed to toggle star:', error);
             // Revert optimistic update on error
             if (isLead) {
-                setLeads(prevLeads => 
-                    prevLeads.map(l => 
+                updateLeadsState(prevLeads =>
+                    prevLeads.map(l =>
                         l.id === clientId ? { ...l, isStarred: currentStarred } : l
                     )
                 );
             } else {
-                setClients(prevClients => 
-                    prevClients.map(c => 
+                updateClientsState(prevClients =>
+                    prevClients.map(c =>
                         c.id === clientId ? { ...c, isStarred: currentStarred } : c
                     )
                 );
