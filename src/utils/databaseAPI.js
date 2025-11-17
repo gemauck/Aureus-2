@@ -1850,6 +1850,7 @@ const DatabaseAPI = {
             throw new Error('commentId is required to delete a comment');
         }
         const payload = {
+            action: 'comment',
             id: commentId,
             commentId
         };

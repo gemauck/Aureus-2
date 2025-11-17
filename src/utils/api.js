@@ -482,6 +482,7 @@ const api = {
     if (options.pageUrl) params.append('pageUrl', options.pageUrl)
     if (options.section) params.append('section', options.section)
     if (options.includeUser) params.append('includeUser', 'true')
+    if (options.includeReplies) params.append('includeReplies', 'true')
     
     const query = params.toString()
     const res = await request(`/feedback${query ? `?${query}` : ''}`)
@@ -492,6 +493,18 @@ const api = {
     const res = await request('/feedback', { 
       method: 'POST', 
       body: JSON.stringify(data) 
+    })
+    return res
+  },
+
+  async replyToFeedback(feedbackId, data) {
+    if (!feedbackId) {
+      throw new Error('feedbackId is required to reply')
+    }
+
+    const res = await request(`/feedback/${feedbackId}/replies`, {
+      method: 'POST',
+      body: JSON.stringify(data)
     })
     return res
   },

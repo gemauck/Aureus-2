@@ -1,5 +1,5 @@
 import { prisma } from './_lib/prisma.js'
-import { badRequest, created, ok, serverError } from './_lib/response.js'
+import { badRequest, created, forbidden, notFound, ok, serverError, unauthorized } from './_lib/response.js'
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
@@ -210,6 +210,47 @@ async function handler(req, res) {
       }
     }
 
+    const ensureUserLoaded = async () => {
+      if (req.user?.role) {
+        return req.user
+      }
+
+      const userId = req.user?.id || req.user?.sub
+      if (!userId) {
+        return null
+      }
+
+      try {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: userId },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true
+          }
+        })
+
+        if (dbUser) {
+          req.user = {
+            ...req.user,
+            ...dbUser
+          }
+        }
+
+        return req.user || dbUser
+      } catch (userError) {
+        console.error('❌ Failed to load user for feedback reply:', userError)
+        return null
+      }
+    }
+
+    const isAdminUser = (user) => {
+      if (!user) return false
+      const role = (user.role || '').toString().trim().toLowerCase()
+      return role === 'admin'
+    }
+
     // Parse query parameters safely and get path without query string
     const parseQueryParams = (urlString) => {
       const params = {}
@@ -236,6 +277,7 @@ async function handler(req, res) {
         const pageUrl = queryParams.pageUrl
         const section = queryParams.section
         const includeUser = queryParams.includeUser === 'true'
+        const includeReplies = queryParams.includeReplies === 'true'
 
         const where = {}
         if (pageUrl) where.pageUrl = pageUrl
@@ -248,16 +290,33 @@ async function handler(req, res) {
           take: pageUrl && section ? 50 : 200 // More results for specific sections
         }
 
-        if (includeUser) {
-          // Use include for relations - more reliable than nested select
-          queryOptions.include = {
-            user: {
+        if (includeUser || includeReplies) {
+          queryOptions.include = {}
+
+          if (includeUser) {
+            queryOptions.include.user = {
               select: {
                 id: true,
                 name: true,
                 email: true,
                 avatar: true
               }
+            }
+          }
+
+          if (includeReplies) {
+            queryOptions.include.replies = {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    avatar: true
+                  }
+                }
+              },
+              orderBy: { createdAt: 'asc' }
             }
           }
         } else {
@@ -350,6 +409,79 @@ async function handler(req, res) {
         return created(res, createdItem)
       } catch (e) {
         return serverError(res, 'Failed to create feedback', e.message)
+      }
+    }
+
+    // POST /api/feedback/:id/replies -> reply to feedback (admin only)
+    if (
+      req.method === 'POST' &&
+      pathSegments.length === 3 &&
+      pathSegments[0] === 'feedback' &&
+      pathSegments[2] === 'replies'
+    ) {
+      const feedbackId = pathSegments[1]
+
+      if (!feedbackId) {
+        return badRequest(res, 'feedbackId required')
+      }
+
+      if (!req.user) {
+        return unauthorized(res, 'Authentication required to reply')
+      }
+
+      const currentUser = await ensureUserLoaded()
+      if (!isAdminUser(currentUser)) {
+        console.warn('⚠️ Non-admin attempted to reply to feedback', {
+          userId: currentUser?.id || req.user?.sub,
+          email: currentUser?.email || req.user?.email,
+          role: currentUser?.role || req.user?.role
+        })
+        return forbidden(res, 'Only administrators can reply to feedback')
+      }
+
+      // Try req.body first, fallback to raw parse
+      let body = req.body
+      if (!body || Object.keys(body).length === 0) {
+        body = await parseJsonBody(req)
+      }
+
+      const message = (body?.message || '').trim()
+      if (!message) {
+        return badRequest(res, 'message required')
+      }
+
+      const feedbackItem = await prisma.feedback.findUnique({
+        where: { id: feedbackId },
+        select: { id: true }
+      })
+
+      if (!feedbackItem) {
+        return notFound(res, 'Feedback not found')
+      }
+
+      try {
+        const reply = await prisma.feedbackReply.create({
+          data: {
+            feedbackId: feedbackItem.id,
+            userId: currentUser?.id || req.user?.sub || null,
+            message
+          },
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                avatar: true
+              }
+            }
+          }
+        })
+
+        return created(res, reply)
+      } catch (e) {
+        console.error('❌ Failed to save feedback reply:', e)
+        return serverError(res, 'Failed to create feedback reply', e.message)
       }
     }
 

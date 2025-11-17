@@ -9,6 +9,9 @@ const FeedbackViewer = () => {
         severity: 'all',
         search: ''
     });
+    const [replyInputs, setReplyInputs] = useState({});
+    const [submittingReplyId, setSubmittingReplyId] = useState(null);
+    const [replyErrors, setReplyErrors] = useState({});
     const { isDark } = window.useTheme();
     const { user } = window.useAuth();
 
@@ -37,7 +40,8 @@ const FeedbackViewer = () => {
         try {
             console.log('📥 Loading feedback from API...');
             const response = await window.api.getFeedback({
-                includeUser: true
+                includeUser: true,
+                includeReplies: true
             });
             console.log('📥 Feedback API response:', response);
             
@@ -67,6 +71,43 @@ const FeedbackViewer = () => {
             setFeedback([]);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleReplyChange = (feedbackId, value) => {
+        setReplyInputs(prev => ({
+            ...prev,
+            [feedbackId]: value
+        }));
+    };
+
+    const handleReplySubmit = async (feedbackId) => {
+        const message = (replyInputs[feedbackId] || '').trim();
+        if (!message || submittingReplyId === feedbackId) {
+            return;
+        }
+
+        setReplyErrors(prev => ({
+            ...prev,
+            [feedbackId]: null
+        }));
+        setSubmittingReplyId(feedbackId);
+
+        try {
+            await window.api.replyToFeedback(feedbackId, { message });
+            setReplyInputs(prev => ({
+                ...prev,
+                [feedbackId]: ''
+            }));
+            await loadFeedback();
+        } catch (error) {
+            console.error('❌ Failed to submit reply:', error);
+            setReplyErrors(prev => ({
+                ...prev,
+                [feedbackId]: error?.message || 'Failed to submit reply. Please try again.'
+            }));
+        } finally {
+            setSubmittingReplyId(null);
         }
     };
 
@@ -255,6 +296,74 @@ const FeedbackViewer = () => {
                                     <div className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                                         <div><strong>Section:</strong> {item.section || 'general'}</div>
                                         <div><strong>Page:</strong> <code className="bg-gray-100 px-1 rounded">{item.pageUrl}</code></div>
+                                    </div>
+                                    <div className={`mt-3 pt-3 border-t ${isDark ? 'border-gray-700' : 'border-gray-100'} space-y-3`}>
+                                        <div className="space-y-2">
+                                            {(item.replies && item.replies.length > 0) ? (
+                                                item.replies.map((reply) => (
+                                                    <div
+                                                        key={reply.id}
+                                                        className={`${isDark ? 'bg-gray-700' : 'bg-gray-50'} rounded-lg p-3`}
+                                                    >
+                                                        <div className="flex items-start gap-2">
+                                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
+                                                                isDark ? 'bg-primary-500 text-white' : 'bg-primary-100 text-primary-700'
+                                                            }`}>
+                                                                {reply.user ? getInitials(reply.user.name || reply.user.email || 'Admin') : 'AD'}
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-2 flex-wrap">
+                                                                    <span className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                                        {reply.user?.name || reply.user?.email || 'Admin'}
+                                                                    </span>
+                                                                    <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                                        {formatDate(reply.createdAt)}
+                                                                    </span>
+                                                                </div>
+                                                                <p className={`text-sm mt-1 ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>{reply.message}</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <p className={`text-xs italic ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                                                    No replies yet.
+                                                </p>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <textarea
+                                                value={replyInputs[item.id] || ''}
+                                                onChange={(e) => handleReplyChange(item.id, e.target.value)}
+                                                placeholder="Write a reply..."
+                                                rows={2}
+                                                className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
+                                                    isDark
+                                                        ? 'bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-400'
+                                                        : 'border-gray-300'
+                                                }`}
+                                            />
+                                            <div className="flex items-center justify-between mt-2">
+                                                {replyErrors[item.id] && (
+                                                    <span className="text-xs text-red-500">{replyErrors[item.id]}</span>
+                                                )}
+                                                <button
+                                                    onClick={() => handleReplySubmit(item.id)}
+                                                    disabled={(replyInputs[item.id] || '').trim().length === 0 || submittingReplyId === item.id}
+                                                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                                        submittingReplyId === item.id
+                                                            ? 'opacity-70 cursor-not-allowed'
+                                                            : ''
+                                                    } ${
+                                                        isDark
+                                                            ? 'bg-primary-600 text-white hover:bg-primary-500 disabled:bg-primary-700'
+                                                            : 'bg-primary-100 text-primary-700 hover:bg-primary-200 disabled:bg-primary-100'
+                                                    }`}
+                                                >
+                                                    {submittingReplyId === item.id ? 'Sending...' : 'Reply'}
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

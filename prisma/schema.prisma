@@ -347,10 +347,25 @@ model Feedback {
   severity  String   @default("medium") // low | medium | high
   meta      String?
   user      User?    @relation("UserFeedback", fields: [userId], references: [id])
+  replies   FeedbackReply[]
   createdAt DateTime @default(now())
 
   @@index([pageUrl])
   @@index([section])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model FeedbackReply {
+  id         String   @id @default(cuid())
+  feedbackId String
+  userId     String?
+  message    String
+  feedback   Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  user       User?    @relation(fields: [userId], references: [id])
+  createdAt  DateTime @default(now())
+
+  @@index([feedbackId])
   @@index([userId])
   @@index([createdAt])
 }
