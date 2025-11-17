@@ -260,9 +260,14 @@ function initializeProjectDetail() {
             () => (typeof window.CommentsPopup === 'function' ? window.CommentsPopup : null)
         );
         const [isCommentsPopupLoading, setIsCommentsPopupLoading] = useState(false);
+        const [projectModalComponent, setProjectModalComponent] = useState(
+            () => (typeof window.ProjectModal === 'function' ? window.ProjectModal : null)
+        );
+        const [isProjectModalLoading, setIsProjectModalLoading] = useState(false);
         const listModalLoadPromiseRef = useRef(null);
         const taskDetailModalLoadPromiseRef = useRef(null);
         const commentsPopupLoadPromiseRef = useRef(null);
+        const projectModalLoadPromiseRef = useRef(null);
     
     // Check if required components are loaded
     const requiredComponents = {
@@ -410,6 +415,43 @@ function initializeProjectDetail() {
             window.removeEventListener('componentLoaded', handleComponentLoaded);
         };
     }, [listModalComponent]);
+
+    // Listen for ProjectModal being registered after initial render
+    useEffect(() => {
+        if (projectModalComponent) {
+            return;
+        }
+
+        if (typeof window.ProjectModal === 'function') {
+            setProjectModalComponent(() => window.ProjectModal);
+            return;
+        }
+
+        const handleComponentLoaded = (event) => {
+            if (event?.detail?.component === 'ProjectModal' && typeof window.ProjectModal === 'function') {
+                setProjectModalComponent(() => window.ProjectModal);
+            }
+        };
+
+        let attempts = 0;
+        const maxAttempts = 50;
+        const intervalId = setInterval(() => {
+            attempts++;
+            if (typeof window.ProjectModal === 'function') {
+                setProjectModalComponent(() => window.ProjectModal);
+                clearInterval(intervalId);
+            } else if (attempts >= maxAttempts) {
+                clearInterval(intervalId);
+            }
+        }, 100);
+
+        window.addEventListener('componentLoaded', handleComponentLoaded);
+
+        return () => {
+            clearInterval(intervalId);
+            window.removeEventListener('componentLoaded', handleComponentLoaded);
+        };
+    }, [projectModalComponent]);
 
     useEffect(() => {
         if (taskDetailModalComponent) {
@@ -624,6 +666,52 @@ function initializeProjectDetail() {
         commentsPopupLoadPromiseRef.current = loadPromise;
         return loadPromise;
     }, [commentsPopupComponent]);
+
+    const ensureProjectModalLoaded = useCallback(async () => {
+        if (typeof window.ProjectModal === 'function') {
+            if (!projectModalComponent) {
+                setProjectModalComponent(() => window.ProjectModal);
+            }
+            return true;
+        }
+
+        if (projectModalLoadPromiseRef.current) {
+            return projectModalLoadPromiseRef.current;
+        }
+
+        setIsProjectModalLoading(true);
+
+        const loadPromise = new Promise((resolve) => {
+            const script = document.createElement('script');
+            script.src = `/dist/src/components/projects/ProjectModal.js?v=project-modal-fallback-${Date.now()}`;
+            script.async = true;
+            script.dataset.projectModalLoader = 'true';
+
+            script.onload = () => {
+                setIsProjectModalLoading(false);
+                projectModalLoadPromiseRef.current = null;
+                if (typeof window.ProjectModal === 'function') {
+                    setProjectModalComponent(() => window.ProjectModal);
+                    resolve(true);
+                } else {
+                    console.warn('⚠️ ProjectModal script loaded but component not registered');
+                    resolve(false);
+                }
+            };
+
+            script.onerror = (error) => {
+                console.error('❌ Failed to load ProjectModal:', error);
+                setIsProjectModalLoading(false);
+                projectModalLoadPromiseRef.current = null;
+                resolve(false);
+            };
+
+            document.body.appendChild(script);
+        });
+
+        projectModalLoadPromiseRef.current = loadPromise;
+        return loadPromise;
+    }, [projectModalComponent]);
 
     // Initialize taskLists with project-specific data
     const [taskLists, setTaskLists] = useState(
@@ -2914,7 +3002,7 @@ function initializeProjectDetail() {
 
     const TaskDetailModalComponent = taskDetailModalComponent || (typeof window.TaskDetailModal === 'function' ? window.TaskDetailModal : null);
     const CommentsPopupComponent = commentsPopupComponent || (typeof window.CommentsPopup === 'function' ? window.CommentsPopup : null);
-    const ProjectModalComponent = (typeof window.ProjectModal === 'function' ? window.ProjectModal : null);
+    const ProjectModalComponent = projectModalComponent || (typeof window.ProjectModal === 'function' ? window.ProjectModal : null);
     const CustomFieldModalComponent = (typeof window.CustomFieldModal === 'function' ? window.CustomFieldModal : null);
     const KanbanViewComponent = (typeof window.KanbanView === 'function' ? window.KanbanView : null);
     const DocumentCollectionModalComponent = (typeof window.DocumentCollectionModal === 'function' ? window.DocumentCollectionModal : null);
@@ -2937,7 +3025,14 @@ function initializeProjectDetail() {
                 </div>
                 <div className="flex gap-2">
                     <button 
-                        onClick={() => setShowProjectModal(true)}
+                        onClick={async () => {
+                            const loaded = await ensureProjectModalLoaded();
+                            if (loaded) {
+                                setShowProjectModal(true);
+                            } else {
+                                alert('Failed to load project settings. Please refresh the page and try again.');
+                            }
+                        }}
                         className="px-3 py-1.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center text-xs font-medium"
                     >
                         <i className="fas fa-cog mr-1.5"></i>
@@ -3272,18 +3367,22 @@ function initializeProjectDetail() {
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-lg p-4 w-full max-w-sm text-center shadow-lg space-y-2">
                         <p className="text-sm text-gray-700 font-medium">
-                            Loading project settings...
+                            {isProjectModalLoading
+                                ? 'Loading project settings...'
+                                : 'Preparing project settings. Please wait...'}
                         </p>
                         <p className="text-xs text-gray-500">
                             This screen opens once ProjectModal finishes loading.
                         </p>
-                        <button
-                            type="button"
-                            onClick={() => setShowProjectModal(false)}
-                            className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                        >
-                            Close
-                        </button>
+                        <div className="mt-4">
+                            <button
+                                type="button"
+                                onClick={() => setShowProjectModal(false)}
+                                className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                            >
+                                Close
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

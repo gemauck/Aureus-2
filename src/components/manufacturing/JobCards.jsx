@@ -42,7 +42,8 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     materialsBought: [],
     otherComments: '',
     photos: [],
-    status: 'draft'
+    status: 'draft',
+    nonActiveClientSiteDetails: ''
   });
   const [technicianInput, setTechnicianInput] = useState('');
   const [selectedPhotos, setSelectedPhotos] = useState([]);
@@ -353,6 +354,13 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
 
   // Load sites when client changes
   useEffect(() => {
+    // Handle "Not an active Client" case
+    if (formData.clientId === 'not_active_client') {
+      setAvailableSites([]);
+      setFormData(prev => ({ ...prev, siteId: '', siteName: '', clientName: '' }));
+      return;
+    }
+    
     if (formData.clientId && clients.length > 0) {
       const client = clients.find(c => c.id === formData.clientId);
       if (client) {
@@ -879,7 +887,8 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       materialsBought: [],
       otherComments: '',
       photos: [],
-      status: 'draft'
+      status: 'draft',
+      nonActiveClientSiteDetails: ''
     });
     setSelectedPhotos([]);
     setTechnicianInput('');
@@ -1127,32 +1136,50 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="">Select client</option>
+                <option value="not_active_client">Not an active Client</option>
                 {clients.map(client => (
                   <option key={client.id} value={client.id}>{client.name}</option>
                 ))}
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Site
-              </label>
-              <select
-                name="siteId"
-                value={formData.siteId}
-                onChange={handleChange}
-                disabled={!formData.clientId || availableSites.length === 0}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-              >
-                <option value="">
-                  {availableSites.length === 0 ? 'No sites available for this client' : 'Select site'}
-                </option>
-                {availableSites.map(site => (
-                  <option key={site.id || site.name} value={site.id || site.name}>
-                    {site.name || site}
+            {formData.clientId === 'not_active_client' ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Details of Site Visited *
+                </label>
+                <textarea
+                  name="nonActiveClientSiteDetails"
+                  value={formData.nonActiveClientSiteDetails}
+                  onChange={handleChange}
+                  required
+                  rows={3}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y"
+                  placeholder="Enter details of the site visited"
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Site
+                </label>
+                <select
+                  name="siteId"
+                  value={formData.siteId}
+                  onChange={handleChange}
+                  disabled={!formData.clientId || availableSites.length === 0}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
+                >
+                  <option value="">
+                    {availableSites.length === 0 ? 'No sites available for this client' : 'Select site'}
                   </option>
-                ))}
-              </select>
-            </div>
+                  {availableSites.map(site => (
+                    <option key={site.id || site.name} value={site.id || site.name}>
+                      {site.name || site}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Location */}
@@ -1629,7 +1656,8 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
                       materialsBought: jobCard.materialsBought || [],
                       otherComments: jobCard.otherComments || '',
                       photos: jobCard.photos || [],
-                      status: jobCard.status || 'draft'
+                      status: jobCard.status || 'draft',
+                      nonActiveClientSiteDetails: jobCard.nonActiveClientSiteDetails || ''
                     });
                   }}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
@@ -1777,35 +1805,56 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
                 >
                   <option value="">Select client</option>
+                  <option value="not_active_client">Not an active Client</option>
                   {clients.map(client => (
                     <option key={client.id} value={client.id}>{client.name}</option>
                   ))}
                 </select>
               ) : (
-                <p className="text-sm text-gray-900">{displayData.clientName || 'N/A'}</p>
+                <p className="text-sm text-gray-900">
+                  {displayData.clientId === 'not_active_client' ? 'Not an active Client' : (displayData.clientName || 'N/A')}
+                </p>
               )}
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Site</label>
-              {isEditMode ? (
-                <select
-                  name="siteId"
-                  value={formData.siteId}
-                  onChange={handleChange}
-                  disabled={!formData.clientId || availableSites.length === 0}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg disabled:bg-gray-100"
-                >
-                  <option value="">Select site</option>
-                  {availableSites.map(site => (
-                    <option key={site.id || site.name} value={site.id || site.name}>
-                      {site.name || site}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <p className="text-sm text-gray-900">{displayData.siteName || 'N/A'}</p>
-              )}
-            </div>
+            {formData.clientId === 'not_active_client' ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Details of Site Visited</label>
+                {isEditMode ? (
+                  <textarea
+                    name="nonActiveClientSiteDetails"
+                    value={formData.nonActiveClientSiteDetails}
+                    onChange={handleChange}
+                    rows={3}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg resize-y"
+                    placeholder="Enter details of the site visited"
+                  />
+                ) : (
+                  <p className="text-sm text-gray-900">{displayData.nonActiveClientSiteDetails || 'N/A'}</p>
+                )}
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Site</label>
+                {isEditMode ? (
+                  <select
+                    name="siteId"
+                    value={formData.siteId}
+                    onChange={handleChange}
+                    disabled={!formData.clientId || availableSites.length === 0}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg disabled:bg-gray-100"
+                  >
+                    <option value="">Select site</option>
+                    {availableSites.map(site => (
+                      <option key={site.id || site.name} value={site.id || site.name}>
+                        {site.name || site}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-sm text-gray-900">{displayData.siteName || 'N/A'}</p>
+                )}
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
               {isEditMode ? (

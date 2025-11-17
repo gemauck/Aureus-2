@@ -112,7 +112,8 @@ const JobCardFormPublic = () => {
     customerTitle: '',
     customerFeedback: '',
     customerSignDate: '',
-    customerSignature: ''
+    customerSignature: '',
+    nonActiveClientSiteDetails: ''
   });
 
   const [technicianInput, setTechnicianInput] = useState('');
@@ -881,6 +882,13 @@ const JobCardFormPublic = () => {
 
   useEffect(() => {
     const loadSitesForClient = async () => {
+      // Handle "Not an active Client" case
+      if (formData.clientId === 'not_active_client') {
+        setAvailableSites([]);
+        setFormData(prev => ({ ...prev, siteId: '', siteName: '', clientName: '' }));
+        return;
+      }
+      
       if (formData.clientId && clients.length > 0) {
         const client = clients.find(c => c.id === formData.clientId);
         if (client) {
@@ -1599,33 +1607,52 @@ const JobCardFormPublic = () => {
               style={{ fontSize: '16px' }}
             >
               <option value="">Select client</option>
+              <option value="not_active_client">Not an active Client</option>
               {clients.map(client => (
                 <option key={client.id} value={client.id}>{client.name}</option>
               ))}
             </select>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Site
-            </label>
-            <select
-              name="siteId"
-              value={formData.siteId}
-              onChange={handleChange}
-              disabled={!formData.clientId || availableSites.length === 0}
-              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 bg-white"
-              style={{ fontSize: '16px' }}
-            >
-              <option value="">
-                {availableSites.length === 0 ? 'No sites available for this client' : 'Select site'}
-              </option>
-              {availableSites.map(site => (
-                <option key={site.id || site.name || site} value={site.id || site.name || site}>
-                  {site.name || site}
+          {formData.clientId === 'not_active_client' ? (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Details of Site Visited *
+              </label>
+              <textarea
+                name="nonActiveClientSiteDetails"
+                value={formData.nonActiveClientSiteDetails}
+                onChange={handleChange}
+                required
+                rows={3}
+                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white resize-y"
+                placeholder="Enter details of the site visited"
+                style={{ fontSize: '16px' }}
+              />
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Site
+              </label>
+              <select
+                name="siteId"
+                value={formData.siteId}
+                onChange={handleChange}
+                disabled={!formData.clientId || availableSites.length === 0}
+                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 bg-white"
+                style={{ fontSize: '16px' }}
+              >
+                <option value="">
+                  {availableSites.length === 0 ? 'No sites available for this client' : 'Select site'}
                 </option>
-              ))}
-            </select>
-          </div>
+                {availableSites.map(site => (
+                  <option key={site.id || site.name || site} value={site.id || site.name || site}>
+                    {site.name || site}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </section>
       {renderNavigationButtons()}
@@ -2312,7 +2339,7 @@ const JobCardFormPublic = () => {
   );
 
   const renderNavigationButtons = () => (
-    <div className="mt-6 pt-6 border-t border-gray-200 bg-white rounded-lg p-4 sm:p-6">
+    <div className="mt-6 pt-6 border-t border-gray-200 bg-white rounded-lg p-4 sm:p-6 mb-4 sm:mb-0">
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div className="text-[10px] sm:text-xs text-gray-500 text-center sm:text-left">
           Step {currentStep + 1} of {STEP_IDS.length}
@@ -2527,7 +2554,7 @@ const JobCardFormPublic = () => {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Scrollable Content Area */}
         <div className="job-card-scrollable-content flex-1 overflow-y-auto overflow-x-hidden -webkit-overflow-scrolling-touch">
-          <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 space-y-4 sm:space-y-5">
+          <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6 pb-24 sm:pb-6 space-y-4 sm:space-y-5">
             {stepError && (
               <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-3 py-2 flex items-start gap-2 text-sm">
                 <i className="fas fa-exclamation-circle mt-0.5 flex-shrink-0"></i>

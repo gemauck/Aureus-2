@@ -313,3 +313,13 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
 
 // Make available globally
 window.ProjectModal = ProjectModal;
+
+// Dispatch event to notify other components
+try {
+    window.dispatchEvent(new CustomEvent('componentLoaded', { 
+        detail: { component: 'ProjectModal' } 
+    }));
+    console.log('✅ ProjectModal component registered and event dispatched');
+} catch (error) {
+    console.warn('⚠️ Failed to dispatch componentLoaded event:', error);
+}
