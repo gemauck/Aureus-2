@@ -92,50 +92,30 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         return [];
     };
     
-    // CRITICAL: Declare refs BEFORE useState that uses them
-    const isInitialMount = useRef(true);
-    const hasInitializedRef = useRef(false);
-    const lastLocalUpdateRef = useRef(Date.now());
+    // Refs for state management
+    const previousProjectIdRef = useRef(project?.id);
+    const editingSectionIdRef = useRef(null);
     const isSavingRef = useRef(false);
     const debouncedSaveTimeoutRef = useRef(null);
-    const previousDocumentSectionsRef = useRef(project?.documentSections);
-    const previousProjectIdRef = useRef(project?.id);
-    const editingSectionIdRef = useRef(null); // Ref to store current editingSectionId
     
-    // ULTRA AGGRESSIVE: Initialize sections from props, but check localStorage first to preserve saved sections
+    // Version-based conflict resolution (best practice instead of time windows)
+    const [localVersion, setLocalVersion] = useState(0);
+    const serverVersionRef = useRef(0);
+    
+    // Initialize sections from localStorage or props (pure initialization)
+    const getStorageKey = () => `documentSections_${project?.id}`;
+    
     const [sections, setSections] = useState(() => {
         console.log('📋 Initializing sections from project.documentSections:', project.documentSections);
         
-        // CRITICAL: Check localStorage first - if we have saved sections, use them instead of stale prop data
-        // localStorage persists across browser sessions, unlike sessionStorage which is cleared after ~4 hours
-        const storageKey = `documentSections_${project?.id}`;
+        // Check localStorage first for saved sections
+        const storageKey = getStorageKey();
         try {
-            // Try localStorage first (persists across sessions)
-            const savedSections = localStorage.getItem(storageKey);
-            if (savedSections) {
-                const parsed = JSON.parse(savedSections);
-                if (Array.isArray(parsed) && parsed.length > 0) {
+            const savedData = localStorage.getItem(storageKey);
+            if (savedData) {
+                const parsed = JSON.parse(savedData);
+                if (Array.isArray(parsed)) {
                     console.log('🛡️ Using saved sections from localStorage:', parsed.length, 'sections');
-                    hasInitializedRef.current = true;
-                    console.log('🛑 ULTRA AGGRESSIVE: Initialized with saved sections - BLOCKING all future syncs');
-                    return parsed;
-                }
-            }
-            // Fallback to sessionStorage for backward compatibility
-            const sessionSections = sessionStorage.getItem(storageKey);
-            if (sessionSections) {
-                const parsed = JSON.parse(sessionSections);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    console.log('🛡️ Using saved sections from sessionStorage (fallback):', parsed.length, 'sections');
-                    // Migrate to localStorage
-                    try {
-                        localStorage.setItem(storageKey, sessionSections);
-                        console.log('📦 Migrated sections from sessionStorage to localStorage');
-                    } catch (e) {
-                        console.warn('Failed to migrate to localStorage:', e);
-                    }
-                    hasInitializedRef.current = true;
-                    console.log('🛑 ULTRA AGGRESSIVE: Initialized with saved sections - BLOCKING all future syncs');
                     return parsed;
                 }
             }
@@ -146,11 +126,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         // Fallback to prop data
         const parsed = parseSections(project.documentSections);
         console.log('📋 Parsed sections from props:', parsed.length, 'sections');
-        // ULTRA AGGRESSIVE: Mark as initialized immediately if we have sections
-        if (parsed.length > 0) {
-            hasInitializedRef.current = true;
-            console.log('🛑 ULTRA AGGRESSIVE: Initialized with sections - BLOCKING all future syncs');
-        }
         return parsed;
     });
     const [showSectionModal, setShowSectionModal] = useState(false);
@@ -191,20 +166,26 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
     };
     
-    // Smart Sync with Dirty Field Tracking - Best practice for collaboration
-    const [dirtyFields, setDirtyFields] = useState(new Set());
-    const [lastSyncData, setLastSyncData] = useState(null);
+    // BEST PRACTICE: Separate localStorage persistence from state updates
+    // Persist sections to localStorage whenever they change (pure side effect)
     useEffect(() => {
-        if (!project?.id || typeof window === 'undefined') {
-            return;
-        }
+        if (!project?.id || typeof window === 'undefined') return;
         
-        // Only initialize year when project ID actually changes (not on every render)
-        const projectIdChanged = previousProjectIdRef.current !== project.id;
-        if (!projectIdChanged && previousProjectIdRef.current !== null) {
-            // Project ID hasn't changed, don't reset the year
-            return;
+        const storageKey = getStorageKey();
+        try {
+            localStorage.setItem(storageKey, JSON.stringify(sections));
+            console.log('💾 Persisted sections to localStorage:', sections.length, 'sections');
+        } catch (e) {
+            console.warn('Failed to persist sections to localStorage:', e);
         }
+    }, [sections, project?.id]); // Pure side effect - no logic mixed with state
+    
+    // Initialize year when project ID changes
+    useEffect(() => {
+        if (!project?.id || typeof window === 'undefined') return;
+        
+        const projectIdChanged = previousProjectIdRef.current !== project.id;
+        if (!projectIdChanged && previousProjectIdRef.current !== null) return;
         
         previousProjectIdRef.current = project.id;
         
@@ -212,18 +193,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const storedYear = localStorage.getItem(storageKey);
         const parsedYear = storedYear ? parseInt(storedYear, 10) : NaN;
         if (!Number.isNaN(parsedYear)) {
-            // Restore from localStorage
             if (parsedYear !== selectedYear) {
                 console.log('📅 Restoring selected year from localStorage:', parsedYear);
                 setSelectedYear(parsedYear);
             }
         } else {
-            // Only set to currentYear on initial load for this project (when no stored value)
-            // This prevents resetting the year when component re-renders
             console.log('📅 No stored year found, using current year:', currentYear);
             setSelectedYear(currentYear);
         }
-    }, [project?.id]); // Only run when project ID changes
+    }, [project?.id]);
+    
+    // Dirty field tracking for collaboration
+    const [dirtyFields, setDirtyFields] = useState(new Set());
+    const [lastSyncData, setLastSyncData] = useState(null);
 
     const handleYearChange = (year) => {
         setSelectedYear(year);
@@ -251,38 +233,32 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
   }, []);
   
-  // Smart merge: Only update sections that don't have dirty fields
+  // BEST PRACTICE: Single sync mechanism with version-based conflict resolution
   useEffect(() => {
-    // Check if project data has changed
     const newData = project?.documentSections;
     if (!newData || newData === lastSyncData) return;
     
-    // Skip if we recently made a local update (within 2 seconds)
-    const timeSinceLocalUpdate = Date.now() - lastLocalUpdateRef.current;
-    if (timeSinceLocalUpdate < 2000) {
-      console.log('⏭️ Skipping sync - recent local update (' + timeSinceLocalUpdate + 'ms ago)');
-      return;
-    }
-    
-    // Skip if user is actively editing (has dirty fields)
+    // Skip if user is actively editing
     if (dirtyFields.size > 0) {
       console.log('⏭️ Skipping sync - user has ' + dirtyFields.size + ' dirty field(s)');
       return;
     }
     
-    // Safe to sync - no dirty fields
+    // Version-based conflict resolution (best practice)
     const parsed = parseSections(newData);
-    if (parsed.length > 0 && !hasInitializedRef.current) {
-      console.log('🔄 Smart sync: Initial load from server (' + parsed.length + ' sections)');
+    const serverVersion = Date.parse(project.updatedAt || new Date().toISOString());
+    
+    // Only sync if server version is newer than local version
+    if (serverVersion > serverVersionRef.current || localVersion === 0) {
+      console.log('🔄 Syncing from server (' + parsed.length + ' sections)');
       setSections(parsed);
-      hasInitializedRef.current = true;
-    } else if (parsed.length > 0 && hasInitializedRef.current) {
-      console.log('🔄 Smart sync: Updating from server (' + parsed.length + ' sections, no dirty fields)');
-      setSections(parsed);
+      serverVersionRef.current = serverVersion;
+    } else {
+      console.log('🛡️ Local version is newer - skipping sync to preserve user changes');
     }
     
     setLastSyncData(newData);
-  }, [project?.documentSections, dirtyFields]);
+  }, [project?.documentSections, dirtyFields, localVersion]);
     const [editingSection, setEditingSection] = useState(null);
     const [editingDocument, setEditingDocument] = useState(null);
     const [editingSectionId, setEditingSectionId] = useState(null);
@@ -296,20 +272,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 }); // Store popup position
     const commentPopupContainerRef = useRef(null); // Ref for comment popup scrollable container
     
-    // Helper function to immediately save documentSections to database
+    // BEST PRACTICE: Save to database only (localStorage handled by separate useEffect)
     const immediatelySaveDocumentSections = async (sectionsToSave) => {
         try {
-            // Cancel any pending debounced saves to prevent overwriting
+            // Cancel any pending debounced saves
             if (debouncedSaveTimeoutRef.current) {
                 clearTimeout(debouncedSaveTimeoutRef.current);
                 debouncedSaveTimeoutRef.current = null;
-                console.log('🛑 Cancelled pending debounced save before immediate save');
             }
             
             isSavingRef.current = true;
-                                lastLocalUpdateRef.current = Date.now();
             
-            console.log('💾 Immediately saving document sections to database...');
+            console.log('💾 Saving document sections to database...');
             console.log('  - Project ID:', project.id);
             console.log('  - Sections count:', sectionsToSave.length);
             
@@ -321,9 +295,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 documentSections: JSON.stringify(sectionsToSave)
             };
             
-            console.log('📦 Update payload:', updatePayload);
             const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
-            console.log('✅ Database save successful:', apiResponse);
+            console.log('✅ Database save successful');
+            
+            // Update version after successful save
+            const serverVersion = Date.parse(new Date().toISOString());
+            serverVersionRef.current = serverVersion;
+            setLocalVersion(prev => prev + 1);
             
             // Clear cache to ensure fresh data on reload
             if (window.DatabaseAPI._responseCache) {
@@ -335,78 +313,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 });
                 cacheKeysToDelete.forEach(key => {
                     window.DatabaseAPI._responseCache.delete(key);
-                    console.log('🗑️ Cleared cache for:', key);
-                });
-                
-                // Also clear projects list cache
-                const projectsListCacheKeys = [];
-                window.DatabaseAPI._responseCache.forEach((value, key) => {
-                    if (key.includes('/projects') && !key.includes(`/projects/${project.id}`)) {
-                        projectsListCacheKeys.push(key);
-                    }
-                });
-                projectsListCacheKeys.forEach(key => {
-                    window.DatabaseAPI._responseCache.delete(key);
-                    console.log('🗑️ Cleared projects list cache:', key);
                 });
             }
             
-                // CRITICAL: Save to localStorage to preserve across browser sessions and remounts
-                // localStorage persists indefinitely, unlike sessionStorage which is cleared after ~4 hours
-                const storageKey = `documentSections_${project.id}`;
-                try {
-                    localStorage.setItem(storageKey, JSON.stringify(sectionsToSave));
-                    console.log('🛡️ Saved sections to localStorage for persistence across sessions');
-                    // Also save to sessionStorage for fast access during current session
-                    try {
-                        sessionStorage.setItem(storageKey, JSON.stringify(sectionsToSave));
-                    } catch (e) {
-                        // Ignore sessionStorage errors - localStorage is primary
-                    }
-                } catch (e) {
-                    console.warn('Failed to save sections to localStorage:', e);
-                    // Fallback to sessionStorage if localStorage fails
-                    try {
-                        sessionStorage.setItem(storageKey, JSON.stringify(sectionsToSave));
-                        console.log('⚠️ Saved sections to sessionStorage (localStorage unavailable)');
-                    } catch (e2) {
-                        console.warn('Failed to save sections to sessionStorage:', e2);
-                    }
-                }
-                
-                // Update localStorage for consistency
-                if (window.dataService && typeof window.dataService.getProjects === 'function') {
-                    const savedProjects = await window.dataService.getProjects();
-                    if (savedProjects) {
-                        const updatedProjects = savedProjects.map(p => {
-                            if (p.id === project.id) {
-                                return { ...p, documentSections: sectionsToSave };
-                            }
-                            return p;
-                        });
-                        if (window.dataService && typeof window.dataService.setProjects === 'function') {
-                            try {
-                                await window.dataService.setProjects(updatedProjects);
-                                console.log('✅ localStorage updated for consistency');
-                            } catch (saveError) {
-                                console.warn('Failed to save projects to dataService:', saveError);
-                            }
-                        }
-                    }
-                }
+            // Note: localStorage persistence is handled by separate useEffect
             
-            // DISABLED: Don't dispatch projectUpdated event - it causes parent to refresh
-            // which then triggers sync and overwrites user input
-            console.log('✅ Immediate save completed - parent will get fresh data on next navigation');
-            
-            // Reset saving flag after a delay
-            setTimeout(() => {
-                isSavingRef.current = false;
-            }, 1000);
-            } catch (error) {
-            console.error('❌ Error immediately saving document sections:', error);
             isSavingRef.current = false;
-            alert('Failed to save document sections: ' + error.message);
+        } catch (error) {
+            console.error('❌ Error saving document sections:', error);
+            isSavingRef.current = false;
+            throw error; // Re-throw for error handling in handlers
         }
     };
 
@@ -462,56 +378,32 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
     };
 
-    // ULTRA AGGRESSIVE: Sync sections from project prop ONLY on the very first mount
-    // NEVER sync after initialization - local state is ALWAYS the source of truth
+    // BEST PRACTICE: Handle project changes - reset version when switching projects
     useEffect(() => {
-        // Check if project ID changed (switching to different project)
         const projectIdChanged = previousProjectIdRef.current !== project?.id;
-        if (projectIdChanged) {
-            // Project changed - reset initialization flags for new project
+        if (projectIdChanged && project?.id) {
             console.log('🔄 Project ID changed, resetting for new project');
-            hasInitializedRef.current = false;
-            isInitialMount.current = true;
-            previousProjectIdRef.current = project?.id;
-            previousDocumentSectionsRef.current = null; // Reset to allow sync for new project
-        }
-        
-        // ULTRA AGGRESSIVE: If already initialized, NEVER sync - even if prop changes
-        // Local state is the source of truth after initialization
-        if (hasInitializedRef.current) {
-            console.log('🛑 ULTRA AGGRESSIVE: Component initialized - BLOCKING all syncs to preserve user input');
-                return;
-            }
+            previousProjectIdRef.current = project.id;
+            setLocalVersion(0); // Reset version for new project
+            serverVersionRef.current = 0;
             
-        // Only sync on the very first mount when local state is empty AND we haven't initialized
-        if (project && project.documentSections !== undefined && isInitialMount.current && !hasInitializedRef.current) {
-            const parsed = parseSections(project.documentSections);
-            
-            setSections(currentSections => {
-                // ULTRA AGGRESSIVE: Only sync if local state is completely empty
-                // Once we have ANY sections (even if user just added them), never sync again
-                if (currentSections.length === 0 && parsed.length > 0) {
-                    console.log('🔄 Initial sync from project prop on first mount:', parsed.length, 'sections');
-                    hasInitializedRef.current = true; // Mark as initialized - NEVER sync again
-                        isInitialMount.current = false;
-                    lastLocalUpdateRef.current = Date.now();
-                    previousDocumentSectionsRef.current = project.documentSections;
-                        return parsed;
-                } else if (currentSections.length === 0 && parsed.length === 0) {
-                    // Empty state - mark as initialized but don't change state
-                    console.log('✅ Component initialized with empty sections');
-                    hasInitializedRef.current = true; // Mark as initialized - NEVER sync again
-                    isInitialMount.current = false;
-                } else if (currentSections.length > 0) {
-                    // ULTRA AGGRESSIVE: If we have ANY sections, mark initialized and NEVER sync
-                    console.log('🛑 ULTRA AGGRESSIVE: Local sections exist - marking initialized, BLOCKING all future syncs');
-                    hasInitializedRef.current = true; // Mark as initialized - NEVER sync again
-                    isInitialMount.current = false;
+            // Load from localStorage for new project
+            const storageKey = getStorageKey();
+            try {
+                const savedSections = localStorage.getItem(storageKey);
+                if (savedSections) {
+                    const parsed = JSON.parse(savedSections);
+                    if (Array.isArray(parsed)) {
+                        console.log('🛡️ Loaded sections from localStorage for new project:', parsed.length);
+                        setSections(parsed);
+                        return;
+                    }
                 }
-                return currentSections;
-            });
+            } catch (e) {
+                console.warn('Failed to load sections from storage:', e);
+            }
         }
-    }, [project?.id]); // ONLY run when project ID changes (switching projects)
+    }, [project?.id]);
 
     // REMOVED: Debounced auto-save effect
     // NEW METHODOLOGY: Only save explicitly when user adds/edits/deletes sections or documents
@@ -735,48 +627,51 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
     };
 
+    // BEST PRACTICE: Optimistic updates - update UI first, then persist
     const handleDeleteSection = async (sectionId) => {
-        // Get current user info
         const currentUser = getCurrentUser();
+        const section = sections.find(s => s.id === sectionId);
+        if (!section) return;
         
-        let updatedSections;
+        if (!confirm(`Delete section "${section.name}" and all its documents?`)) {
+            return;
+        }
         
-        // Use functional update to get current section
-        setSections(currentSections => {
-            const section = currentSections.find(s => s.id === sectionId);
-            if (!section) return currentSections;
-            
-            if (confirm(`Delete section "${section.name}" and all its documents?`)) {
-                // Update timestamp to prevent sync from overwriting
-                lastLocalUpdateRef.current = Date.now();
-                
-                updatedSections = currentSections.filter(s => s.id !== sectionId);
-                console.log('🗑️ Deleting section:', section.name, 'Remaining sections:', updatedSections.length);
-                
-                // Log to audit trail
-                if (window.AuditLogger) {
-                    window.AuditLogger.log(
-                        'delete',
-                        'projects',
-                        {
-                            action: 'Section Deleted',
-                            projectId: project.id,
-                            projectName: project.name,
-                            sectionName: section.name,
-                            documentsCount: section.documents?.length || 0
-                        },
-                        currentUser
-                    );
-                }
-                
-                return updatedSections;
-            }
-            return currentSections;
-        });
+        // Capture previous state for rollback
+        const previousSections = sections;
         
-        // Immediately save to database to ensure persistence
-        if (updatedSections) {
+        // STEP 1: Optimistic update (pure state update, no side effects)
+        const updatedSections = sections.filter(s => s.id !== sectionId);
+        setSections(updatedSections);
+        setLocalVersion(prev => prev + 1); // Increment version to prevent sync override
+        
+        console.log('🗑️ Deleting section:', section.name, 'Remaining sections:', updatedSections.length);
+        
+        // STEP 2: Log to audit trail
+        if (window.AuditLogger) {
+            window.AuditLogger.log(
+                'delete',
+                'projects',
+                {
+                    action: 'Section Deleted',
+                    projectId: project.id,
+                    projectName: project.name,
+                    sectionName: section.name,
+                    documentsCount: section.documents?.length || 0
+                },
+                currentUser
+            );
+        }
+        
+        // STEP 3: Save to database (async - localStorage already saved by useEffect)
+        try {
             await immediatelySaveDocumentSections(updatedSections);
+        } catch (error) {
+            // STEP 4: Rollback on error
+            console.error('Failed to delete section:', error);
+            setSections(previousSections); // Restore previous state
+            setLocalVersion(prev => Math.max(0, prev - 1)); // Rollback version
+            alert('Failed to delete section. Please try again.');
         }
     };
 
