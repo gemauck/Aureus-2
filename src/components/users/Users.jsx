@@ -162,16 +162,34 @@ const Users = () => {
     };
 
     const handleDeleteUser = async (user) => {
-        console.log('🔴 handleDeleteUser called with user:', user);
-        
-        if (!confirm(`Are you sure you want to delete ${user.name}?`)) {
-            console.log('❌ User cancelled deletion');
-            return;
-        }
-        
-        console.log('✅ User confirmed deletion');
-
         try {
+            console.log('🔴🔴🔴 handleDeleteUser FUNCTION CALLED');
+            console.log('🔴 handleDeleteUser called with user:', user);
+            console.log('🔴 User object keys:', user ? Object.keys(user) : 'user is null/undefined');
+            
+            if (!user) {
+                console.error('❌ handleDeleteUser: user is null or undefined');
+                alert('Error: User data is missing');
+                return;
+            }
+            
+            if (!user.id) {
+                console.error('❌ handleDeleteUser: user.id is missing');
+                alert('Error: User ID is missing');
+                return;
+            }
+            
+            console.log('🔴 Showing confirmation dialog...');
+            const confirmed = confirm(`Are you sure you want to delete ${user.name || user.email || 'this user'}?`);
+            console.log('🔴 Confirmation result:', confirmed);
+            
+            if (!confirmed) {
+                console.log('❌ User cancelled deletion');
+                return;
+            }
+            
+            console.log('✅ User confirmed deletion');
+
             const token = window.storage?.getToken?.();
             if (!token) {
                 alert('Authentication error: Please refresh the page and try again');
@@ -773,10 +791,22 @@ const Users = () => {
                                         <button
                                             type="button"
                                             onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                console.log('🔴 Delete button clicked (grid view) for user:', user);
-                                                handleDeleteUser(user);
+                                                try {
+                                                    console.log('🔴🔴🔴 DELETE BUTTON CLICKED (GRID) - START');
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    console.log('🔴 Delete button clicked (grid view) for user:', user);
+                                                    console.log('🔴 User ID:', user?.id);
+                                                    if (!user || !user.id) {
+                                                        console.error('❌ Invalid user object in grid view:', user);
+                                                        alert('Error: Invalid user data');
+                                                        return;
+                                                    }
+                                                    handleDeleteUser(user);
+                                                } catch (error) {
+                                                    console.error('❌ Error in grid delete button onClick:', error);
+                                                    alert('Error clicking delete button: ' + error.message);
+                                                }
                                             }}
                                             className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition font-medium"
                                         >
@@ -889,10 +919,25 @@ const Users = () => {
                                                         <button
                                                             type="button"
                                                             onClick={(e) => {
-                                                                e.preventDefault();
-                                                                e.stopPropagation();
-                                                                console.log('🔴 Delete button clicked for user:', user);
-                                                                handleDeleteUser(user);
+                                                                try {
+                                                                    console.log('🔴🔴🔴 DELETE BUTTON CLICKED - START');
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                    console.log('🔴 Delete button clicked for user:', user);
+                                                                    console.log('🔴 User ID:', user?.id);
+                                                                    console.log('🔴 User name:', user?.name);
+                                                                    if (!user || !user.id) {
+                                                                        console.error('❌ Invalid user object:', user);
+                                                                        alert('Error: Invalid user data');
+                                                                        return;
+                                                                    }
+                                                                    console.log('🔴 Calling handleDeleteUser...');
+                                                                    handleDeleteUser(user);
+                                                                    console.log('🔴 handleDeleteUser called');
+                                                                } catch (error) {
+                                                                    console.error('❌ Error in delete button onClick:', error);
+                                                                    alert('Error clicking delete button: ' + error.message);
+                                                                }
                                                             }}
                                                             className="p-1 text-gray-400 hover:text-red-600 transition"
                                                             title="Delete"
