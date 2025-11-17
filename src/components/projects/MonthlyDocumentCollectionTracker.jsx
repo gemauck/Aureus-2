@@ -3140,6 +3140,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                             } else {
                                                 // Keep as string - template IDs can be UUIDs (strings) or numbers
                                                 setSelectedTemplateId(value);
+                                                // Auto-apply template when selected
+                                                const template = parsedTemplates.find(t => String(t.id) === String(value));
+                                                if (template) {
+                                                    // Small delay to ensure state is updated
+                                                    setTimeout(() => {
+                                                        handleApplyTemplate(template, targetYear);
+                                                        setShowApplyTemplateModal(false);
+                                                    }, 100);
+                                                }
                                             }
                                         }}
                                         className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
