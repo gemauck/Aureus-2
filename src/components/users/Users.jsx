@@ -78,14 +78,15 @@ const Users = () => {
                     const data = await response.json();
                     const responseData = data.data || data;
                     const apiUsers = responseData.users || [];
-                    if (apiUsers.length > 0) {
-                        setUsers(apiUsers);
-                        return;
-                    }
+                    // Always use API data when available, even if empty array
+                    setUsers(apiUsers);
+                    // Update local storage to match API data
+                    storage.setUsers(apiUsers);
+                    return;
                 }
             }
             
-            // Fallback to local storage
+            // Fallback to local storage only if API call fails
             let savedUsers = storage.getUsers() || [];
             if (savedUsers.length === 0) {
                 savedUsers = [];
@@ -163,30 +164,64 @@ const Users = () => {
                 return;
             }
 
-            console.log('🗑️ Deleting user via API:', user.id);
+            console.log('🗑️ Deleting user via API:', {
+                userId: user.id,
+                userName: user.name,
+                userEmail: user.email,
+                url: `/api/users/${user.id}`
+            });
             
             const response = await fetch(`/api/users/${user.id}`, {
                 method: 'DELETE',
                 headers: {
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
                 }
             });
 
+            console.log('📡 Delete response status:', response.status, response.statusText);
+
+            // Get response text first to see what we're dealing with
+            const responseText = await response.text();
+            console.log('📡 Delete response body:', responseText);
+
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({ message: 'Failed to delete user' }));
-                alert(errorData.message || `Failed to delete user (Status: ${response.status})`);
+                let errorData;
+                try {
+                    errorData = JSON.parse(responseText);
+                } catch (e) {
+                    errorData = { message: responseText || `Failed to delete user (Status: ${response.status})` };
+                }
+                console.error('❌ Delete failed:', errorData);
+                alert(errorData.message || errorData.error || `Failed to delete user (Status: ${response.status})`);
                 return;
             }
 
-            const data = await response.json();
+            // Parse response if it's JSON
+            let data;
+            try {
+                data = JSON.parse(responseText);
+            } catch (e) {
+                data = { success: true, message: 'User deleted successfully' };
+            }
+            
             console.log('✅ User deleted successfully:', data);
 
+            // Clear local storage cache to prevent stale data
+            const currentUsers = users.filter(u => u.id !== user.id);
+            storage.setUsers(currentUsers);
+            
             // Reload users from API to reflect the deletion
             await loadUsers();
             
             alert('User deleted successfully');
         } catch (error) {
             console.error('❌ Error deleting user:', error);
+            console.error('Error details:', {
+                message: error.message,
+                stack: error.stack,
+                name: error.name
+            });
             alert(`Failed to delete user: ${error.message}`);
         }
     };
