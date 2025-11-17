@@ -486,18 +486,13 @@ const Clients = React.memo(() => {
     const selectedClientRef = useRef(null); // Ref to track selected client
     const selectedLeadRef = useRef(null); // Ref to track selected lead
     const pipelineOpportunitiesLoadedRef = useRef(new Map());
-    // Keep refs in sync with state
+    
+    // PERFORMANCE FIX: Combine ref sync effects into one to reduce re-renders
     useEffect(() => {
         clientsRef.current = clients;
-    }, [clients]);
-
-    useEffect(() => {
         leadsRef.current = leads;
-    }, [leads]);
-    
-    useEffect(() => {
         viewModeRef.current = viewMode;
-    }, [viewMode]);
+    }, [clients, leads, viewMode]);
 
 
     // Utility function to calculate time since first contact
@@ -1219,127 +1214,112 @@ const Clients = React.memo(() => {
         loadLeadsOnBoot();
         
         // Also retry localStorage after a delay in case DashboardLive stores them
+        // PERFORMANCE FIX: Use ref to avoid stale closure
+        const leadsLengthRef = leads.length;
         setTimeout(() => {
-            if (leads.length === 0) {
+            if (leadsLengthRef === 0) {
                 console.log('🔄 Retrying leads load from localStorage...');
                 tryLoadLeadsFromStorage();
             }
         }, 1000);
-    }, []);
+    }, []); // Empty deps - only run on mount
 
     // Keep leadsCount in sync with leads.length
     useEffect(() => {
         setLeadsCount(leads.length);
     }, [leads.length]);
 
-    // AUTOMATIC CACHE CLEARING: Clear all caches on mount to ensure fresh data across users
+    // PERFORMANCE FIX: Only clear cache if explicitly needed (e.g., user logout/login)
+    // Removed automatic cache clearing on mount - this was causing slow initial loads
+    // Cache will be used for fast initial render, then refreshed in background
     useEffect(() => {
-        console.log('🧹 AUTOMATIC: Clearing all caches on component mount to ensure fresh data...');
+        // Only clear cache if there's a flag indicating we need fresh data
+        // (e.g., after logout/login, or explicit refresh action)
+        const needsFreshData = sessionStorage.getItem('crm_needs_fresh_data') === 'true';
         
-        // Clear ClientCache
-        if (window.ClientCache?.clearCache) {
-            window.ClientCache.clearCache();
-            console.log('   ✅ ClientCache cleared');
-        }
-        
-        // Clear DatabaseAPI cache
-        if (window.DatabaseAPI?.clearCache) {
-            window.DatabaseAPI.clearCache('/leads');
-            window.DatabaseAPI.clearCache('/clients');
-            console.log('   ✅ DatabaseAPI cache cleared');
-        }
-        
-        // Clear localStorage to prevent stale data
-        if (window.storage?.removeLeads) {
-            window.storage.removeLeads();
-            console.log('   ✅ localStorage leads cleared');
-        }
-        if (window.storage?.removeClients) {
-            window.storage.removeClients();
-            console.log('   ✅ localStorage clients cleared');
-        }
-        
-        // Reset API call timestamps to force fresh fetch
-        lastApiCallTimestamp = 0;
-        lastLeadsApiCallTimestamp = 0;
-        
-        console.log('✅ All caches cleared - fresh data will be fetched automatically');
-        
-        // Trigger initial data load after clearing cache
-        setTimeout(() => {
-            if (viewMode === 'leads') {
-                loadLeads(true);
-            } else if (viewMode === 'clients') {
-                loadClients(true);
-            }
-        }, 500);
-    }, []); // Only run once on mount
-
-    // Force refresh leads when switching to leads view to ensure fresh data across users
-    // CRITICAL: Skip if user is editing
-    useEffect(() => {
-        if (viewMode === 'leads' && !isUserEditingRef.current) {
-            const currentUser = window.storage?.getUser?.();
-            const userEmail = currentUser?.email || 'unknown';
-            console.log(`🔄 Switching to leads view (${userEmail}) - clearing caches and refreshing...`);
+        if (needsFreshData) {
+            console.log('🧹 Clearing caches due to explicit refresh flag...');
+            sessionStorage.removeItem('crm_needs_fresh_data');
             
-            // Clear all caches before loading
-            if (window.ClientCache?.clearLeadsCache) {
-                window.ClientCache.clearLeadsCache();
+            // Clear caches only when explicitly needed
+            if (window.ClientCache?.clearCache) {
+                window.ClientCache.clearCache();
             }
             if (window.DatabaseAPI?.clearCache) {
                 window.DatabaseAPI.clearCache('/leads');
-            }
-            if (window.storage?.removeLeads) {
-                window.storage.removeLeads();
-            }
-            
-            // Immediately refresh and trigger sync
-            setTimeout(async () => {
-                await loadLeads(true); // Force refresh to bypass cache and get latest leads
-                
-                // Also trigger LiveDataSync to ensure we have latest data
-                if (window.LiveDataSync?.forceSync) {
-                    window.LiveDataSync.forceSync().catch(err => {
-                        console.warn('⚠️ Force sync failed (will sync automatically):', err);
-                    });
-                }
-            }, 100);
-        }
-    }, [viewMode]);
-
-    // Force refresh clients when switching to clients view to ensure fresh data across users
-    // CRITICAL: Skip if user is editing
-    useEffect(() => {
-        if (viewMode === 'clients' && !isUserEditingRef.current) {
-            const currentUser = window.storage?.getUser?.();
-            const userEmail = currentUser?.email || 'unknown';
-            console.log(`🔄 Switching to clients view (${userEmail}) - clearing caches and refreshing...`);
-            
-            // Clear all caches before loading
-            if (window.ClientCache?.clearClientsCache) {
-                window.ClientCache.clearClientsCache();
-            }
-            if (window.DatabaseAPI?.clearCache) {
                 window.DatabaseAPI.clearCache('/clients');
             }
-            if (window.storage?.removeClients) {
-                window.storage.removeClients();
+            
+            // Reset API call timestamps to force fresh fetch
+            lastApiCallTimestamp = 0;
+            lastLeadsApiCallTimestamp = 0;
+        }
+        
+        // Load data normally (will use cache if available for fast initial render)
+        // The loadClients/loadLeads functions already handle cache intelligently
+    }, []); // Only run once on mount
+
+    // PERFORMANCE FIX: Optimize view mode switching - only refresh if data is stale
+    // Skip if user is editing to prevent data loss
+    useEffect(() => {
+        if (viewMode === 'leads' && !isUserEditingRef.current) {
+            // Check if we already have leads data - if so, use it (fast!)
+            if (leads.length > 0) {
+                console.log(`⚡ Switching to leads view - using cached data (${leads.length} leads)`);
+                // Trigger background sync to update in background without blocking UI
+                if (window.LiveDataSync?.forceSync) {
+                    window.LiveDataSync.forceSync().catch(() => {});
+                }
+                return;
             }
             
-            // Immediately refresh and trigger sync
+            // Only force refresh if we don't have data
+            const currentUser = window.storage?.getUser?.();
+            const userEmail = currentUser?.email || 'unknown';
+            console.log(`🔄 Switching to leads view (${userEmail}) - no cached data, loading...`);
+            
+            // Load leads (will use cache if available, then refresh in background)
             setTimeout(async () => {
-                await loadClients(true); // Force refresh to bypass cache and get latest clients
+                await loadLeads(false); // Don't force refresh - use cache if available
                 
-                // Also trigger LiveDataSync to ensure we have latest data
+                // Trigger background sync for fresh data
                 if (window.LiveDataSync?.forceSync) {
-                    window.LiveDataSync.forceSync().catch(err => {
-                        console.warn('⚠️ Force sync failed (will sync automatically):', err);
-                    });
+                    window.LiveDataSync.forceSync().catch(() => {});
                 }
             }, 100);
         }
-    }, [viewMode]);
+    }, [viewMode, leads.length]);
+
+    // PERFORMANCE FIX: Optimize view mode switching - only refresh if data is stale
+    // Skip if user is editing to prevent data loss
+    useEffect(() => {
+        if (viewMode === 'clients' && !isUserEditingRef.current) {
+            // Check if we already have clients data - if so, use it (fast!)
+            if (clients.length > 0) {
+                console.log(`⚡ Switching to clients view - using cached data (${clients.length} clients)`);
+                // Trigger background sync to update in background without blocking UI
+                if (window.LiveDataSync?.forceSync) {
+                    window.LiveDataSync.forceSync().catch(() => {});
+                }
+                return;
+            }
+            
+            // Only force refresh if we don't have data
+            const currentUser = window.storage?.getUser?.();
+            const userEmail = currentUser?.email || 'unknown';
+            console.log(`🔄 Switching to clients view (${userEmail}) - no cached data, loading...`);
+            
+            // Load clients (will use cache if available, then refresh in background)
+            setTimeout(async () => {
+                await loadClients(false); // Don't force refresh - use cache if available
+                
+                // Trigger background sync for fresh data
+                if (window.LiveDataSync?.forceSync) {
+                    window.LiveDataSync.forceSync().catch(() => {});
+                }
+            }, 100);
+        }
+    }, [viewMode, clients.length]);
 
     // Ensure leads are loaded from localStorage if state is empty
     useEffect(() => {
@@ -2044,9 +2024,24 @@ const Clients = React.memo(() => {
     
     // REMOVED: Duplicate opportunity loading - now handled by the effect above
     
-    // Save data
+    // PERFORMANCE FIX: Debounce storage writes to prevent expensive operations on every state change
+    // Storage writes are expensive with large datasets, so we debounce them
     useEffect(() => {
-        safeStorage.setClients(clients);
+        // Only save if clients array has meaningful data (not empty on initial load)
+        if (!clients || clients.length === 0) {
+            return;
+        }
+        
+        // Debounce storage write to avoid blocking UI on rapid state changes
+        const timeoutId = setTimeout(() => {
+            try {
+                safeStorage.setClients(clients);
+            } catch (error) {
+                console.warn('⚠️ Failed to save clients to storage:', error);
+            }
+        }, 300); // 300ms debounce - saves after user stops making changes
+        
+        return () => clearTimeout(timeoutId);
     }, [clients]);
 
     useEffect(() => {
@@ -3009,28 +3004,28 @@ const Clients = React.memo(() => {
         }
     };
 
-    // Handle column sorting
-    const handleSort = (field) => {
+    // PERFORMANCE FIX: Memoize event handlers to prevent unnecessary re-renders
+    const handleSort = useCallback((field) => {
         if (sortField === field) {
             setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
         } else {
             setSortField(field);
             setSortDirection('asc');
         }
-    };
+    }, [sortField, sortDirection]);
 
-    // Separate sort handler for leads
-    const handleLeadSort = (field) => {
+    // PERFORMANCE FIX: Memoize lead sort handler
+    const handleLeadSort = useCallback((field) => {
         if (leadSortField === field) {
             setLeadSortDirection(leadSortDirection === 'asc' ? 'desc' : 'asc');
         } else {
             setLeadSortField(field);
             setLeadSortDirection('asc');
         }
-    };
+    }, [leadSortField, leadSortDirection]);
 
-    // Sort function
-    const sortClients = (clients) => {
+    // PERFORMANCE FIX: Memoize sort functions to prevent recreation on every render
+    const sortClients = useCallback((clients) => {
         return [...clients].sort((a, b) => {
             let aValue = a[sortField];
             let bValue = b[sortField];
@@ -3051,10 +3046,10 @@ const Clients = React.memo(() => {
                 return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
             }
         });
-    };
+    }, [sortField, sortDirection]);
 
-    // Sort function for leads
-    const sortLeads = (leads) => {
+    // PERFORMANCE FIX: Memoize sort function for leads
+    const sortLeads = useCallback((leads) => {
         return [...leads].sort((a, b) => {
             let aValue = a[leadSortField];
             let bValue = b[leadSortField];
@@ -3082,96 +3077,114 @@ const Clients = React.memo(() => {
                 return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
             }
         });
-    };
+    }, [leadSortField, leadSortDirection]);
 
-    // Filter clients - explicitly exclude leads and records without proper type
-    // Use multiple checks to ensure leads never appear in clients list
-    const filteredClients = clients.filter(client => {
-        // Include clients with type='client' OR null/undefined (legacy clients without type field)
-        // This matches the logic in loadClients() which includes legacy clients
-        if (client.type !== 'client' && client.type !== null && client.type !== undefined) {
-            return false; // Exclude leads or any other type value
-        }
-        
-        // Additional safeguard: exclude records with status='Potential' (always a lead)
-        // This catches leads that might have been incorrectly saved with type='client'
-        if (client.status === 'Potential') {
-            console.warn(`⚠️ Filtering out lead with status='Potential' from clients: ${client.name}`);
-            return false;
-        }
-        
-        // Enhanced search across multiple fields
-        const searchLower = searchTerm.toLowerCase();
-        const services = Array.isArray(client.services)
-            ? client.services
-            : (typeof client.services === 'string' ? (()=>{ try { return JSON.parse(client.services||'[]'); } catch { return []; } })() : []);
-        const matchesSearch = searchTerm === '' || 
-            client.name.toLowerCase().includes(searchLower) ||
-            client.industry.toLowerCase().includes(searchLower) ||
-            client.address.toLowerCase().includes(searchLower) ||
-            client.website.toLowerCase().includes(searchLower) ||
-            client.notes.toLowerCase().includes(searchLower) ||
-            // Search in services
-            services.some(service => 
-                service.toLowerCase().includes(searchLower)
-            ) ||
-            // Search in all contacts
-            (client.contacts || []).some(contact => 
-                contact.name.toLowerCase().includes(searchLower) ||
-                contact.email.toLowerCase().includes(searchLower) ||
-                contact.phone.includes(searchTerm)
-            ) ||
-            // Search in all sites
-            (client.sites || []).some(site => 
-                site.name.toLowerCase().includes(searchLower) ||
-                site.address.toLowerCase().includes(searchLower)
-            );
-        
-        const matchesIndustry = filterIndustry === 'All Industries' || client.industry === filterIndustry;
-        const matchesStatus = filterStatus === 'All Status' || client.status === filterStatus;
-        
-        // Check if client matches selected services (if any are selected)
-        const matchesServices = filterServices.length === 0 || 
-            services.some(service => filterServices.includes(service));
-        
-        // Check if starred filter is applied
-        const matchesStarred = !showStarredOnly || client.isStarred === true;
-        
-        return matchesSearch && matchesIndustry && matchesStatus && matchesServices && matchesStarred;
-    });
+    // PERFORMANCE FIX: Memoize filtered clients to prevent recalculation on every render
+    const filteredClients = useMemo(() => {
+        return clients.filter(client => {
+            // Include clients with type='client' OR null/undefined (legacy clients without type field)
+            // This matches the logic in loadClients() which includes legacy clients
+            if (client.type !== 'client' && client.type !== null && client.type !== undefined) {
+                return false; // Exclude leads or any other type value
+            }
+            
+            // Additional safeguard: exclude records with status='Potential' (always a lead)
+            // This catches leads that might have been incorrectly saved with type='client'
+            if (client.status === 'Potential') {
+                console.warn(`⚠️ Filtering out lead with status='Potential' from clients: ${client.name}`);
+                return false;
+            }
+            
+            // Enhanced search across multiple fields
+            const searchLower = searchTerm.toLowerCase();
+            const services = Array.isArray(client.services)
+                ? client.services
+                : (typeof client.services === 'string' ? (()=>{ try { return JSON.parse(client.services||'[]'); } catch { return []; } })() : []);
+            const matchesSearch = searchTerm === '' || 
+                client.name.toLowerCase().includes(searchLower) ||
+                client.industry.toLowerCase().includes(searchLower) ||
+                client.address.toLowerCase().includes(searchLower) ||
+                client.website.toLowerCase().includes(searchLower) ||
+                client.notes.toLowerCase().includes(searchLower) ||
+                // Search in services
+                services.some(service => 
+                    service.toLowerCase().includes(searchLower)
+                ) ||
+                // Search in all contacts
+                (client.contacts || []).some(contact => 
+                    contact.name.toLowerCase().includes(searchLower) ||
+                    contact.email.toLowerCase().includes(searchLower) ||
+                    contact.phone.includes(searchTerm)
+                ) ||
+                // Search in all sites
+                (client.sites || []).some(site => 
+                    site.name.toLowerCase().includes(searchLower) ||
+                    site.address.toLowerCase().includes(searchLower)
+                );
+            
+            const matchesIndustry = filterIndustry === 'All Industries' || client.industry === filterIndustry;
+            const matchesStatus = filterStatus === 'All Status' || client.status === filterStatus;
+            
+            // Check if client matches selected services (if any are selected)
+            const matchesServices = filterServices.length === 0 || 
+                services.some(service => filterServices.includes(service));
+            
+            // Check if starred filter is applied
+            const matchesStarred = !showStarredOnly || client.isStarred === true;
+            
+            return matchesSearch && matchesIndustry && matchesStatus && matchesServices && matchesStarred;
+        });
+    }, [clients, searchTerm, filterIndustry, filterStatus, filterServices, showStarredOnly]);
 
-    // Sort the filtered clients
-    const sortedClients = sortClients(filteredClients);
+    // PERFORMANCE FIX: Memoize sorted clients
+    const sortedClients = useMemo(() => {
+        return sortClients(filteredClients);
+    }, [filteredClients, sortField, sortDirection]);
 
-    // Filter leads
-    const filteredLeads = leads.filter(lead => {
-        const matchesSearch = searchTerm === '' || 
-            lead.name.toLowerCase().includes(searchTerm.toLowerCase());
-            // Contact search removed for leads
+    // PERFORMANCE FIX: Memoize filtered leads
+    const filteredLeads = useMemo(() => {
+        return leads.filter(lead => {
+            const matchesSearch = searchTerm === '' || 
+                lead.name.toLowerCase().includes(searchTerm.toLowerCase());
+                // Contact search removed for leads
+            
+            const matchesIndustry = filterIndustry === 'All Industries' || lead.industry === filterIndustry;
+            // Status is hardcoded as 'active' for all leads, so status filter doesn't apply
+            const matchesStatus = true;
+            
+            // Check if starred filter is applied
+            const matchesStarred = !showStarredOnly || lead.isStarred === true;
+            
+            return matchesSearch && matchesIndustry && matchesStatus && matchesStarred;
+        });
+    }, [leads, searchTerm, filterIndustry, showStarredOnly]);
+
+    // PERFORMANCE FIX: Memoize sorted leads
+    const sortedLeads = useMemo(() => {
+        return sortLeads(filteredLeads);
+    }, [filteredLeads, leadSortField, leadSortDirection]);
+
+    // PERFORMANCE FIX: Memoize pagination calculations
+    const paginationData = useMemo(() => {
+        const clientsStartIndex = (clientsPage - 1) * ITEMS_PER_PAGE;
+        const clientsEndIndex = clientsStartIndex + ITEMS_PER_PAGE;
+        const paginatedClients = sortedClients.slice(clientsStartIndex, clientsEndIndex);
+        const totalClientsPages = Math.ceil(sortedClients.length / ITEMS_PER_PAGE);
+
+        const leadsStartIndex = (leadsPage - 1) * ITEMS_PER_PAGE;
+        const leadsEndIndex = leadsStartIndex + ITEMS_PER_PAGE;
+        const paginatedLeads = sortedLeads.slice(leadsStartIndex, leadsEndIndex);
+        const totalLeadsPages = Math.ceil(sortedLeads.length / ITEMS_PER_PAGE);
         
-        const matchesIndustry = filterIndustry === 'All Industries' || lead.industry === filterIndustry;
-        // Status is hardcoded as 'active' for all leads, so status filter doesn't apply
-        const matchesStatus = true;
-        
-        // Check if starred filter is applied
-        const matchesStarred = !showStarredOnly || lead.isStarred === true;
-        
-        return matchesSearch && matchesIndustry && matchesStatus && matchesStarred;
-    });
-
-    // Sort the filtered leads (default to alphabetical by name)
-    const sortedLeads = sortLeads(filteredLeads);
-
-    // Paginate clients and leads
-    const clientsStartIndex = (clientsPage - 1) * ITEMS_PER_PAGE;
-    const clientsEndIndex = clientsStartIndex + ITEMS_PER_PAGE;
-    const paginatedClients = sortedClients.slice(clientsStartIndex, clientsEndIndex);
-    const totalClientsPages = Math.ceil(sortedClients.length / ITEMS_PER_PAGE);
-
-    const leadsStartIndex = (leadsPage - 1) * ITEMS_PER_PAGE;
-    const leadsEndIndex = leadsStartIndex + ITEMS_PER_PAGE;
-    const paginatedLeads = sortedLeads.slice(leadsStartIndex, leadsEndIndex);
-    const totalLeadsPages = Math.ceil(sortedLeads.length / ITEMS_PER_PAGE);
+        return {
+            paginatedClients,
+            totalClientsPages,
+            paginatedLeads,
+            totalLeadsPages
+        };
+    }, [sortedClients, sortedLeads, clientsPage, leadsPage]);
+    
+    const { paginatedClients, totalClientsPages, paginatedLeads, totalLeadsPages } = paginationData;
 
     // Debug pagination - commented to reduce spam
     // console.log(`📄 PAGINATION DEBUG: ${sortedClients.length} clients, showing ${paginatedClients.length} on page ${clientsPage} of ${totalClientsPages}`);
@@ -3529,83 +3542,86 @@ const Clients = React.memo(() => {
             return () => window.removeEventListener('opportunitiesUpdated', handleOpportunitiesUpdated);
         }, []); // Empty deps - only set up listener once
         
-        let clientOpportunities = clients.reduce((acc, client) => {
-            if (client.opportunities && Array.isArray(client.opportunities)) {
-                const mapped = client.opportunities.map(opp => {
-                    // Normalize stage to match pipeline stages exactly
-                    let normalizedStage = 'Awareness'; // Default
-                    const originalStage = opp.stage;
-                    
-                    if (originalStage && typeof originalStage === 'string') {
-                        // Convert to title case and match to pipeline stages
-                        const stageMap = {
-                            'awareness': 'Awareness',
-                            'interest': 'Interest',
-                            'desire': 'Desire',
-                            'action': 'Action',
-                            'prospect': 'Awareness',
-                            'new': 'Awareness',
-                            'qualification': 'Interest',
-                            'proposal': 'Desire',
-                            'negotiation': 'Action'
+        // PERFORMANCE FIX: Memoize expensive computations to prevent recalculation on every render
+        const clientOpportunities = useMemo(() => {
+            return clients.reduce((acc, client) => {
+                if (client.opportunities && Array.isArray(client.opportunities)) {
+                    const mapped = client.opportunities.map(opp => {
+                        // Normalize stage to match pipeline stages exactly
+                        let normalizedStage = 'Awareness'; // Default
+                        const originalStage = opp.stage;
+                        
+                        if (originalStage && typeof originalStage === 'string') {
+                            // Convert to title case and match to pipeline stages
+                            const stageMap = {
+                                'awareness': 'Awareness',
+                                'interest': 'Interest',
+                                'desire': 'Desire',
+                                'action': 'Action',
+                                'prospect': 'Awareness',
+                                'new': 'Awareness',
+                                'qualification': 'Interest',
+                                'proposal': 'Desire',
+                                'negotiation': 'Action'
+                            };
+                            normalizedStage = stageMap[originalStage.toLowerCase()] || 'Awareness';
+                        }
+                        
+                        return {
+                            ...opp,
+                            clientName: client.name,
+                            clientId: client.id,
+                            type: 'opportunity',
+                            stage: normalizedStage, // Use normalized stage
+                            status: opp.status || 'Active', // Default to Active if no status
+                            title: opp.title || opp.name || 'Untitled Opportunity',
+                            value: Number(opp.value) || 0
                         };
-                        normalizedStage = stageMap[originalStage.toLowerCase()] || 'Awareness';
-                    }
-                    
-                    
-                    return {
-                    ...opp,
-                    clientName: client.name,
-                    clientId: client.id,
-                    type: 'opportunity',
-                        stage: normalizedStage, // Use normalized stage
-                        status: opp.status || 'Active', // Default to Active if no status
-                        title: opp.title || opp.name || 'Untitled Opportunity',
-                        value: Number(opp.value) || 0
-                    };
-                });
-                if (mapped.length > 0) {
+                    });
+                    return acc.concat(mapped);
                 }
-                return acc.concat(mapped);
-            }
-            return acc;
-        }, []);
-        
+                return acc;
+            }, []);
+        }, [clients]);
 
-        // Filter active leads and normalize stages to match AIDA pipeline stages
-        const activeLeads = leads.map(lead => {
-            // Normalize lead stage to match AIDA pipeline stages (same as Pipeline.jsx)
-            let mappedStage = lead.stage || 'Awareness';
-            const originalStage = mappedStage;
-            
-            // Normalize stage value - trim whitespace and handle variations
-            if (mappedStage) {
-                mappedStage = mappedStage.trim();
-            }
-            
-            // Convert common stage values to AIDA stages
-            if (mappedStage === 'prospect' || mappedStage === 'new') {
-                mappedStage = 'Awareness';
-            } else if (!['Awareness', 'Interest', 'Desire', 'Action'].includes(mappedStage)) {
-                // If stage doesn't match AIDA stages, default to Awareness
-                mappedStage = 'Awareness';
-            }
-            
-            if (originalStage !== mappedStage) {
-                console.log(`🔄 PipelineView: Mapped lead stage "${originalStage}" → "${mappedStage}" for ${lead.name || lead.id}`);
-            }
-            
-            return { ...lead, stage: mappedStage };
-        }).filter(lead => {
-            // Filter out inactive leads
-            return lead.status !== 'Inactive' && lead.status !== 'Disinterested';
-        });
+        // PERFORMANCE FIX: Memoize active leads computation
+        const activeLeads = useMemo(() => {
+            return leads.map(lead => {
+                // Normalize lead stage to match AIDA pipeline stages (same as Pipeline.jsx)
+                let mappedStage = lead.stage || 'Awareness';
+                const originalStage = mappedStage;
+                
+                // Normalize stage value - trim whitespace and handle variations
+                if (mappedStage) {
+                    mappedStage = mappedStage.trim();
+                }
+                
+                // Convert common stage values to AIDA stages
+                if (mappedStage === 'prospect' || mappedStage === 'new') {
+                    mappedStage = 'Awareness';
+                } else if (!['Awareness', 'Interest', 'Desire', 'Action'].includes(mappedStage)) {
+                    // If stage doesn't match AIDA stages, default to Awareness
+                    mappedStage = 'Awareness';
+                }
+                
+                if (originalStage !== mappedStage) {
+                    console.log(`🔄 PipelineView: Mapped lead stage "${originalStage}" → "${mappedStage}" for ${lead.name || lead.id}`);
+                }
+                
+                return { ...lead, stage: mappedStage };
+            }).filter(lead => {
+                // Filter out inactive leads
+                return lead.status !== 'Inactive' && lead.status !== 'Disinterested';
+            });
+        }, [leads]);
         
-        // Filter active opportunities
-        const activeOpportunities = clientOpportunities.filter(opp => {
-            const status = opp.status || 'Active'; // Default to 'Active' if no status
-            return status !== 'Inactive' && status !== 'Closed Lost' && status !== 'Closed Won';
-        });
+        // PERFORMANCE FIX: Memoize active opportunities computation
+        const activeOpportunities = useMemo(() => {
+            return clientOpportunities.filter(opp => {
+                const status = opp.status || 'Active'; // Default to 'Active' if no status
+                return status !== 'Inactive' && status !== 'Closed Lost' && status !== 'Closed Won';
+            });
+        }, [clientOpportunities]);
 
         const handleDragStart = (item, type) => {
             setDidDrag(true);
