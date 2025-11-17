@@ -1229,40 +1229,73 @@ function doesOpportunityBelongToClient(opportunity, client) {
         event.preventDefault();
         event.stopPropagation();
 
+        const currentStarred = item.isStarred || false;
+        const newStarredState = !currentStarred;
+
+        // Update local state optimistically first for instant UI feedback
+        if (item.type === 'lead') {
+            const updatedLeads = leads.map(lead =>
+                lead.id === item.id ? { ...lead, isStarred: newStarredState } : lead
+            );
+            setLeads(updatedLeads);
+            storage.setLeads(updatedLeads);
+        } else if (item.type === 'opportunity') {
+            const updatedClients = clients.map(client => {
+                if (client.id !== item.clientId) return client;
+                const updatedOpportunities = (client.opportunities || []).map(opp =>
+                    opp.id === item.id ? { ...opp, isStarred: newStarredState } : opp
+                );
+                return { ...client, opportunities: updatedOpportunities };
+            });
+            setClients(updatedClients);
+            storage.setClients(updatedClients);
+        }
+
         try {
+            // Call API in background (non-blocking)
             if (item.type === 'lead') {
                 const toggleFn = window.api?.toggleStarClient || window.DatabaseAPI?.toggleStarClient;
                 if (toggleFn && item.id) {
-                    await toggleFn(item.id);
+                    toggleFn(item.id).then(() => {
+                        console.log(`⭐ Lead ${currentStarred ? 'unstarred' : 'starred'} successfully`);
+                        // Clear cache but don't refetch - optimistic update is sufficient
+                        if (window.DatabaseAPI?.clearCache) {
+                            window.DatabaseAPI.clearCache('/leads');
+                        }
+                    }).catch(error => {
+                        console.error('❌ Pipeline: Failed to toggle star for lead', error);
+                        // Revert optimistic update on error
+                        const revertedLeads = leads.map(lead =>
+                            lead.id === item.id ? { ...lead, isStarred: currentStarred } : lead
+                        );
+                        setLeads(revertedLeads);
+                        storage.setLeads(revertedLeads);
+                    });
                 }
-
-                const updatedLeads = leads.map(lead =>
-                    lead.id === item.id ? { ...lead, isStarred: !lead.isStarred } : lead
-                );
-                setLeads(updatedLeads);
-                storage.setLeads(updatedLeads);
             } else if (item.type === 'opportunity') {
                 const toggleOpportunityFn = window.api?.toggleStarOpportunity || window.DatabaseAPI?.toggleStarOpportunity;
                 if (toggleOpportunityFn && item.id) {
-                    await toggleOpportunityFn(item.id);
+                    toggleOpportunityFn(item.id).then(() => {
+                        console.log(`⭐ Opportunity ${currentStarred ? 'unstarred' : 'starred'} successfully`);
+                        // Clear cache but don't refetch - optimistic update is sufficient
+                        if (window.DatabaseAPI?.clearCache) {
+                            window.DatabaseAPI.clearCache('/clients');
+                        }
+                    }).catch(error => {
+                        console.error('❌ Pipeline: Failed to toggle star for opportunity', error);
+                        // Revert optimistic update on error
+                        const revertedClients = clients.map(client => {
+                            if (client.id !== item.clientId) return client;
+                            const revertedOpportunities = (client.opportunities || []).map(opp =>
+                                opp.id === item.id ? { ...opp, isStarred: currentStarred } : opp
+                            );
+                            return { ...client, opportunities: revertedOpportunities };
+                        });
+                        setClients(revertedClients);
+                        storage.setClients(revertedClients);
+                    });
                 }
-
-                const updatedClients = clients.map(client => {
-                    if (client.id !== item.clientId) return client;
-                    const updatedOpportunities = (client.opportunities || []).map(opp =>
-                        opp.id === item.id ? { ...opp, isStarred: !opp.isStarred } : opp
-                    );
-                    return { ...client, opportunities: updatedOpportunities };
-                });
-
-                setClients(updatedClients);
-                storage.setClients(updatedClients);
             }
-
-            // Re-sort locally and refresh from API to stay in sync
-            setTimeout(() => {
-                setRefreshKey(k => k + 1);
-            }, 400);
         } catch (error) {
             console.error('❌ Pipeline: Failed to toggle star', error);
             alert('Failed to update favorite. Please try again.');

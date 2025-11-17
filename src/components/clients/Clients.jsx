@@ -3347,39 +3347,67 @@ const Clients = React.memo(() => {
         
         const clientId = clientOrLead.id;
         const currentStarred = clientOrLead.isStarred || false;
+        const newStarredState = !currentStarred;
+        
+        // Update local state optimistically first for instant UI feedback
+        if (isLead) {
+            setLeads(prevLeads => 
+                prevLeads.map(l => 
+                    l.id === clientId ? { ...l, isStarred: newStarredState } : l
+                )
+            );
+        } else {
+            setClients(prevClients => 
+                prevClients.map(c => 
+                    c.id === clientId ? { ...c, isStarred: newStarredState } : c
+                )
+            );
+        }
         
         try {
             if (window.DatabaseAPI && typeof window.DatabaseAPI.toggleStarClient === 'function') {
-                // Update local state optimistically first
+                // Call API to persist the change (non-blocking)
+                window.DatabaseAPI.toggleStarClient(clientId).then(() => {
+                    console.log(`⭐ Client/lead ${currentStarred ? 'unstarred' : 'starred'} successfully`);
+                    // Clear cache but don't refetch - optimistic update is sufficient
+                    if (window.DatabaseAPI?.clearCache) {
+                        window.DatabaseAPI.clearCache('/clients');
+                        window.DatabaseAPI.clearCache('/leads');
+                    }
+                }).catch(error => {
+                    console.error('❌ Failed to toggle star:', error);
+                    // Revert optimistic update on error
+                    if (isLead) {
+                        setLeads(prevLeads => 
+                            prevLeads.map(l => 
+                                l.id === clientId ? { ...l, isStarred: currentStarred } : l
+                            )
+                        );
+                    } else {
+                        setClients(prevClients => 
+                            prevClients.map(c => 
+                                c.id === clientId ? { ...c, isStarred: currentStarred } : c
+                            )
+                        );
+                    }
+                    alert('Failed to update star. Please try again.');
+                });
+            } else {
+                console.error('❌ Star API not available');
+                // Revert if API not available
                 if (isLead) {
                     setLeads(prevLeads => 
                         prevLeads.map(l => 
-                            l.id === clientId ? { ...l, isStarred: !currentStarred } : l
+                            l.id === clientId ? { ...l, isStarred: currentStarred } : l
                         )
                     );
                 } else {
                     setClients(prevClients => 
                         prevClients.map(c => 
-                            c.id === clientId ? { ...c, isStarred: !currentStarred } : c
+                            c.id === clientId ? { ...c, isStarred: currentStarred } : c
                         )
                     );
                 }
-                
-                // Call API to persist the change
-                await window.DatabaseAPI.toggleStarClient(clientId);
-                
-                // Refetch to ensure we have the latest data from the database
-                if (isLead) {
-                    console.log('🔄 Refetching leads after star toggle...');
-                    await loadLeads(true); // Force refresh
-                } else {
-                    console.log('🔄 Refetching clients after star toggle...');
-                    await loadClients(true); // Force refresh
-                }
-                
-                console.log(`⭐ Client/lead ${currentStarred ? 'unstarred' : 'starred'}`);
-            } else {
-                console.error('❌ Star API not available');
             }
         } catch (error) {
             console.error('❌ Failed to toggle star:', error);
