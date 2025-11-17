@@ -71,8 +71,18 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         return parsedClient;
     });
     
+    // Check if current user is admin
+    const user = window.storage?.getUser?.() || {};
+    const isAdmin = user?.role?.toLowerCase() === 'admin';
+    
     // Now initialize other state and refs AFTER formData
-    const [activeTab, setActiveTab] = useState(initialTab);
+    const [activeTab, setActiveTab] = useState(() => {
+        // If user tries to access contracts tab but is not admin, default to overview
+        if (initialTab === 'contracts' && !isAdmin) {
+            return 'overview';
+        }
+        return initialTab;
+    });
     const [uploadingContract, setUploadingContract] = useState(false);
     
     // Track optimistic updates in STATE (not refs) so React re-renders when they change
@@ -171,8 +181,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     
     // Update tab when initialTab prop changes
     useEffect(() => {
-        setActiveTab(initialTab);
-    }, [initialTab]);
+        // If user tries to access contracts tab but is not admin, default to overview
+        if (initialTab === 'contracts' && !isAdmin) {
+            setActiveTab('overview');
+        } else {
+            setActiveTab(initialTab);
+        }
+    }, [initialTab, isAdmin]);
     
     // MANUFACTURING PATTERN: Only sync formData when client ID changes (switching to different client)
     // Once modal is open, formData is completely user-controlled - no automatic syncing from props
@@ -325,6 +340,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     
     // Handle tab change and notify parent
     const handleTabChange = (tab) => {
+        // Prevent non-admins from accessing contracts tab
+        if (tab === 'contracts' && !isAdmin) {
+            return;
+        }
         setActiveTab(tab);
         if (onTabChange) {
             onTabChange(tab);
@@ -1994,7 +2013,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 {/* Tabs */}
                 <div className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} px-3 sm:px-6`}>
                     <div className={`flex ${isFullPage ? 'gap-4 sm:gap-8' : 'gap-2 sm:gap-6'} overflow-x-auto scrollbar-hide`} style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                        {['overview', 'contacts', 'sites', 'opportunities', 'calendar', 'projects', 'service', 'maintenance', 'contracts', 'activity', 'notes'].map(tab => (
+                        {['overview', 'contacts', 'sites', 'opportunities', 'calendar', 'projects', 'service', 'maintenance', ...(isAdmin ? ['contracts'] : []), 'activity', 'notes'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => handleTabChange(tab)}
