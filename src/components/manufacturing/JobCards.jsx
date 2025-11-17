@@ -2217,8 +2217,10 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
               <p>Last Updated: {new Date(jobCard.updatedAt).toLocaleString('en-ZA')}</p>
             )}
           </div>
-        </div>
               </>
+            );
+          })()}
+        </div>
       </div>
     );
   };
