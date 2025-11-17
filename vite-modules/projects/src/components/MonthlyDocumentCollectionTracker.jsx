@@ -2331,6 +2331,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // Template Management Modal
     const TemplateModal = () => {
         const [showTemplateList, setShowTemplateList] = useState(!editingTemplate);
+        
+        // Debug: Log templates when they change
+        useEffect(() => {
+            console.log('🔍 TemplateModal: Templates state changed', {
+                templatesCount: templates.length,
+                templates: templates,
+                showTemplateModal: showTemplateModal,
+                showTemplateList: showTemplateList
+            });
+        }, [templates, showTemplateModal, showTemplateList]);
+        
         const [templateFormData, setTemplateFormData] = useState(() => {
             // Check if we have pre-filled data from "Save as Template"
             const prefill = window.tempTemplateData;
