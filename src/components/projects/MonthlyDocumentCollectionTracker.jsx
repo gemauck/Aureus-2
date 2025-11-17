@@ -2941,6 +2941,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return year;
         });
 
+        // Helper to safely parse template sections
+        const parseTemplateSections = (sections) => {
+            if (!sections) return [];
+            if (Array.isArray(sections)) return sections;
+            if (typeof sections === 'string') {
+                try {
+                    const parsed = JSON.parse(sections);
+                    return Array.isArray(parsed) ? parsed : [];
+                } catch (e) {
+                    console.warn('Failed to parse template sections in ApplyTemplateModal:', e);
+                    return [];
+                }
+            }
+            return [];
+        };
+
         const handleApply = () => {
             if (!selectedTemplateId) {
                 alert('Please select a template');
@@ -2951,7 +2967,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 alert('Template not found');
                 return;
             }
-            handleApplyTemplate(template, targetYear);
+            // Ensure sections are parsed before applying
+            const templateWithParsedSections = {
+                ...template,
+                sections: parseTemplateSections(template.sections)
+            };
+            handleApplyTemplate(templateWithParsedSections, targetYear);
         };
 
         return (
@@ -3015,7 +3036,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     >
                                         <option value="">-- Select a template --</option>
                                         {templates.map(template => {
-                                            const sectionsCount = Array.isArray(template.sections) ? template.sections.length : 0;
+                                            // Parse sections safely for dropdown display
+                                            const sections = (() => {
+                                                if (Array.isArray(template.sections)) return template.sections;
+                                                if (typeof template.sections === 'string') {
+                                                    try {
+                                                        const parsed = JSON.parse(template.sections);
+                                                        return Array.isArray(parsed) ? parsed : [];
+                                                    } catch (e) {
+                                                        return [];
+                                                    }
+                                                }
+                                                return [];
+                                            })();
+                                            const sectionsCount = sections.length || 0;
                                             return (
                                                 <option key={template.id} value={String(template.id)}>
                                                     {template.name} ({sectionsCount} sections)
@@ -3028,7 +3062,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                             return null;
                                         }
                                         const template = templates.find(t => String(t.id) === String(selectedTemplateId));
-                                        if (template?.description) {
+                                        if (!template) {
+                                            return null;
+                                        }
+                                        if (template.description) {
                                             return (
                                                 <p className="mt-1 text-[10px] text-gray-500">{template.description}</p>
                                             );
@@ -3072,12 +3109,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     if (!template) {
                                         return null;
                                     }
-                                    const sections = Array.isArray(template.sections) ? template.sections : [];
-                                    const sectionsCount = sections.length;
+                                    // Parse sections safely - handle string, array, or undefined
+                                    const sections = (() => {
+                                        if (Array.isArray(template.sections)) return template.sections;
+                                        if (typeof template.sections === 'string') {
+                                            try {
+                                                const parsed = JSON.parse(template.sections);
+                                                return Array.isArray(parsed) ? parsed : [];
+                                            } catch (e) {
+                                                console.warn('Failed to parse template sections in preview:', e);
+                                                return [];
+                                            }
+                                        }
+                                        return [];
+                                    })();
+                                    const sectionsCount = sections.length || 0;
                                     const totalDocs = sections.reduce((sum, s) => {
-                                        const docCount = Array.isArray(s?.documents) ? s.documents.length : 0;
-                                        return sum + docCount;
-                                    }, 0);
+                                        const docCount = Array.isArray(s?.documents) ? (s.documents.length || 0) : 0;
+                                        return (sum || 0) + docCount;
+                                    }, 0) || 0;
                                     return (
                                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5">
                                             <p className="text-[10px] font-medium text-blue-900 mb-1">Template Preview:</p>
