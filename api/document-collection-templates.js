@@ -1,6 +1,6 @@
 import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
-import { badRequest, ok, serverError, notFound } from './_lib/response.js'
+import { badRequest, ok, serverError } from './_lib/response.js'
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
@@ -114,5 +114,4 @@ async function handler(req, res) {
 }
 
 export default withLogging(withHttp(handler))
-
 

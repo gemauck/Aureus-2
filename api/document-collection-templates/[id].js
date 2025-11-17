@@ -9,9 +9,17 @@ async function handler(req, res) {
   try {
     await authRequired(req, res)
     
+    console.log('🔍 Document Collection Template [id] API:', {
+      method: req.method,
+      url: req.url,
+      params: req.params
+    })
+    
     const url = new URL(req.url, `http://${req.headers.host}`)
     const pathSegments = url.pathname.split('/').filter(Boolean)
     const id = req.params?.id || pathSegments[pathSegments.length - 1]
+    
+    console.log('🔍 Extracted ID:', id, 'from path segments:', pathSegments)
     
     if (!id) {
       return badRequest(res, 'Template ID required')
@@ -134,16 +142,22 @@ async function handler(req, res) {
     // Delete template
     if (req.method === 'DELETE') {
       try {
+        console.log('🗑️ Attempting to delete template:', id)
+        
         const template = await prisma.documentCollectionTemplate.findUnique({
           where: { id }
         })
         
         if (!template) {
-          return notFound(res)
+          console.log('❌ Template not found in database:', id)
+          return notFound(res, 'Template not found')
         }
+        
+        console.log('📋 Found template:', template.name, 'isDefault:', template.isDefault)
         
         // Prevent deleting default templates
         if (template.isDefault) {
+          console.log('⚠️ Attempted to delete default template, blocking')
           return badRequest(res, 'Default templates cannot be deleted')
         }
         
@@ -167,5 +181,4 @@ async function handler(req, res) {
 }
 
 export default withLogging(withHttp(handler))
-
 

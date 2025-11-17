@@ -8,7 +8,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const currentMonth = new Date().getMonth(); // 0-11
     
     // Calculate working months (2 months in arrears from current month)
-    // Example: If current month is October, working months are August and September
     const getWorkingMonths = () => {
         const twoMonthsBack = currentMonth - 2 < 0 ? currentMonth - 2 + 12 : currentMonth - 2;
         const oneMonthBack = currentMonth - 1 < 0 ? currentMonth - 1 + 12 : currentMonth - 1;
@@ -16,7 +15,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
     
     const workingMonths = getWorkingMonths();
-    
     const tableRef = useRef(null);
     const monthRefs = useRef({});
     const hasInitialScrolled = useRef(false);
@@ -39,96 +37,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
     const [selectedYear, setSelectedYear] = useState(getInitialSelectedYear);
     
-    // Parse documentSections safely - handle various formats
-    const parseSections = (data) => {
-        if (!data) return [];
-        if (Array.isArray(data)) return data;
-        
-        try {
-            // Handle stringified data
-            if (typeof data === 'string') {
-                let cleaned = data.trim();
-                if (!cleaned) return [];
-                
-                // Recursively unescape until we get valid JSON
-                let attempts = 0;
-                const maxAttempts = 10;
-                
-                while (attempts < maxAttempts) {
-                    try {
-                        // Try to parse directly first
-                        const parsed = JSON.parse(cleaned);
-                        if (Array.isArray(parsed)) return parsed;
-                        // If it's a string, continue unescaping
-                        if (typeof parsed === 'string') {
-                            cleaned = parsed;
-                            attempts++;
-                            continue;
-                        }
-                        return [];
-                    } catch (parseError) {
-                        // If parsing fails, try to unescape
-                        if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
-                            cleaned = cleaned.slice(1, -1);
-                        }
-                        // Unescape backslashes and quotes
-                        cleaned = cleaned.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-                        attempts++;
-                        
-                        // If we've made no progress, give up
-                        if (attempts >= maxAttempts) {
-                            console.warn('Failed to parse documentSections after', attempts, 'attempts:', parseError);
-                            return [];
-                        }
-                    }
-                }
-                
-                return [];
-            }
-        } catch (e) {
-            console.warn('Failed to parse documentSections:', e);
-            return [];
-        }
-        return [];
-    };
-    
-    // Refs for state management
-    const previousProjectIdRef = useRef(project?.id);
-    const editingSectionIdRef = useRef(null);
-    const isSavingRef = useRef(false);
-    const debouncedSaveTimeoutRef = useRef(null);
-    const lastLocalUpdateRef = useRef(0); // Track last local update timestamp to prevent sync overwrites
-    
-    // Version-based conflict resolution (best practice instead of time windows)
-    const [localVersion, setLocalVersion] = useState(0);
-    const serverVersionRef = useRef(0);
-    
-    // Initialize sections from localStorage or props (pure initialization)
-    const getStorageKey = () => `documentSections_${project?.id}`;
-    
-    const [sections, setSections] = useState(() => {
-        console.log('📋 Initializing sections from project.documentSections:', project.documentSections);
-        
-        // Check localStorage first for saved sections
-        const storageKey = getStorageKey();
-        try {
-            const savedData = localStorage.getItem(storageKey);
-            if (savedData) {
-                const parsed = JSON.parse(savedData);
-                if (Array.isArray(parsed)) {
-                    console.log('🛡️ Using saved sections from localStorage:', parsed.length, 'sections');
-                    return parsed;
-                }
-            }
-        } catch (e) {
-            console.warn('Failed to load sections from storage:', e);
-        }
-        
-        // Fallback to prop data
-        const parsed = parseSections(project.documentSections);
-        console.log('📋 Parsed sections from props:', parsed.length, 'sections');
-        return parsed;
-    });
+    // ✅ NEW SIMPLE ARCHITECTURE: Database as single source of truth
+    const [sections, setSections] = useState([]);
     const [showSectionModal, setShowSectionModal] = useState(false);
     const [showDocumentModal, setShowDocumentModal] = useState(false);
     const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -136,146 +46,108 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [editingTemplate, setEditingTemplate] = useState(null);
     const [templates, setTemplates] = useState([]);
     const [showTemplateList, setShowTemplateList] = useState(true);
-    
+    const [editingSection, setEditingSection] = useState(null);
+    const [editingDocument, setEditingDocument] = useState(null);
+    const [editingSectionId, setEditingSectionId] = useState(null);
+    const editingSectionIdRef = useRef(null);
+    const [draggedSection, setDraggedSection] = useState(null);
+    const [dragOverIndex, setDragOverIndex] = useState(null);
+    const [draggedDocument, setDraggedDocument] = useState(null);
+    const [dragOverDocumentIndex, setDragOverDocumentIndex] = useState(null);
+    const [isExporting, setIsExporting] = useState(false);
+    const [hoverCommentCell, setHoverCommentCell] = useState(null);
+    const [quickComment, setQuickComment] = useState('');
+    const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
+    const commentPopupContainerRef = useRef(null);
+    const previousProjectIdRef = useRef(project?.id);
+
     // Template storage key
     const TEMPLATES_STORAGE_KEY = 'documentCollectionTemplates';
-    
-    // Load templates from API and localStorage (reusable function)
-    const loadTemplatesFromAPI = useCallback(async () => {
-        console.log('🔄 loadTemplatesFromAPI called');
-        if (typeof window === 'undefined') {
-            console.log('⚠️ Window undefined, skipping template load');
-            return;
+
+    // ✅ LOAD DATA FROM DATABASE ON MOUNT
+    useEffect(() => {
+        if (!project?.documentSections) return;
+        
+        console.log('📋 MonthlyDocumentCollectionTracker: Loading data from database');
+        let parsed = [];
+        try {
+            if (typeof project.documentSections === 'string') {
+                parsed = JSON.parse(project.documentSections);
+            } else if (Array.isArray(project.documentSections)) {
+                parsed = project.documentSections;
+            }
+        } catch (e) {
+            console.warn('Failed to parse documentSections:', e);
         }
         
+        console.log('✅ Loaded sections from project:', parsed.length, 'sections');
+        setSections(Array.isArray(parsed) ? parsed : []);
+    }, [project?.id, project?.documentSections]);
+
+    // ✅ AUTO-SAVE TO DATABASE AFTER 1 SECOND OF INACTIVITY
+    useEffect(() => {
+        if (!project?.id || sections.length === 0) return;
+        
+        const timeout = setTimeout(async () => {
+            console.log('💾 Saving sections to database:', sections.length, 'sections');
+            try {
+                await window.DatabaseAPI.updateProject(project.id, {
+                    documentSections: JSON.stringify(sections)
+                });
+                console.log('✅ Sections saved successfully');
+            } catch (error) {
+                console.error('❌ Error saving sections:', error);
+            }
+        }, 1000);
+        
+        return () => clearTimeout(timeout);
+    }, [sections, project?.id]);
+
+    // ✅ LOAD TEMPLATES ONLY WHEN MODALS OPEN
+    useEffect(() => {
+        if (!showTemplateModal && !showApplyTemplateModal) return;
+        
+        console.log('📂 Loading templates...');
+        loadTemplates();
+    }, [showTemplateModal, showApplyTemplateModal]);
+
+    const loadTemplates = async () => {
         try {
-            // First, load from localStorage for instant UI
-            const storedTemplates = localStorage.getItem(TEMPLATES_STORAGE_KEY);
-            let localTemplates = [];
-            if (storedTemplates) {
-                try {
-                    localTemplates = JSON.parse(storedTemplates);
-                    console.log(`📦 Found ${localTemplates.length} template(s) in localStorage`);
-                    if (Array.isArray(localTemplates)) {
-                        setTemplates(localTemplates);
-                    }
-                } catch (e) {
-                    console.warn('Failed to parse stored templates:', e);
-                }
-            } else {
-                console.log('📦 No templates in localStorage');
+            // Load from localStorage first
+            const stored = localStorage.getItem(TEMPLATES_STORAGE_KEY);
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                setTemplates(Array.isArray(parsed) ? parsed : []);
             }
             
             // Then fetch from API
             const token = window.storage?.getToken?.();
-            console.log('🔑 Token check:', token ? `Found (length: ${token.length})` : 'Not found');
-            if (token) {
-                try {
-                    console.log('📋 Fetching document collection templates from API...');
-                    const response = await fetch('/api/document-collection-templates', {
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    
-                    console.log('📡 API Response status:', response.status, response.ok);
-                    
-                    if (response.ok) {
-                        const responseData = await response.json();
-                        console.log('📥 API Response data:', responseData);
-                        // Handle different response formats: {templates: [...]} or {data: {templates: [...]}}
-                        const apiTemplates = responseData?.templates || responseData?.data?.templates || [];
-                        
-                        console.log(`✅ Loaded ${apiTemplates.length} template(s) from API`, {
-                            responseData,
-                            apiTemplates,
-                            templatesCount: apiTemplates.length,
-                            firstTemplate: apiTemplates[0]
-                        });
-                        
-                        // Merge API templates with local templates (API templates take precedence)
-                        const templateMap = new Map();
-                        
-                        // Add local templates first
-                        if (Array.isArray(localTemplates)) {
-                            localTemplates.forEach(t => {
-                                if (t.id) templateMap.set(t.id, t);
-                            });
-                        }
-                        
-                        // Overwrite with API templates (they're the source of truth)
-                        apiTemplates.forEach(t => {
-                            if (t.id) templateMap.set(t.id, t);
-                        });
-                        
-                        const mergedTemplates = Array.from(templateMap.values());
-                        console.log(`💾 Setting ${mergedTemplates.length} merged template(s) to state`);
-                        setTemplates(mergedTemplates);
-                        
-                        // Update localStorage with merged templates
-                        if (typeof window !== 'undefined') {
-                            localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(mergedTemplates));
-                            console.log('💾 Templates saved to localStorage');
-                        }
-                    } else {
-                        const errorText = await response.text();
-                        console.warn('⚠️ Failed to fetch templates from API:', response.status, errorText);
-                        // Keep using local templates if API fails
-                    }
-                } catch (apiError) {
-                    console.error('❌ Error fetching templates from API:', apiError);
-                    // Keep using local templates if API fails
+            if (!token) return;
+            
+            const response = await fetch('/api/document-collection-templates', {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
                 }
-            } else {
-                console.log('📋 No auth token, using local templates only');
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                const apiTemplates = data?.templates || data?.data?.templates || [];
+                console.log('✅ Loaded templates from API:', apiTemplates.length);
+                setTemplates(apiTemplates);
+                localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(apiTemplates));
             }
-        } catch (e) {
-            console.error('❌ Failed to load templates:', e);
-            setTemplates([]);
-        }
-    }, []);
-    
-    // Load templates on mount
-    useEffect(() => {
-        console.log('🚀 MonthlyDocumentCollectionTracker: Loading templates on mount');
-        loadTemplatesFromAPI();
-    }, [loadTemplatesFromAPI]);
-    
-    // Reload templates when template modal opens
-    useEffect(() => {
-        if (showTemplateModal) {
-            console.log('📂 Template modal opened, reloading templates...');
-            loadTemplatesFromAPI();
-        }
-    }, [showTemplateModal, loadTemplatesFromAPI]);
-    
-    // Save templates to localStorage
-    const saveTemplates = (templatesToSave) => {
-        if (typeof window !== 'undefined') {
-            try {
-                localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(templatesToSave));
-                setTemplates(templatesToSave);
-            } catch (e) {
-                console.error('Failed to save templates:', e);
-            }
+        } catch (error) {
+            console.error('❌ Error loading templates:', error);
         }
     };
-    
-    // BEST PRACTICE: Separate localStorage persistence from state updates
-    // Persist sections to localStorage whenever they change (pure side effect)
-    useEffect(() => {
-        if (!project?.id || typeof window === 'undefined') return;
-        
-        const storageKey = getStorageKey();
-        try {
-            localStorage.setItem(storageKey, JSON.stringify(sections));
-            console.log('💾 Persisted sections to localStorage:', sections.length, 'sections');
-        } catch (e) {
-            console.warn('Failed to persist sections to localStorage:', e);
-        }
-    }, [sections, project?.id]); // Pure side effect - no logic mixed with state
-    
+
+    const saveTemplates = (templatesToSave) => {
+        localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(templatesToSave));
+        setTemplates(templatesToSave);
+    };
+
     // Initialize year when project ID changes
     useEffect(() => {
         if (!project?.id || typeof window === 'undefined') return;
@@ -290,18 +162,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const parsedYear = storedYear ? parseInt(storedYear, 10) : NaN;
         if (!Number.isNaN(parsedYear)) {
             if (parsedYear !== selectedYear) {
-                console.log('📅 Restoring selected year from localStorage:', parsedYear);
                 setSelectedYear(parsedYear);
             }
-        } else {
-            console.log('📅 No stored year found, using current year:', currentYear);
-            setSelectedYear(currentYear);
         }
     }, [project?.id]);
-    
-    // Dirty field tracking for collaboration
-    const [dirtyFields, setDirtyFields] = useState(new Set());
-    const [lastSyncData, setLastSyncData] = useState(null);
 
     const handleYearChange = (year) => {
         setSelectedYear(year);
@@ -310,140 +174,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
     };
 
-
-  // Smart Sync: Only update fields that aren't currently being edited
-  // This allows real-time collaboration while preventing overwrites
-  useEffect(() => {
-    console.log('🔄 Smart Sync enabled - will sync non-dirty fields only');
-    
-    // Resume LiveDataSync so we get updates
-    if (window.LiveDataSync && typeof window.LiveDataSync.resume === 'function') {
-      window.LiveDataSync.resume();
-    }
-
-    // Cleanup: pause on unmount
-    return () => {
-      if (window.LiveDataSync && typeof window.LiveDataSync.pause === 'function') {
-        window.LiveDataSync.pause();
-      }
-    };
-  }, []);
-  
-  // BEST PRACTICE: Single sync mechanism with version-based conflict resolution
-  useEffect(() => {
-    const newData = project?.documentSections;
-    if (!newData || newData === lastSyncData) return;
-    
-    // Skip if user is actively editing
-    if (dirtyFields.size > 0) {
-      console.log('⏭️ Skipping sync - user has ' + dirtyFields.size + ' dirty field(s)');
-      return;
-    }
-    
-    // Version-based conflict resolution (best practice)
-    const parsed = parseSections(newData);
-    const serverVersion = Date.parse(project.updatedAt || new Date().toISOString());
-    
-    // Only sync if server version is newer than local version
-    if (serverVersion > serverVersionRef.current || localVersion === 0) {
-      console.log('🔄 Syncing from server (' + parsed.length + ' sections)');
-      setSections(parsed);
-      serverVersionRef.current = serverVersion;
-    } else {
-      console.log('🛡️ Local version is newer - skipping sync to preserve user changes');
-    }
-    
-    setLastSyncData(newData);
-  }, [project?.documentSections, dirtyFields, localVersion]);
-    const [editingSection, setEditingSection] = useState(null);
-    const [editingDocument, setEditingDocument] = useState(null);
-    const [editingSectionId, setEditingSectionId] = useState(null);
-    const [draggedSection, setDraggedSection] = useState(null);
-    const [dragOverIndex, setDragOverIndex] = useState(null);
-    const [draggedDocument, setDraggedDocument] = useState(null);
-    const [dragOverDocumentIndex, setDragOverDocumentIndex] = useState(null);
-    const [isExporting, setIsExporting] = useState(false);
-    const [hoverCommentCell, setHoverCommentCell] = useState(null); // Track which cell's popup is open
-    const [quickComment, setQuickComment] = useState(''); // For quick comment input
-    const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 }); // Store popup position
-    const commentPopupContainerRef = useRef(null); // Ref for comment popup scrollable container
-    
-    // BEST PRACTICE: Save to database only (localStorage handled by separate useEffect)
-    const immediatelySaveDocumentSections = async (sectionsToSave) => {
-        try {
-            // Cancel any pending debounced saves
-            if (debouncedSaveTimeoutRef.current) {
-                clearTimeout(debouncedSaveTimeoutRef.current);
-                debouncedSaveTimeoutRef.current = null;
-            }
-            
-            isSavingRef.current = true;
-            
-            console.log('💾 Saving document sections to database...');
-            console.log('  - Project ID:', project.id);
-            console.log('  - Sections count:', sectionsToSave.length);
-            
-            if (!window.DatabaseAPI || typeof window.DatabaseAPI.updateProject !== 'function') {
-                throw new Error('DatabaseAPI.updateProject is not available');
-            }
-            
-            const updatePayload = {
-                documentSections: JSON.stringify(sectionsToSave)
-            };
-            
-            const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
-            console.log('✅ Database save successful');
-            
-            // Update version after successful save
-            const serverVersion = Date.parse(new Date().toISOString());
-            serverVersionRef.current = serverVersion;
-            setLocalVersion(prev => prev + 1);
-            
-            // Clear cache to ensure fresh data on reload
-            if (window.DatabaseAPI._responseCache) {
-                const cacheKeysToDelete = [];
-                window.DatabaseAPI._responseCache.forEach((value, key) => {
-                    if (key.includes(`/projects/${project.id}`) || key.includes(`projects/${project.id}`)) {
-                        cacheKeysToDelete.push(key);
-                    }
-                });
-                cacheKeysToDelete.forEach(key => {
-                    window.DatabaseAPI._responseCache.delete(key);
-                });
-            }
-            
-            // Note: localStorage persistence is handled by separate useEffect
-            
-            isSavingRef.current = false;
-        } catch (error) {
-            console.error('❌ Error saving document sections:', error);
-            isSavingRef.current = false;
-            throw error; // Re-throw for error handling in handlers
-        }
-    };
-
-    // Generate year options (allow selection back to 2015)
-    const MIN_YEAR = 2015;
-    const FUTURE_YEAR_BUFFER = 5;
-    const yearOptions = [];
-    for (let i = MIN_YEAR; i <= currentYear + FUTURE_YEAR_BUFFER; i++) {
-        yearOptions.push(i);
-    }
-
-    // Status options with color progression from red to green
-    const statusOptions = [
-        { value: 'not-collected', label: 'Not Collected', color: 'bg-red-400 text-white font-semibold', cellColor: 'bg-red-400 border-l-4 border-red-700 shadow-sm' },
-        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-yellow-400 text-white font-semibold', cellColor: 'bg-yellow-400 border-l-4 border-yellow-700 shadow-sm' },
-        { value: 'collected', label: 'Collected', color: 'bg-green-500 text-white font-semibold', cellColor: 'bg-green-500 border-l-4 border-green-700 shadow-sm' },
-        { value: 'unavailable', label: 'Unavailable', color: 'bg-gray-400 text-white font-semibold', cellColor: 'bg-gray-400 border-l-4 border-gray-700 shadow-sm' }
-    ];
-
-    // DISABLED: No automatic refresh on mount - only use data from props
-    // This prevents overwriting user input and unnecessary API calls
-    // Data will be loaded from props when component mounts or project changes
-    
     useEffect(() => {
-        // Scroll to working months only on initial load
         if (!hasInitialScrolled.current && sections.length > 0 && tableRef.current && selectedYear === currentYear) {
             setTimeout(() => {
                 scrollToWorkingMonths();
@@ -459,12 +190,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         if (firstMonthElement && tableRef.current) {
             const container = tableRef.current;
             const elementLeft = firstMonthElement.offsetLeft;
-            
-            // Calculate the width of document column (sticky left column)
-            const documentColumnWidth = 250; // Approximate width of the document info column
-            
-            // Scroll to show the first working month with enough padding
-            // Position it after the sticky document column with some breathing room
+            const documentColumnWidth = 250;
             const scrollPosition = elementLeft - documentColumnWidth - 100;
             
             container.scrollTo({
@@ -474,96 +200,35 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
     };
 
-    // BEST PRACTICE: Handle project changes - reset version when switching projects
-    useEffect(() => {
-        const projectIdChanged = previousProjectIdRef.current !== project?.id;
-        if (projectIdChanged && project?.id) {
-            console.log('🔄 Project ID changed, resetting for new project');
-            previousProjectIdRef.current = project.id;
-            setLocalVersion(0); // Reset version for new project
-            serverVersionRef.current = 0;
-            
-            // Load from localStorage for new project
-            const storageKey = getStorageKey();
-            try {
-                const savedSections = localStorage.getItem(storageKey);
-                if (savedSections) {
-                    const parsed = JSON.parse(savedSections);
-                    if (Array.isArray(parsed)) {
-                        console.log('🛡️ Loaded sections from localStorage for new project:', parsed.length);
-                        setSections(parsed);
-                        return;
-                    }
-                }
-            } catch (e) {
-                console.warn('Failed to load sections from storage:', e);
-            }
-        }
-    }, [project?.id]);
+    const yearOptions = [];
+    const MIN_YEAR = 2015;
+    const FUTURE_YEAR_BUFFER = 5;
+    for (let i = MIN_YEAR; i <= currentYear + FUTURE_YEAR_BUFFER; i++) {
+        yearOptions.push(i);
+    }
 
-    // REMOVED: Debounced auto-save effect
-    // NEW METHODOLOGY: Only save explicitly when user adds/edits/deletes sections or documents
-    // No automatic saves - prevents refreshes and overwriting user input
-    // Data only refreshes on mount or when navigating back to the page
-
-    // Auto-scroll to last comment when comment popup opens
-    useEffect(() => {
-        if (hoverCommentCell && commentPopupContainerRef.current) {
-            // Small delay to ensure DOM is ready
-            setTimeout(() => {
-                if (commentPopupContainerRef.current) {
-                    commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
-                }
-            }, 100);
-        }
-    }, [hoverCommentCell, sections]); // Re-scroll when popup opens or sections change
-
-    // Close comment popup on click outside
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            // Check if click is on comment button or inside popup
-            const isCommentButton = event.target.closest('[data-comment-cell]');
-            const isInsidePopup = event.target.closest('.comment-popup');
-            
-            if (hoverCommentCell && !isCommentButton && !isInsidePopup) {
-                console.log('Closing popup - clicked outside');
-                setHoverCommentCell(null);
-                setQuickComment('');
-            }
-        };
-
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [hoverCommentCell]);
+    const statusOptions = [
+        { value: 'not-collected', label: 'Not Collected', color: 'bg-red-400 text-white font-semibold', cellColor: 'bg-red-400 border-l-4 border-red-700 shadow-sm' },
+        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-yellow-400 text-white font-semibold', cellColor: 'bg-yellow-400 border-l-4 border-yellow-700 shadow-sm' },
+        { value: 'collected', label: 'Collected', color: 'bg-green-500 text-white font-semibold', cellColor: 'bg-green-500 border-l-4 border-green-700 shadow-sm' },
+        { value: 'unavailable', label: 'Unavailable', color: 'bg-gray-400 text-white font-semibold', cellColor: 'bg-gray-400 border-l-4 border-gray-700 shadow-sm' }
+    ];
 
     const getStatusConfig = (status) => {
         return statusOptions.find(opt => opt.value === status) || statusOptions[0];
     };
 
-    // Helper function to safely get current user info
-    // This function will NEVER throw an error - it always returns a valid user object
     const getCurrentUser = () => {
         const defaultUser = { name: 'System', email: 'system', id: 'system', role: 'System' };
         
         try {
-            // Helper to extract user from various formats
             const extractUser = (data) => {
                 if (!data) return null;
-                
-                // Handle case where API returns { user: {...} }
-                if (data.user && typeof data.user === 'object') {
-                    return data.user;
-                }
-                
-                // Handle direct user object
-                if (data.name || data.email) {
-                    return data;
-                }
-                
+                if (data.user && typeof data.user === 'object') return data.user;
+                if (data.name || data.email) return data;
                 return null;
             };
             
-            // Method 1: Try to parse from localStorage directly first (most reliable)
             try {
                 const userData = localStorage.getItem('abcotronics_user');
                 if (userData && userData !== 'null' && userData !== 'undefined') {
@@ -578,9 +243,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             role: user.role || 'System'
                         };
                         
-                        // Only return if it's not the default System user
                         if (result.name !== 'System' && result.email !== 'system') {
-                            console.log('✅ Retrieved user from localStorage:', result.name, result.email);
                             return result;
                         }
                     }
@@ -589,20 +252,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 console.warn('Failed to parse user from localStorage:', error);
             }
             
-            // Method 2: Try getUserInfo() if it exists
             if (window.storage && typeof window.storage.getUserInfo === 'function') {
                 try {
                     const userInfo = window.storage.getUserInfo();
                     if (userInfo && ((userInfo.name && userInfo.name !== 'System') || (userInfo.email && userInfo.email !== 'system'))) {
-                        console.log('✅ Retrieved user from getUserInfo():', userInfo.name || userInfo.email);
                         return userInfo;
                     }
-                } catch (error) {
-                    // Silently continue to next method
-                }
+                } catch (error) {}
             }
             
-            // Method 3: Try getUser() as fallback
             if (window.storage && typeof window.storage.getUser === 'function') {
                 try {
                     const userRaw = window.storage.getUser();
@@ -617,30 +275,21 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         };
                         
                         if (result.name !== 'System' && result.email !== 'system') {
-                            console.log('✅ Retrieved user from getUser():', result.name || result.email);
                             return result;
                         }
                     }
-                } catch (error) {
-                    // Silently continue to next method
-                }
+                } catch (error) {}
             }
         } catch (error) {
-            // Catch any unexpected errors
             console.warn('Unexpected error in getCurrentUser:', error);
         }
         
-        console.warn('⚠️ Could not retrieve user, defaulting to System. localStorage content:', localStorage.getItem('abcotronics_user'));
-        // Always return a valid user object - never throw
         return defaultUser;
     };
 
     const handleAddSection = () => {
-        console.log('🔵 Add Section button clicked');
-        console.log('  - Current sections:', sections.length);
         setEditingSection(null);
         setShowSectionModal(true);
-        console.log('  - showSectionModal set to:', true);
     };
 
     const handleEditSection = (section) => {
@@ -648,39 +297,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         setShowSectionModal(true);
     };
 
-    const handleSaveSection = async (sectionData) => {
-        // Get current user info
+    const handleSaveSection = (sectionData) => {
         const currentUser = getCurrentUser();
 
-        // Update timestamp BEFORE state update to prevent sync from overwriting
-        lastLocalUpdateRef.current = Date.now();
-
-        let updatedSections;
-
         if (editingSection) {
-            // Use functional update to avoid race conditions
-            setSections(currentSections => {
-                updatedSections = currentSections.map(s => 
-                    s.id === editingSection.id ? { ...s, ...sectionData } : s
-                );
-                console.log('📝 Updating section:', sectionData.name, 'Total sections:', updatedSections.length);
-                return updatedSections;
-            });
+            setSections(prev => prev.map(s => 
+                s.id === editingSection.id ? { ...s, ...sectionData } : s
+            ));
             
-            // Log to audit trail
             if (window.AuditLogger) {
-                window.AuditLogger.log(
-                    'update',
-                    'projects',
-                    {
-                        action: 'Section Updated',
-                        projectId: project.id,
-                        projectName: project.name,
-                        sectionName: sectionData.name,
-                        oldSectionName: editingSection.name
-                    },
-                    currentUser
-                );
+                window.AuditLogger.log('update', 'projects', {
+                    action: 'Section Updated',
+                    projectId: project.id,
+                    projectName: project.name,
+                    sectionName: sectionData.name,
+                    oldSectionName: editingSection.name
+                }, currentUser);
             }
         } else {
             const newSection = {
@@ -688,90 +320,42 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 ...sectionData,
                 documents: []
             };
-            // Use functional update to avoid race conditions
-            setSections(currentSections => {
-                updatedSections = [...currentSections, newSection];
-                console.log('➕ Adding new section:', sectionData.name, 'Total sections:', updatedSections.length);
-                // ULTRA AGGRESSIVE: Mark as initialized IMMEDIATELY when adding section
-                hasInitializedRef.current = true;
-                console.log('🛑 ULTRA AGGRESSIVE: Marked initialized on section add - BLOCKING all future syncs');
-                return updatedSections;
-            });
+            setSections(prev => [...prev, newSection]);
             
-            // Log to audit trail
             if (window.AuditLogger) {
-                window.AuditLogger.log(
-                    'create',
-                    'projects',
-                    {
-                        action: 'Section Created',
-                        projectId: project.id,
-                        projectName: project.name,
-                        sectionName: sectionData.name
-                    },
-                    currentUser
-                );
+                window.AuditLogger.log('create', 'projects', {
+                    action: 'Section Created',
+                    projectId: project.id,
+                    projectName: project.name,
+                    sectionName: sectionData.name
+                }, currentUser);
             }
         }
         
         setShowSectionModal(false);
         setEditingSection(null);
-        
-        // Immediately save to database to ensure persistence
-        if (updatedSections) {
-            await immediatelySaveDocumentSections(updatedSections);
-        }
     };
 
-    // BEST PRACTICE: Optimistic updates - update UI first, then persist
-    const handleDeleteSection = async (sectionId) => {
+    const handleDeleteSection = (sectionId) => {
         const currentUser = getCurrentUser();
         const section = sections.find(s => s.id === sectionId);
         if (!section) return;
         
-        if (!confirm(`Delete section "${section.name}" and all its documents?`)) {
-            return;
-        }
+        if (!confirm(`Delete section "${section.name}" and all its documents?`)) return;
         
-        // Capture previous state for rollback
-        const previousSections = sections;
+        setSections(prev => prev.filter(s => s.id !== sectionId));
         
-        // STEP 1: Optimistic update (pure state update, no side effects)
-        const updatedSections = sections.filter(s => s.id !== sectionId);
-        setSections(updatedSections);
-        setLocalVersion(prev => prev + 1); // Increment version to prevent sync override
-        
-        console.log('🗑️ Deleting section:', section.name, 'Remaining sections:', updatedSections.length);
-        
-        // STEP 2: Log to audit trail
         if (window.AuditLogger) {
-            window.AuditLogger.log(
-                'delete',
-                'projects',
-                {
-                    action: 'Section Deleted',
-                    projectId: project.id,
-                    projectName: project.name,
-                    sectionName: section.name,
-                    documentsCount: section.documents?.length || 0
-                },
-                currentUser
-            );
-        }
-        
-        // STEP 3: Save to database (async - localStorage already saved by useEffect)
-        try {
-            await immediatelySaveDocumentSections(updatedSections);
-        } catch (error) {
-            // STEP 4: Rollback on error
-            console.error('Failed to delete section:', error);
-            setSections(previousSections); // Restore previous state
-            setLocalVersion(prev => Math.max(0, prev - 1)); // Rollback version
-            alert('Failed to delete section. Please try again.');
+            window.AuditLogger.log('delete', 'projects', {
+                action: 'Section Deleted',
+                projectId: project.id,
+                projectName: project.name,
+                sectionName: section.name,
+                documentsCount: section.documents?.length || 0
+            }, currentUser);
         }
     };
 
-    // Template Management Functions
     const handleCreateTemplate = () => {
         setEditingTemplate(null);
         setShowTemplateModal(true);
@@ -794,14 +378,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         let updatedTemplates;
         
         if (editingTemplate) {
-            // Update existing template
             updatedTemplates = templates.map(t => 
                 t.id === editingTemplate.id 
                     ? { ...t, ...templateData, updatedAt: new Date().toISOString(), updatedBy: currentUser.name || currentUser.email }
                     : t
             );
         } else {
-            // Create new template
             const newTemplate = {
                 id: Date.now(),
                 ...templateData,
@@ -816,75 +398,43 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         saveTemplates(updatedTemplates);
         setEditingTemplate(null);
         setShowTemplateList(true);
-        // Don't close modal, just go back to list view
     };
 
-    const handleApplyTemplate = async (template, targetYear) => {
+    const handleApplyTemplate = (template, targetYear) => {
         if (!template || !template.sections || template.sections.length === 0) {
             alert('Template is empty or invalid');
             return;
         }
 
-        // Get current user info
         const currentUser = getCurrentUser();
         
-        // Update timestamp to prevent sync from overwriting
-        lastLocalUpdateRef.current = Date.now();
-
-        // Create new sections from template with unique IDs and target year
         const newSections = template.sections.map(section => ({
-            id: Date.now() + Math.random(), // Unique ID
+            id: Date.now() + Math.random(),
             name: section.name,
             description: section.description || '',
             documents: (section.documents || []).map(doc => ({
-                id: Date.now() + Math.random(), // Unique ID
+                id: Date.now() + Math.random(),
                 name: doc.name,
                 description: doc.description || '',
-                collectionStatus: {} // Initialize empty status for all months
+                collectionStatus: {}
             }))
         }));
 
-        // Merge with existing sections
-        setSections(currentSections => {
-            const updatedSections = [...currentSections, ...newSections];
-            console.log(`📋 Applied template "${template.name}" to year ${targetYear}:`, {
-                templateSections: template.sections.length,
-                newSections: newSections.length,
-                totalSections: updatedSections.length
-            });
-            
-            // Mark as initialized
-            hasInitializedRef.current = true;
-            
-            return updatedSections;
-        });
+        setSections(prev => [...prev, ...newSections]);
 
-        // Log to audit trail
         if (window.AuditLogger) {
-            window.AuditLogger.log(
-                'create',
-                'projects',
-                {
-                    action: 'Template Applied',
-                    projectId: project.id,
-                    projectName: project.name,
-                    templateName: template.name,
-                    templateId: template.id,
-                    targetYear: targetYear,
-                    sectionsAdded: newSections.length
-                },
-                currentUser
-            );
+            window.AuditLogger.log('create', 'projects', {
+                action: 'Template Applied',
+                projectId: project.id,
+                projectName: project.name,
+                templateName: template.name,
+                templateId: template.id,
+                targetYear: targetYear,
+                sectionsAdded: newSections.length
+            }, currentUser);
         }
 
         setShowApplyTemplateModal(false);
-        
-        // Save to database
-        setSections(currentSections => {
-            const finalSections = [...currentSections, ...newSections];
-            immediatelySaveDocumentSections(finalSections);
-            return finalSections;
-        });
     };
 
     const handleCreateTemplateFromCurrent = () => {
@@ -893,7 +443,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return;
         }
         
-        // Create template from current sections
         const templateData = {
             name: `${project.name} - ${selectedYear}`,
             description: `Template created from ${project.name} for year ${selectedYear}`,
@@ -909,9 +458,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         setEditingTemplate(null);
         setShowTemplateModal(true);
-        // Pre-fill the form with this data (we'll handle this in the modal)
         setTimeout(() => {
-            // Store in a ref or pass via state
             if (window.tempTemplateData) {
                 window.tempTemplateData = templateData;
             }
@@ -919,343 +466,107 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
 
     const handleAddDocument = (sectionId) => {
-        console.log('➕ handleAddDocument called with sectionId:', sectionId);
-        if (!sectionId) {
-            console.error('❌ handleAddDocument called without sectionId');
-            alert('Error: Cannot add document. Section ID is missing.');
-            return;
-        }
-        // Store in both state and ref to ensure handleSaveDocument always has access
         editingSectionIdRef.current = sectionId;
         setEditingSectionId(sectionId);
         setEditingDocument(null);
         setShowDocumentModal(true);
-        console.log('✅ Document modal opening for section:', sectionId);
     };
 
     const handleEditDocument = (section, document) => {
-        // Store in both state and ref to ensure handleSaveDocument always has access
         editingSectionIdRef.current = section.id;
         setEditingSectionId(section.id);
         setEditingDocument(document);
         setShowDocumentModal(true);
     };
 
-    const handleSaveDocument = async (documentData) => {
-        // Use ref value to ensure we always have the current section ID
+    const handleSaveDocument = (documentData) => {
         const currentSectionId = editingSectionIdRef.current || editingSectionId;
         
-        // Validate that we have a section ID
         if (!currentSectionId) {
-            console.error('❌ Cannot save document: No section ID specified');
             alert('Error: No section selected. Please try again.');
             return;
         }
         
-        console.log('💾 Saving document to section ID:', currentSectionId);
-        
-        // Get current user info
         const currentUser = getCurrentUser();
         
-        // Update timestamp BEFORE state update to prevent sync from overwriting
-        lastLocalUpdateRef.current = Date.now();
-        
-        let updatedSections;
-        
-        // Use functional update to avoid race conditions
-        setSections(currentSections => {
-            const section = currentSections.find(s => s.id === currentSectionId);
-            
-            // Validate section exists
-            if (!section) {
-                console.error('❌ Cannot save document: Section not found with ID:', currentSectionId);
-                alert('Error: Section not found. Please try again.');
-                return currentSections;
-            }
-            
-            updatedSections = currentSections.map(s => {
-                if (s.id === currentSectionId) {
-                    if (editingDocument) {
-                        // Update existing document - preserve ALL existing fields and merge new data
-                        const updated = {
-                            ...s,
-                            documents: s.documents.map(doc => {
-                                if (doc.id === editingDocument.id) {
-                                    // Preserve existing collectionStatus, comments, and attachments
-                                    const merged = {
-                                        ...doc, // Keep all existing fields
-                                        ...documentData, // Apply new data
-                                        // Ensure these are preserved if not in documentData
-                                        collectionStatus: documentData.collectionStatus || doc.collectionStatus || {},
-                                        comments: documentData.comments || doc.comments || {},
-                                        attachments: documentData.attachments !== undefined ? documentData.attachments : doc.attachments || []
-                                    };
-                                    console.log('📝 Updating document:', merged.name, 'in section:', s.name, {
-                                        hasAttachments: (merged.attachments?.length || 0) > 0,
-                                        hasComments: Object.keys(merged.comments || {}).length > 0,
-                                        hasStatus: Object.keys(merged.collectionStatus || {}).length > 0
-                                    });
-                                    return merged;
-                                }
-                                return doc;
-                            })
-                        };
-                        
-                        // Log to audit trail
-                        if (window.AuditLogger) {
-                            window.AuditLogger.log(
-                                'update',
-                                'projects',
-                                {
-                                    action: 'Document Updated',
-                                    projectId: project.id,
-                                    projectName: project.name,
-                                    sectionName: section?.name || 'Unknown',
-                                    documentName: documentData.name,
-                                    oldDocumentName: editingDocument.name
-                                },
-                                currentUser
-                            );
-                        }
-                        
-                        return updated;
-                    } else {
-                        // Add new document - ensure ALL fields are preserved
-                        const newDocument = {
-                            id: Date.now(),
-                            name: documentData.name || '',
-                            description: documentData.description || '',
-                            attachments: documentData.attachments || [], // Preserve file attachments
-                            collectionStatus: documentData.collectionStatus || {}, // Store month-year status
-                            comments: documentData.comments || {} // Store month-year comments
-                        };
-                        const updated = {
-                            ...s,
-                            documents: [...s.documents, newDocument]
-                        };
-                        
-                        console.log('➕ Adding new document:', newDocument.name, 'to section:', s.name, {
-                            hasDescription: !!newDocument.description,
-                            attachmentsCount: newDocument.attachments?.length || 0
-                        });
-                        
-                        // Log to audit trail
-                        if (window.AuditLogger) {
-                            window.AuditLogger.log(
-                                'create',
-                                'projects',
-                                {
-                                    action: 'Document Created',
-                                    projectId: project.id,
-                                    projectName: project.name,
-                                    sectionName: section?.name || 'Unknown',
-                                    documentName: documentData.name
-                                },
-                                currentUser
-                            );
-                        }
-                        
-                        return updated;
-                    }
+        setSections(prev => prev.map(s => {
+            if (s.id === currentSectionId) {
+                if (editingDocument) {
+                    return {
+                        ...s,
+                        documents: s.documents.map(doc => 
+                            doc.id === editingDocument.id ? { ...doc, ...documentData } : doc
+                        )
+                    };
+                } else {
+                    const newDocument = {
+                        id: Date.now(),
+                        ...documentData,
+                        collectionStatus: {},
+                        comments: {}
+                    };
+                    return {
+                        ...s,
+                        documents: [...s.documents, newDocument]
+                    };
                 }
-                return s;
-            });
-            
-            return updatedSections;
-        });
+            }
+            return s;
+        }));
         
         setShowDocumentModal(false);
         setEditingDocument(null);
         setEditingSectionId(null);
-        editingSectionIdRef.current = null; // Clear ref as well
-        
-        // Immediately save to database to ensure persistence
-        if (updatedSections) {
-            await immediatelySaveDocumentSections(updatedSections);
-        }
+        editingSectionIdRef.current = null;
     };
 
-    const handleDeleteDocument = async (sectionId, documentId) => {
-        // Get current user info
-        const currentUser = getCurrentUser();
+    const handleDeleteDocument = (sectionId, documentId) => {
+        const section = sections.find(s => s.id === sectionId);
+        const document = section?.documents.find(d => d.id === documentId);
         
-        let updatedSections;
+        if (!section || !document) return;
         
-        // Use functional update to avoid race conditions
-        setSections(currentSections => {
-            const section = currentSections.find(s => s.id === sectionId);
-            const document = section?.documents.find(d => d.id === documentId);
-            
-            if (!section || !document) return currentSections;
-            
-            if (confirm('Delete this document/data item?')) {
-                // Update timestamp to prevent sync from overwriting
-                lastLocalUpdateRef.current = Date.now();
-                
-                updatedSections = currentSections.map(s => {
-                    if (s.id === sectionId) {
-                        return {
-                            ...s,
-                            documents: s.documents.filter(doc => doc.id !== documentId)
-                        };
-                    }
-                    return s;
-                });
-                
-                console.log('🗑️ Deleting document:', document.name, 'from section:', section.name);
-                
-                // Log to audit trail
-                if (window.AuditLogger) {
-                    window.AuditLogger.log(
-                        'delete',
-                        'projects',
-                        {
-                            action: 'Document Deleted',
-                            projectId: project.id,
-                            projectName: project.name,
-                            sectionName: section?.name || 'Unknown',
-                            documentName: document?.name || 'Unknown'
-                        },
-                        currentUser
-                    );
-                }
-                
-                return updatedSections;
-            }
-            return currentSections;
-        });
-        
-        // Immediately save to database to ensure persistence
-        if (updatedSections) {
-            await immediatelySaveDocumentSections(updatedSections);
-        }
-    };
-
-    const handleUpdateStatus = async (sectionId, documentId, month, status) => {
-        // Get current user info
-        const currentUser = getCurrentUser();
-
-        // Update timestamp BEFORE state update to prevent sync from overwriting
-        lastLocalUpdateRef.current = Date.now();
-
-        let updatedSections;
-        // Hoisted audit variables to use after state update
-        let auditSectionName = 'Unknown';
-        let auditDocumentName = 'Unknown';
-        let auditOldStatus = 'Not Set';
-
-        // Use functional update to avoid race conditions
-        setSections(currentSections => {
-            // Get section and document names for audit trail
-            const section = currentSections.find(s => s.id === sectionId);
-            const document = section?.documents.find(d => d.id === documentId);
-            const oldStatus = document?.collectionStatus?.[`${month}-${selectedYear}`];
-            // Capture for audit logging after update
-            auditSectionName = section?.name || 'Unknown';
-            auditDocumentName = document?.name || 'Unknown';
-            auditOldStatus = oldStatus || 'Not Set';
-
-            updatedSections = currentSections.map(s => {
+        if (confirm('Delete this document/data item?')) {
+            setSections(prev => prev.map(s => {
                 if (s.id === sectionId) {
                     return {
                         ...s,
-                        documents: s.documents.map(doc => {
-                            if (doc.id === documentId) {
-                                const monthKey = `${month}-${selectedYear}`;
-                                return {
-                                    ...doc,
-                                    collectionStatus: {
-                                        ...doc.collectionStatus,
-                                        [monthKey]: status
-                                    }
-                                };
-                            }
-                            return doc;
-                        })
+                        documents: s.documents.filter(doc => doc.id !== documentId)
                     };
                 }
                 return s;
-            });
-            
-            return updatedSections;
-        });
-
-        // Immediately save to database to ensure persistence
-        if (updatedSections) {
-            await immediatelySaveDocumentSections(updatedSections);
-        }
-
-        // Log to audit trail (using values from closure)
-        if (window.AuditLogger) {
-            const statusLabel = statusOptions.find(opt => opt.value === status)?.label || status;
-            window.AuditLogger.log(
-                'update',
-                'projects',
-                {
-                    action: 'Status Updated',
-                    projectId: project.id,
-                    projectName: project.name,
-                    sectionName: auditSectionName,
-                    documentName: auditDocumentName,
-                    month: month,
-                    year: selectedYear,
-                    oldStatus: auditOldStatus,
-                    newStatus: statusLabel
-                },
-                currentUser
-            );
+            }));
         }
     };
 
-    const handleAddComment = async (sectionId, documentId, month, commentText) => {
+    const handleUpdateStatus = (sectionId, documentId, month, status) => {
+        setSections(prev => prev.map(s => {
+            if (s.id === sectionId) {
+                return {
+                    ...s,
+                    documents: s.documents.map(doc => {
+                        if (doc.id === documentId) {
+                            const monthKey = `${month}-${selectedYear}`;
+                            return {
+                                ...doc,
+                                collectionStatus: {
+                                    ...doc.collectionStatus,
+                                    [monthKey]: status
+                                }
+                            };
+                        }
+                        return doc;
+                    })
+                };
+            }
+            return s;
+        }));
+    };
+
+    const handleAddComment = (sectionId, documentId, month, commentText) => {
         if (!commentText.trim()) return;
 
-        // Get current user info - try multiple methods
-        let currentUser = getCurrentUser();
-        
-        // If we got System, try to fetch from API as a last resort
-        if (currentUser.name === 'System' && currentUser.email === 'system') {
-            try {
-                if (window.storage && window.storage.getToken && window.storage.getToken()) {
-                    if (window.api && window.api.me) {
-                        console.log('🔄 Attempting to fetch user from API...');
-                        const meResponse = await window.api.me();
-                        if (meResponse) {
-                            // Handle different response formats
-                            const user = meResponse.user || meResponse;
-                            if (user && (user.name || user.email)) {
-                                currentUser = {
-                                    name: user.name || user.email || 'System',
-                                    email: user.email || 'system',
-                                    id: user.id || user._id || user.email || 'system',
-                                    role: user.role || 'System'
-                                };
-                                
-                                // Save to localStorage for future use
-                                if (window.storage && window.storage.setUser) {
-                                    window.storage.setUser(user);
-                                }
-                                console.log('✅ Retrieved user from API:', currentUser.name, currentUser.email);
-                            }
-                        }
-                    }
-                }
-            } catch (error) {
-                console.warn('Failed to fetch user from API:', error);
-            }
-        }
-        
-        console.log('💬 Creating comment with user:', currentUser.name, currentUser.email);
-        
-        // Get section and document names for context
-        const section = sections.find(s => s.id === sectionId);
-        const document = section?.documents.find(d => d.id === documentId);
-        const documentName = document?.name || 'Document';
-        const sectionName = section?.name || 'Section';
-        const contextTitle = `${documentName} in ${sectionName}`;
-        const contextLink = `/projects/${project.id}`;
-        const projectName = project?.name || 'Project';
-
+        const currentUser = getCurrentUser();
         const monthKey = `${month}-${selectedYear}`;
         const newComment = {
             id: Date.now(),
@@ -1268,369 +579,37 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             authorRole: currentUser.role
         };
 
-        // Update timestamp BEFORE state update to prevent sync from overwriting
-        lastLocalUpdateRef.current = Date.now();
-        
-        let updatedSections;
-        
-        // OPTIMISTIC UI UPDATE - Update UI immediately for better UX using functional update
-        setSections(currentSections => {
-            updatedSections = currentSections.map(s => {
-                if (s.id === sectionId) {
-                    return {
-                        ...s,
-                        documents: s.documents.map(doc => {
-                            if (doc.id === documentId) {
-                                const existingComments = doc.comments?.[monthKey] || [];
-                                return {
-                                    ...doc,
-                                    comments: {
-                                        ...doc.comments,
-                                        [monthKey]: [...existingComments, newComment]
-                                    }
-                                };
-                            }
-                            return doc;
-                        })
-                    };
-                }
-                return s;
-            });
-            return updatedSections;
-        });
-        setQuickComment(''); // Clear input immediately
-        
-        // Immediately save to database to ensure persistence
-        if (updatedSections) {
-            immediatelySaveDocumentSections(updatedSections).catch(error => {
-                console.error('❌ Error saving comment:', error);
-            });
-        }
-
-        // PRIORITY: Process @mentions FIRST (emails must be sent immediately after tagging)
-        // This runs in parallel with save but prioritizes mention notifications
-        const mentionNotificationPromise = (async () => {
-            const hasMentions = window.MentionHelper && window.MentionHelper.hasMentions(commentText);
-            if (!hasMentions) return [];
-            
-            try {
-                // Fetch users immediately for @mentions
-                const token = window.storage?.getToken?.();
-                if (!token) return [];
-                
-                const usersResponse = await fetch('/api/users', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (!usersResponse.ok) return [];
-                
-                const usersData = await usersResponse.json();
-                const allUsers = usersData.data?.users || usersData.users || [];
-                
-                if (allUsers.length === 0) return [];
-                
-                // Extract mentioned users
-                const mentionedEntries = window.MentionHelper.getMentionedUsernames(commentText);
-                const mentionedUsers = allUsers.filter(user => {
-                    const userNameNormalized = window.MentionHelper.normalizeIdentifier(user.name || '');
-                    const emailUsernameNormalized = window.MentionHelper.normalizeIdentifier(
-                        (user.email || '').split('@')[0]
-                    );
-                    
-                    return mentionedEntries.some(entry => {
-                        const mentionNormalized = typeof entry === 'string'
-                            ? window.MentionHelper.normalizeIdentifier(entry)
-                            : entry.normalized;
-                        
-                        if (!mentionNormalized) return false;
-                        
-                        return userNameNormalized === mentionNormalized ||
-                               userNameNormalized.includes(mentionNormalized) ||
-                               mentionNormalized.includes(userNameNormalized) ||
-                               emailUsernameNormalized === mentionNormalized;
-                    });
-                }).filter(user => user.id !== currentUser.id);
-                
-                if (mentionedUsers.length === 0) return [];
-                
-                // Process mentions IMMEDIATELY - this sends notifications and emails synchronously
-                console.log(`📧 Processing @mentions immediately for ${mentionedUsers.length} user(s)`);
-                await window.MentionHelper.processMentions(
-                    commentText,
-                    contextTitle,
-                    contextLink,
-                    currentUser.name || currentUser.email || 'Unknown',
-                    allUsers,
-                    {
-                        projectId: project?.id,
-                        projectName: projectName
-                    }
-                );
-                console.log('✅ @Mention notifications and emails sent immediately');
-                return mentionedUsers;
-            } catch (error) {
-                console.error('❌ Error processing @mentions:', error);
-                return [];
-            }
-        })();
-
-        // Save to database (in parallel with mention processing)
-        const savePromise = (async () => {
-            try {
-                // Wait for DatabaseAPI if not immediately available
-                const waitForDatabaseAPI = async (maxWait = 5000, retryInterval = 100) => {
-                    const startTime = Date.now();
-                    while (Date.now() - startTime < maxWait) {
-                        if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
-                            return true;
-                        }
-                        await new Promise(resolve => setTimeout(resolve, retryInterval));
-                    }
-                    return false;
-                };
-                
-                if (!window.DatabaseAPI || typeof window.DatabaseAPI.updateProject !== 'function') {
-                    console.log('⏳ MonthlyDocumentCollectionTracker: Waiting for DatabaseAPI for comment save...');
-                    const apiAvailable = await waitForDatabaseAPI(5000, 100);
-                    if (!apiAvailable) {
-                        throw new Error('DatabaseAPI.updateProject is not available after waiting. Please refresh the page.');
-                    }
-                    console.log('✅ DatabaseAPI is now available for comment save');
-                }
-                
-                const updatePayload = {
-                    documentSections: JSON.stringify(updatedSections)
-                };
-                await window.DatabaseAPI.updateProject(project.id, updatePayload);
-                console.log('✅ Comment saved to database');
-                
-                // Clear cache to ensure fresh data is loaded next time
-                if (window.DatabaseAPI && typeof window.DatabaseAPI.clearCache === 'function') {
-                    window.DatabaseAPI.clearCache(`/projects/${project.id}`);
-                    window.DatabaseAPI.clearCache('/projects');
-                    console.log('🗑️ Cleared project cache after comment save');
-                }
-                
-                // Dispatch event to notify parent component
-                if (typeof window.dispatchEvent === 'function') {
-                    window.dispatchEvent(new CustomEvent('projectUpdated', {
-                        detail: { projectId: project.id, field: 'documentSections' }
-                    }));
-                }
-            } catch (error) {
-                console.error('❌ Error saving comment to database:', error);
-                console.error('  - Error details:', {
-                    message: error.message,
-                    DatabaseAPI: typeof window.DatabaseAPI,
-                    updateProject: typeof window.DatabaseAPI?.updateProject
-                });
-                alert('Failed to save comment: ' + error.message);
-            }
-        })();
-
-        // Process other comment notifications (previous commenters, team members) in background
-        const commentNotificationPromise = (async () => {
-            try {
-                // Wait for mention processing to complete first
-                const mentionedUsers = await mentionNotificationPromise;
-                
-                // Fetch users if we need to notify previous commenters or team members
-                let allUsers = [];
-                const hasPreviousComments = document?.comments && Object.keys(document.comments).length > 0;
-                const hasTeam = project.team;
-                
-                if (hasPreviousComments || hasTeam) {
-                    try {
-                        const token = window.storage?.getToken?.();
-                        if (token) {
-                            const usersResponse = await fetch('/api/users', {
-                                headers: { 'Authorization': `Bearer ${token}` }
-                            });
-                            if (usersResponse.ok) {
-                                const usersData = await usersResponse.json();
-                                allUsers = usersData.data?.users || usersData.users || [];
-                            }
-                        }
-                    } catch (error) {
-                        console.error('❌ Error fetching users:', error);
-                        return;
-                    }
-                } else {
-                    // If no previous comments or team, we already have users from mention processing
-                    if (mentionedUsers.length > 0) {
-                        // Get users from the mention processing (they were already fetched)
-                        try {
-                            const token = window.storage?.getToken?.();
-                            if (token) {
-                                const usersResponse = await fetch('/api/users', {
-                                    headers: { 'Authorization': `Bearer ${token}` }
-                                });
-                                if (usersResponse.ok) {
-                                    const usersData = await usersResponse.json();
-                                    allUsers = usersData.data?.users || usersData.users || [];
+        setSections(prev => prev.map(s => {
+            if (s.id === sectionId) {
+                return {
+                    ...s,
+                    documents: s.documents.map(doc => {
+                        if (doc.id === documentId) {
+                            const existingComments = doc.comments?.[monthKey] || [];
+                            return {
+                                ...doc,
+                                comments: {
+                                    ...doc.comments,
+                                    [monthKey]: [...existingComments, newComment]
                                 }
-                            }
-                        } catch (error) {
-                            console.error('❌ Error fetching users:', error);
-                            return;
+                            };
                         }
-                    }
-                }
-
-                // Send comment notifications to relevant users (only if we have users loaded)
-                if (allUsers.length > 0) {
-                    console.log(`📧 Processing comment notifications - allUsers: ${allUsers.length}`);
-                    
-                    // Get the updated document from updatedSections to include all previous comments
-                    const updatedSection = updatedSections.find(s => s.id === sectionId);
-                    const updatedDocument = updatedSection?.documents.find(d => d.id === documentId);
-                    
-                    // Get all users who have previously commented on this document (across all months)
-                    const previousCommenters = new Set();
-                    if (updatedDocument && updatedDocument.comments) {
-                        Object.values(updatedDocument.comments).forEach(commentArray => {
-                            if (Array.isArray(commentArray)) {
-                                commentArray.forEach(comment => {
-                                    // Exclude the comment we just added (by ID) and the current user
-                                    if (comment.id !== newComment.id && comment.authorId && comment.authorId !== currentUser.id) {
-                                        previousCommenters.add(comment.authorId);
-                                    }
-                                });
-                            }
-                        });
-                    }
-                    console.log(`📧 Previous commenters found: ${previousCommenters.size}`);
-                    
-                    // Get project team members if available
-                    const projectTeamIds = new Set();
-                    if (project.team) {
-                        try {
-                            const team = typeof project.team === 'string' ? JSON.parse(project.team || '[]') : (project.team || []);
-                            if (Array.isArray(team)) {
-                                team.forEach(member => {
-                                    if (typeof member === 'string') {
-                                        const teamUser = allUsers.find(u => 
-                                            u.name === member || u.email === member || u.id === member
-                                        );
-                                        if (teamUser && teamUser.id) {
-                                            projectTeamIds.add(teamUser.id);
-                                        }
-                                    } else if (member && member.id) {
-                                        projectTeamIds.add(member.id);
-                                    }
-                                });
-                            }
-                        } catch (e) {
-                            console.warn('Error parsing project team:', e);
-                        }
-                    }
-                    console.log(`📧 Project team members found: ${projectTeamIds.size}`);
-                    
-                    // Combine previous commenters and team members
-                    const usersToNotify = new Set([...previousCommenters, ...projectTeamIds]);
-                    
-                    // Remove comment author and mentioned users
-                    usersToNotify.delete(currentUser.id);
-                    mentionedUsers.forEach(user => usersToNotify.delete(user.id));
-                    
-                    console.log(`📧 Total users to notify (after filtering): ${usersToNotify.size}`);
-                    
-                    // Send notifications to each user (fire and forget - don't await)
-                    if (usersToNotify.size > 0) {
-                        console.log(`📧 Sending comment notifications to ${usersToNotify.size} user(s)`);
-                        const notificationPromises = [];
-                        for (const userId of usersToNotify) {
-                            const user = allUsers.find(u => u.id === userId);
-                            if (user) {
-                                console.log(`📧 Creating notification for: ${user.name} (${user.email})`);
-                                notificationPromises.push(
-                                    window.DatabaseAPI.makeRequest('/notifications', {
-                                        method: 'POST',
-                                        body: JSON.stringify({
-                                            userId: user.id,
-                                            type: 'comment',
-                                            title: `New comment on document: ${documentName}`,
-                                            message: `${currentUser.name} commented on "${documentName}" in ${sectionName} (${projectName}): "${commentText.substring(0, 100)}${commentText.length > 100 ? '...' : ''}"`,
-                                            link: contextLink,
-                                            metadata: {
-                                                projectId: project?.id,
-                                                projectName: projectName,
-                                                sectionId: sectionId,
-                                                sectionName: sectionName,
-                                                documentId: documentId,
-                                                documentName: documentName,
-                                                month: month,
-                                                year: selectedYear,
-                                                commentAuthor: currentUser.name,
-                                                commentText: commentText
-                                            }
-                                        })
-                                    }).then(response => {
-                                        console.log(`✅ Notification created for ${user.name}:`, response);
-                                        return response;
-                                    }).catch(err => {
-                                        console.error(`❌ Failed to send notification to user ${user.name}:`, err);
-                                        console.error(`❌ Error details:`, {
-                                            message: err.message,
-                                            status: err.status,
-                                            response: err.response
-                                        });
-                                        return null;
-                                    })
-                                );
-                            }
-                        }
-                        
-                        // Don't await - let notifications send in background, but log results
-                        Promise.all(notificationPromises).then(results => {
-                            const successCount = results.filter(r => r !== null).length;
-                            console.log(`✅ Comment notifications processed: ${successCount}/${notificationPromises.length} successful`);
-                        }).catch(err => {
-                            console.error('❌ Error sending comment notifications:', err);
-                        });
-                    } else {
-                        console.log(`⏭️ No users to notify (no previous commenters or team members found)`);
-                    }
-                }
-            } catch (error) {
-                console.error('❌ Error in notification processing:', error);
+                        return doc;
+                    })
+                };
             }
-        })();
-
-        // Wait for save and mention processing to complete
-        // This ensures @mention emails are sent immediately after tagging
-        await Promise.all([savePromise, mentionNotificationPromise]);
-
-        // Log to audit trail (non-blocking)
-        if (window.AuditLogger) {
-            window.AuditLogger.log(
-                'comment',
-                'projects',
-                {
-                    action: 'Comment Added',
-                    projectId: project.id,
-                    projectName: project.name,
-                    sectionName: section?.name || 'Unknown',
-                    documentName: document?.name || 'Unknown',
-                    month: month,
-                    year: selectedYear,
-                    commentPreview: commentText.substring(0, 50) + (commentText.length > 50 ? '...' : '')
-                },
-                currentUser
-            );
-        }
+            return s;
+        }));
+        
+        setQuickComment('');
     };
 
-    const handleDeleteComment = async (sectionId, documentId, month, commentId) => {
-        let updatedSections;
-        // Get current user info
+    const handleDeleteComment = (sectionId, documentId, month, commentId) => {
         const currentUser = getCurrentUser();
-        
-        // Get section and document
         const section = sections.find(s => s.id === sectionId);
         const document = section?.documents.find(d => d.id === documentId);
         const comment = document?.comments?.[`${month}-${selectedYear}`]?.find(c => c.id === commentId);
         
-        // Check if user can delete (own comment or admin role)
         const canDelete = comment?.authorId === currentUser.id || 
                          currentUser.role === 'Admin' || 
                          currentUser.role === 'Administrator' ||
@@ -1644,59 +623,28 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         if (!confirm('Delete this comment?')) return;
 
         const monthKey = `${month}-${selectedYear}`;
-
-        // Update timestamp BEFORE state update to prevent sync from overwriting
-        lastLocalUpdateRef.current = Date.now();
         
-        // Use functional update to avoid race conditions
-        setSections(currentSections => {
-            updatedSections = currentSections.map(s => {
-                if (s.id === sectionId) {
-                    return {
-                        ...s,
-                        documents: s.documents.map(doc => {
-                            if (doc.id === documentId) {
-                                const existingComments = doc.comments?.[monthKey] || [];
-                                return {
-                                    ...doc,
-                                    comments: {
-                                        ...doc.comments,
-                                        [monthKey]: existingComments.filter(c => c.id !== commentId)
-                                    }
-                                };
-                            }
-                            return doc;
-                        })
-                    };
-                }
-                return s;
-            });
-            return updatedSections;
-        });
-
-        // Immediately save to database to ensure persistence
-        if (updatedSections) {
-            await immediatelySaveDocumentSections(updatedSections);
-        }
-
-        // Log to audit trail
-        if (window.AuditLogger) {
-            window.AuditLogger.log(
-                'delete',
-                'projects',
-                {
-                    action: 'Comment Deleted',
-                    projectId: project.id,
-                    projectName: project.name,
-                    sectionName: section?.name || 'Unknown',
-                    documentName: document?.name || 'Unknown',
-                    month: month,
-                    year: selectedYear,
-                    commentAuthor: comment?.author || 'Unknown'
-                },
-                currentUser
-            );
-        }
+        setSections(prev => prev.map(s => {
+            if (s.id === sectionId) {
+                return {
+                    ...s,
+                    documents: s.documents.map(doc => {
+                        if (doc.id === documentId) {
+                            const existingComments = doc.comments?.[monthKey] || [];
+                            return {
+                                ...doc,
+                                comments: {
+                                    ...doc.comments,
+                                    [monthKey]: existingComments.filter(c => c.id !== commentId)
+                                }
+                            };
+                        }
+                        return doc;
+                    })
+                };
+            }
+            return s;
+        }));
     };
 
     const getDocumentStatus = (document, month) => {
@@ -1712,43 +660,24 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const handleExportToExcel = async () => {
         setIsExporting(true);
         try {
-            // Get XLSX from global scope (loaded in index.html)
             let XLSX = window.XLSX;
             
-            // Wait for XLSX to be available if it's still loading
             if (!XLSX || !XLSX.utils) {
-                // Wait up to 3 seconds for XLSX to be fully loaded from the script tag
                 for (let waitAttempt = 0; waitAttempt < 30 && (!XLSX || !XLSX.utils); waitAttempt++) {
                     await new Promise(resolve => setTimeout(resolve, 100));
                     XLSX = window.XLSX;
                 }
             }
             
-            // Verify XLSX is available and has required methods
-            if (!XLSX) {
-                throw new Error('XLSX library failed to load. window.XLSX is undefined. Please check your internet connection and refresh the page.');
-            }
-            if (!XLSX.utils) {
-                throw new Error('XLSX library loaded but utils is missing. Please refresh the page and try again.');
-            }
-            if (!XLSX.utils.book_new) {
-                throw new Error('XLSX.utils.book_new is missing. The library may not be fully loaded. Please refresh the page.');
-            }
-            if (!XLSX.utils.aoa_to_sheet) {
-                throw new Error('XLSX.utils.aoa_to_sheet is missing. The library may not be fully loaded. Please refresh the page.');
-            }
-            if (!XLSX.writeFile) {
-                throw new Error('XLSX.writeFile is missing. The library may not be fully loaded. Please refresh the page.');
+            if (!XLSX || !XLSX.utils) {
+                throw new Error('XLSX library failed to load. Please refresh and try again.');
             }
         
-            // Prepare data for Excel
             const excelData = [];
             
-            // Add header rows
             const headerRow1 = ['Section / Document'];
             const headerRow2 = [''];
             
-            // Add month headers (2 columns per month: Status, Comments)
             months.forEach(month => {
                 const monthYear = `${month.slice(0, 3)} '${String(selectedYear).slice(-2)}`;
                 headerRow1.push(monthYear, '');
@@ -1758,28 +687,23 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             excelData.push(headerRow1);
             excelData.push(headerRow2);
             
-            // Add section and document data rows
             sections.forEach(section => {
-                // Section header row
                 const sectionRow = [section.name];
                 for (let i = 0; i < 12 * 2; i++) {
                     sectionRow.push('');
                 }
                 excelData.push(sectionRow);
                 
-                // Document rows
                 section.documents.forEach(document => {
                     const row = [`  ${document.name}${document.description ? ' - ' + document.description : ''}`];
                     
                     months.forEach(month => {
                         const monthKey = `${month}-${selectedYear}`;
                         
-                        // Status
                         const status = document.collectionStatus?.[monthKey];
                         const statusLabel = status ? statusOptions.find(s => s.value === status)?.label : '';
                         row.push(statusLabel || '');
                         
-                        // Comments
                         const comments = document.comments?.[monthKey] || [];
                         const commentsText = comments.map((comment, idx) => {
                             const date = new Date(comment.date || comment.timestamp || comment.createdAt).toLocaleString('en-ZA', {
@@ -1803,47 +727,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 });
             });
             
-            // Create workbook and worksheet
-            // Double-check XLSX.utils is available before use
-            if (!XLSX || !XLSX.utils) {
-                throw new Error('XLSX.utils became unavailable. Please refresh the page and try again.');
-            }
-            if (typeof XLSX.utils.book_new !== 'function') {
-                throw new Error('XLSX.utils.book_new is not a function. The library version may be incompatible.');
-            }
-            
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.aoa_to_sheet(excelData);
             
-            // Set column widths
-            const colWidths = [
-                { wch: 40 }, // Section/Document column
-            ];
-            
-            // Add widths for each month (2 columns per month)
+            const colWidths = [{ wch: 40 }];
             for (let i = 0; i < 12; i++) {
-                colWidths.push(
-                    { wch: 18 }, // Status
-                    { wch: 50 }  // Comments - wider for multiple entries
-                );
+                colWidths.push({ wch: 18 }, { wch: 50 });
             }
-            
             ws['!cols'] = colWidths;
             
-            // Enable text wrapping for comments columns
-            const range = XLSX.utils.decode_range(ws['!ref']);
-            for (let R = range.s.r + 2; R <= range.e.r; ++R) {
-                for (let i = 0; i < 12; i++) {
-                    const commentsColIdx = 1 + (i * 2) + 1; // After doc name + (months*2) + comments column
-                    const cellRef = XLSX.utils.encode_cell({ r: R, c: commentsColIdx });
-                    if (ws[cellRef]) {
-                        if (!ws[cellRef].s) ws[cellRef].s = {};
-                        ws[cellRef].s.alignment = { wrapText: true, vertical: 'top' };
-                    }
-                }
-            }
-            
-            // Merge cells for month headers
             const merges = [];
             for (let i = 0; i < 12; i++) {
                 const startCol = 1 + (i * 2);
@@ -1854,25 +746,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             }
             ws['!merges'] = merges;
             
-            // Add worksheet to workbook
             XLSX.utils.book_append_sheet(wb, ws, `Doc Collection ${selectedYear}`);
             
-            // Generate filename
             const filename = `${project.name}_Document_Collection_${selectedYear}_${new Date().toISOString().split('T')[0]}.xlsx`;
-            
-            // Write file
             XLSX.writeFile(wb, filename);
             
         } catch (error) {
             console.error('Error exporting to Excel:', error);
-            const errorMessage = error.message || 'Unknown error occurred';
-            alert(`Failed to export to Excel: ${errorMessage}`);
+            alert(`Failed to export to Excel: ${error.message}`);
         } finally {
             setIsExporting(false);
         }
     };
 
-    // Section drag and drop
     const handleDragStart = (e, section, index) => {
         setDraggedSection({ section, index });
         e.dataTransfer.effectAllowed = 'move';
@@ -1908,23 +794,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const handleDrop = (e, dropIndex) => {
         e.preventDefault();
         if (draggedSection && draggedSection.index !== dropIndex) {
-            // Update timestamp BEFORE state update to prevent sync from overwriting
-            lastLocalUpdateRef.current = Date.now();
-            
-            // Use functional update to avoid race conditions
-            setSections(currentSections => {
-                // Reorder sections based on drag and drop
-                const reordered = [...currentSections];
+            setSections(prev => {
+                const reordered = [...prev];
                 const [removed] = reordered.splice(draggedSection.index, 1);
                 reordered.splice(dropIndex, 0, removed);
-                console.log('🔄 Reordering sections via drag and drop');
                 return reordered;
             });
         }
         setDragOverIndex(null);
     };
 
-    // Document drag and drop
     const handleDocumentDragStart = (e, document, sectionId, documentIndex) => {
         setDraggedDocument({ document, sectionId, documentIndex });
         e.dataTransfer.effectAllowed = 'move';
@@ -1960,27 +839,44 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const handleDocumentDrop = (e, sectionId, dropIndex) => {
         e.preventDefault();
         if (draggedDocument && draggedDocument.sectionId === sectionId && draggedDocument.documentIndex !== dropIndex) {
-            // Update timestamp BEFORE state update to prevent sync from overwriting
-            lastLocalUpdateRef.current = Date.now();
-            
-            // Use functional update to avoid race conditions
-            setSections(currentSections => {
-                return currentSections.map(section => {
-                    if (section.id === sectionId) {
-                        const reordered = [...section.documents];
-                        const [removed] = reordered.splice(draggedDocument.documentIndex, 1);
-                        reordered.splice(dropIndex, 0, removed);
-                        console.log('🔄 Reordering documents via drag and drop');
-                        return { ...section, documents: reordered };
-                    }
-                    return section;
-                });
-            });
+            setSections(prev => prev.map(section => {
+                if (section.id === sectionId) {
+                    const reordered = [...section.documents];
+                    const [removed] = reordered.splice(draggedDocument.documentIndex, 1);
+                    reordered.splice(dropIndex, 0, removed);
+                    return { ...section, documents: reordered };
+                }
+                return section;
+            }));
         }
         setDragOverDocumentIndex(null);
     };
 
-    // Modals
+    useEffect(() => {
+        if (hoverCommentCell && commentPopupContainerRef.current) {
+            setTimeout(() => {
+                if (commentPopupContainerRef.current) {
+                    commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
+                }
+            }, 100);
+        }
+    }, [hoverCommentCell, sections]);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            const isCommentButton = event.target.closest('[data-comment-cell]');
+            const isInsidePopup = event.target.closest('.comment-popup');
+            
+            if (hoverCommentCell && !isCommentButton && !isInsidePopup) {
+                setHoverCommentCell(null);
+                setQuickComment('');
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [hoverCommentCell]);
+
     const SectionModal = () => {
         const [sectionFormData, setSectionFormData] = useState({
             name: editingSection?.name || '',
@@ -2064,7 +960,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         setShowDocumentModal(false);
         setEditingDocument(null);
         setEditingSectionId(null);
-        editingSectionIdRef.current = null; // Clear ref when modal closes
+        editingSectionIdRef.current = null;
     };
 
     const DocumentModal = () => {
@@ -2073,108 +969,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             description: editingDocument?.description || '',
             attachments: editingDocument?.attachments || []
         });
-        const [selectedFiles, setSelectedFiles] = useState([]);
-        const [uploadingFiles, setUploadingFiles] = useState(false);
 
-        // Reset form when editingDocument changes
         useEffect(() => {
             setDocumentFormData({
                 name: editingDocument?.name || '',
                 description: editingDocument?.description || '',
                 attachments: editingDocument?.attachments || []
             });
-            setSelectedFiles([]);
-            setUploadingFiles(false);
         }, [editingDocument]);
 
-        const handleFileSelect = (e) => {
-            const files = Array.from(e.target.files);
-            setSelectedFiles(prev => [...prev, ...files]);
-        };
-
-        const handleRemoveFile = (index) => {
-            setSelectedFiles(prev => prev.filter((_, i) => i !== index));
-        };
-
-        const handleSubmit = async (e) => {
+        const handleSubmit = (e) => {
             e.preventDefault();
             if (!documentFormData.name.trim()) {
                 alert('Please enter a document/data name');
                 return;
             }
-
-            // Upload files if any are selected
-            let uploadedAttachments = [...(documentFormData.attachments || [])];
-            
-            if (selectedFiles.length > 0) {
-                setUploadingFiles(true);
-                try {
-                    const token = window.storage?.getToken?.();
-                    if (!token) {
-                        alert('Please log in to upload files');
-                        setUploadingFiles(false);
-                        return;
-                    }
-
-                    for (const file of selectedFiles) {
-                        try {
-                            // Read file as data URL
-                            const dataUrl = await new Promise((resolve, reject) => {
-                                const reader = new FileReader();
-                                reader.onload = (e) => resolve(e.target.result);
-                                reader.onerror = reject;
-                                reader.readAsDataURL(file);
-                            });
-
-                            // Upload to server
-                            const response = await fetch('/api/files', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'Authorization': `Bearer ${token}`
-                                },
-                                body: JSON.stringify({
-                                    folder: 'monthly-documents',
-                                    name: file.name,
-                                    dataUrl
-                                })
-                            });
-
-                            if (!response.ok) {
-                                throw new Error(`Failed to upload ${file.name}`);
-                            }
-
-                            const uploadData = await response.json();
-                            const fileUrl = uploadData.data?.url || uploadData.url;
-
-                            uploadedAttachments.push({
-                                id: Date.now() + Math.random(),
-                                name: file.name,
-                                size: file.size,
-                                type: file.type,
-                                url: fileUrl,
-                                uploadedAt: new Date().toISOString()
-                            });
-                        } catch (error) {
-                            console.error(`Error uploading file ${file.name}:`, error);
-                            alert(`Failed to upload ${file.name}: ${error.message}`);
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error uploading files:', error);
-                    alert('Failed to upload files: ' + error.message);
-                    setUploadingFiles(false);
-                    return;
-                } finally {
-                    setUploadingFiles(false);
-                }
-            }
-
-            // Save document with attachments
-            handleSaveDocument({
-                ...documentFormData,
-                attachments: uploadedAttachments
-            });
+            handleSaveDocument(documentFormData);
         };
 
         return (
@@ -2194,12 +1004,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
                     <form onSubmit={handleSubmit} className="p-4 space-y-3">
                         <div>
-                            <label htmlFor="documentName" className="block text-xs font-medium text-gray-700 mb-1.5">
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
                                 Document/Data Name *
                             </label>
                             <input
-                                id="documentName"
-                                name="documentName"
                                 type="text"
                                 value={documentFormData.name}
                                 onChange={(e) => setDocumentFormData({...documentFormData, name: e.target.value})}
@@ -2210,95 +1018,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         </div>
 
                         <div>
-                            <label htmlFor="documentDescription" className="block text-xs font-medium text-gray-700 mb-1.5">
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
                                 Description (Optional)
                             </label>
                             <textarea
-                                id="documentDescription"
-                                name="documentDescription"
                                 value={documentFormData.description}
                                 onChange={(e) => setDocumentFormData({...documentFormData, description: e.target.value})}
                                 className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                 rows="2"
                                 placeholder="Additional details..."
                             ></textarea>
-                        </div>
-
-                        {/* File Upload */}
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                                Attachments (Optional)
-                            </label>
-                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 text-center">
-                                <input
-                                    type="file"
-                                    id="documentFileUpload"
-                                    onChange={handleFileSelect}
-                                    className="hidden"
-                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.csv"
-                                    multiple
-                                />
-                                <label
-                                    htmlFor="documentFileUpload"
-                                    className="cursor-pointer block"
-                                >
-                                    <i className="fas fa-cloud-upload-alt text-2xl text-gray-400 mb-1"></i>
-                                    <p className="text-xs text-gray-600">
-                                        Click to upload or drag and drop
-                                    </p>
-                                    <p className="text-[10px] text-gray-500 mt-1">
-                                        PDF, Word, Excel, Images, CSV (Max 8MB each)
-                                    </p>
-                                </label>
-                                
-                                {/* Selected Files Preview */}
-                                {selectedFiles.length > 0 && (
-                                    <div className="mt-3 space-y-1">
-                                        {selectedFiles.map((file, index) => (
-                                            <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded text-left">
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-xs text-gray-700 font-medium truncate">{file.name}</p>
-                                                    <p className="text-[10px] text-gray-500">
-                                                        {(file.size / 1024).toFixed(2)} KB
-                                                    </p>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleRemoveFile(index)}
-                                                    className="ml-2 text-red-600 hover:text-red-700 p-1"
-                                                    title="Remove"
-                                                >
-                                                    <i className="fas fa-times text-xs"></i>
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {/* Existing Attachments */}
-                                {documentFormData.attachments && documentFormData.attachments.length > 0 && (
-                                    <div className="mt-3 space-y-1">
-                                        <p className="text-[10px] font-medium text-gray-600 mb-1">Existing attachments:</p>
-                                        {documentFormData.attachments.map((attachment, index) => (
-                                            <div key={attachment.id || index} className="flex items-center justify-between p-2 bg-blue-50 rounded text-left">
-                                                <div className="flex-1 min-w-0">
-                                                    <a
-                                                        href={attachment.url}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="text-xs text-blue-700 font-medium truncate hover:underline"
-                                                    >
-                                                        {attachment.name}
-                                                    </a>
-                                                    <p className="text-[10px] text-gray-500">
-                                                        {attachment.size ? `${(attachment.size / 1024).toFixed(2)} KB` : ''}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
                         </div>
 
                         <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
@@ -2311,17 +1040,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             </button>
                             <button
                                 type="submit"
-                                disabled={uploadingFiles}
-                                className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
                             >
-                                {uploadingFiles ? (
-                                    <>
-                                        <i className="fas fa-spinner fa-spin mr-1"></i>
-                                        Uploading...
-                                    </>
-                                ) : (
-                                    editingDocument ? 'Update' : 'Add'
-                                )}
+                                {editingDocument ? 'Update' : 'Add'}
                             </button>
                         </div>
                     </form>
@@ -2330,18 +1051,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         );
     };
 
-    // Template Management Modal
     const TemplateModal = ({ showTemplateList = true, setShowTemplateList }) => {
-        // showTemplateList is now managed by parent component
-        // Add safety check for setShowTemplateList
-        if (!setShowTemplateList) {
-            console.error('TemplateModal: setShowTemplateList prop is missing');
-            return null;
-        }
+        if (!setShowTemplateList) return null;
         
-        // Reset showTemplateList when editingTemplate changes
         useEffect(() => {
-            if (!setShowTemplateList) return;
             if (editingTemplate) {
                 setShowTemplateList(false);
             } else {
@@ -2349,29 +1062,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             }
         }, [editingTemplate, setShowTemplateList]);
         
-        // Reset showTemplateList when modal closes
         useEffect(() => {
-            if (!setShowTemplateList) return;
             if (!showTemplateModal) {
                 setShowTemplateList(true);
             }
         }, [showTemplateModal, setShowTemplateList]);
         
-        // Debug: Log templates when they change
-        useEffect(() => {
-            console.log('🔍 TemplateModal: Templates state changed', {
-                templatesCount: templates.length,
-                templates: templates,
-                showTemplateModal: showTemplateModal,
-                showTemplateList: showTemplateList
-            });
-        }, [templates, showTemplateModal, showTemplateList]);
-        
         const [templateFormData, setTemplateFormData] = useState(() => {
-            // Check if we have pre-filled data from "Save as Template"
             const prefill = window.tempTemplateData;
             if (prefill) {
-                window.tempTemplateData = null; // Clear after use
+                window.tempTemplateData = null;
                 return {
                     name: prefill.name || '',
                     description: prefill.description || '',
@@ -2436,14 +1136,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 alert('Please add at least one section to the template');
                 return;
             }
-            // Validate sections and documents
-            for (let i = 0; i < templateFormData.sections.length; i++) {
-                const section = templateFormData.sections[i];
-                if (!section.name.trim()) {
-                    alert(`Please enter a name for section ${i + 1}`);
-                    return;
-                }
-            }
             handleSaveTemplate(templateFormData);
         };
 
@@ -2458,12 +1150,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             {!showTemplateList && (
                                 <button
                                     onClick={() => {
-                                        if (setShowTemplateList) setShowTemplateList(true);
+                                        setShowTemplateList(true);
                                         setEditingTemplate(null);
                                         window.tempTemplateData = null;
                                     }}
                                     className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800"
-                                    title="Back to templates list"
                                 >
                                     <i className="fas fa-arrow-left mr-1"></i>
                                     Back
@@ -2473,7 +1164,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 onClick={() => {
                                     setShowTemplateModal(false);
                                     setEditingTemplate(null);
-                                    if (setShowTemplateList) setShowTemplateList(true);
+                                    setShowTemplateList(true);
                                     window.tempTemplateData = null;
                                 }} 
                                 className="text-gray-400 hover:text-gray-600 p-1"
@@ -2490,7 +1181,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     <p className="text-xs text-gray-600">Manage your document collection templates</p>
                                     <button
                                         onClick={() => {
-                                            if (setShowTemplateList) setShowTemplateList(false);
+                                            setShowTemplateList(false);
                                             setEditingTemplate(null);
                                             setTemplateFormData({ name: '', description: '', sections: [] });
                                         }}
@@ -2501,72 +1192,57 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     </button>
                                 </div>
                                 
-                                {(() => {
-                                    console.log('🔍 Template Modal: Rendering template list', {
-                                        templatesCount: templates.length,
-                                        templates: templates,
-                                        showTemplateList: showTemplateList
-                                    });
-                                    if (templates.length === 0) {
+                                {templates.length === 0 ? (
+                                    <div className="text-center py-8 text-gray-400">
+                                        <i className="fas fa-layer-group text-3xl mb-2 opacity-50"></i>
+                                        <p className="text-sm">No templates yet</p>
+                                        <p className="text-xs mt-1">Create your first template to get started</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {templates.map(template => {
+                                        const totalDocs = template.sections?.reduce((sum, s) => sum + (s.documents?.length || 0), 0) || 0;
                                         return (
-                                            <div className="text-center py-8 text-gray-400">
-                                                <i className="fas fa-layer-group text-3xl mb-2 opacity-50"></i>
-                                                <p className="text-sm">No templates yet</p>
-                                                <p className="text-xs mt-1">Create your first template to get started</p>
-                                            </div>
-                                        );
-                                    }
-                                    return (
-                                        <div className="space-y-2">
-                                            {templates.map(template => {
-                                            const totalDocs = template.sections?.reduce((sum, s) => sum + (s.documents?.length || 0), 0) || 0;
-                                            return (
-                                                <div key={template.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
-                                                    <div className="flex justify-between items-start">
-                                                        <div className="flex-1">
-                                                            <h3 className="text-sm font-semibold text-gray-900 mb-1">{template.name}</h3>
-                                                            {template.description && (
-                                                                <p className="text-xs text-gray-600 mb-2">{template.description}</p>
-                                                            )}
-                                                            <div className="flex items-center gap-4 text-[10px] text-gray-500">
-                                                                <span><i className="fas fa-folder mr-1"></i>{template.sections?.length || 0} sections</span>
-                                                                <span><i className="fas fa-file mr-1"></i>{totalDocs} documents</span>
-                                                                {template.createdBy && (
-                                                                    <span><i className="fas fa-user mr-1"></i>Created by {template.createdBy}</span>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex items-center gap-1 ml-3">
-                                                            <button
-                                                                onClick={() => {
-                                                                    setEditingTemplate(template);
-                                                                    if (setShowTemplateList) setShowTemplateList(false);
-                                                                    setTemplateFormData({
-                                                                        name: template.name,
-                                                                        description: template.description || '',
-                                                                        sections: template.sections || []
-                                                                    });
-                                                                }}
-                                                                className="px-2 py-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
-                                                                title="Edit template"
-                                                            >
-                                                                <i className="fas fa-edit"></i>
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleDeleteTemplate(template.id)}
-                                                                className="px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
-                                                                title="Delete template"
-                                                            >
-                                                                <i className="fas fa-trash"></i>
-                                                            </button>
+                                            <div key={template.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
+                                                <div className="flex justify-between items-start">
+                                                    <div className="flex-1">
+                                                        <h3 className="text-sm font-semibold text-gray-900 mb-1">{template.name}</h3>
+                                                        {template.description && (
+                                                            <p className="text-xs text-gray-600 mb-2">{template.description}</p>
+                                                        )}
+                                                        <div className="flex items-center gap-4 text-[10px] text-gray-500">
+                                                            <span><i className="fas fa-folder mr-1"></i>{template.sections?.length || 0} sections</span>
+                                                            <span><i className="fas fa-file mr-1"></i>{totalDocs} documents</span>
                                                         </div>
                                                     </div>
+                                                    <div className="flex items-center gap-1 ml-3">
+                                                        <button
+                                                            onClick={() => {
+                                                                setEditingTemplate(template);
+                                                                setShowTemplateList(false);
+                                                                setTemplateFormData({
+                                                                    name: template.name,
+                                                                    description: template.description || '',
+                                                                    sections: template.sections || []
+                                                                });
+                                                            }}
+                                                            className="px-2 py-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                                                        >
+                                                            <i className="fas fa-edit"></i>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteTemplate(template.id)}
+                                                            className="px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+                                                        >
+                                                            <i className="fas fa-trash"></i>
+                                                        </button>
+                                                    </div>
                                                 </div>
-                                            );
-                                        })}
-                                        </div>
-                                    );
-                                })()}
+                                            </div>
+                                        );
+                                    })}
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <form onSubmit={handleSubmit} className="space-y-4">
@@ -2593,7 +1269,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     onChange={(e) => setTemplateFormData({...templateFormData, description: e.target.value})}
                                     className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                     rows="2"
-                                    placeholder="Brief description of this template..."
+                                    placeholder="Brief description..."
                                 ></textarea>
                             </div>
 
@@ -2637,7 +1313,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                     type="button"
                                                     onClick={() => handleRemoveSectionFromTemplate(sectionIndex)}
                                                     className="ml-2 text-red-600 hover:text-red-800 p-1"
-                                                    title="Remove section"
                                                 >
                                                     <i className="fas fa-trash text-xs"></i>
                                                 </button>
@@ -2670,7 +1345,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                                 type="button"
                                                                 onClick={() => handleRemoveDocumentFromTemplate(sectionIndex, docIndex)}
                                                                 className="text-red-600 hover:text-red-800 p-0.5"
-                                                                title="Remove document"
                                                             >
                                                                 <i className="fas fa-times text-[9px]"></i>
                                                             </button>
@@ -2689,7 +1363,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     onClick={() => {
                                         setShowTemplateModal(false);
                                         setEditingTemplate(null);
-                                        if (setShowTemplateList) setShowTemplateList(true);
+                                        setShowTemplateList(true);
                                         window.tempTemplateData = null;
                                     }}
                                     className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
@@ -2711,7 +1385,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         );
     };
 
-    // Apply Template Modal
     const ApplyTemplateModal = () => {
         const [selectedTemplateId, setSelectedTemplateId] = useState(null);
         const [targetYear, setTargetYear] = useState(selectedYear);
@@ -2776,12 +1449,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                             </option>
                                         ))}
                                     </select>
-                                    {selectedTemplateId && (() => {
-                                        const template = templates.find(t => t.id === selectedTemplateId);
-                                        return template?.description ? (
-                                            <p className="mt-1 text-[10px] text-gray-500">{template.description}</p>
-                                        ) : null;
-                                    })()}
                                 </div>
 
                                 <div>
@@ -2799,24 +1466,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                             </option>
                                         ))}
                                     </select>
-                                    <p className="mt-1 text-[10px] text-gray-500">
-                                        Template will be applied to the selected year. Sections and documents will be added to the current collection.
-                                    </p>
                                 </div>
-
-                                {selectedTemplateId && (() => {
-                                    const template = templates.find(t => t.id === selectedTemplateId);
-                                    const totalDocs = template?.sections?.reduce((sum, s) => sum + (s.documents?.length || 0), 0) || 0;
-                                    return (
-                                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5">
-                                            <p className="text-[10px] font-medium text-blue-900 mb-1">Template Preview:</p>
-                                            <p className="text-[10px] text-blue-700">
-                                                • {template?.sections?.length || 0} sections<br/>
-                                                • {totalDocs} documents
-                                            </p>
-                                        </div>
-                                    );
-                                })()}
 
                                 <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
                                     <button
@@ -2851,13 +1501,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const cellKey = `${section.id}-${document.id}-${month}`;
         const isPopupOpen = hoverCommentCell === cellKey;
         
-        // Determine cell background - prioritize status color over working month highlight
         const isWorkingMonth = workingMonths.includes(months.indexOf(month)) && selectedYear === currentYear;
         const cellBackgroundClass = statusConfig 
             ? statusConfig.cellColor 
             : (isWorkingMonth ? 'bg-primary-50' : '');
         
-        // Extract text color from status config (e.g., "bg-red-100 text-red-800" -> "text-red-800")
         const textColorClass = statusConfig && statusConfig.color 
             ? statusConfig.color.split(' ').find(cls => cls.startsWith('text-')) || 'text-gray-900'
             : 'text-gray-400';
@@ -2867,31 +1515,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 className={`px-2 py-1 text-xs border-l border-gray-100 ${cellBackgroundClass} relative z-0`}
             >
                 <div className="min-w-[160px] relative">
-                    {/* Status Dropdown */}
                     <select
                         value={status || ''}
                         onChange={(e) => handleUpdateStatus(section.id, document.id, month, e.target.value)}
-                        onFocus={() => {
-                            // Mark field as dirty when user starts editing
-                            const fieldId = cellKey;
-                            console.log('🎯 Marking field as dirty:', fieldId);
-                            setDirtyFields(prev => new Set(prev).add(fieldId));
-                        }}
-                        onBlur={() => {
-                            // Clear dirty flag after 5 seconds of inactivity
-                            const fieldId = cellKey;
-                            setTimeout(() => {
-                                console.log('✨ Clearing dirty flag:', fieldId);
-                                setDirtyFields(prev => {
-                                    const next = new Set(prev);
-                                    next.delete(fieldId);
-                                    return next;
-                                });
-                            }, 5000);
-                        }}
                         className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80 relative z-0`}
-                        style={{ pointerEvents: 'auto' }}
-                        onClick={(e) => e.stopPropagation()}
                     >
                         <option value="">Select Status</option>
                         {statusOptions.map(option => (
@@ -2901,33 +1528,27 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         ))}
                     </select>
                     
-                    {/* Comments Icon/Badge - Centered vertically on right */}
                     <div className="absolute top-1/2 right-0.5 -translate-y-1/2 z-10">
                         <button
                             data-comment-cell={cellKey}
                             onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                console.log('Comment button clicked for:', cellKey, 'Current state:', hoverCommentCell);
                                 
                                 if (isPopupOpen) {
                                     setHoverCommentCell(null);
                                 } else {
-                                    // Calculate position for fixed popup
                                     const rect = e.currentTarget.getBoundingClientRect();
                                     const position = {
                                         top: rect.bottom + 5,
-                                        left: rect.right - 288 // 288px = 18rem (w-72)
+                                        left: rect.right - 288
                                     };
-                                    console.log('Popup position:', position, 'Button rect:', rect);
                                     setCommentPopupPosition(position);
                                     setHoverCommentCell(cellKey);
                                 }
                             }}
                             className="text-gray-500 hover:text-gray-700 transition-colors relative p-1"
-                            title={hasComments ? `${comments.length} comment(s)` : 'Add comment'}
                             type="button"
-                            style={{ pointerEvents: 'auto' }}
                         >
                             <i className="fas fa-comment text-base"></i>
                             {hasComments && (
@@ -2944,7 +1565,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     return (
         <div className="space-y-3">
-            {/* Comment Popup - Rendered at root level with fixed positioning */}
             {hoverCommentCell && (() => {
                 const [sectionId, documentId, month] = hoverCommentCell.split('-');
                 const section = sections.find(s => s.id === parseInt(sectionId));
@@ -2960,7 +1580,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         }}
                         onClick={(e) => e.stopPropagation()}
                     >
-                        {/* Previous Comments */}
                         {comments.length > 0 && (
                             <div className="mb-3">
                                 <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
@@ -2995,7 +1614,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                     <button
                                                         onClick={() => handleDeleteComment(parseInt(sectionId), parseInt(documentId), month, comment.id || idx)}
                                                         className="absolute top-1 right-1 text-gray-400 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
-                                                        title="Delete comment"
                                                         type="button"
                                                     >
                                                         <i className="fas fa-trash text-[10px]"></i>
@@ -3008,70 +1626,35 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             </div>
                         )}
                         
-                        {/* Quick Comment Input */}
                         <div>
-                            {window.CommentInputWithMentions ? (
-                                <window.CommentInputWithMentions
-                                    onSubmit={(commentText) => {
-                                        handleAddComment(parseInt(sectionId), parseInt(documentId), month, commentText);
-                                    }}
-                                    placeholder="Add a comment... (@mention users, Shift+Enter for new line, Enter to send)"
-                                    rows={2}
-                                    taskTitle={document?.name || 'Document'}
-                                    taskLink={`#${section?.name || 'Section'}-${document?.name || 'Document'}`}
-                                    showButton={true}
-                                />
-                            ) : (
-                                <>
-                                    <div className="text-[10px] font-semibold text-gray-600 mb-1">Add Comment</div>
-                                    <textarea
-                                        value={quickComment}
-                                        onChange={(e) => setQuickComment(e.target.value)}
-                                        onFocus={() => {
-                                            // Mark comment field as dirty when typing
-                                            const fieldId = `comment-${hoverCommentCell}`;
-                                            console.log('🎯 Marking comment field as dirty:', fieldId);
-                                            setDirtyFields(prev => new Set(prev).add(fieldId));
-                                        }}
-                                        onBlur={() => {
-                                            // Clear dirty flag after 3 seconds
-                                            const fieldId = `comment-${hoverCommentCell}`;
-                                            setTimeout(() => {
-                                                console.log('✨ Clearing comment dirty flag:', fieldId);
-                                                setDirtyFields(prev => {
-                                                    const next = new Set(prev);
-                                                    next.delete(fieldId);
-                                                    return next;
-                                                });
-                                            }, 3000);
-                                        }}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && e.ctrlKey) {
-                                                handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
-                                            }
-                                        }}
-                                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                        rows="2"
-                                        placeholder="Type comment... (Ctrl+Enter to submit)"
-                                        autoFocus
-                                    />
-                                    <button
-                                        onClick={() => {
-                                            handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
-                                        }}
-                                        disabled={!quickComment.trim()}
-                                        className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        Add Comment
-                                    </button>
-                                </>
-                            )}
+                            <div className="text-[10px] font-semibold text-gray-600 mb-1">Add Comment</div>
+                            <textarea
+                                value={quickComment}
+                                onChange={(e) => setQuickComment(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && e.ctrlKey) {
+                                        handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
+                                    }
+                                }}
+                                className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                rows="2"
+                                placeholder="Type comment... (Ctrl+Enter to submit)"
+                                autoFocus
+                            />
+                            <button
+                                onClick={() => {
+                                    handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
+                                }}
+                                disabled={!quickComment.trim()}
+                                className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Add Comment
+                            </button>
                         </div>
                     </div>
                 );
             })()}
 
-            {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <button 
@@ -3082,7 +1665,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     </button>
                     <div>
                         <h1 className="text-lg font-semibold text-gray-900">Monthly Document Collection Tracker</h1>
-                        <p className="text-xs text-gray-500">{project.name} • {project.client} • Track monthly document & data collection</p>
+                        <p className="text-xs text-gray-500">{project.name} • {project.client}</p>
                     </div>
                 </div>
                 
@@ -3100,21 +1683,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             </option>
                         ))}
                     </select>
-                    {selectedYear === currentYear && (
-                        <button
-                            onClick={scrollToWorkingMonths}
-                            className="px-2.5 py-1 bg-primary-50 text-primary-700 rounded-lg hover:bg-primary-100 transition-colors text-[10px] font-medium"
-                            title="Scroll to working months"
-                        >
-                            <i className="fas fa-crosshairs mr-1"></i>
-                            Working Months
-                        </button>
-                    )}
                     <button
                         onClick={handleExportToExcel}
                         disabled={isExporting || sections.length === 0}
                         className="px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-[10px] font-medium flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Download as Excel"
                     >
                         {isExporting ? (
                             <>
@@ -3124,7 +1696,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         ) : (
                             <>
                                 <i className="fas fa-file-excel"></i>
-                                Export to Excel
+                                Export
                             </>
                         )}
                     </button>
@@ -3135,41 +1707,34 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         <i className="fas fa-plus mr-1"></i>
                         Add Section
                     </button>
-                    <div className="flex items-center gap-1 border-l border-gray-300 pl-2 ml-2">
+                    <button
+                        onClick={() => setShowApplyTemplateModal(true)}
+                        className="px-3 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-[10px] font-medium"
+                    >
+                        <i className="fas fa-magic mr-1"></i>
+                        Apply Template
+                    </button>
+                    <button
+                        onClick={handleCreateTemplate}
+                        className="px-3 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-[10px] font-medium"
+                    >
+                        <i className="fas fa-layer-group mr-1"></i>
+                        Templates
+                    </button>
+                    {sections.length > 0 && (
                         <button
-                            onClick={() => setShowApplyTemplateModal(true)}
-                            className="px-3 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-[10px] font-medium"
-                            title="Apply a template to this year"
+                            onClick={handleCreateTemplateFromCurrent}
+                            className="px-3 py-1 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-[10px] font-medium"
                         >
-                            <i className="fas fa-magic mr-1"></i>
-                            Apply Template
+                            <i className="fas fa-save mr-1"></i>
+                            Save as Template
                         </button>
-                        <button
-                            onClick={handleCreateTemplate}
-                            className="px-3 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-[10px] font-medium"
-                            title="Create or manage templates"
-                        >
-                            <i className="fas fa-layer-group mr-1"></i>
-                            Templates
-                        </button>
-                        {sections.length > 0 && (
-                            <button
-                                onClick={handleCreateTemplateFromCurrent}
-                                className="px-3 py-1 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-[10px] font-medium"
-                                title="Create template from current sections"
-                            >
-                                <i className="fas fa-save mr-1"></i>
-                                Save as Template
-                            </button>
-                        )}
-                    </div>
+                    )}
                 </div>
             </div>
 
-            {/* Legend */}
             <div className="bg-white rounded-lg border border-gray-200 p-2.5">
                 <div className="space-y-1.5">
-                    {/* Working Months Info */}
                     <div className="flex items-center gap-2 pb-1.5 border-b border-gray-100">
                         <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 text-[10px] font-medium">
                             <i className="fas fa-calendar-check mr-1 text-[10px]"></i>
@@ -3180,7 +1745,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         </span>
                     </div>
                     
-                    {/* Status Legend */}
                     <div className="flex items-center gap-3">
                         <span className="text-[10px] font-medium text-gray-600">Status Progression:</span>
                         {statusOptions.slice(0, 3).map((option, idx) => (
@@ -3203,7 +1767,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 </div>
             </div>
 
-            {/* Collection Tracker Table */}
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 <div className="relative overflow-x-auto" ref={tableRef}>
                     <table className="min-w-full divide-y divide-gray-200">
@@ -3259,7 +1822,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             ) : (
                                 sections.map((section, sectionIndex) => (
                                     <React.Fragment key={section.id}>
-                                        {/* Section Header Row */}
                                         <tr 
                                             draggable="true"
                                             onDragStart={(e) => handleDragStart(e, section, sectionIndex)}
@@ -3300,14 +1862,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                     <button
                                                         onClick={() => handleEditSection(section)}
                                                         className="text-gray-600 hover:text-primary-600 p-1"
-                                                        title="Edit Section"
                                                     >
                                                         <i className="fas fa-edit text-xs"></i>
                                                     </button>
                                                     <button
                                                         onClick={() => handleDeleteSection(section.id)}
                                                         className="text-gray-600 hover:text-red-600 p-1"
-                                                        title="Delete Section"
                                                     >
                                                         <i className="fas fa-trash text-xs"></i>
                                                     </button>
@@ -3315,7 +1875,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                             </td>
                                         </tr>
 
-                                        {/* Document Rows */}
                                         {section.documents.length === 0 ? (
                                             <tr>
                                                 <td colSpan={14} className="px-8 py-4 text-center text-gray-400">
@@ -3372,14 +1931,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                             <button
                                                                 onClick={() => handleEditDocument(section, document)}
                                                                 className="text-gray-600 hover:text-primary-600 p-1"
-                                                                title="Edit"
                                                             >
                                                                 <i className="fas fa-edit text-xs"></i>
                                                             </button>
                                                             <button
                                                                 onClick={() => handleDeleteDocument(section.id, document.id)}
                                                                 className="text-gray-600 hover:text-red-600 p-1"
-                                                                title="Delete"
                                                             >
                                                                 <i className="fas fa-trash text-xs"></i>
                                                             </button>
@@ -3396,7 +1953,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 </div>
             </div>
 
-            {/* Modals */}
             {showSectionModal && <SectionModal />}
             {showDocumentModal && <DocumentModal />}
             {showTemplateModal && <TemplateModal showTemplateList={showTemplateList} setShowTemplateList={setShowTemplateList} />}
@@ -3405,10 +1961,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     );
 };
 
-// Make available globally
 window.MonthlyDocumentCollectionTracker = MonthlyDocumentCollectionTracker;
-console.log('✅ MonthlyDocumentCollectionTracker component loaded and registered globally');
+console.log('✅ MonthlyDocumentCollectionTracker component loaded (OVERHAULED SIMPLE VERSION)');
 
-// Export as default for Vite module
 export default MonthlyDocumentCollectionTracker;
-
