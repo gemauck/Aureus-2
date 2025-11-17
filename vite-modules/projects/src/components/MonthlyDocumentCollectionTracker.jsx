@@ -101,6 +101,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
     const previousDocumentSectionsRef = useRef(project?.documentSections);
     const previousProjectIdRef = useRef(project?.id);
     const editingSectionIdRef = useRef(null); // Ref to store current editingSectionId
+    const documentCollectionProjectIdRef = useRef(project?.id); // Track project ID for LiveDataSync management
     
     // Initialize sections from props or localStorage
     const [sections, setSections] = useState(() => {
@@ -315,20 +316,46 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
 
   // CRITICAL: Pause LiveDataSync completely when viewing/editing document collection
   // This prevents any data sync from overwriting user input while they're working
+  // Track the project ID to detect if we're actually leaving the page
   useEffect(() => {
+    const currentProjectId = project?.id;
+    const previousProjectId = documentCollectionProjectIdRef.current;
+    
+    // Update the ref with current project ID
+    documentCollectionProjectIdRef.current = currentProjectId;
+    
+    // Set global flag to indicate we're on document collection page
+    window._isOnDocumentCollectionPage = true;
     console.log('🛑 Pausing LiveDataSync for document collection checklist - no sync while editing');
     if (window.LiveDataSync && typeof window.LiveDataSync.pause === 'function') {
       window.LiveDataSync.pause();
     }
     
-    // Cleanup: resume LiveDataSync when component unmounts (user leaves the page)
+    // Cleanup: Only resume if we're actually leaving (project ID changed or flag cleared)
     return () => {
-      console.log('▶️ Resuming LiveDataSync - user left document collection page');
-      if (window.LiveDataSync && typeof window.LiveDataSync.resume === 'function') {
-        window.LiveDataSync.resume();
-      }
+      // Capture the project ID at cleanup time
+      const projectIdAtCleanup = documentCollectionProjectIdRef.current;
+      
+      // Use a small delay to check if component is remounting (flag will be set again)
+      setTimeout(() => {
+        // Check if flag is still set (component remounted) or if project ID changed
+        const flagStillSet = window._isOnDocumentCollectionPage === true;
+        const currentProjectIdNow = documentCollectionProjectIdRef.current;
+        const projectChanged = currentProjectIdNow !== projectIdAtCleanup;
+        
+        // Only resume if flag is cleared (truly leaving) or project changed
+        if (!flagStillSet || projectChanged) {
+          console.log('▶️ Resuming LiveDataSync - user left document collection page');
+          window._isOnDocumentCollectionPage = false;
+          if (window.LiveDataSync && typeof window.LiveDataSync.resume === 'function') {
+            window.LiveDataSync.resume();
+          }
+        } else {
+          console.log('⏸️ Component remounting - keeping LiveDataSync paused');
+        }
+      }, 150);
     };
-  }, []); // Empty dependency array = run once on mount
+  }, [project?.id]); // Re-run when project ID changes
     const [editingSection, setEditingSection] = useState(null);
     const [editingDocument, setEditingDocument] = useState(null);
     const [editingSectionId, setEditingSectionId] = useState(null);
