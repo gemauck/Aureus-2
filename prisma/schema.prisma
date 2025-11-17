@@ -48,6 +48,7 @@ model User {
   tasks                     Task[]                  @relation("TaskAssignee")
   auditLogs                 AuditLog[]              @relation("AuditActor")
   feedback                  Feedback[]              @relation("UserFeedback")
+  feedbackReplies           FeedbackReply[]         @relation("FeedbackReplyAuthor")
   sentMessages              Message[]               @relation("MessageSender")
   passwordResets            PasswordReset[]
   calendarNotes             CalendarNote[]
@@ -362,7 +363,7 @@ model FeedbackReply {
   userId     String?
   message    String
   feedback   Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
-  user       User?    @relation(fields: [userId], references: [id])
+  user       User?    @relation("FeedbackReplyAuthor", fields: [userId], references: [id])
   createdAt  DateTime @default(now())
 
   @@index([feedbackId])
