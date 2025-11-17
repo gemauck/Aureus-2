@@ -838,8 +838,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
                 
                 // Update local state
-                const updatedTemplates = templates.filter(t => t.id !== templateId);
-                saveTemplates(updatedTemplates);
+            const updatedTemplates = templates.filter(t => t.id !== templateId);
+            saveTemplates(updatedTemplates);
             } catch (error) {
                 console.error('❌ Error deleting template:', error);
                 alert('Failed to delete template. Please try again.');
@@ -854,9 +854,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         try {
             const token = window.storage?.getToken?.();
-            
-            if (editingTemplate) {
-                // Update existing template
+        
+        if (editingTemplate) {
+            // Update existing template
                 if (token && typeof editingTemplate.id === 'string' && editingTemplate.id.length > 15) {
                     // Likely a database ID, try to update via API
                     try {
@@ -881,11 +881,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         } else {
                             console.warn('⚠️ Failed to update template in API:', response.status);
                             // Fall back to local update
-                            updatedTemplates = templates.map(t => 
-                                t.id === editingTemplate.id 
-                                    ? { ...t, ...templateData, updatedAt: new Date().toISOString(), updatedBy: currentUser.name || currentUser.email }
-                                    : t
-                            );
+            updatedTemplates = templates.map(t => 
+                t.id === editingTemplate.id 
+                    ? { ...t, ...templateData, updatedAt: new Date().toISOString(), updatedBy: currentUser.name || currentUser.email }
+                    : t
+            );
                         }
                     } catch (apiError) {
                         console.error('❌ Error updating template in API:', apiError);
@@ -904,8 +904,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             : t
                     );
                 }
-            } else {
-                // Create new template
+        } else {
+            // Create new template
                 if (token) {
                     try {
                         const response = await fetch('/api/document-collection-templates', {
@@ -925,15 +925,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         } else {
                             console.warn('⚠️ Failed to create template in API:', response.status);
                             // Fall back to local creation
-                            const newTemplate = {
-                                id: Date.now(),
-                                ...templateData,
-                                createdAt: new Date().toISOString(),
-                                createdBy: currentUser.name || currentUser.email,
-                                updatedAt: new Date().toISOString(),
-                                updatedBy: currentUser.name || currentUser.email
-                            };
-                            updatedTemplates = [...templates, newTemplate];
+            const newTemplate = {
+                id: Date.now(),
+                ...templateData,
+                createdAt: new Date().toISOString(),
+                createdBy: currentUser.name || currentUser.email,
+                updatedAt: new Date().toISOString(),
+                updatedBy: currentUser.name || currentUser.email
+            };
+            updatedTemplates = [...templates, newTemplate];
                         }
                     } catch (apiError) {
                         console.error('❌ Error creating template in API:', apiError);
@@ -960,12 +960,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     };
                     updatedTemplates = [...templates, newTemplate];
                 }
-            }
-            
-            saveTemplates(updatedTemplates);
-            setEditingTemplate(null);
-            setShowTemplateList(true);
-            // Don't close modal, just go back to list view
+        }
+        
+        saveTemplates(updatedTemplates);
+        setEditingTemplate(null);
+        setShowTemplateList(true);
+        // Don't close modal, just go back to list view
         } catch (error) {
             console.error('❌ Error saving template:', error);
             alert('Failed to save template. Please try again.');
@@ -2582,7 +2582,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 sections: parseTemplateSections(t.sections)
             }));
         }, [templates]);
-
+        
         const [templateFormData, setTemplateFormData] = useState(() => {
             // Check if we have pre-filled data from "Save as Template"
             const prefill = window.tempTemplateData;
@@ -2682,7 +2682,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     if (e.target === e.currentTarget) {
                         setShowTemplateModal(false);
                         setEditingTemplate(null);
-                        setShowTemplateList(true);
+                        if (setShowTemplateList) setShowTemplateList(true);
                         window.tempTemplateData = null;
                     }
                 }}
@@ -2699,7 +2699,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             {!showTemplateList && (
                                 <button
                                     onClick={() => {
-                                        setShowTemplateList(true);
+                                        if (setShowTemplateList) setShowTemplateList(true);
                                         setEditingTemplate(null);
                                         window.tempTemplateData = null;
                                     }}
@@ -2714,7 +2714,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 onClick={() => {
                                     setShowTemplateModal(false);
                                     setEditingTemplate(null);
-                                    setShowTemplateList(true);
+                                    if (setShowTemplateList) setShowTemplateList(true);
                                     window.tempTemplateData = null;
                                 }} 
                                 className="text-gray-400 hover:text-gray-600 p-1"
@@ -2731,7 +2731,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     <p className="text-xs text-gray-600">Manage your document collection templates</p>
                                     <button
                                         onClick={() => {
-                                            setShowTemplateList(false);
+                                            if (setShowTemplateList) setShowTemplateList(false);
                                             setEditingTemplate(null);
                                             setTemplateFormData({ name: '', description: '', sections: [] });
                                         }}
@@ -2795,7 +2795,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                             <button
                                                                 onClick={() => {
                                                                     setEditingTemplate(template);
-                                                                    setShowTemplateList(false);
+                                                                    if (setShowTemplateList) setShowTemplateList(false);
                                                                     setTemplateFormData({
                                                                         name: template.name,
                                                                         description: template.description || '',
@@ -2955,7 +2955,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     onClick={() => {
                                         setShowTemplateModal(false);
                                         setEditingTemplate(null);
-                                        setShowTemplateList(true);
+                                        if (setShowTemplateList) setShowTemplateList(true);
                                         window.tempTemplateData = null;
                                     }}
                                     className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
@@ -3152,9 +3152,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                             const lengthValue = sections && typeof sections.length === 'number' ? sections.length : 0;
                                             const displayCount = safeRenderNumber(lengthValue);
                                             return (
-                                                <option key={template.id} value={String(template.id)}>
+                                            <option key={template.id} value={String(template.id)}>
                                                     {template.name} ({displayCount} sections)
-                                                </option>
+                                            </option>
                                             );
                                         })}
                                     </select>
