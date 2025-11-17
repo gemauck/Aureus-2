@@ -112,6 +112,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // CRITICAL: Track when user has started typing - once they start, NEVER update formData from prop
     const userHasStartedTypingRef = useRef(false);
     
+    // Track loading state to prevent duplicate API calls
+    const isLoadingContactsRef = useRef(false);
+    const isLoadingSitesRef = useRef(false);
+    const isLoadingClientRef = useRef(false);
+    const isLoadingOpportunitiesRef = useRef(false);
+    const pendingTimeoutsRef = useRef([]); // Track all pending timeouts to cancel on unmount
+    
     // Refs for auto-scrolling comments
     const commentsContainerRef = useRef(null);
     const contentScrollableRef = useRef(null);
@@ -178,6 +185,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             // NO LiveDataSync.start() here - only in onClose callback
         };
     }, []); // Run on mount/unmount only - stop/start based on modal visibility
+    
+    // Cleanup: Cancel all pending timeouts when component unmounts
+    useEffect(() => {
+        return () => {
+            // Cancel all pending timeouts to prevent API calls after unmount
+            pendingTimeoutsRef.current.forEach(timeoutId => {
+                clearTimeout(timeoutId);
+            });
+            pendingTimeoutsRef.current = [];
+            // Reset loading flags
+            isLoadingContactsRef.current = false;
+            isLoadingSitesRef.current = false;
+            isLoadingClientRef.current = false;
+            isLoadingOpportunitiesRef.current = false;
+        };
+    }, []);
     
     // Update tab when initialTab prop changes
     useEffect(() => {
@@ -794,20 +817,35 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             // This prevents overwriting optimistic updates
             if (shouldLoadFromDatabase) {
                 console.log('📡 Loading data from database (client changed or form not edited)');
+                
+                // Cancel any existing pending timeouts for this client
+                pendingTimeoutsRef.current.forEach(timeoutId => {
+                    clearTimeout(timeoutId);
+                });
+                pendingTimeoutsRef.current = [];
+                
                 // Stagger API calls to prevent rate limiting (429 errors)
                 // Each call waits for the previous one with a delay
-                loadOpportunitiesFromDatabase(client.id);
-                setTimeout(() => {
+                const timeout1 = setTimeout(() => {
+                    loadOpportunitiesFromDatabase(client.id);
+                }, 0);
+                pendingTimeoutsRef.current.push(timeout1);
+                
+                const timeout2 = setTimeout(() => {
                     loadContactsFromDatabase(client.id);
-                }, 300); // Delay 300ms
-                setTimeout(() => {
+                }, 500); // Increased delay to 500ms
+                pendingTimeoutsRef.current.push(timeout2);
+                
+                const timeout3 = setTimeout(() => {
                     loadSitesFromDatabase(client.id);
-                }, 600); // Delay 600ms
+                }, 1000); // Increased delay to 1000ms
+                pendingTimeoutsRef.current.push(timeout3);
                 
                 // Reload the full client data from database to get comments, followUps, activityLog
-                setTimeout(() => {
+                const timeout4 = setTimeout(() => {
                     loadClientFromDatabase(client.id);
-                }, 900); // Delay 900ms
+                }, 1500); // Increased delay to 1500ms
+                pendingTimeoutsRef.current.push(timeout4);
             } else {
                 console.log('⏭️ Skipping database load - form has been edited and client ID unchanged');
             }
@@ -817,6 +855,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Load full client data from database to get latest comments, followUps, activityLog
     const loadClientFromDatabase = async (clientId) => {
         try {
+            // Prevent duplicate requests
+            if (isLoadingClientRef.current) {
+                console.log('⏭️ Skipping client reload - already loading');
+                return;
+            }
+            
             // Skip if form has been edited to preserve optimistic updates
             if (hasUserEditedForm.current) {
                 console.log('⏭️ Skipping client reload - form has been edited (preserving optimistic updates)');
@@ -835,6 +879,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 return;
             }
             
+            isLoadingClientRef.current = true;
             console.log('📡 Reloading full client data from database for client:', clientId);
             const response = await window.api.getClient(clientId);
             const dbClient = response?.data?.client;
@@ -884,12 +929,20 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             }
         } catch (error) {
             console.error('❌ Error loading client from database:', error);
+        } finally {
+            isLoadingClientRef.current = false;
         }
     };
 
     // Load contacts from database
     const loadContactsFromDatabase = async (clientId) => {
         try {
+            // Prevent duplicate requests
+            if (isLoadingContactsRef.current) {
+                console.log('⏭️ Skipping contact load - already loading');
+                return;
+            }
+            
             // Skip loading if form has been edited to preserve optimistic updates
             if (hasUserEditedForm.current) {
                 console.log('⏭️ Skipping contact load - form has been edited (preserving optimistic updates)');
@@ -902,6 +955,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 return;
             }
             
+            isLoadingContactsRef.current = true;
             console.log('📡 Loading contacts from database for client:', clientId);
             const response = await window.api.getContacts(clientId);
             const contacts = response?.data?.contacts || [];
@@ -925,12 +979,20 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             setOptimisticContacts(prev => prev.filter(opt => !contacts.some(db => db.id === opt.id)));
         } catch (error) {
             console.error('❌ Error loading contacts from database:', error);
+        } finally {
+            isLoadingContactsRef.current = false;
         }
     };
 
     // Load sites from database
     const loadSitesFromDatabase = async (clientId) => {
         try {
+            // Prevent duplicate requests
+            if (isLoadingSitesRef.current) {
+                console.log('⏭️ Skipping site load - already loading');
+                return;
+            }
+            
             // Skip loading if form has been edited to preserve optimistic updates
             if (hasUserEditedForm.current) {
                 console.log('⏭️ Skipping site load - form has been edited (preserving optimistic updates)');
@@ -943,6 +1005,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 return;
             }
             
+            isLoadingSitesRef.current = true;
             console.log('📡 Loading sites from database for client:', clientId);
             const response = await window.api.getSites(clientId);
             const sites = response?.data?.sites || [];
@@ -966,18 +1029,27 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             setOptimisticSites(prev => prev.filter(opt => !sites.some(db => db.id === opt.id)));
         } catch (error) {
             console.error('❌ Error loading sites from database:', error);
+        } finally {
+            isLoadingSitesRef.current = false;
         }
     };
 
     // Load opportunities from database
     const loadOpportunitiesFromDatabase = async (clientId) => {
         try {
+            // Prevent duplicate requests
+            if (isLoadingOpportunitiesRef.current) {
+                console.log('⏭️ Skipping opportunity load - already loading');
+                return;
+            }
+            
             const token = window.storage?.getToken?.();
             if (!token) {
                 console.log('⚠️ No authentication token, skipping opportunity loading');
                 return;
             }
             
+            isLoadingOpportunitiesRef.current = true;
             console.log('📡 Loading opportunities from database for client:', clientId);
             const response = await window.api.getOpportunitiesByClient(clientId);
             const opportunities = response?.data?.opportunities || [];
@@ -992,6 +1064,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         } catch (error) {
             console.error('❌ Error loading opportunities from database:', error);
             // Don't show error to user, just log it
+        } finally {
+            isLoadingOpportunitiesRef.current = false;
         }
     };
 

@@ -232,7 +232,7 @@ async function handler(req, res) {
 
                 // Delete notifications
                 await prisma.notification.deleteMany({
-                    where: { recipientId: userId }
+                    where: { userId: userId }
                 })
                 console.log('✅ Deleted notifications')
 

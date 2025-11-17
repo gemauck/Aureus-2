@@ -261,13 +261,150 @@ const NotificationCenter = () => {
             markAsRead([notification.id]);
         }
         
-        // Navigate to link if available
-        if (notification.link) {
-            window.location.hash = notification.link;
-        }
-        
         // Close dropdown
         setIsOpen(false);
+        
+        // Navigate to link if available
+        if (notification.link) {
+            // Parse metadata if available for more specific navigation
+            let metadata = null;
+            if (notification.metadata) {
+                try {
+                    metadata = typeof notification.metadata === 'string' 
+                        ? JSON.parse(notification.metadata) 
+                        : notification.metadata;
+                } catch (e) {
+                    console.warn('Failed to parse notification metadata:', e);
+                }
+            }
+            
+            // Navigate to the link
+            window.location.hash = notification.link;
+            
+            // Helper function to highlight an element
+            const highlightElement = (element) => {
+                if (!element) return;
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // Highlight the element briefly
+                const originalBg = window.getComputedStyle(element).backgroundColor;
+                const originalTransition = element.style.transition;
+                element.style.transition = 'background-color 0.3s, box-shadow 0.3s';
+                element.style.backgroundColor = 'rgba(59, 130, 246, 0.15)';
+                element.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.3)';
+                setTimeout(() => {
+                    element.style.backgroundColor = originalBg;
+                    element.style.boxShadow = '';
+                    element.style.transition = originalTransition;
+                }, 2000);
+            };
+            
+            // Helper function to find and scroll to element with retries
+            const findAndScrollToElement = (selectors, maxRetries = 5, delay = 500) => {
+                let retries = 0;
+                const tryFind = () => {
+                    for (const selector of selectors) {
+                        const element = typeof selector === 'string' 
+                            ? document.querySelector(selector)
+                            : selector();
+                        if (element) {
+                            highlightElement(element);
+                            return true;
+                        }
+                    }
+                    return false;
+                };
+                
+                const attempt = () => {
+                    if (tryFind()) {
+                        return; // Found it!
+                    }
+                    retries++;
+                    if (retries < maxRetries) {
+                        setTimeout(attempt, delay);
+                    }
+                };
+                
+                // Start trying after initial delay
+                setTimeout(attempt, delay);
+            };
+            
+            // After navigation, try to scroll to specific elements if metadata provides them
+            if (metadata) {
+                // Handle proposal stage navigation
+                if (metadata.stageId || metadata.stageIndex !== undefined) {
+                    const stageId = metadata.stageId;
+                    const stageIndex = metadata.stageIndex;
+                    const proposalId = metadata.proposalId;
+                    
+                    const selectors = [];
+                    if (stageId) {
+                        selectors.push(
+                            `[data-stage-id="${stageId}"]`,
+                            `#stage-${stageId}`,
+                            `[data-proposal-stage="${stageId}"]`,
+                            `[id*="stage"][id*="${stageId}"]`
+                        );
+                    }
+                    if (stageIndex !== undefined && proposalId) {
+                        selectors.push(() => {
+                            const proposalElement = document.querySelector(`[data-proposal-id="${proposalId}"]`) ||
+                                                  document.querySelector(`[id*="proposal"][id*="${proposalId}"]`);
+                            if (proposalElement) {
+                                const stages = proposalElement.querySelectorAll('[data-stage-index], [class*="stage"]');
+                                return stages[stageIndex] || null;
+                            }
+                            return null;
+                        });
+                    }
+                    
+                    if (selectors.length > 0) {
+                        findAndScrollToElement(selectors);
+                    }
+                }
+                
+                // Handle task navigation
+                if (metadata.taskId) {
+                    const taskId = metadata.taskId;
+                    findAndScrollToElement([
+                        `#task-${taskId}`,
+                        `[data-task-id="${taskId}"]`,
+                        `[id*="task"][id*="${taskId}"]`
+                    ]);
+                }
+                
+                // Handle comment navigation
+                if (metadata.commentId) {
+                    const commentId = metadata.commentId;
+                    findAndScrollToElement([
+                        `#comment-${commentId}`,
+                        `[data-comment-id="${commentId}"]`,
+                        `[id*="comment"][id*="${commentId}"]`
+                    ]);
+                }
+                
+                // Handle proposal navigation
+                if (metadata.proposalId && !metadata.stageId && metadata.stageIndex === undefined) {
+                    const proposalId = metadata.proposalId;
+                    findAndScrollToElement([
+                        `[data-proposal-id="${proposalId}"]`,
+                        `#proposal-${proposalId}`,
+                        `[id*="proposal"][id*="${proposalId}"]`
+                    ]);
+                }
+            }
+            
+            // Also try to scroll to any hash anchor in the link
+            const hashMatch = notification.link.match(/#([^?&]+)/);
+            if (hashMatch && hashMatch[1]) {
+                const anchorId = hashMatch[1];
+                findAndScrollToElement([
+                    `#${anchorId}`,
+                    `[data-id="${anchorId}"]`,
+                    `[name="${anchorId}"]`,
+                    `[id*="${anchorId}"]`
+                ]);
+            }
+        }
     };
     
     return (
