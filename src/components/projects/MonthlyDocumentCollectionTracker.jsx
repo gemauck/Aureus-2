@@ -780,41 +780,170 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         setShowTemplateModal(true);
     };
 
-    const handleDeleteTemplate = (templateId) => {
+    const handleDeleteTemplate = async (templateId) => {
         if (confirm('Delete this template? This action cannot be undone.')) {
-            const updatedTemplates = templates.filter(t => t.id !== templateId);
-            saveTemplates(updatedTemplates);
+            try {
+                // Delete from API if template has a database ID (not just a timestamp ID)
+                const templateToDelete = templates.find(t => t.id === templateId);
+                if (templateToDelete && typeof templateToDelete.id === 'string' && templateToDelete.id.length > 15) {
+                    // Likely a database ID (UUID format), try to delete from API
+                    const token = window.storage?.getToken?.();
+                    if (token) {
+                        try {
+                            const response = await fetch(`/api/document-collection-templates/${templateId}`, {
+                                method: 'DELETE',
+                                headers: {
+                                    'Authorization': `Bearer ${token}`,
+                                    'Content-Type': 'application/json'
+                                }
+                            });
+                            
+                            if (!response.ok) {
+                                console.warn('⚠️ Failed to delete template from API:', response.status);
+                                // Continue with local deletion even if API fails
+                            } else {
+                                console.log('✅ Template deleted from API');
+                            }
+                        } catch (apiError) {
+                            console.error('❌ Error deleting template from API:', apiError);
+                            // Continue with local deletion even if API fails
+                        }
+                    }
+                }
+                
+                // Update local state
+                const updatedTemplates = templates.filter(t => t.id !== templateId);
+                saveTemplates(updatedTemplates);
+            } catch (error) {
+                console.error('❌ Error deleting template:', error);
+                alert('Failed to delete template. Please try again.');
+            }
         }
     };
 
-    const handleSaveTemplate = (templateData) => {
+    const handleSaveTemplate = async (templateData) => {
         const currentUser = getCurrentUser();
         let updatedTemplates;
+        let savedTemplate;
         
-        if (editingTemplate) {
-            // Update existing template
-            updatedTemplates = templates.map(t => 
-                t.id === editingTemplate.id 
-                    ? { ...t, ...templateData, updatedAt: new Date().toISOString(), updatedBy: currentUser.name || currentUser.email }
-                    : t
-            );
-        } else {
-            // Create new template
-            const newTemplate = {
-                id: Date.now(),
-                ...templateData,
-                createdAt: new Date().toISOString(),
-                createdBy: currentUser.name || currentUser.email,
-                updatedAt: new Date().toISOString(),
-                updatedBy: currentUser.name || currentUser.email
-            };
-            updatedTemplates = [...templates, newTemplate];
+        try {
+            const token = window.storage?.getToken?.();
+            
+            if (editingTemplate) {
+                // Update existing template
+                if (token && typeof editingTemplate.id === 'string' && editingTemplate.id.length > 15) {
+                    // Likely a database ID, try to update via API
+                    try {
+                        const response = await fetch(`/api/document-collection-templates/${editingTemplate.id}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(templateData)
+                        });
+                        
+                        if (response.ok) {
+                            const responseData = await response.json();
+                            savedTemplate = responseData.template;
+                            console.log('✅ Template updated in API');
+                            
+                            // Update local templates with API response
+                            updatedTemplates = templates.map(t => 
+                                t.id === editingTemplate.id ? savedTemplate : t
+                            );
+                        } else {
+                            console.warn('⚠️ Failed to update template in API:', response.status);
+                            // Fall back to local update
+                            updatedTemplates = templates.map(t => 
+                                t.id === editingTemplate.id 
+                                    ? { ...t, ...templateData, updatedAt: new Date().toISOString(), updatedBy: currentUser.name || currentUser.email }
+                                    : t
+                            );
+                        }
+                    } catch (apiError) {
+                        console.error('❌ Error updating template in API:', apiError);
+                        // Fall back to local update
+                        updatedTemplates = templates.map(t => 
+                            t.id === editingTemplate.id 
+                                ? { ...t, ...templateData, updatedAt: new Date().toISOString(), updatedBy: currentUser.name || currentUser.email }
+                                : t
+                        );
+                    }
+                } else {
+                    // Local-only template (timestamp ID), just update locally
+                    updatedTemplates = templates.map(t => 
+                        t.id === editingTemplate.id 
+                            ? { ...t, ...templateData, updatedAt: new Date().toISOString(), updatedBy: currentUser.name || currentUser.email }
+                            : t
+                    );
+                }
+            } else {
+                // Create new template
+                if (token) {
+                    try {
+                        const response = await fetch('/api/document-collection-templates', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(templateData)
+                        });
+                        
+                        if (response.ok) {
+                            const responseData = await response.json();
+                            savedTemplate = responseData.template;
+                            console.log('✅ Template created in API');
+                            updatedTemplates = [...templates, savedTemplate];
+                        } else {
+                            console.warn('⚠️ Failed to create template in API:', response.status);
+                            // Fall back to local creation
+                            const newTemplate = {
+                                id: Date.now(),
+                                ...templateData,
+                                createdAt: new Date().toISOString(),
+                                createdBy: currentUser.name || currentUser.email,
+                                updatedAt: new Date().toISOString(),
+                                updatedBy: currentUser.name || currentUser.email
+                            };
+                            updatedTemplates = [...templates, newTemplate];
+                        }
+                    } catch (apiError) {
+                        console.error('❌ Error creating template in API:', apiError);
+                        // Fall back to local creation
+                        const newTemplate = {
+                            id: Date.now(),
+                            ...templateData,
+                            createdAt: new Date().toISOString(),
+                            createdBy: currentUser.name || currentUser.email,
+                            updatedAt: new Date().toISOString(),
+                            updatedBy: currentUser.name || currentUser.email
+                        };
+                        updatedTemplates = [...templates, newTemplate];
+                    }
+                } else {
+                    // No auth token, create locally only
+                    const newTemplate = {
+                        id: Date.now(),
+                        ...templateData,
+                        createdAt: new Date().toISOString(),
+                        createdBy: currentUser.name || currentUser.email,
+                        updatedAt: new Date().toISOString(),
+                        updatedBy: currentUser.name || currentUser.email
+                    };
+                    updatedTemplates = [...templates, newTemplate];
+                }
+            }
+            
+            saveTemplates(updatedTemplates);
+            setEditingTemplate(null);
+            setShowTemplateList(true);
+            // Don't close modal, just go back to list view
+        } catch (error) {
+            console.error('❌ Error saving template:', error);
+            alert('Failed to save template. Please try again.');
         }
-        
-        saveTemplates(updatedTemplates);
-        setEditingTemplate(null);
-        setShowTemplateList(true);
-        // Don't close modal, just go back to list view
     };
 
     const handleApplyTemplate = async (template, targetYear) => {
@@ -1980,6 +2109,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     // Modals
     const SectionModal = () => {
+        // Debug: Log when modal renders
+        useEffect(() => {
+            console.log('✅ SectionModal rendered, showSectionModal:', showSectionModal);
+        }, [showSectionModal]);
+
         const [sectionFormData, setSectionFormData] = useState({
             name: editingSection?.name || '',
             description: editingSection?.description || ''
@@ -1994,6 +2128,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             handleSaveSection(sectionFormData);
         };
 
+        console.log('✅ SectionModal: Rendering modal, showSectionModal:', showSectionModal);
         return (
             <div 
                 className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
@@ -2423,7 +2558,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             setTemplateFormData({ ...templateFormData, sections: updatedSections });
         };
 
-        const handleSubmit = (e) => {
+        const handleSubmit = async (e) => {
             e.preventDefault();
             if (!templateFormData.name.trim()) {
                 alert('Please enter a template name');
@@ -2441,7 +2576,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     return;
                 }
             }
-            handleSaveTemplate(templateFormData);
+            await handleSaveTemplate(templateFormData);
         };
 
         return (
@@ -2730,7 +2865,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         });
 
         const handleApply = () => {
-            if (selectedTemplateId == null || Number.isNaN(selectedTemplateId)) {
+            if (!selectedTemplateId) {
                 alert('Please select a template');
                 return;
             }
@@ -2795,8 +2930,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                             if (!value) {
                                                 setSelectedTemplateId(null);
                                             } else {
-                                                const parsed = parseInt(value, 10);
-                                                setSelectedTemplateId(Number.isNaN(parsed) ? null : parsed);
+                                                // Keep as string - template IDs can be UUIDs (strings) or numbers
+                                                setSelectedTemplateId(value);
                                             }
                                         }}
                                         className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -2809,7 +2944,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         ))}
                                     </select>
                                     {(() => {
-                                        if (selectedTemplateId == null || Number.isNaN(selectedTemplateId)) {
+                                        if (!selectedTemplateId) {
                                             return null;
                                         }
                                         const template = templates.find(t => String(t.id) === String(selectedTemplateId));
@@ -2850,7 +2985,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 </div>
 
                                 {(() => {
-                                    if (selectedTemplateId == null || Number.isNaN(selectedTemplateId)) {
+                                    if (!selectedTemplateId) {
                                         return null;
                                     }
                                     const template = templates.find(t => String(t.id) === String(selectedTemplateId));
