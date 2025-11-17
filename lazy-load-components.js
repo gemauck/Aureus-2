@@ -87,7 +87,7 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
         './src/components/users/InviteUserModal.jsx',
         './src/components/users/PasswordDisplayModal.jsx',
         './src/components/users/Users.jsx',
-        './src/components/users/UserManagement.jsx',
+        // UserManagement.jsx removed - using Users.jsx instead
         
         // Manufacturing - MOVED from index.html to lazy loading for better performance
         './src/components/manufacturing/locations/StockLocations.jsx',
@@ -269,12 +269,14 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
             // Note: Check both .jsx (source) and .js (compiled) paths since lazy-loader converts paths
             // Also check the original src path to catch components before path conversion
             const needsCacheBusting = src.includes('DailyNotes') || src.includes('Manufacturing') || 
-                                     src.includes('UserManagement') || src.includes('ProjectProgressTracker') || 
+                                     src.includes('ProjectProgressTracker') || 
                                      src.includes('TaskManagement') || src.includes('MonthlyDocumentCollectionTracker') || 
                                      src.includes('Projects.jsx') || src.includes('Projects.js') || 
+                                     src.includes('Users.jsx') || src.includes('Users.js') ||
                                      scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || 
-                                     scriptSrc.includes('UserManagement') || scriptSrc.includes('ProjectProgressTracker') || 
-                                     scriptSrc.includes('TaskManagement') || scriptSrc.includes('MonthlyDocumentCollectionTracker') || 
+                                     scriptSrc.includes('ProjectProgressTracker') || 
+                                     scriptSrc.includes('TaskManagement') || scriptSrc.includes('MonthlyDocumentCollectionTracker') ||
+                                     scriptSrc.includes('Users.jsx') || scriptSrc.includes('Users.js') || 
                                      scriptSrc.includes('Projects.jsx') || scriptSrc.includes('Projects.js') || 
                                      scriptSrc.includes('/projects/Projects') || 
                                      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';

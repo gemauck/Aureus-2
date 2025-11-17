@@ -419,12 +419,12 @@ const MainLayout = () => {
     
     // Users component loading state
     const [usersComponentReady, setUsersComponentReady] = React.useState(
-        !!(window.UserManagement || window.Users)
+        !!(window.Users || window.UserManagement)
     );
     
     React.useEffect(() => {
         const checkUsers = () => {
-            const UsersComponent = window.UserManagement || window.Users;
+            const UsersComponent = window.Users || window.UserManagement;
             const isValidComponent = UsersComponent && typeof UsersComponent === 'function';
             if (isValidComponent && !usersComponentReady) {
                 console.log('✅ MainLayout: Users component became available');
@@ -500,7 +500,7 @@ const MainLayout = () => {
     const Teams = window.Teams || window.TeamsSimple || (() => <div className="text-center py-12 text-gray-500">Teams module loading...</div>);
     
     const Users = React.useMemo(() => {
-        const UsersComponent = window.UserManagement || window.Users;
+        const UsersComponent = window.Users || window.UserManagement;
         if (UsersComponent) {
             return UsersComponent;
         }
