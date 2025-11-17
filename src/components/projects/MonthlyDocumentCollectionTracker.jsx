@@ -2544,39 +2544,47 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return null;
         }
         
+        // Use ref to store setShowTemplateList to avoid closure issues
+        const setShowTemplateListRef = useRef(setShowTemplateList);
+        useEffect(() => {
+            setShowTemplateListRef.current = setShowTemplateList;
+        }, [setShowTemplateList]);
+        
         // Reset showTemplateList when editingTemplate changes
         useEffect(() => {
-            // Double-check that setShowTemplateList is available and is a function
-            if (!setShowTemplateList || typeof setShowTemplateList !== 'function') {
+            // Use ref to access setShowTemplateList to avoid closure issues
+            const setter = setShowTemplateListRef.current;
+            if (!setter || typeof setter !== 'function') {
                 console.warn('TemplateModal: setShowTemplateList not available in useEffect');
                 return;
             }
             try {
                 if (editingTemplate) {
-                    setShowTemplateList(false);
+                    setter(false);
                 } else {
-                    setShowTemplateList(true);
+                    setter(true);
                 }
             } catch (error) {
                 console.error('TemplateModal: Error calling setShowTemplateList:', error);
             }
-        }, [editingTemplate]); // Remove setShowTemplateList from deps to avoid stale closure issues
+        }, [editingTemplate]);
         
         // Reset showTemplateList when modal closes
         useEffect(() => {
-            // Double-check that setShowTemplateList is available and is a function
-            if (!setShowTemplateList || typeof setShowTemplateList !== 'function') {
+            // Use ref to access setShowTemplateList to avoid closure issues
+            const setter = setShowTemplateListRef.current;
+            if (!setter || typeof setter !== 'function') {
                 console.warn('TemplateModal: setShowTemplateList not available in useEffect');
                 return;
             }
             try {
                 if (!showTemplateModal) {
-                    setShowTemplateList(true);
+                    setter(true);
                 }
             } catch (error) {
                 console.error('TemplateModal: Error calling setShowTemplateList:', error);
             }
-        }, [showTemplateModal]); // Remove setShowTemplateList from deps to avoid stale closure issues
+        }, [showTemplateModal]);
         
         // Debug: Log templates when they change
         useEffect(() => {
