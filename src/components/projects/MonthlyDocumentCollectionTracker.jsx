@@ -138,20 +138,84 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // Template storage key
     const TEMPLATES_STORAGE_KEY = 'documentCollectionTemplates';
     
-    // Load templates from localStorage
+    // Load templates from API and localStorage
     useEffect(() => {
-        if (typeof window !== 'undefined') {
+        const loadTemplates = async () => {
+            if (typeof window === 'undefined') return;
+            
             try {
+                // First, load from localStorage for instant UI
                 const storedTemplates = localStorage.getItem(TEMPLATES_STORAGE_KEY);
+                let localTemplates = [];
                 if (storedTemplates) {
-                    const parsed = JSON.parse(storedTemplates);
-                    setTemplates(Array.isArray(parsed) ? parsed : []);
+                    try {
+                        localTemplates = JSON.parse(storedTemplates);
+                        if (Array.isArray(localTemplates)) {
+                            setTemplates(localTemplates);
+                        }
+                    } catch (e) {
+                        console.warn('Failed to parse stored templates:', e);
+                    }
+                }
+                
+                // Then fetch from API
+                const token = window.storage?.getToken?.();
+                if (token) {
+                    try {
+                        console.log('📋 Fetching document collection templates from API...');
+                        const response = await fetch('/api/document-collection-templates', {
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            const apiTemplates = data?.templates || data?.data?.templates || [];
+                            
+                            console.log(`✅ Loaded ${apiTemplates.length} template(s) from API`);
+                            
+                            // Merge API templates with local templates (API templates take precedence)
+                            const templateMap = new Map();
+                            
+                            // Add local templates first
+                            if (Array.isArray(localTemplates)) {
+                                localTemplates.forEach(t => {
+                                    if (t.id) templateMap.set(t.id, t);
+                                });
+                            }
+                            
+                            // Overwrite with API templates (they're the source of truth)
+                            apiTemplates.forEach(t => {
+                                if (t.id) templateMap.set(t.id, t);
+                            });
+                            
+                            const mergedTemplates = Array.from(templateMap.values());
+                            setTemplates(mergedTemplates);
+                            
+                            // Update localStorage with merged templates
+                            if (typeof window !== 'undefined') {
+                                localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(mergedTemplates));
+                            }
+                        } else {
+                            console.warn('⚠️ Failed to fetch templates from API:', response.status);
+                            // Keep using local templates if API fails
+                        }
+                    } catch (apiError) {
+                        console.warn('⚠️ Error fetching templates from API:', apiError);
+                        // Keep using local templates if API fails
+                    }
+                } else {
+                    console.log('📋 No auth token, using local templates only');
                 }
             } catch (e) {
                 console.warn('Failed to load templates:', e);
                 setTemplates([]);
             }
-        }
+        };
+        
+        loadTemplates();
     }, []);
     
     // Save templates to localStorage
