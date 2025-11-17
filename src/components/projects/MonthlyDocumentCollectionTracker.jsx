@@ -140,7 +140,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     // Load templates from API and localStorage (reusable function)
     const loadTemplatesFromAPI = useCallback(async () => {
-        if (typeof window === 'undefined') return;
+        console.log('🔄 loadTemplatesFromAPI called');
+        if (typeof window === 'undefined') {
+            console.log('⚠️ Window undefined, skipping template load');
+            return;
+        }
         
         try {
             // First, load from localStorage for instant UI
@@ -149,16 +153,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             if (storedTemplates) {
                 try {
                     localTemplates = JSON.parse(storedTemplates);
+                    console.log(`📦 Found ${localTemplates.length} template(s) in localStorage`);
                     if (Array.isArray(localTemplates)) {
                         setTemplates(localTemplates);
                     }
                 } catch (e) {
                     console.warn('Failed to parse stored templates:', e);
                 }
+            } else {
+                console.log('📦 No templates in localStorage');
             }
             
             // Then fetch from API
             const token = window.storage?.getToken?.();
+            console.log('🔑 Token check:', token ? `Found (length: ${token.length})` : 'Not found');
             if (token) {
                 try {
                     console.log('📋 Fetching document collection templates from API...');
@@ -169,15 +177,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         }
                     });
                     
+                    console.log('📡 API Response status:', response.status, response.ok);
+                    
                     if (response.ok) {
                         const responseData = await response.json();
+                        console.log('📥 API Response data:', responseData);
                         // Handle different response formats: {templates: [...]} or {data: {templates: [...]}}
                         const apiTemplates = responseData?.templates || responseData?.data?.templates || [];
                         
                         console.log(`✅ Loaded ${apiTemplates.length} template(s) from API`, {
                             responseData,
                             apiTemplates,
-                            templatesCount: apiTemplates.length
+                            templatesCount: apiTemplates.length,
+                            firstTemplate: apiTemplates[0]
                         });
                         
                         // Merge API templates with local templates (API templates take precedence)
@@ -196,37 +208,42 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         });
                         
                         const mergedTemplates = Array.from(templateMap.values());
+                        console.log(`💾 Setting ${mergedTemplates.length} merged template(s) to state`);
                         setTemplates(mergedTemplates);
                         
                         // Update localStorage with merged templates
                         if (typeof window !== 'undefined') {
                             localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(mergedTemplates));
+                            console.log('💾 Templates saved to localStorage');
                         }
                     } else {
-                        console.warn('⚠️ Failed to fetch templates from API:', response.status, await response.text());
+                        const errorText = await response.text();
+                        console.warn('⚠️ Failed to fetch templates from API:', response.status, errorText);
                         // Keep using local templates if API fails
                     }
                 } catch (apiError) {
-                    console.warn('⚠️ Error fetching templates from API:', apiError);
+                    console.error('❌ Error fetching templates from API:', apiError);
                     // Keep using local templates if API fails
                 }
             } else {
                 console.log('📋 No auth token, using local templates only');
             }
         } catch (e) {
-            console.warn('Failed to load templates:', e);
+            console.error('❌ Failed to load templates:', e);
             setTemplates([]);
         }
     }, []);
     
     // Load templates on mount
     useEffect(() => {
+        console.log('🚀 MonthlyDocumentCollectionTracker: Loading templates on mount');
         loadTemplatesFromAPI();
     }, [loadTemplatesFromAPI]);
     
     // Reload templates when template modal opens
     useEffect(() => {
         if (showTemplateModal) {
+            console.log('📂 Template modal opened, reloading templates...');
             loadTemplatesFromAPI();
         }
     }, [showTemplateModal, loadTemplatesFromAPI]);
