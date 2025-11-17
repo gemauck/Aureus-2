@@ -221,8 +221,16 @@ const Dashboard = () => {
 
     // Get Calendar component (may be lazy loaded)
     const Calendar = window.Calendar || (() => <div>Loading calendar...</div>);
+    // Get MyProjectTasks component (may be lazy loaded)
+    const MyProjectTasks = window.MyProjectTasks || (() => <div>Loading tasks...</div>);
+    
     return (
         <div className="space-y-4">
+            {/* My Project Tasks Component */}
+            <div>
+                <MyProjectTasks />
+            </div>
+            
             {/* Calendar Component */}
             <div>
                 <Calendar />

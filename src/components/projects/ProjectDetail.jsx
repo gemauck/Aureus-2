@@ -1186,18 +1186,10 @@ function initializeProjectDetail() {
         console.log('  - hasDocumentCollectionProcess:', hasDocumentCollectionProcess);
         console.log('  - activeSection:', activeSection);
         
-        // View mode: 'checklist' or 'tracker'
-        const [viewMode, setViewMode] = useState(() => {
-            const saved = localStorage.getItem(`documentCollectionViewMode_${project.id}`);
-            return saved === 'tracker' ? 'tracker' : 'checklist';
-        });
-        
         // CRITICAL: Declare MonthlyDocumentCollectionTracker before hooks to avoid initialization errors
         const MonthlyDocumentCollectionTracker = window.MonthlyDocumentCollectionTracker;
-        const DocumentCollectionChecklist = window.DocumentCollectionChecklist;
         
         const [trackerReady, setTrackerReady] = useState(() => !!MonthlyDocumentCollectionTracker);
-        const [checklistReady, setChecklistReady] = useState(() => !!DocumentCollectionChecklist);
         const [loadAttempts, setLoadAttempts] = useState(0);
         const maxAttempts = 50; // 5 seconds (50 * 100ms)
         
@@ -1253,40 +1245,8 @@ function initializeProjectDetail() {
         console.log('  - trackerReady:', trackerReady);
         console.log('  - loadAttempts:', loadAttempts);
         
-        // Wait for checklist component to load
-        useEffect(() => {
-            if (checklistReady) return;
-            
-            const checkChecklist = () => {
-                if (window.DocumentCollectionChecklist && typeof window.DocumentCollectionChecklist === 'function') {
-                    console.log('✅ DocumentCollectionChecklist loaded!');
-                    setChecklistReady(true);
-                    return true;
-                }
-                return false;
-            };
-            
-            if (checkChecklist()) return;
-            
-            // Poll for component
-            const interval = setInterval(() => {
-                if (checkChecklist()) {
-                    clearInterval(interval);
-                }
-            }, 100);
-            
-            return () => clearInterval(interval);
-        }, [checklistReady]);
-        
-        // Save view mode preference
-        useEffect(() => {
-            if (project?.id) {
-                localStorage.setItem(`documentCollectionViewMode_${project.id}`, viewMode);
-            }
-        }, [viewMode, project?.id]);
-        
-        // Check if components are loaded based on view mode
-        if (viewMode === 'tracker' && (!trackerReady || !MonthlyDocumentCollectionTracker)) {
+        // Check if component is loaded
+        if (!trackerReady || !MonthlyDocumentCollectionTracker) {
             return (
                 <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
                     <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
@@ -1322,61 +1282,11 @@ function initializeProjectDetail() {
             );
         }
         
-        if (viewMode === 'checklist' && (!checklistReady || !DocumentCollectionChecklist)) {
-            return (
-                <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-                    <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading Checklist...</h3>
-                    <p className="text-sm text-gray-600">The Document Collection Checklist is loading...</p>
-                </div>
-            );
-        }
-        
         return (
-            <div className="space-y-4">
-                {/* View Mode Switcher */}
-                <div className="bg-white rounded-lg border border-gray-200 p-3">
-                    <div className="flex border border-gray-300 rounded-lg overflow-hidden">
-                        <button
-                            onClick={() => setViewMode('checklist')}
-                            className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
-                                viewMode === 'checklist'
-                                    ? 'bg-primary-600 text-white'
-                                    : 'bg-white text-gray-700 hover:bg-gray-50'
-                            }`}
-                        >
-                            <i className="fas fa-check-square mr-2"></i>
-                            Checklist
-                        </button>
-                        <button
-                            onClick={() => setViewMode('tracker')}
-                            className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
-                                viewMode === 'tracker'
-                                    ? 'bg-primary-600 text-white'
-                                    : 'bg-white text-gray-700 hover:bg-gray-50'
-                            }`}
-                        >
-                            <i className="fas fa-calendar-alt mr-2"></i>
-                            Monthly Tracker
-                        </button>
-                    </div>
-                </div>
-                
-                {/* Render selected view */}
-                {viewMode === 'checklist' && checklistReady && DocumentCollectionChecklist && (
-                    <DocumentCollectionChecklist
-                        project={project}
-                        onBack={() => setActiveSection('overview')}
-                    />
-                )}
-                
-                {viewMode === 'tracker' && trackerReady && MonthlyDocumentCollectionTracker && (
-                    <MonthlyDocumentCollectionTracker
-                        project={project}
-                        onBack={() => setActiveSection('overview')}
-                    />
-                )}
-            </div>
+            <MonthlyDocumentCollectionTracker
+                project={project}
+                onBack={() => setActiveSection('overview')}
+            />
         );
     };
 

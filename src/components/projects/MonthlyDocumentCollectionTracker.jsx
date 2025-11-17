@@ -138,247 +138,28 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // Template storage key
     const TEMPLATES_STORAGE_KEY = 'documentCollectionTemplates';
     
-    // Default checklist template structure
-    const getDefaultChecklistTemplate = () => ({
-        id: 'default-checklist-template',
-        name: 'Document Collection Checklist (Default)',
-        description: 'Standard document collection checklist with 7 files and all required documents',
-        isDefault: true,
-        sections: [
-            {
-                name: 'File 1',
-                description: '',
-                documents: [
-                    { name: 'Mining Right', description: '' },
-                    { name: 'CIPC Documents', description: '' },
-                    { name: 'Diesel Refund Registration', description: '' },
-                    { name: 'VAT Registration', description: '' },
-                    { name: 'Title Deed / Lease Agreement', description: '' },
-                    { name: 'Environmental Authorisations', description: '' },
-                    { name: 'Summary of Operations and Activities', description: '' },
-                    { name: 'Descriptions of Specialised Data Systems', description: '' },
-                    { name: 'File 1 Explanation', description: '' }
-                ]
-            },
-            {
-                name: 'File 2',
-                description: '',
-                documents: [
-                    { name: 'Fuel Supply Contract', description: '' },
-                    { name: 'Mining Contractors Contracts', description: '' },
-                    { name: 'Sale of Product Contracts', description: '' },
-                    { name: 'File 2 Explanation', description: '' }
-                ]
-            },
-            {
-                name: 'File 3',
-                description: '',
-                documents: [
-                    { name: 'Tank and Pump Configuration', description: '' },
-                    { name: 'Diagram of Fuel System', description: '' },
-                    { name: 'Photos of meter', description: '' },
-                    { name: 'Delivery Notes', description: '' },
-                    { name: 'Invoices', description: '' },
-                    { name: 'Remittance Advices', description: '' },
-                    { name: 'Proof of payments', description: '' },
-                    { name: 'Tank Reconcilliations', description: '' },
-                    { name: 'Photos of Meter Readings', description: '' },
-                    { name: 'Meter Readings', description: '' },
-                    { name: 'Calibration Certificates', description: '' },
-                    { name: 'Document', description: '' }
-                ]
-            },
-            {
-                name: 'File 4',
-                description: '',
-                documents: [
-                    { name: 'Asset Register - Combined Assets', description: '' },
-                    { name: 'Asset Register - Mining Assets', description: '' },
-                    { name: 'Asset Register - Non Mining Assets', description: '' },
-                    { name: 'Driver List', description: '' },
-                    { name: 'File 4 Explanation', description: '' }
-                ]
-            },
-            {
-                name: 'File 5',
-                description: '',
-                documents: [
-                    { name: 'Description and Literature of FMS', description: '' },
-                    { name: 'FMS Raw Data', description: '' },
-                    { name: 'Detailed Fuel Refund Report', description: '' },
-                    { name: 'Fuel Refund Logbook Per Asset', description: '' },
-                    { name: 'Claim Comparison [if applicable]', description: '' },
-                    { name: 'File 5 Explanation', description: '' }
-                ]
-            },
-            {
-                name: 'File 6',
-                description: '',
-                documents: [
-                    { name: 'Monthly Survey Reports', description: '' },
-                    { name: 'Production Reports', description: '' },
-                    { name: 'Asset Activity Reports', description: '' },
-                    { name: 'Asset Tagging Reports', description: '' },
-                    { name: 'Diesel Cost Component', description: '' },
-                    { name: 'Sales of Coal', description: '' },
-                    { name: 'Weighbridge Data', description: '' },
-                    { name: 'Contractor Invoices', description: '' },
-                    { name: 'Contractor Remittances', description: '' },
-                    { name: 'Contractor Proof of payment', description: '' },
-                    { name: 'File 6 Explanation', description: '' }
-                ]
-            },
-            {
-                name: 'File 7',
-                description: '',
-                documents: [
-                    { name: 'Annual Financial Statements', description: '' },
-                    { name: 'Management Accounts', description: '' },
-                    { name: 'Any deviations (theft, loss etc)', description: '' },
-                    { name: 'Fuel Caps Exceeded', description: '' },
-                    { name: 'VAT 201 - Monthly', description: '' },
-                    { name: 'File 7 Explanation', description: '' }
-                ]
-            }
-        ],
-        createdAt: new Date().toISOString(),
-        createdBy: 'System',
-        updatedAt: new Date().toISOString(),
-        updatedBy: 'System'
-    });
-    
-    // Load templates from database
+    // Load templates from localStorage
     useEffect(() => {
-        console.log('📋 Template loading useEffect triggered');
-        console.log('📋 Storage available:', !!storage);
-        console.log('📋 Project ID:', project?.id);
-        
-        // Only load if we have storage and project
-        if (!storage) {
-            console.warn('⚠️ Storage not available, skipping template load');
-            return;
-        }
-        
-        const loadTemplates = async () => {
-            try {
-                console.log('📋 Loading templates from database...');
-                const token = storage?.getToken?.() || '';
-                
-                if (!token) {
-                    console.warn('⚠️ No auth token found, cannot load templates from database');
-                    throw new Error('No authentication token');
-                }
-                
-                console.log('📋 Fetching from /api/document-collection-templates...');
-                const response = await fetch('/api/document-collection-templates', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-                
-                console.log('📋 Template API response status:', response.status);
-                
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('❌ Template API error:', response.status, errorText);
-                    throw new Error(`Failed to load templates: ${response.status} - ${errorText}`);
-                }
-                
-                const data = await response.json();
-                console.log('📋 Template API response data:', data);
-                let dbTemplates = data.templates || data.data?.templates || [];
-                
-                console.log(`📋 Loaded ${dbTemplates.length} templates from database`);
-                
-                // Check if default template exists
-                const defaultTemplateData = getDefaultChecklistTemplate();
-                const hasDefaultTemplate = dbTemplates.some(t => 
-                    t.isDefault === true || 
-                    t.name === defaultTemplateData.name ||
-                    t.id === 'default-checklist-template'
-                );
-                
-                if (!hasDefaultTemplate) {
-                    console.log('📋 Default template not found, creating in database...');
-                    // Create default template in database
-                    try {
-                        const createResponse = await fetch('/api/document-collection-templates', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${token}`
-                            },
-                            body: JSON.stringify({
-                                name: defaultTemplateData.name,
-                                description: defaultTemplateData.description,
-                                sections: defaultTemplateData.sections,
-                                isDefault: true
-                            })
-                        });
-                        
-                        if (createResponse.ok) {
-                            const created = await createResponse.json();
-                            const newTemplate = created.template || created.data?.template || created;
-                            dbTemplates = [newTemplate, ...dbTemplates];
-                            console.log('✅ Default template created in database');
-                        } else {
-                            console.warn('⚠️ Failed to create default template in database, using local fallback');
-                            dbTemplates = [defaultTemplateData, ...dbTemplates];
-                        }
-                    } catch (createError) {
-                        console.error('❌ Error creating default template:', createError);
-                        dbTemplates = [defaultTemplateData, ...dbTemplates];
-                    }
-                }
-                
-                // Cache in localStorage for offline access
-                try {
-                    localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(dbTemplates));
-                } catch (cacheError) {
-                    console.warn('⚠️ Failed to cache templates in localStorage:', cacheError);
-                }
-                
-                console.log(`📋 Setting templates state with ${dbTemplates.length} template(s)`);
-                setTemplates(dbTemplates);
-            } catch (error) {
-                console.error('❌ Failed to load templates from database:', error);
-                // Fallback to localStorage
-                try {
-                    const storedTemplates = localStorage.getItem(TEMPLATES_STORAGE_KEY);
-                    if (storedTemplates) {
-                        const parsed = JSON.parse(storedTemplates);
-                        if (Array.isArray(parsed) && parsed.length > 0) {
-                            console.log('📋 Using cached templates from localStorage');
-                            setTemplates(parsed);
-                            return;
-                        }
-                    }
-                } catch (e) {
-                    console.warn('⚠️ Failed to load from localStorage:', e);
-                }
-                
-                // Last resort: use default template
-                const defaultTemplate = getDefaultChecklistTemplate();
-                console.log('📋 Using default template as fallback');
-                setTemplates([defaultTemplate]);
-            }
-        };
-        
-        loadTemplates();
-    }, []);
-    
-    // Save templates to database and localStorage
-    const saveTemplates = async (templatesToSave) => {
         if (typeof window !== 'undefined') {
             try {
-                // Update state immediately
-                setTemplates(templatesToSave);
-                
-                // Cache in localStorage
+                const storedTemplates = localStorage.getItem(TEMPLATES_STORAGE_KEY);
+                if (storedTemplates) {
+                    const parsed = JSON.parse(storedTemplates);
+                    setTemplates(Array.isArray(parsed) ? parsed : []);
+                }
+            } catch (e) {
+                console.warn('Failed to load templates:', e);
+                setTemplates([]);
+            }
+        }
+    }, []);
+    
+    // Save templates to localStorage
+    const saveTemplates = (templatesToSave) => {
+        if (typeof window !== 'undefined') {
+            try {
                 localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(templatesToSave));
-                
-                // Note: Individual template saves are handled by handleSaveTemplate
-                // This function is mainly for state updates and caching
+                setTemplates(templatesToSave);
             } catch (e) {
                 console.error('Failed to save templates:', e);
             }
@@ -896,129 +677,50 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     // Template Management Functions
     const handleCreateTemplate = () => {
-        console.log('📋 Opening template modal. Current templates:', templates.length);
-        console.log('📋 Templates state:', templates);
         setEditingTemplate(null);
         setShowTemplateModal(true);
     };
 
     const handleEditTemplate = (template) => {
-        // Prevent editing of default template
-        if (template.isDefault || template.id === 'default-checklist-template') {
-            alert('The default checklist template cannot be edited. You can create a new template based on it.');
-            return;
-        }
-        
         setEditingTemplate(template);
         setShowTemplateModal(true);
     };
 
-    const handleDeleteTemplate = async (templateId) => {
-        // Check if it's a default template
-        const template = templates.find(t => t.id === templateId);
-        if (template && (template.isDefault || template.id === 'default-checklist-template')) {
-            alert('The default checklist template cannot be deleted.');
-            return;
-        }
-        
-        if (!confirm('Delete this template? This action cannot be undone.')) {
-            return;
-        }
-        
-        try {
-            const token = storage?.getToken?.() || '';
-            const response = await fetch(`/api/document-collection-templates/${templateId}`, {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-            
-            if (!response.ok) {
-                throw new Error('Failed to delete template');
-            }
-            
-            // Update local state
+    const handleDeleteTemplate = (templateId) => {
+        if (confirm('Delete this template? This action cannot be undone.')) {
             const updatedTemplates = templates.filter(t => t.id !== templateId);
-            await saveTemplates(updatedTemplates);
-            
-            console.log('✅ Template deleted from database');
-        } catch (error) {
-            console.error('❌ Error deleting template:', error);
-            alert('Failed to delete template: ' + error.message);
+            saveTemplates(updatedTemplates);
         }
     };
 
-    const handleSaveTemplate = async (templateData) => {
+    const handleSaveTemplate = (templateData) => {
         const currentUser = getCurrentUser();
-        const token = storage?.getToken?.() || '';
+        let updatedTemplates;
         
-        try {
-            if (editingTemplate && editingTemplate.id) {
-                // Update existing template in database
-                const response = await fetch(`/api/document-collection-templates/${editingTemplate.id}`, {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        name: templateData.name,
-                        description: templateData.description || '',
-                        sections: templateData.sections || []
-                    })
-                });
-                
-                if (!response.ok) {
-                    throw new Error('Failed to update template');
-                }
-                
-                const data = await response.json();
-                const updatedTemplate = data.template || data.data?.template || data;
-                
-                // Update local state
-                const updatedTemplates = templates.map(t => 
-                    t.id === editingTemplate.id ? updatedTemplate : t
-                );
-                await saveTemplates(updatedTemplates);
-                
-                console.log('✅ Template updated in database');
-            } else {
-                // Create new template in database
-                const response = await fetch('/api/document-collection-templates', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({
-                        name: templateData.name,
-                        description: templateData.description || '',
-                        sections: templateData.sections || [],
-                        isDefault: false
-                    })
-                });
-                
-                if (!response.ok) {
-                    throw new Error('Failed to create template');
-                }
-                
-                const data = await response.json();
-                const newTemplate = data.template || data.data?.template || data;
-                
-                // Update local state
-                const updatedTemplates = [...templates, newTemplate];
-                await saveTemplates(updatedTemplates);
-                
-                console.log('✅ Template created in database');
-            }
-            
-            setEditingTemplate(null);
-            setShowTemplateList(true);
-        } catch (error) {
-            console.error('❌ Error saving template:', error);
-            alert('Failed to save template: ' + error.message);
+        if (editingTemplate) {
+            // Update existing template
+            updatedTemplates = templates.map(t => 
+                t.id === editingTemplate.id 
+                    ? { ...t, ...templateData, updatedAt: new Date().toISOString(), updatedBy: currentUser.name || currentUser.email }
+                    : t
+            );
+        } else {
+            // Create new template
+            const newTemplate = {
+                id: Date.now(),
+                ...templateData,
+                createdAt: new Date().toISOString(),
+                createdBy: currentUser.name || currentUser.email,
+                updatedAt: new Date().toISOString(),
+                updatedBy: currentUser.name || currentUser.email
+            };
+            updatedTemplates = [...templates, newTemplate];
         }
+        
+        saveTemplates(updatedTemplates);
+        setEditingTemplate(null);
+        setShowTemplateList(true);
+        // Don't close modal, just go back to list view
     };
 
     const handleApplyTemplate = async (template, targetYear) => {
@@ -2669,78 +2371,21 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     </button>
                                 </div>
                                 
-                                {(() => {
-                                    console.log('📋 Rendering template list. Templates count:', templates.length);
-                                    console.log('📋 Templates:', templates);
-                                    return null;
-                                })()}
-                                
                                 {templates.length === 0 ? (
                                     <div className="text-center py-8 text-gray-400">
                                         <i className="fas fa-layer-group text-3xl mb-2 opacity-50"></i>
                                         <p className="text-sm">No templates yet</p>
                                         <p className="text-xs mt-1">Create your first template to get started</p>
-                                        <button
-                                            onClick={async () => {
-                                                // Force create default template in database
-                                                try {
-                                                    const defaultTemplateData = getDefaultChecklistTemplate();
-                                                    const token = storage?.getToken?.() || '';
-                                                    const response = await fetch('/api/document-collection-templates', {
-                                                        method: 'POST',
-                                                        headers: {
-                                                            'Content-Type': 'application/json',
-                                                            'Authorization': `Bearer ${token}`
-                                                        },
-                                                        body: JSON.stringify({
-                                                            name: defaultTemplateData.name,
-                                                            description: defaultTemplateData.description,
-                                                            sections: defaultTemplateData.sections,
-                                                            isDefault: true
-                                                        })
-                                                    });
-                                                    
-                                                    if (response.ok) {
-                                                        const data = await response.json();
-                                                        const newTemplate = data.template || data.data?.template || data;
-                                                        const updatedTemplates = [newTemplate, ...templates];
-                                                        await saveTemplates(updatedTemplates);
-                                                        console.log('✅ Default template created in database');
-                                                    } else {
-                                                        throw new Error('Failed to create template');
-                                                    }
-                                                } catch (error) {
-                                                    console.error('❌ Error creating default template:', error);
-                                                    alert('Failed to create default template: ' + error.message);
-                                                }
-                                            }}
-                                            className="mt-3 px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
-                                        >
-                                            <i className="fas fa-plus mr-1"></i>
-                                            Create Default Template
-                                        </button>
                                     </div>
                                 ) : (
                                     <div className="space-y-2">
                                         {templates.map(template => {
                                             const totalDocs = template.sections?.reduce((sum, s) => sum + (s.documents?.length || 0), 0) || 0;
-                                            const isDefault = template.isDefault === true || template.id === 'default-checklist-template';
                                             return (
-                                                <div key={template.id} className={`border rounded-lg p-3 transition-colors ${
-                                                    isDefault 
-                                                        ? 'border-primary-300 bg-primary-50 hover:bg-primary-100' 
-                                                        : 'border-gray-200 bg-gray-50 hover:bg-gray-100'
-                                                }`}>
+                                                <div key={template.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
                                                     <div className="flex justify-between items-start">
                                                         <div className="flex-1">
-                                                            <div className="flex items-center gap-2 mb-1">
-                                                                <h3 className="text-sm font-semibold text-gray-900">{template.name}</h3>
-                                                                {isDefault && (
-                                                                    <span className="px-1.5 py-0.5 text-[10px] font-medium bg-primary-600 text-white rounded">
-                                                                        Default
-                                                                    </span>
-                                                                )}
-                                                            </div>
+                                                            <h3 className="text-sm font-semibold text-gray-900 mb-1">{template.name}</h3>
                                                             {template.description && (
                                                                 <p className="text-xs text-gray-600 mb-2">{template.description}</p>
                                                             )}
@@ -2752,32 +2397,30 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                                 )}
                                                             </div>
                                                         </div>
-                                                        {!isDefault && (
-                                                            <div className="flex items-center gap-1 ml-3">
-                                                                <button
-                                                                    onClick={() => {
-                                                                        setEditingTemplate(template);
-                                                                        setShowTemplateList(false);
-                                                                        setTemplateFormData({
-                                                                            name: template.name,
-                                                                            description: template.description || '',
-                                                                            sections: template.sections || []
-                                                                        });
-                                                                    }}
-                                                                    className="px-2 py-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
-                                                                    title="Edit template"
-                                                                >
-                                                                    <i className="fas fa-edit"></i>
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleDeleteTemplate(template.id)}
-                                                                    className="px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
-                                                                    title="Delete template"
-                                                                >
-                                                                    <i className="fas fa-trash"></i>
-                                                                </button>
-                                                            </div>
-                                                        )}
+                                                        <div className="flex items-center gap-1 ml-3">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setEditingTemplate(template);
+                                                                    setShowTemplateList(false);
+                                                                    setTemplateFormData({
+                                                                        name: template.name,
+                                                                        description: template.description || '',
+                                                                        sections: template.sections || []
+                                                                    });
+                                                                }}
+                                                                className="px-2 py-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                                                                title="Edit template"
+                                                            >
+                                                                <i className="fas fa-edit"></i>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteTemplate(template.id)}
+                                                                className="px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+                                                                title="Delete template"
+                                                            >
+                                                                <i className="fas fa-trash"></i>
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             );
