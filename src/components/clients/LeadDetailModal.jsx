@@ -249,6 +249,20 @@ const LeadDetailModal = ({
     // NOTE: No useEffect to watch ref values - refs don't trigger effects!
     // onEditingChange is called directly in onChange/onFocus/onBlur handlers instead
     
+    const parseProposalsArray = (value) => {
+        if (Array.isArray(value)) {
+            return value;
+        }
+        if (typeof value === 'string' && value.trim()) {
+            try {
+                return JSON.parse(value);
+            } catch (error) {
+                console.warn('⚠️ Failed to parse proposals JSON, returning empty array', error);
+            }
+        }
+        return [];
+    };
+    
     // Update tab when initialTab prop changes
     useEffect(() => {
         // If user tries to access proposals tab but is not admin, default to overview
@@ -375,6 +389,33 @@ const LeadDetailModal = ({
         lastProcessedLeadRef.current = lead;
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [lead?.id]); // Only watch lead.id, not entire lead object - matches Manufacturing pattern
+    
+    // Ensure proposals from latest lead fetch are synced even when lead ID stays the same
+    useEffect(() => {
+        if (!lead || isSavingProposalsRef.current || isCreatingProposalRef.current) {
+            return;
+        }
+        
+        const fetchedProposals = parseProposalsArray(lead.proposals);
+        if (!fetchedProposals.length) {
+            return;
+        }
+        
+        setFormData(prev => {
+            const currentProposals = Array.isArray(prev.proposals) ? prev.proposals : [];
+            if (currentProposals.length > 0) {
+                return prev;
+            }
+            
+            console.log('🔄 Syncing proposals from fetched lead data', {
+                fetchedCount: fetchedProposals.length,
+                currentCount: currentProposals.length,
+                leadId: lead.id
+            });
+            
+            return { ...prev, proposals: fetchedProposals };
+        });
+    }, [lead?.proposals]);
     
     // Track previous lead ID to detect when a new lead gets an ID after save
     const previousLeadIdRef = useRef(lead?.id || null);

@@ -209,6 +209,12 @@ async function handler(req, res) {
         })
         console.log('🗑️ Deleted invoices:', invoicesDeleted.count)
         
+        // Delete sales orders
+        const salesOrdersDeleted = await prisma.salesOrder.deleteMany({
+          where: { clientId: id }
+        })
+        console.log('🗑️ Deleted sales orders:', salesOrdersDeleted.count)
+        
         // Update projects to remove client reference (set clientId to null)
         const projectsUpdated = await prisma.project.updateMany({
           where: { clientId: id },
@@ -216,14 +222,29 @@ async function handler(req, res) {
         })
         console.log('🔄 Updated projects (removed client reference):', projectsUpdated.count)
         
+        // Update service calls to remove client reference (set clientId to null) if ServiceCall model exists
+        let serviceCallsUpdated = { count: 0 }
+        try {
+          serviceCallsUpdated = await prisma.serviceCall.updateMany({
+            where: { clientId: id },
+            data: { clientId: null }
+          })
+          console.log('🔄 Updated service calls (removed client reference):', serviceCallsUpdated.count)
+        } catch (error) {
+          // ServiceCall model might not exist, ignore error
+          console.log('ℹ️ ServiceCall model not found or no service calls to update')
+        }
+        
+        // ClientNews, ClientTag, and StarredClient have onDelete: Cascade, so they'll be deleted automatically
         // Now delete the client
         await prisma.client.delete({ where: { id } })
         console.log('✅ Client deleted successfully:', id)
         return ok(res, { 
-          message: `Client deleted successfully. Also deleted ${opportunitiesDeleted.count} opportunities, ${invoicesDeleted.count} invoices, and updated ${projectsUpdated.count} projects.`
+          message: `Client deleted successfully. Also deleted ${opportunitiesDeleted.count} opportunities, ${invoicesDeleted.count} invoices, ${salesOrdersDeleted.count} sales orders, and updated ${projectsUpdated.count} projects.`
         })
       } catch (dbError) {
         console.error('❌ Database error deleting client:', dbError)
+        console.error('❌ Full error details:', JSON.stringify(dbError, null, 2))
         return serverError(res, 'Failed to delete client', dbError.message)
       }
     }
