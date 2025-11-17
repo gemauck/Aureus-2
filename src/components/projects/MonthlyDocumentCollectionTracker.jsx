@@ -2762,18 +2762,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                             {parsedTemplates.map(template => {
                                             // Ensure sections is an array and safely calculate totalDocs
                                             const sections = Array.isArray(template.sections) ? template.sections : [];
-                                            const sectionsCount = (() => {
-                                                const count = Number(sections.length);
-                                                return Number.isNaN(count) ? 0 : count;
-                                            })();
+                                            // Double-check length is a valid number
+                                            const lengthValue = sections && typeof sections.length === 'number' && !Number.isNaN(sections.length) ? sections.length : 0;
+                                            const sectionsCount = safeNumber(lengthValue);
                                             const totalDocs = (() => {
+                                                if (!Array.isArray(sections) || sections.length === 0) return 0;
                                                 const total = sections.reduce((sum, s) => {
-                                                    const docCount = Array.isArray(s?.documents) ? Number(s.documents.length) : 0;
-                                                    const safeSum = Number(sum) || 0;
-                                                    const safeDocCount = Number.isNaN(docCount) ? 0 : docCount;
-                                                    return safeSum + safeDocCount;
+                                                    if (!s || !Array.isArray(s.documents)) return safeNumber(sum);
+                                                    const docLength = s.documents && typeof s.documents.length === 'number' && !Number.isNaN(s.documents.length) ? s.documents.length : 0;
+                                                    const docCount = safeNumber(docLength);
+                                                    return safeNumber(sum) + docCount;
                                                 }, 0);
-                                                return Number.isNaN(total) ? 0 : total;
+                                                return safeNumber(total);
                                             })();
                                             return (
                                                 <div key={template.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
