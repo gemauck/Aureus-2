@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback } from '../react-window.js';
-
-// For now, we'll still use window dependencies until we migrate services
-const storage = typeof window !== 'undefined' ? window.storage : null;
+// Get React hooks from window
+const { useState, useEffect, useRef, useCallback } = React;
+const storage = window.storage;
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
 
-export function MonthlyDocumentCollectionTracker({ project, onBack }) {
+const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth(); // 0-11
     
@@ -20,6 +19,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
     
     const tableRef = useRef(null);
     const monthRefs = useRef({});
+    const hasInitialScrolled = useRef(false);
 
     const months = [
         'January', 'February', 'March', 'April', 'May', 'June',
@@ -92,46 +92,30 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         return [];
     };
     
-    // CRITICAL: Declare refs BEFORE useState that uses them
-    const isInitialMount = useRef(true);
-    const hasInitializedRef = useRef(false);
-    const lastLocalUpdateRef = useRef(Date.now());
+    // Refs for state management
+    const previousProjectIdRef = useRef(project?.id);
+    const editingSectionIdRef = useRef(null);
     const isSavingRef = useRef(false);
     const debouncedSaveTimeoutRef = useRef(null);
-    const previousDocumentSectionsRef = useRef(project?.documentSections);
-    const previousProjectIdRef = useRef(project?.id);
-    const editingSectionIdRef = useRef(null); // Ref to store current editingSectionId
-    const documentCollectionProjectIdRef = useRef(project?.id); // Track project ID for LiveDataSync management
     
-    // Initialize sections from props or localStorage
+    // Version-based conflict resolution (best practice instead of time windows)
+    const [localVersion, setLocalVersion] = useState(0);
+    const serverVersionRef = useRef(0);
+    
+    // Initialize sections from localStorage or props (pure initialization)
+    const getStorageKey = () => `documentSections_${project?.id}`;
+    
     const [sections, setSections] = useState(() => {
         console.log('📋 Initializing sections from project.documentSections:', project.documentSections);
         
-        // Check localStorage first for saved sections (persists across sessions)
-        const storageKey = `documentSections_${project?.id}`;
+        // Check localStorage first for saved sections
+        const storageKey = getStorageKey();
         try {
-            // Try localStorage first (persists across sessions)
-            const savedSections = localStorage.getItem(storageKey);
-            if (savedSections) {
-                const parsed = JSON.parse(savedSections);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    console.log('📋 Using saved sections from localStorage:', parsed.length, 'sections');
-                    return parsed;
-                }
-            }
-            // Fallback to sessionStorage for backward compatibility
-            const sessionSections = sessionStorage.getItem(storageKey);
-            if (sessionSections) {
-                const parsed = JSON.parse(sessionSections);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    console.log('📋 Using saved sections from sessionStorage (fallback):', parsed.length, 'sections');
-                    // Migrate to localStorage
-                    try {
-                        localStorage.setItem(storageKey, sessionSections);
-                        console.log('📦 Migrated sections from sessionStorage to localStorage');
-                    } catch (e) {
-                        console.warn('Failed to migrate to localStorage:', e);
-                    }
+            const savedData = localStorage.getItem(storageKey);
+            if (savedData) {
+                const parsed = JSON.parse(savedData);
+                if (Array.isArray(parsed)) {
+                    console.log('🛡️ Using saved sections from localStorage:', parsed.length, 'sections');
                     return parsed;
                 }
             }
@@ -150,28 +134,121 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
     const [showApplyTemplateModal, setShowApplyTemplateModal] = useState(false);
     const [editingTemplate, setEditingTemplate] = useState(null);
     const [templates, setTemplates] = useState([]);
-    const [hoverCommentCell, setHoverCommentCell] = useState(null); // Track which cell's popup is open
-    const [quickComment, setQuickComment] = useState(''); // For quick comment input
-    const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 }); // Store popup position
-    const commentPopupContainerRef = useRef(null); // Ref for comment popup scrollable container
-    const isInteractingRef = useRef(false); // Track if user is interacting with status/comment controls
+    
+    // Template storage key
     const TEMPLATES_STORAGE_KEY = 'documentCollectionTemplates';
-
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            try {
-                const storedTemplates = localStorage.getItem(TEMPLATES_STORAGE_KEY);
-                if (storedTemplates) {
-                    const parsed = JSON.parse(storedTemplates);
-                    setTemplates(Array.isArray(parsed) ? parsed : []);
+    
+    // Load templates from API and localStorage (reusable function)
+    const loadTemplatesFromAPI = useCallback(async () => {
+        console.log('🔄 loadTemplatesFromAPI called');
+        if (typeof window === 'undefined') {
+            console.log('⚠️ Window undefined, skipping template load');
+            return;
+        }
+        
+        try {
+            // First, load from localStorage for instant UI
+            const storedTemplates = localStorage.getItem(TEMPLATES_STORAGE_KEY);
+            let localTemplates = [];
+            if (storedTemplates) {
+                try {
+                    localTemplates = JSON.parse(storedTemplates);
+                    console.log(`📦 Found ${localTemplates.length} template(s) in localStorage`);
+                    if (Array.isArray(localTemplates)) {
+                        setTemplates(localTemplates);
+                    }
+                } catch (e) {
+                    console.warn('Failed to parse stored templates:', e);
                 }
-            } catch (e) {
-                console.warn('Failed to load templates:', e);
-                setTemplates([]);
+            } else {
+                console.log('📦 No templates in localStorage');
             }
+            
+            // Then fetch from API
+            const token = window.storage?.getToken?.();
+            console.log('🔑 Token check:', token ? `Found (length: ${token.length})` : 'Not found');
+            if (token) {
+                try {
+                    console.log('📋 Fetching document collection templates from API...');
+                    const response = await fetch('/api/document-collection-templates', {
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    console.log('📡 API Response status:', response.status, response.ok);
+                    
+                    if (response.ok) {
+                        const responseData = await response.json();
+                        console.log('📥 API Response data:', responseData);
+                        // Handle different response formats: {templates: [...]} or {data: {templates: [...]}}
+                        const apiTemplates = responseData?.templates || responseData?.data?.templates || [];
+                        
+                        console.log(`✅ Loaded ${apiTemplates.length} template(s) from API`, {
+                            responseData,
+                            apiTemplates,
+                            templatesCount: apiTemplates.length,
+                            firstTemplate: apiTemplates[0]
+                        });
+                        
+                        // Merge API templates with local templates (API templates take precedence)
+                        const templateMap = new Map();
+                        
+                        // Add local templates first
+                        if (Array.isArray(localTemplates)) {
+                            localTemplates.forEach(t => {
+                                if (t.id) templateMap.set(t.id, t);
+                            });
+                        }
+                        
+                        // Overwrite with API templates (they're the source of truth)
+                        apiTemplates.forEach(t => {
+                            if (t.id) templateMap.set(t.id, t);
+                        });
+                        
+                        const mergedTemplates = Array.from(templateMap.values());
+                        console.log(`💾 Setting ${mergedTemplates.length} merged template(s) to state`);
+                        setTemplates(mergedTemplates);
+                        
+                        // Update localStorage with merged templates
+                        if (typeof window !== 'undefined') {
+                            localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(mergedTemplates));
+                            console.log('💾 Templates saved to localStorage');
+                        }
+                    } else {
+                        const errorText = await response.text();
+                        console.warn('⚠️ Failed to fetch templates from API:', response.status, errorText);
+                        // Keep using local templates if API fails
+                    }
+                } catch (apiError) {
+                    console.error('❌ Error fetching templates from API:', apiError);
+                    // Keep using local templates if API fails
+                }
+            } else {
+                console.log('📋 No auth token, using local templates only');
+            }
+        } catch (e) {
+            console.error('❌ Failed to load templates:', e);
+            setTemplates([]);
         }
     }, []);
-
+    
+    // Load templates on mount
+    useEffect(() => {
+        console.log('🚀 MonthlyDocumentCollectionTracker: Loading templates on mount');
+        loadTemplatesFromAPI();
+    }, [loadTemplatesFromAPI]);
+    
+    // Reload templates when template modal opens
+    useEffect(() => {
+        if (showTemplateModal) {
+            console.log('📂 Template modal opened, reloading templates...');
+            loadTemplatesFromAPI();
+        }
+    }, [showTemplateModal, loadTemplatesFromAPI]);
+    
+    // Save templates to localStorage
     const saveTemplates = (templatesToSave) => {
         if (typeof window !== 'undefined') {
             try {
@@ -182,180 +259,100 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
             }
         }
     };
-
-    const ApplyTemplateModal = () => {
-        const [selectedTemplateId, setSelectedTemplateId] = useState(null);
-        const [targetYear, setTargetYear] = useState(selectedYear);
-
-        const handleApplyAction = () => {
-            if (!selectedTemplateId) {
-                alert('Please select a template');
-                return;
+    
+    // BEST PRACTICE: Separate localStorage persistence from state updates
+    // Persist sections to localStorage whenever they change (pure side effect)
+    useEffect(() => {
+        if (!project?.id || typeof window === 'undefined') return;
+        
+        const storageKey = getStorageKey();
+        try {
+            localStorage.setItem(storageKey, JSON.stringify(sections));
+            console.log('💾 Persisted sections to localStorage:', sections.length, 'sections');
+        } catch (e) {
+            console.warn('Failed to persist sections to localStorage:', e);
+        }
+    }, [sections, project?.id]); // Pure side effect - no logic mixed with state
+    
+    // Initialize year when project ID changes
+    useEffect(() => {
+        if (!project?.id || typeof window === 'undefined') return;
+        
+        const projectIdChanged = previousProjectIdRef.current !== project.id;
+        if (!projectIdChanged && previousProjectIdRef.current !== null) return;
+        
+        previousProjectIdRef.current = project.id;
+        
+        const storageKey = `${YEAR_STORAGE_PREFIX}${project.id}`;
+        const storedYear = localStorage.getItem(storageKey);
+        const parsedYear = storedYear ? parseInt(storedYear, 10) : NaN;
+        if (!Number.isNaN(parsedYear)) {
+            if (parsedYear !== selectedYear) {
+                console.log('📅 Restoring selected year from localStorage:', parsedYear);
+                setSelectedYear(parsedYear);
             }
-            const template = templates.find(t => t.id === selectedTemplateId);
-            if (!template) {
-                alert('Template not found');
-                return;
-            }
-            handleApplyTemplate(template, targetYear);
-        };
+        } else {
+            console.log('📅 No stored year found, using current year:', currentYear);
+            setSelectedYear(currentYear);
+        }
+    }, [project?.id]);
+    
+    // Dirty field tracking for collaboration
+    const [dirtyFields, setDirtyFields] = useState(new Set());
+    const [lastSyncData, setLastSyncData] = useState(null);
 
-        return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
-                        <h2 className="text-base font-semibold text-gray-900">
-                            Apply Template
-                        </h2>
-                        <button 
-                            onClick={() => setShowApplyTemplateModal(false)} 
-                            className="text-gray-400 hover:text-gray-600 p-1"
-                        >
-                            <i className="fas fa-times text-sm"></i>
-                        </button>
-                    </div>
-
-                    <div className="p-4 space-y-4">
-                        {templates.length === 0 ? (
-                            <div className="text-center py-4">
-                                <p className="text-sm text-gray-600 mb-3">No templates available</p>
-                                <button
-                                    onClick={() => {
-                                        setShowApplyTemplateModal(false);
-                                        handleCreateTemplate();
-                                    }}
-                                    className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
-                                >
-                                    Create Template
-                                </button>
-                            </div>
-                        ) : (
-                            <>
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                                        Select Template *
-                                    </label>
-                                    <select
-                                        value={selectedTemplateId || ''}
-                                        onChange={(e) => setSelectedTemplateId(e.target.value ? parseInt(e.target.value) : null)}
-                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                    >
-                                        <option value="">-- Select a template --</option>
-                                        {templates.map(template => (
-                                            <option key={template.id} value={template.id}>
-                                                {template.name} ({template.sections?.length || 0} sections)
-                                            </option>
-                                        ))}
-                                    </select>
-                                    {selectedTemplateId && (() => {
-                                        const template = templates.find(t => t.id === selectedTemplateId);
-                                        return template?.description ? (
-                                            <p className="mt-1 text-[10px] text-gray-500">{template.description}</p>
-                                        ) : null;
-                                    })()}
-                                </div>
-
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                                        Target Year
-                                    </label>
-                                    <select
-                                        value={targetYear}
-                                        onChange={(e) => setTargetYear(parseInt(e.target.value))}
-                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                    >
-                                        {yearOptions.map(year => (
-                                            <option key={year} value={year}>
-                                                {year}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    <p className="mt-1 text-[10px] text-gray-500">
-                                        Template will be applied to the selected year. Sections and documents will be added to the current collection.
-                                    </p>
-                                </div>
-
-                                {selectedTemplateId && (() => {
-                                    const template = templates.find(t => t.id === selectedTemplateId);
-                                    const totalDocs = template?.sections?.reduce((sum, s) => sum + (s.documents?.length || 0), 0) || 0;
-                                    return (
-                                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5">
-                                            <p className="text-[10px] font-medium text-blue-900 mb-1">Template Preview:</p>
-                                            <p className="text-[10px] text-blue-700">
-                                                • {template?.sections?.length || 0} sections<br/>
-                                                • {totalDocs} documents
-                                            </p>
-                                        </div>
-                                    );
-                                })()}
-
-                                <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowApplyTemplateModal(false)}
-                                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={handleApplyAction}
-                                        disabled={!selectedTemplateId}
-                                        className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        Apply Template
-                                    </button>
-                                </div>
-                            </>
-                        )}
-                    </div>
-                </div>
-            </div>
-        );
+    const handleYearChange = (year) => {
+        setSelectedYear(year);
+        if (project?.id && typeof window !== 'undefined') {
+            localStorage.setItem(`${YEAR_STORAGE_PREFIX}${project.id}`, String(year));
+        }
     };
 
-  // CRITICAL: Pause LiveDataSync completely when viewing/editing document collection
-  // This prevents any data sync from overwriting user input while they're working
-  // Track the project ID to detect if we're actually leaving the page
+
+  // Smart Sync: Only update fields that aren't currently being edited
+  // This allows real-time collaboration while preventing overwrites
   useEffect(() => {
-    const currentProjectId = project?.id;
-    const previousProjectId = documentCollectionProjectIdRef.current;
+    console.log('🔄 Smart Sync enabled - will sync non-dirty fields only');
     
-    // Update the ref with current project ID
-    documentCollectionProjectIdRef.current = currentProjectId;
+    // Resume LiveDataSync so we get updates
+    if (window.LiveDataSync && typeof window.LiveDataSync.resume === 'function') {
+      window.LiveDataSync.resume();
+    }
+
+    // Cleanup: pause on unmount
+    return () => {
+      if (window.LiveDataSync && typeof window.LiveDataSync.pause === 'function') {
+        window.LiveDataSync.pause();
+      }
+    };
+  }, []);
+  
+  // BEST PRACTICE: Single sync mechanism with version-based conflict resolution
+  useEffect(() => {
+    const newData = project?.documentSections;
+    if (!newData || newData === lastSyncData) return;
     
-    // Set global flag to indicate we're on document collection page
-    window._isOnDocumentCollectionPage = true;
-    console.log('🛑 Pausing LiveDataSync for document collection checklist - no sync while editing');
-    if (window.LiveDataSync && typeof window.LiveDataSync.pause === 'function') {
-      window.LiveDataSync.pause();
+    // Skip if user is actively editing
+    if (dirtyFields.size > 0) {
+      console.log('⏭️ Skipping sync - user has ' + dirtyFields.size + ' dirty field(s)');
+      return;
     }
     
-    // Cleanup: Only resume if we're actually leaving (project ID changed or flag cleared)
-    return () => {
-      // Capture the project ID at cleanup time
-      const projectIdAtCleanup = documentCollectionProjectIdRef.current;
-      
-      // Use a small delay to check if component is remounting (flag will be set again)
-      setTimeout(() => {
-        // Check if flag is still set (component remounted) or if project ID changed
-        const flagStillSet = window._isOnDocumentCollectionPage === true;
-        const currentProjectIdNow = documentCollectionProjectIdRef.current;
-        const projectChanged = currentProjectIdNow !== projectIdAtCleanup;
-        
-        // Only resume if flag is cleared (truly leaving) or project changed
-        if (!flagStillSet || projectChanged) {
-          console.log('▶️ Resuming LiveDataSync - user left document collection page');
-          window._isOnDocumentCollectionPage = false;
-          if (window.LiveDataSync && typeof window.LiveDataSync.resume === 'function') {
-            window.LiveDataSync.resume();
-          }
-        } else {
-          console.log('⏸️ Component remounting - keeping LiveDataSync paused');
-        }
-      }, 150);
-    };
-  }, [project?.id]); // Re-run when project ID changes
+    // Version-based conflict resolution (best practice)
+    const parsed = parseSections(newData);
+    const serverVersion = Date.parse(project.updatedAt || new Date().toISOString());
+    
+    // Only sync if server version is newer than local version
+    if (serverVersion > serverVersionRef.current || localVersion === 0) {
+      console.log('🔄 Syncing from server (' + parsed.length + ' sections)');
+      setSections(parsed);
+      serverVersionRef.current = serverVersion;
+    } else {
+      console.log('🛡️ Local version is newer - skipping sync to preserve user changes');
+    }
+    
+    setLastSyncData(newData);
+  }, [project?.documentSections, dirtyFields, localVersion]);
     const [editingSection, setEditingSection] = useState(null);
     const [editingDocument, setEditingDocument] = useState(null);
     const [editingSectionId, setEditingSectionId] = useState(null);
@@ -364,21 +361,23 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
     const [draggedDocument, setDraggedDocument] = useState(null);
     const [dragOverDocumentIndex, setDragOverDocumentIndex] = useState(null);
     const [isExporting, setIsExporting] = useState(false);
+    const [hoverCommentCell, setHoverCommentCell] = useState(null); // Track which cell's popup is open
+    const [quickComment, setQuickComment] = useState(''); // For quick comment input
+    const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 }); // Store popup position
+    const commentPopupContainerRef = useRef(null); // Ref for comment popup scrollable container
     
-    // Helper function to immediately save documentSections to database
+    // BEST PRACTICE: Save to database only (localStorage handled by separate useEffect)
     const immediatelySaveDocumentSections = async (sectionsToSave) => {
         try {
-            // Cancel any pending debounced saves to prevent overwriting
+            // Cancel any pending debounced saves
             if (debouncedSaveTimeoutRef.current) {
                 clearTimeout(debouncedSaveTimeoutRef.current);
                 debouncedSaveTimeoutRef.current = null;
-                console.log('🛑 Cancelled pending debounced save before immediate save');
             }
             
             isSavingRef.current = true;
-                                lastLocalUpdateRef.current = Date.now();
             
-            console.log('💾 Immediately saving document sections to database...');
+            console.log('💾 Saving document sections to database...');
             console.log('  - Project ID:', project.id);
             console.log('  - Sections count:', sectionsToSave.length);
             
@@ -390,9 +389,13 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                 documentSections: JSON.stringify(sectionsToSave)
             };
             
-            console.log('📦 Update payload:', updatePayload);
             const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
-            console.log('✅ Database save successful:', apiResponse);
+            console.log('✅ Database save successful');
+            
+            // Update version after successful save
+            const serverVersion = Date.parse(new Date().toISOString());
+            serverVersionRef.current = serverVersion;
+            setLocalVersion(prev => prev + 1);
             
             // Clear cache to ensure fresh data on reload
             if (window.DatabaseAPI._responseCache) {
@@ -404,106 +407,16 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                 });
                 cacheKeysToDelete.forEach(key => {
                     window.DatabaseAPI._responseCache.delete(key);
-                    console.log('🗑️ Cleared cache for:', key);
-                });
-                
-                // Also clear projects list cache
-                const projectsListCacheKeys = [];
-                window.DatabaseAPI._responseCache.forEach((value, key) => {
-                    if (key.includes('/projects') && !key.includes(`/projects/${project.id}`)) {
-                        projectsListCacheKeys.push(key);
-                    }
-                });
-                projectsListCacheKeys.forEach(key => {
-                    window.DatabaseAPI._responseCache.delete(key);
-                    console.log('🗑️ Cleared projects list cache:', key);
                 });
             }
             
-            // CRITICAL: Save to localStorage IMMEDIATELY to prevent overwrites
-            // This ensures that even if the component re-mounts or re-renders,
-            // it will use the saved sections instead of stale prop data
-            // localStorage persists across browser sessions, unlike sessionStorage which is cleared after ~4 hours
-            const storageKey = `documentSections_${project.id}`;
-            try {
-                localStorage.setItem(storageKey, JSON.stringify(sectionsToSave));
-                console.log('💾 Saved sections to localStorage:', sectionsToSave.length, 'sections');
-                // Also save to sessionStorage for fast access during current session
-                try {
-                    sessionStorage.setItem(storageKey, JSON.stringify(sectionsToSave));
-                } catch (e) {
-                    // Ignore sessionStorage errors - localStorage is primary
-                }
-            } catch (e) {
-                console.warn('Failed to save sections to localStorage:', e);
-                // Fallback to sessionStorage if localStorage fails
-                try {
-                    sessionStorage.setItem(storageKey, JSON.stringify(sectionsToSave));
-                    console.log('⚠️ Saved sections to sessionStorage (localStorage unavailable)');
-                } catch (e2) {
-                    console.warn('Failed to save sections to sessionStorage:', e2);
-                }
-            }
+            // Note: localStorage persistence is handled by separate useEffect
             
-            // Update localStorage for consistency
-            if (window.dataService && typeof window.dataService.getProjects === 'function') {
-                const savedProjects = await window.dataService.getProjects();
-                if (savedProjects) {
-                    const updatedProjects = savedProjects.map(p => {
-                        if (p.id === project.id) {
-                            return { ...p, documentSections: sectionsToSave };
-                        }
-                        return p;
-                    });
-                    if (window.dataService && typeof window.dataService.setProjects === 'function') {
-                        try {
-                            await window.dataService.setProjects(updatedProjects);
-                            console.log('✅ localStorage updated for consistency');
-                        } catch (saveError) {
-                            console.warn('Failed to save projects to dataService:', saveError);
-                        }
-                    }
-                }
-            }
-            
-            // CRITICAL: Update parent's viewingProject state so the project prop stays in sync
-            // This ensures that when ProjectDetail preserves project.documentSections,
-            // it preserves the correct, up-to-date sections (not stale data)
-            // We use window.updateViewingProject instead of dispatching projectUpdated event
-            // to avoid triggering unnecessary refreshes
-            if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                try {
-                    // Create updated project object with saved sections
-                    const updatedProject = {
-                        ...project,
-                        documentSections: JSON.stringify(sectionsToSave)
-                    };
-                    window.updateViewingProject(updatedProject);
-                    console.log('🔄 Updated parent viewingProject with saved sections');
-                } catch (updateError) {
-                    console.warn('Failed to update parent viewingProject:', updateError);
-                }
-            }
-            
-            // CRITICAL: Update previousDocumentSectionsRef to track the value we just saved
-            // This prevents LiveDataSync or other background refreshes from triggering a sync
-            // if they update the project prop with the same value we just saved
-            previousDocumentSectionsRef.current = JSON.stringify(sectionsToSave);
-            console.log('📝 Updated previousDocumentSectionsRef to match saved value');
-            
-            // DISABLED: Don't dispatch projectUpdated event - it causes parent to refresh
-            // which then triggers sync and overwrites user input
-            // Instead, we use window.updateViewingProject to update parent state directly
-            console.log('✅ Immediate save completed - parent viewingProject updated');
-            
-            // Reset saving flag after a delay
-            setTimeout(() => {
-                isSavingRef.current = false;
-            }, 1000);
-            } catch (error) {
-            console.error('❌ Error immediately saving document sections:', error);
             isSavingRef.current = false;
-            alert('Failed to save document sections: ' + error.message);
+        } catch (error) {
+            console.error('❌ Error saving document sections:', error);
+            isSavingRef.current = false;
+            throw error; // Re-throw for error handling in handlers
         }
     };
 
@@ -515,36 +428,12 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         yearOptions.push(i);
     }
 
-    // Status options with color progression from red to green (with dark mode support)
+    // Status options with color progression from red to green
     const statusOptions = [
-        { 
-            value: 'not-collected', 
-            label: 'Not Collected', 
-            color: 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-100', 
-            cellColor: 'bg-red-50 dark:bg-red-950',
-            textColor: 'text-red-800 dark:text-red-100'
-        },
-        { 
-            value: 'ongoing', 
-            label: 'Collection Ongoing', 
-            color: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-100', 
-            cellColor: 'bg-yellow-50 dark:bg-yellow-950',
-            textColor: 'text-yellow-800 dark:text-yellow-100'
-        },
-        { 
-            value: 'collected', 
-            label: 'Collected', 
-            color: 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-100', 
-            cellColor: 'bg-green-50 dark:bg-green-950',
-            textColor: 'text-green-800 dark:text-green-100'
-        },
-        { 
-            value: 'unavailable', 
-            label: 'Unavailable', 
-            color: 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200', 
-            cellColor: 'bg-gray-50 dark:bg-gray-900',
-            textColor: 'text-gray-800 dark:text-gray-200'
-        }
+        { value: 'not-collected', label: 'Not Collected', color: 'bg-red-400 text-white font-semibold', cellColor: 'bg-red-400 border-l-4 border-red-700 shadow-sm' },
+        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-yellow-400 text-white font-semibold', cellColor: 'bg-yellow-400 border-l-4 border-yellow-700 shadow-sm' },
+        { value: 'collected', label: 'Collected', color: 'bg-green-500 text-white font-semibold', cellColor: 'bg-green-500 border-l-4 border-green-700 shadow-sm' },
+        { value: 'unavailable', label: 'Unavailable', color: 'bg-gray-400 text-white font-semibold', cellColor: 'bg-gray-400 border-l-4 border-gray-700 shadow-sm' }
     ];
 
     // DISABLED: No automatic refresh on mount - only use data from props
@@ -552,10 +441,11 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
     // Data will be loaded from props when component mounts or project changes
     
     useEffect(() => {
-        // Scroll to working months after sections load and when year changes
-        if (sections.length > 0 && tableRef.current && selectedYear === currentYear) {
+        // Scroll to working months only on initial load
+        if (!hasInitialScrolled.current && sections.length > 0 && tableRef.current && selectedYear === currentYear) {
             setTimeout(() => {
                 scrollToWorkingMonths();
+                hasInitialScrolled.current = true;
             }, 100);
         }
     }, [sections, selectedYear]);
@@ -582,114 +472,32 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         }
     };
 
-    // Smart Sync: Sync from project prop when data changes, but protect user edits
-    // Uses version-based conflict resolution and dirty field tracking
+    // BEST PRACTICE: Handle project changes - reset version when switching projects
     useEffect(() => {
-        // Check if project ID changed (switching to different project)
         const projectIdChanged = previousProjectIdRef.current !== project?.id;
-        if (projectIdChanged) {
-            // Project changed - reset for new project
+        if (projectIdChanged && project?.id) {
             console.log('🔄 Project ID changed, resetting for new project');
-            hasInitializedRef.current = false;
-            isInitialMount.current = true;
-            previousProjectIdRef.current = project?.id;
-            previousDocumentSectionsRef.current = null;
-        }
-        
-        // Skip sync if user is actively editing (dirty fields)
-        if (isInteractingRef.current) {
-            console.log('⏭️ Skipping sync - user is actively editing');
-            return;
-        }
-        
-        // Skip if no project data
-        if (!project || project.documentSections === undefined) {
-            return;
-        }
-        
-        const currentPropValue = project.documentSections;
-        const lastSyncedValue = previousDocumentSectionsRef.current;
-        
-        // Skip if prop value hasn't changed
-        if (currentPropValue === lastSyncedValue || 
-            (currentPropValue && lastSyncedValue && 
-             JSON.stringify(parseSections(currentPropValue)) === JSON.stringify(parseSections(lastSyncedValue)))) {
-            return;
-        }
-        
-        // Parse new data from props
-        const parsed = parseSections(currentPropValue);
-        
-        // Smart sync: Only update if server data is newer or local state is empty
-        setSections(currentSections => {
-            // If local state is empty, always sync from props
-            if (currentSections.length === 0 && parsed.length > 0) {
-                console.log('🔄 Syncing sections from project prop:', parsed.length, 'sections');
-                previousDocumentSectionsRef.current = currentPropValue;
-                lastLocalUpdateRef.current = Date.now();
-                return parsed;
-            }
+            previousProjectIdRef.current = project.id;
+            setLocalVersion(0); // Reset version for new project
+            serverVersionRef.current = 0;
             
-            // If local state has data, check if server data is newer
-            // Compare timestamps if available
-            const serverTimestamp = project.updatedAt ? new Date(project.updatedAt).getTime() : 0;
-            const localTimestamp = lastLocalUpdateRef.current || 0;
-            
-            if (serverTimestamp > localTimestamp) {
-                console.log('🔄 Server data is newer, syncing from project prop:', parsed.length, 'sections');
-                previousDocumentSectionsRef.current = currentPropValue;
-                lastLocalUpdateRef.current = Date.now();
-                return parsed;
+            // Load from localStorage for new project
+            const storageKey = getStorageKey();
+            try {
+                const savedSections = localStorage.getItem(storageKey);
+                if (savedSections) {
+                    const parsed = JSON.parse(savedSections);
+                    if (Array.isArray(parsed)) {
+                        console.log('🛡️ Loaded sections from localStorage for new project:', parsed.length);
+                        setSections(parsed);
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to load sections from storage:', e);
             }
-            
-            // Local data is newer or same - keep local state
-            console.log('🛡️ Local data is newer or same - keeping local state');
-            return currentSections;
-        });
-        
-        // Mark as initialized after first sync
-        if (!hasInitializedRef.current) {
-            hasInitializedRef.current = true;
-            isInitialMount.current = false;
         }
-    }, [project?.id, project?.documentSections]); // Sync when project ID or documentSections changes
-
-    // Restore selected year from localStorage when project changes
-    useEffect(() => {
-        if (!project?.id || typeof window === 'undefined') {
-            return;
-        }
-        
-        // Only initialize year when project ID actually changes (not on every render)
-        const projectIdChanged = previousProjectIdRef.current !== project.id;
-        if (!projectIdChanged && previousProjectIdRef.current !== null) {
-            // Project ID hasn't changed, don't reset the year
-            return;
-        }
-        
-        const storageKey = `${YEAR_STORAGE_PREFIX}${project.id}`;
-        const storedYear = localStorage.getItem(storageKey);
-        const parsedYear = storedYear ? parseInt(storedYear, 10) : NaN;
-        if (!Number.isNaN(parsedYear)) {
-            // Restore from localStorage
-            if (parsedYear !== selectedYear) {
-                console.log('📅 Restoring selected year from localStorage:', parsedYear);
-                setSelectedYear(parsedYear);
-            }
-        } else {
-            // Only set to currentYear on initial load for this project (when no stored value)
-            // This prevents resetting the year when component re-renders
-            console.log('📅 No stored year found, using current year:', currentYear);
-            setSelectedYear(currentYear);
-        }
-    }, [project?.id]); // Only run when project ID changes
-
-    const handleYearChange = (year) => {
-        setSelectedYear(year);
-        if (project?.id && typeof window !== 'undefined') {
-            localStorage.setItem(`${YEAR_STORAGE_PREFIX}${project.id}`, String(year));
-        }
-    };
+    }, [project?.id]);
 
     // REMOVED: Debounced auto-save effect
     // NEW METHODOLOGY: Only save explicitly when user adds/edits/deletes sections or documents
@@ -882,8 +690,9 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
             setSections(currentSections => {
                 updatedSections = [...currentSections, newSection];
                 console.log('➕ Adding new section:', sectionData.name, 'Total sections:', updatedSections.length);
-                // Update last local update timestamp to protect this change
-                lastLocalUpdateRef.current = Date.now();
+                // ULTRA AGGRESSIVE: Mark as initialized IMMEDIATELY when adding section
+                hasInitializedRef.current = true;
+                console.log('🛑 ULTRA AGGRESSIVE: Marked initialized on section add - BLOCKING all future syncs');
                 return updatedSections;
             });
             
@@ -912,6 +721,54 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         }
     };
 
+    // BEST PRACTICE: Optimistic updates - update UI first, then persist
+    const handleDeleteSection = async (sectionId) => {
+        const currentUser = getCurrentUser();
+        const section = sections.find(s => s.id === sectionId);
+        if (!section) return;
+        
+        if (!confirm(`Delete section "${section.name}" and all its documents?`)) {
+            return;
+        }
+        
+        // Capture previous state for rollback
+        const previousSections = sections;
+        
+        // STEP 1: Optimistic update (pure state update, no side effects)
+        const updatedSections = sections.filter(s => s.id !== sectionId);
+        setSections(updatedSections);
+        setLocalVersion(prev => prev + 1); // Increment version to prevent sync override
+        
+        console.log('🗑️ Deleting section:', section.name, 'Remaining sections:', updatedSections.length);
+        
+        // STEP 2: Log to audit trail
+        if (window.AuditLogger) {
+            window.AuditLogger.log(
+                'delete',
+                'projects',
+                {
+                    action: 'Section Deleted',
+                    projectId: project.id,
+                    projectName: project.name,
+                    sectionName: section.name,
+                    documentsCount: section.documents?.length || 0
+                },
+                currentUser
+            );
+        }
+        
+        // STEP 3: Save to database (async - localStorage already saved by useEffect)
+        try {
+            await immediatelySaveDocumentSections(updatedSections);
+        } catch (error) {
+            // STEP 4: Rollback on error
+            console.error('Failed to delete section:', error);
+            setSections(previousSections); // Restore previous state
+            setLocalVersion(prev => Math.max(0, prev - 1)); // Rollback version
+            alert('Failed to delete section. Please try again.');
+        }
+    };
+
     // Template Management Functions
     const handleCreateTemplate = () => {
         setEditingTemplate(null);
@@ -935,12 +792,14 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         let updatedTemplates;
         
         if (editingTemplate) {
+            // Update existing template
             updatedTemplates = templates.map(t => 
                 t.id === editingTemplate.id 
                     ? { ...t, ...templateData, updatedAt: new Date().toISOString(), updatedBy: currentUser.name || currentUser.email }
                     : t
             );
         } else {
+            // Create new template
             const newTemplate = {
                 id: Date.now(),
                 ...templateData,
@@ -954,7 +813,8 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         
         saveTemplates(updatedTemplates);
         setEditingTemplate(null);
-        setShowTemplateModal(true);
+        setShowTemplateList(true);
+        // Don't close modal, just go back to list view
     };
 
     const handleApplyTemplate = async (template, targetYear) => {
@@ -963,28 +823,41 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
             return;
         }
 
+        // Get current user info
         const currentUser = getCurrentUser();
+        
+        // Update timestamp to prevent sync from overwriting
         lastLocalUpdateRef.current = Date.now();
 
+        // Create new sections from template with unique IDs and target year
         const newSections = template.sections.map(section => ({
-            id: Date.now() + Math.random(),
+            id: Date.now() + Math.random(), // Unique ID
             name: section.name,
             description: section.description || '',
             documents: (section.documents || []).map(doc => ({
-                id: Date.now() + Math.random(),
+                id: Date.now() + Math.random(), // Unique ID
                 name: doc.name,
                 description: doc.description || '',
-                collectionStatus: {}
+                collectionStatus: {} // Initialize empty status for all months
             }))
         }));
 
+        // Merge with existing sections
         setSections(currentSections => {
             const updatedSections = [...currentSections, ...newSections];
-            // Update timestamp to protect this change from being overwritten
-            lastLocalUpdateRef.current = Date.now();
+            console.log(`📋 Applied template "${template.name}" to year ${targetYear}:`, {
+                templateSections: template.sections.length,
+                newSections: newSections.length,
+                totalSections: updatedSections.length
+            });
+            
+            // Mark as initialized
+            hasInitializedRef.current = true;
+            
             return updatedSections;
         });
 
+        // Log to audit trail
         if (window.AuditLogger) {
             window.AuditLogger.log(
                 'create',
@@ -995,7 +868,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                     projectName: project.name,
                     templateName: template.name,
                     templateId: template.id,
-                    targetYear,
+                    targetYear: targetYear,
                     sectionsAdded: newSections.length
                 },
                 currentUser
@@ -1003,7 +876,8 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         }
 
         setShowApplyTemplateModal(false);
-
+        
+        // Save to database
         setSections(currentSections => {
             const finalSections = [...currentSections, ...newSections];
             immediatelySaveDocumentSections(finalSections);
@@ -1016,7 +890,8 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
             alert('No sections to create template from. Please add sections first.');
             return;
         }
-
+        
+        // Create template from current sections
         const templateData = {
             name: `${project.name} - ${selectedYear}`,
             description: `Template created from ${project.name} for year ${selectedYear}`,
@@ -1029,63 +904,31 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                 }))
             }))
         };
-
+        
         setEditingTemplate(null);
         setShowTemplateModal(true);
-        window.tempTemplateData = templateData;
-    };
-
-    const handleDeleteSection = async (sectionId) => {
-        // Get current user info
-        const currentUser = getCurrentUser();
-        
-        let updatedSections;
-        
-        // Use functional update to get current section
-        setSections(currentSections => {
-            const section = currentSections.find(s => s.id === sectionId);
-            if (!section) return currentSections;
-            
-            if (confirm(`Delete section "${section.name}" and all its documents?`)) {
-                // Update timestamp to prevent sync from overwriting
-                lastLocalUpdateRef.current = Date.now();
-                
-                updatedSections = currentSections.filter(s => s.id !== sectionId);
-                console.log('🗑️ Deleting section:', section.name, 'Remaining sections:', updatedSections.length);
-                
-                // Log to audit trail
-                if (window.AuditLogger) {
-                    window.AuditLogger.log(
-                        'delete',
-                        'projects',
-                        {
-                            action: 'Section Deleted',
-                            projectId: project.id,
-                            projectName: project.name,
-                            sectionName: section.name,
-                            documentsCount: section.documents?.length || 0
-                        },
-                        currentUser
-                    );
-                }
-                
-                return updatedSections;
+        // Pre-fill the form with this data (we'll handle this in the modal)
+        setTimeout(() => {
+            // Store in a ref or pass via state
+            if (window.tempTemplateData) {
+                window.tempTemplateData = templateData;
             }
-            return currentSections;
-        });
-        
-        // Immediately save to database to ensure persistence
-        if (updatedSections) {
-            await immediatelySaveDocumentSections(updatedSections);
-        }
+        }, 100);
     };
 
     const handleAddDocument = (sectionId) => {
+        console.log('➕ handleAddDocument called with sectionId:', sectionId);
+        if (!sectionId) {
+            console.error('❌ handleAddDocument called without sectionId');
+            alert('Error: Cannot add document. Section ID is missing.');
+            return;
+        }
         // Store in both state and ref to ensure handleSaveDocument always has access
         editingSectionIdRef.current = sectionId;
         setEditingSectionId(sectionId);
         setEditingDocument(null);
         setShowDocumentModal(true);
+        console.log('✅ Document modal opening for section:', sectionId);
     };
 
     const handleEditDocument = (section, document) => {
@@ -1097,6 +940,18 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
     };
 
     const handleSaveDocument = async (documentData) => {
+        // Use ref value to ensure we always have the current section ID
+        const currentSectionId = editingSectionIdRef.current || editingSectionId;
+        
+        // Validate that we have a section ID
+        if (!currentSectionId) {
+            console.error('❌ Cannot save document: No section ID specified');
+            alert('Error: No section selected. Please try again.');
+            return;
+        }
+        
+        console.log('💾 Saving document to section ID:', currentSectionId);
+        
         // Get current user info
         const currentUser = getCurrentUser();
         
@@ -1105,19 +960,16 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         
         let updatedSections;
         
-        // Use ref value to ensure we always have the current section ID
-        const currentSectionId = editingSectionIdRef.current || editingSectionId;
-        
-        // Validate that we have a section ID
-        if (!currentSectionId) {
-            console.error('❌ handleSaveDocument called without sectionId');
-            alert('Error: Cannot save document. Section ID is missing.');
-            return;
-        }
-        
         // Use functional update to avoid race conditions
         setSections(currentSections => {
             const section = currentSections.find(s => s.id === currentSectionId);
+            
+            // Validate section exists
+            if (!section) {
+                console.error('❌ Cannot save document: Section not found with ID:', currentSectionId);
+                alert('Error: Section not found. Please try again.');
+                return currentSections;
+            }
             
             updatedSections = currentSections.map(s => {
                 if (s.id === currentSectionId) {
@@ -1277,330 +1129,6 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         }
     };
 
-    const TemplateModal = () => {
-        const [showTemplateListState, setShowTemplateListState] = useState(!editingTemplate);
-        const [templateFormData, setTemplateFormData] = useState(() => {
-            const prefill = window.tempTemplateData;
-            if (prefill) {
-                window.tempTemplateData = null;
-                return {
-                    name: prefill.name || '',
-                    description: prefill.description || '',
-                    sections: prefill.sections || []
-                };
-            }
-            return {
-                name: editingTemplate?.name || '',
-                description: editingTemplate?.description || '',
-                sections: editingTemplate?.sections || []
-            };
-        });
-
-        const handleAddSectionToTemplate = () => {
-            setTemplateFormData({
-                ...templateFormData,
-                sections: [...templateFormData.sections, { name: '', description: '', documents: [] }]
-            });
-        };
-
-        const handleRemoveSectionFromTemplate = (index) => {
-            setTemplateFormData({
-                ...templateFormData,
-                sections: templateFormData.sections.filter((_, i) => i !== index)
-            });
-        };
-
-        const handleUpdateSectionInTemplate = (index, sectionData) => {
-            const updatedSections = [...templateFormData.sections];
-            updatedSections[index] = { ...updatedSections[index], ...sectionData };
-            setTemplateFormData({ ...templateFormData, sections: updatedSections });
-        };
-
-        const handleAddDocumentToTemplateSection = (sectionIndex) => {
-            const updatedSections = [...templateFormData.sections];
-            if (!updatedSections[sectionIndex].documents) {
-                updatedSections[sectionIndex].documents = [];
-            }
-            updatedSections[sectionIndex].documents.push({ name: '', description: '' });
-            setTemplateFormData({ ...templateFormData, sections: updatedSections });
-        };
-
-        const handleRemoveDocumentFromTemplate = (sectionIndex, docIndex) => {
-            const updatedSections = [...templateFormData.sections];
-            updatedSections[sectionIndex].documents = updatedSections[sectionIndex].documents.filter((_, i) => i !== docIndex);
-            setTemplateFormData({ ...templateFormData, sections: updatedSections });
-        };
-
-        const handleUpdateDocumentInTemplate = (sectionIndex, docIndex, docData) => {
-            const updatedSections = [...templateFormData.sections];
-            updatedSections[sectionIndex].documents[docIndex] = { ...updatedSections[sectionIndex].documents[docIndex], ...docData };
-            setTemplateFormData({ ...templateFormData, sections: updatedSections });
-        };
-
-        const handleSubmitTemplate = (e) => {
-            e.preventDefault();
-            if (!templateFormData.name.trim()) {
-                alert('Please enter a template name');
-                return;
-            }
-            if (templateFormData.sections.length === 0) {
-                alert('Please add at least one section to the template');
-                return;
-            }
-            handleSaveTemplate(templateFormData);
-            setShowTemplateListState(true);
-        };
-
-        return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
-                        <h2 className="text-base font-semibold text-gray-900">
-                            {showTemplateListState ? 'Template Management' : (editingTemplate ? 'Edit Template' : 'Create Template')}
-                        </h2>
-                        <div className="flex items-center gap-2">
-                            {!showTemplateListState && (
-                                <button
-                                    onClick={() => {
-                                        setShowTemplateListState(true);
-                                        setEditingTemplate(null);
-                                        window.tempTemplateData = null;
-                                    }}
-                                    className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800"
-                                >
-                                    <i className="fas fa-arrow-left mr-1"></i>
-                                    Back
-                                </button>
-                            )}
-                            <button
-                                onClick={() => {
-                                    setShowTemplateModal(false);
-                                    setEditingTemplate(null);
-                                    setShowTemplateListState(true);
-                                    window.tempTemplateData = null;
-                                }}
-                                className="text-gray-400 hover:text-gray-600 p-1"
-                            >
-                                <i className="fas fa-times text-sm"></i>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto p-4">
-                        {showTemplateListState ? (
-                            <div className="space-y-3">
-                                <div className="flex justify-between items-center mb-4">
-                                    <p className="text-xs text-gray-600">Manage your document collection templates</p>
-                                    <button
-                                        onClick={() => {
-                                            setShowTemplateListState(false);
-                                            setEditingTemplate(null);
-                                            setTemplateFormData({ name: '', description: '', sections: [] });
-                                        }}
-                                        className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
-                                    >
-                                        <i className="fas fa-plus mr-1"></i>
-                                        Create New Template
-                                    </button>
-                                </div>
-
-                                {templates.length === 0 ? (
-                                    <div className="text-center py-8 text-gray-400">
-                                        <i className="fas fa-layer-group text-3xl mb-2 opacity-50"></i>
-                                        <p className="text-sm">No templates yet</p>
-                                        <p className="text-xs mt-1">Create your first template to get started</p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-2">
-                                        {templates.map(template => {
-                                            const totalDocs = template.sections?.reduce((sum, s) => sum + (s.documents?.length || 0), 0) || 0;
-                                            return (
-                                                <div key={template.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
-                                                    <div className="flex justify-between items-start">
-                                                        <div className="flex-1">
-                                                            <h3 className="text-sm font-semibold text-gray-900 mb-1">{template.name}</h3>
-                                                            {template.description && (
-                                                                <p className="text-xs text-gray-600 mb-2">{template.description}</p>
-                                                            )}
-                                                            <div className="flex items-center gap-4 text-[10px] text-gray-500">
-                                                                <span><i className="fas fa-folder mr-1"></i>{template.sections?.length || 0} sections</span>
-                                                                <span><i className="fas fa-file mr-1"></i>{totalDocs} documents</span>
-                                                                {template.createdBy && (
-                                                                    <span><i className="fas fa-user mr-1"></i>Created by {template.createdBy}</span>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex items-center gap-1 ml-3">
-                                                            <button
-                                                                onClick={() => {
-                                                                    setEditingTemplate(template);
-                                                                    setShowTemplateListState(false);
-                                                                    setTemplateFormData({
-                                                                        name: template.name,
-                                                                        description: template.description || '',
-                                                                        sections: template.sections || []
-                                                                    });
-                                                                }}
-                                                                className="px-2 py-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
-                                                            >
-                                                                <i className="fas fa-edit"></i>
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleDeleteTemplate(template.id)}
-                                                                className="px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
-                                                            >
-                                                                <i className="fas fa-trash"></i>
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <form onSubmit={handleSubmitTemplate} className="space-y-4">
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                                        Template Name *
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={templateFormData.name}
-                                        onChange={(e) => setTemplateFormData({ ...templateFormData, name: e.target.value })}
-                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                        placeholder="e.g., Standard Monthly Checklist"
-                                        required
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                                        Description (Optional)
-                                    </label>
-                                    <textarea
-                                        value={templateFormData.description}
-                                        onChange={(e) => setTemplateFormData({ ...templateFormData, description: e.target.value })}
-                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                        rows="2"
-                                        placeholder="Brief description of this template..."
-                                    ></textarea>
-                                </div>
-
-                                <div>
-                                    <div className="flex justify-between items-center mb-2">
-                                        <label className="block text-xs font-medium text-gray-700">
-                                            Sections *
-                                        </label>
-                                        <button
-                                            type="button"
-                                            onClick={handleAddSectionToTemplate}
-                                            className="px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700"
-                                        >
-                                            <i className="fas fa-plus mr-1"></i>
-                                            Add Section
-                                        </button>
-                                    </div>
-
-                                <div className="space-y-3">
-                                    {templateFormData.sections.map((section, sectionIndex) => (
-                                        <div key={sectionIndex} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                                            <div className="flex items-start justify-between mb-2">
-                                                <div className="flex-1 space-y-2">
-                                                    <input
-                                                        type="text"
-                                                        value={section.name}
-                                                        onChange={(e) => handleUpdateSectionInTemplate(sectionIndex, { name: e.target.value })}
-                                                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
-                                                        placeholder="Section name *"
-                                                        required
-                                                    />
-                                                    <textarea
-                                                        value={section.description || ''}
-                                                        onChange={(e) => handleUpdateSectionInTemplate(sectionIndex, { description: e.target.value })}
-                                                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
-                                                        rows="1"
-                                                        placeholder="Section description (optional)"
-                                                    ></textarea>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleRemoveSectionFromTemplate(sectionIndex)}
-                                                    className="ml-2 text-red-600 hover:text-red-800 p-1"
-                                                    title="Remove section"
-                                                >
-                                                    <i className="fas fa-trash text-xs"></i>
-                                                </button>
-                                            </div>
-
-                                            <div className="mt-2">
-                                                <div className="flex justify-between items-center mb-1">
-                                                    <label className="text-[10px] font-medium text-gray-600">Documents:</label>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleAddDocumentToTemplateSection(sectionIndex)}
-                                                        className="px-1.5 py-0.5 bg-gray-600 text-white rounded text-[9px] font-medium hover:bg-gray-700"
-                                                    >
-                                                        <i className="fas fa-plus mr-0.5"></i>
-                                                        Add
-                                                    </button>
-                                                </div>
-                                                <div className="space-y-1">
-                                                    {(section.documents || []).map((doc, docIndex) => (
-                                                        <div key={docIndex} className="flex items-center gap-1 bg-white p-1.5 rounded border border-gray-200">
-                                                            <input
-                                                                type="text"
-                                                                value={doc.name}
-                                                                onChange={(e) => handleUpdateDocumentInTemplate(sectionIndex, docIndex, { name: e.target.value })}
-                                                                className="flex-1 px-1.5 py-0.5 text-[10px] border border-gray-300 rounded focus:ring-1 focus:ring-primary-500"
-                                                                placeholder="Document name *"
-                                                                required
-                                                            />
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleRemoveDocumentFromTemplate(sectionIndex, docIndex)}
-                                                                className="text-red-600 hover:text-red-800 p-0.5"
-                                                                title="Remove document"
-                                                            >
-                                                                <i className="fas fa-times text-[9px]"></i>
-                                                            </button>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                </div>
-
-                                <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setShowTemplateModal(false);
-                                            setEditingTemplate(null);
-                                            window.tempTemplateData = null;
-                                        }}
-                                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
-                                    >
-                                        {editingTemplate ? 'Update Template' : 'Create Template'}
-                                    </button>
-                                </div>
-                            </form>
-                        )}
-                    </div>
-                </div>
-            </div>
-        );
-    };
-
     const handleUpdateStatus = async (sectionId, documentId, month, status) => {
         // Get current user info
         const currentUser = getCurrentUser();
@@ -1609,7 +1137,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         lastLocalUpdateRef.current = Date.now();
 
         let updatedSections;
-        // Hoist audit variables for use after state update
+        // Hoisted audit variables to use after state update
         let auditSectionName = 'Unknown';
         let auditDocumentName = 'Unknown';
         let auditOldStatus = 'Not Set';
@@ -1620,7 +1148,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
             const section = currentSections.find(s => s.id === sectionId);
             const document = section?.documents.find(d => d.id === documentId);
             const oldStatus = document?.collectionStatus?.[`${month}-${selectedYear}`];
-            // Capture details for audit logging after state update
+            // Capture for audit logging after update
             auditSectionName = section?.name || 'Unknown';
             auditDocumentName = document?.name || 'Unknown';
             auditOldStatus = oldStatus || 'Not Set';
@@ -1880,75 +1408,12 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                     console.log('🗑️ Cleared project cache after comment save');
                 }
                 
-                // Update localStorage for consistency
-                if (window.dataService && typeof window.dataService.getProjects === 'function') {
-                    const savedProjects = await window.dataService.getProjects();
-                    if (savedProjects) {
-                        const updatedProjects = savedProjects.map(p => {
-                            if (p.id === project.id) {
-                                return { ...p, documentSections: updatedSections };
-                            }
-                            return p;
-                        });
-                        if (window.dataService && typeof window.dataService.setProjects === 'function') {
-                            try {
-                                await window.dataService.setProjects(updatedProjects);
-                                console.log('✅ localStorage updated for consistency');
-                            } catch (saveError) {
-                                console.warn('Failed to save projects to dataService:', saveError);
-                            }
-                        }
-                    }
+                // Dispatch event to notify parent component
+                if (typeof window.dispatchEvent === 'function') {
+                    window.dispatchEvent(new CustomEvent('projectUpdated', {
+                        detail: { projectId: project.id, field: 'documentSections' }
+                    }));
                 }
-                
-                // CRITICAL: Update parent's viewingProject state so the project prop stays in sync
-                // This ensures that when ProjectDetail preserves project.documentSections,
-                // it preserves the correct, up-to-date sections (not stale data)
-                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                    try {
-                        // Create updated project object with saved sections
-                        const updatedProject = {
-                            ...project,
-                            documentSections: JSON.stringify(updatedSections)
-                        };
-                        window.updateViewingProject(updatedProject);
-                        console.log('🔄 Updated parent viewingProject with saved sections (comment save)');
-                    } catch (updateError) {
-                        console.warn('Failed to update parent viewingProject:', updateError);
-                    }
-                }
-                
-                // Save to localStorage for persistence across browser sessions
-                const storageKey = `documentSections_${project.id}`;
-                try {
-                    localStorage.setItem(storageKey, JSON.stringify(updatedSections));
-                    console.log('💾 Saved sections to localStorage (comment save):', updatedSections.length, 'sections');
-                    // Also save to sessionStorage for fast access during current session
-                    try {
-                        sessionStorage.setItem(storageKey, JSON.stringify(updatedSections));
-                    } catch (e) {
-                        // Ignore sessionStorage errors - localStorage is primary
-                    }
-                } catch (e) {
-                    console.warn('Failed to save sections to localStorage:', e);
-                    // Fallback to sessionStorage if localStorage fails
-                    try {
-                        sessionStorage.setItem(storageKey, JSON.stringify(updatedSections));
-                        console.log('⚠️ Saved sections to sessionStorage (localStorage unavailable)');
-                    } catch (e2) {
-                        console.warn('Failed to save sections to sessionStorage:', e2);
-                    }
-                }
-                
-                // CRITICAL: Update previousDocumentSectionsRef to track the value we just saved
-                // This prevents LiveDataSync or other background refreshes from triggering a sync
-                // if they update the project prop with the same value we just saved
-                previousDocumentSectionsRef.current = JSON.stringify(updatedSections);
-                console.log('📝 Updated previousDocumentSectionsRef to match saved value (comment save)');
-                
-                // DISABLED: Don't dispatch projectUpdated event - it causes parent to refresh
-                // which then triggers sync and overwrites user input
-                // Instead, we use window.updateViewingProject to update parent state directly
             } catch (error) {
                 console.error('❌ Error saving comment to database:', error);
                 console.error('  - Error details:', {
@@ -2516,17 +1981,9 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
     // Modals
     const SectionModal = () => {
         const [sectionFormData, setSectionFormData] = useState({
-            name: '',
-            description: ''
+            name: editingSection?.name || '',
+            description: editingSection?.description || ''
         });
-
-        // Reset form when editingSection changes
-        useEffect(() => {
-            setSectionFormData({
-                name: editingSection?.name || '',
-                description: editingSection?.description || ''
-            });
-        }, [editingSection]);
 
         const handleSubmit = (e) => {
             e.preventDefault();
@@ -2601,22 +2058,21 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         );
     };
 
+    const handleCloseDocumentModal = () => {
+        setShowDocumentModal(false);
+        setEditingDocument(null);
+        setEditingSectionId(null);
+        editingSectionIdRef.current = null; // Clear ref when modal closes
+    };
+
     const DocumentModal = () => {
         const [documentFormData, setDocumentFormData] = useState({
-            name: '',
-            description: '',
-            attachments: []
+            name: editingDocument?.name || '',
+            description: editingDocument?.description || '',
+            attachments: editingDocument?.attachments || []
         });
         const [selectedFiles, setSelectedFiles] = useState([]);
         const [uploadingFiles, setUploadingFiles] = useState(false);
-
-        // Close handler that clears both state and ref
-        const handleCloseModal = () => {
-            setShowDocumentModal(false);
-            setEditingDocument(null);
-            setEditingSectionId(null);
-            editingSectionIdRef.current = null; // Clear ref when modal closes
-        };
 
         // Reset form when editingDocument changes
         useEffect(() => {
@@ -2727,7 +2183,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                             {editingDocument ? 'Edit Document/Data' : 'Add Document/Data'}
                         </h2>
                         <button 
-                            onClick={handleCloseModal} 
+                            onClick={handleCloseDocumentModal} 
                             className="text-gray-400 hover:text-gray-600 p-1"
                         >
                             <i className="fas fa-times text-sm"></i>
@@ -2736,10 +2192,12 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
 
                     <form onSubmit={handleSubmit} className="p-4 space-y-3">
                         <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                            <label htmlFor="documentName" className="block text-xs font-medium text-gray-700 mb-1.5">
                                 Document/Data Name *
                             </label>
                             <input
+                                id="documentName"
+                                name="documentName"
                                 type="text"
                                 value={documentFormData.name}
                                 onChange={(e) => setDocumentFormData({...documentFormData, name: e.target.value})}
@@ -2750,10 +2208,12 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                         </div>
 
                         <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                            <label htmlFor="documentDescription" className="block text-xs font-medium text-gray-700 mb-1.5">
                                 Description (Optional)
                             </label>
                             <textarea
+                                id="documentDescription"
+                                name="documentDescription"
                                 value={documentFormData.description}
                                 onChange={(e) => setDocumentFormData({...documentFormData, description: e.target.value})}
                                 className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -2842,7 +2302,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                         <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
                             <button
                                 type="button"
-                                onClick={handleCloseModal}
+                                onClick={handleCloseDocumentModal}
                                 className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
                             >
                                 Cancel
@@ -2868,7 +2328,473 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         );
     };
 
+    // Template Management Modal
+    const TemplateModal = () => {
+        const [showTemplateList, setShowTemplateList] = useState(!editingTemplate);
+        const [templateFormData, setTemplateFormData] = useState(() => {
+            // Check if we have pre-filled data from "Save as Template"
+            const prefill = window.tempTemplateData;
+            if (prefill) {
+                window.tempTemplateData = null; // Clear after use
+                return {
+                    name: prefill.name || '',
+                    description: prefill.description || '',
+                    sections: prefill.sections || []
+                };
+            }
+            return {
+                name: editingTemplate?.name || '',
+                description: editingTemplate?.description || '',
+                sections: editingTemplate?.sections || []
+            };
+        });
 
+        const handleAddSectionToTemplate = () => {
+            setTemplateFormData({
+                ...templateFormData,
+                sections: [...templateFormData.sections, { name: '', description: '', documents: [] }]
+            });
+        };
+
+        const handleRemoveSectionFromTemplate = (index) => {
+            setTemplateFormData({
+                ...templateFormData,
+                sections: templateFormData.sections.filter((_, i) => i !== index)
+            });
+        };
+
+        const handleUpdateSectionInTemplate = (index, sectionData) => {
+            const updatedSections = [...templateFormData.sections];
+            updatedSections[index] = { ...updatedSections[index], ...sectionData };
+            setTemplateFormData({ ...templateFormData, sections: updatedSections });
+        };
+
+        const handleAddDocumentToTemplateSection = (sectionIndex) => {
+            const updatedSections = [...templateFormData.sections];
+            if (!updatedSections[sectionIndex].documents) {
+                updatedSections[sectionIndex].documents = [];
+            }
+            updatedSections[sectionIndex].documents.push({ name: '', description: '' });
+            setTemplateFormData({ ...templateFormData, sections: updatedSections });
+        };
+
+        const handleRemoveDocumentFromTemplate = (sectionIndex, docIndex) => {
+            const updatedSections = [...templateFormData.sections];
+            updatedSections[sectionIndex].documents = updatedSections[sectionIndex].documents.filter((_, i) => i !== docIndex);
+            setTemplateFormData({ ...templateFormData, sections: updatedSections });
+        };
+
+        const handleUpdateDocumentInTemplate = (sectionIndex, docIndex, docData) => {
+            const updatedSections = [...templateFormData.sections];
+            updatedSections[sectionIndex].documents[docIndex] = { ...updatedSections[sectionIndex].documents[docIndex], ...docData };
+            setTemplateFormData({ ...templateFormData, sections: updatedSections });
+        };
+
+        const handleSubmit = (e) => {
+            e.preventDefault();
+            if (!templateFormData.name.trim()) {
+                alert('Please enter a template name');
+                return;
+            }
+            if (templateFormData.sections.length === 0) {
+                alert('Please add at least one section to the template');
+                return;
+            }
+            // Validate sections and documents
+            for (let i = 0; i < templateFormData.sections.length; i++) {
+                const section = templateFormData.sections[i];
+                if (!section.name.trim()) {
+                    alert(`Please enter a name for section ${i + 1}`);
+                    return;
+                }
+            }
+            handleSaveTemplate(templateFormData);
+        };
+
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
+                        <h2 className="text-base font-semibold text-gray-900">
+                            {showTemplateList ? 'Template Management' : (editingTemplate ? 'Edit Template' : 'Create Template')}
+                        </h2>
+                        <div className="flex items-center gap-2">
+                            {!showTemplateList && (
+                                <button
+                                    onClick={() => {
+                                        setShowTemplateList(true);
+                                        setEditingTemplate(null);
+                                        window.tempTemplateData = null;
+                                    }}
+                                    className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800"
+                                    title="Back to templates list"
+                                >
+                                    <i className="fas fa-arrow-left mr-1"></i>
+                                    Back
+                                </button>
+                            )}
+                            <button 
+                                onClick={() => {
+                                    setShowTemplateModal(false);
+                                    setEditingTemplate(null);
+                                    setShowTemplateList(true);
+                                    window.tempTemplateData = null;
+                                }} 
+                                className="text-gray-400 hover:text-gray-600 p-1"
+                            >
+                                <i className="fas fa-times text-sm"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-4">
+                        {showTemplateList ? (
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center mb-4">
+                                    <p className="text-xs text-gray-600">Manage your document collection templates</p>
+                                    <button
+                                        onClick={() => {
+                                            setShowTemplateList(false);
+                                            setEditingTemplate(null);
+                                            setTemplateFormData({ name: '', description: '', sections: [] });
+                                        }}
+                                        className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
+                                    >
+                                        <i className="fas fa-plus mr-1"></i>
+                                        Create New Template
+                                    </button>
+                                </div>
+                                
+                                {templates.length === 0 ? (
+                                    <div className="text-center py-8 text-gray-400">
+                                        <i className="fas fa-layer-group text-3xl mb-2 opacity-50"></i>
+                                        <p className="text-sm">No templates yet</p>
+                                        <p className="text-xs mt-1">Create your first template to get started</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {templates.map(template => {
+                                            const totalDocs = template.sections?.reduce((sum, s) => sum + (s.documents?.length || 0), 0) || 0;
+                                            return (
+                                                <div key={template.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
+                                                    <div className="flex justify-between items-start">
+                                                        <div className="flex-1">
+                                                            <h3 className="text-sm font-semibold text-gray-900 mb-1">{template.name}</h3>
+                                                            {template.description && (
+                                                                <p className="text-xs text-gray-600 mb-2">{template.description}</p>
+                                                            )}
+                                                            <div className="flex items-center gap-4 text-[10px] text-gray-500">
+                                                                <span><i className="fas fa-folder mr-1"></i>{template.sections?.length || 0} sections</span>
+                                                                <span><i className="fas fa-file mr-1"></i>{totalDocs} documents</span>
+                                                                {template.createdBy && (
+                                                                    <span><i className="fas fa-user mr-1"></i>Created by {template.createdBy}</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-1 ml-3">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setEditingTemplate(template);
+                                                                    setShowTemplateList(false);
+                                                                    setTemplateFormData({
+                                                                        name: template.name,
+                                                                        description: template.description || '',
+                                                                        sections: template.sections || []
+                                                                    });
+                                                                }}
+                                                                className="px-2 py-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                                                                title="Edit template"
+                                                            >
+                                                                <i className="fas fa-edit"></i>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteTemplate(template.id)}
+                                                                className="px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+                                                                title="Delete template"
+                                                            >
+                                                                <i className="fas fa-trash"></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                                    Template Name *
+                                </label>
+                                <input
+                                    type="text"
+                                    value={templateFormData.name}
+                                    onChange={(e) => setTemplateFormData({...templateFormData, name: e.target.value})}
+                                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                    placeholder="e.g., Standard Monthly Checklist"
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                                    Description (Optional)
+                                </label>
+                                <textarea
+                                    value={templateFormData.description}
+                                    onChange={(e) => setTemplateFormData({...templateFormData, description: e.target.value})}
+                                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                    rows="2"
+                                    placeholder="Brief description of this template..."
+                                ></textarea>
+                            </div>
+
+                            <div>
+                                <div className="flex justify-between items-center mb-2">
+                                    <label className="block text-xs font-medium text-gray-700">
+                                        Sections *
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={handleAddSectionToTemplate}
+                                        className="px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700"
+                                    >
+                                        <i className="fas fa-plus mr-1"></i>
+                                        Add Section
+                                    </button>
+                                </div>
+                                
+                                <div className="space-y-3">
+                                    {templateFormData.sections.map((section, sectionIndex) => (
+                                        <div key={sectionIndex} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                                            <div className="flex items-start justify-between mb-2">
+                                                <div className="flex-1 space-y-2">
+                                                    <input
+                                                        type="text"
+                                                        value={section.name}
+                                                        onChange={(e) => handleUpdateSectionInTemplate(sectionIndex, { name: e.target.value })}
+                                                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
+                                                        placeholder="Section name *"
+                                                        required
+                                                    />
+                                                    <textarea
+                                                        value={section.description || ''}
+                                                        onChange={(e) => handleUpdateSectionInTemplate(sectionIndex, { description: e.target.value })}
+                                                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
+                                                        rows="1"
+                                                        placeholder="Section description (optional)"
+                                                    ></textarea>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveSectionFromTemplate(sectionIndex)}
+                                                    className="ml-2 text-red-600 hover:text-red-800 p-1"
+                                                    title="Remove section"
+                                                >
+                                                    <i className="fas fa-trash text-xs"></i>
+                                                </button>
+                                            </div>
+                                            
+                                            <div className="mt-2">
+                                                <div className="flex justify-between items-center mb-1">
+                                                    <label className="text-[10px] font-medium text-gray-600">Documents:</label>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleAddDocumentToTemplateSection(sectionIndex)}
+                                                        className="px-1.5 py-0.5 bg-gray-600 text-white rounded text-[9px] font-medium hover:bg-gray-700"
+                                                    >
+                                                        <i className="fas fa-plus mr-0.5"></i>
+                                                        Add
+                                                    </button>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    {(section.documents || []).map((doc, docIndex) => (
+                                                        <div key={docIndex} className="flex items-center gap-1 bg-white p-1.5 rounded border border-gray-200">
+                                                            <input
+                                                                type="text"
+                                                                value={doc.name}
+                                                                onChange={(e) => handleUpdateDocumentInTemplate(sectionIndex, docIndex, { name: e.target.value })}
+                                                                className="flex-1 px-1.5 py-0.5 text-[10px] border border-gray-300 rounded focus:ring-1 focus:ring-primary-500"
+                                                                placeholder="Document name *"
+                                                                required
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleRemoveDocumentFromTemplate(sectionIndex, docIndex)}
+                                                                className="text-red-600 hover:text-red-800 p-0.5"
+                                                                title="Remove document"
+                                                            >
+                                                                <i className="fas fa-times text-[9px]"></i>
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowTemplateModal(false);
+                                        setEditingTemplate(null);
+                                        window.tempTemplateData = null;
+                                    }}
+                                    className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
+                                >
+                                    {editingTemplate ? 'Update Template' : 'Create Template'}
+                                </button>
+                            </div>
+                        </form>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    // Apply Template Modal
+    const ApplyTemplateModal = () => {
+        const [selectedTemplateId, setSelectedTemplateId] = useState(null);
+        const [targetYear, setTargetYear] = useState(selectedYear);
+
+        const handleApply = () => {
+            if (!selectedTemplateId) {
+                alert('Please select a template');
+                return;
+            }
+            const template = templates.find(t => t.id === selectedTemplateId);
+            if (!template) {
+                alert('Template not found');
+                return;
+            }
+            handleApplyTemplate(template, targetYear);
+        };
+
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
+                        <h2 className="text-base font-semibold text-gray-900">
+                            Apply Template
+                        </h2>
+                        <button 
+                            onClick={() => setShowApplyTemplateModal(false)} 
+                            className="text-gray-400 hover:text-gray-600 p-1"
+                        >
+                            <i className="fas fa-times text-sm"></i>
+                        </button>
+                    </div>
+
+                    <div className="p-4 space-y-4">
+                        {templates.length === 0 ? (
+                            <div className="text-center py-4">
+                                <p className="text-sm text-gray-600 mb-3">No templates available</p>
+                                <button
+                                    onClick={() => {
+                                        setShowApplyTemplateModal(false);
+                                        handleCreateTemplate();
+                                    }}
+                                    className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
+                                >
+                                    Create Template
+                                </button>
+                            </div>
+                        ) : (
+                            <>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                                        Select Template *
+                                    </label>
+                                    <select
+                                        value={selectedTemplateId || ''}
+                                        onChange={(e) => setSelectedTemplateId(e.target.value ? parseInt(e.target.value) : null)}
+                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                    >
+                                        <option value="">-- Select a template --</option>
+                                        {templates.map(template => (
+                                            <option key={template.id} value={template.id}>
+                                                {template.name} ({template.sections?.length || 0} sections)
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {selectedTemplateId && (() => {
+                                        const template = templates.find(t => t.id === selectedTemplateId);
+                                        return template?.description ? (
+                                            <p className="mt-1 text-[10px] text-gray-500">{template.description}</p>
+                                        ) : null;
+                                    })()}
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                                        Target Year
+                                    </label>
+                                    <select
+                                        value={targetYear}
+                                        onChange={(e) => setTargetYear(parseInt(e.target.value))}
+                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                    >
+                                        {yearOptions.map(year => (
+                                            <option key={year} value={year}>
+                                                {year}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <p className="mt-1 text-[10px] text-gray-500">
+                                        Template will be applied to the selected year. Sections and documents will be added to the current collection.
+                                    </p>
+                                </div>
+
+                                {selectedTemplateId && (() => {
+                                    const template = templates.find(t => t.id === selectedTemplateId);
+                                    const totalDocs = template?.sections?.reduce((sum, s) => sum + (s.documents?.length || 0), 0) || 0;
+                                    return (
+                                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5">
+                                            <p className="text-[10px] font-medium text-blue-900 mb-1">Template Preview:</p>
+                                            <p className="text-[10px] text-blue-700">
+                                                • {template?.sections?.length || 0} sections<br/>
+                                                • {totalDocs} documents
+                                            </p>
+                                        </div>
+                                    );
+                                })()}
+
+                                <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowApplyTemplateModal(false)}
+                                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleApply}
+                                        disabled={!selectedTemplateId}
+                                        className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Apply Template
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
     const renderStatusCell = (section, document, month) => {
         const status = getDocumentStatus(document, month);
@@ -2877,43 +2803,48 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         const hasComments = comments.length > 0;
         const cellKey = `${section.id}-${document.id}-${month}`;
         const isPopupOpen = hoverCommentCell === cellKey;
+        
+        // Determine cell background - prioritize status color over working month highlight
+        const isWorkingMonth = workingMonths.includes(months.indexOf(month)) && selectedYear === currentYear;
+        const cellBackgroundClass = statusConfig 
+            ? statusConfig.cellColor 
+            : (isWorkingMonth ? 'bg-primary-50' : '');
+        
+        // Extract text color from status config (e.g., "bg-red-100 text-red-800" -> "text-red-800")
+        const textColorClass = statusConfig && statusConfig.color 
+            ? statusConfig.color.split(' ').find(cls => cls.startsWith('text-')) || 'text-gray-900'
+            : 'text-gray-400';
 
         return (
             <td 
-                className={`px-2 py-1 text-xs border-l border-gray-100 dark:border-gray-700 relative z-20 ${
-                    workingMonths.includes(months.indexOf(month)) && selectedYear === currentYear
-                        ? 'bg-primary-50 dark:bg-primary-900 bg-opacity-30 dark:bg-opacity-30'
-                        : ''
-                } ${statusConfig ? statusConfig.cellColor : ''}`}
+                className={`px-2 py-1 text-xs border-l border-gray-100 ${cellBackgroundClass} relative z-0`}
             >
-                <div className="min-w-[160px] relative h-full">
+                <div className="min-w-[160px] relative">
                     {/* Status Dropdown */}
                     <select
                         value={status || ''}
                         onChange={(e) => handleUpdateStatus(section.id, document.id, month, e.target.value)}
                         onFocus={() => {
-                            isInteractingRef.current = true;
-                            if (window.LiveDataSync && typeof window.LiveDataSync.pause === 'function') {
-                                window.LiveDataSync.pause();
-                            }
+                            // Mark field as dirty when user starts editing
+                            const fieldId = cellKey;
+                            console.log('🎯 Marking field as dirty:', fieldId);
+                            setDirtyFields(prev => new Set(prev).add(fieldId));
                         }}
                         onBlur={() => {
-                            // Delay to allow onChange to complete
+                            // Clear dirty flag after 5 seconds of inactivity
+                            const fieldId = cellKey;
                             setTimeout(() => {
-                                isInteractingRef.current = false;
-                                // Don't resume LiveDataSync - keep it paused while on document collection page
-                            }, 100);
+                                console.log('✨ Clearing dirty flag:', fieldId);
+                                setDirtyFields(prev => {
+                                    const next = new Set(prev);
+                                    next.delete(fieldId);
+                                    return next;
+                                });
+                            }, 5000);
                         }}
-                        className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent dark:bg-transparent relative z-30 ${
-                            status 
-                                ? statusConfig.textColor
-                                : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400'
-                        }`}
+                        className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80 relative z-0`}
                         style={{ pointerEvents: 'auto' }}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            isInteractingRef.current = true;
-                        }}
+                        onClick={(e) => e.stopPropagation()}
                     >
                         <option value="">Select Status</option>
                         {statusOptions.map(option => (
@@ -2924,7 +2855,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                     </select>
                     
                     {/* Comments Icon/Badge - Centered vertically on right */}
-                    <div className="absolute top-1/2 right-0.5 -translate-y-1/2 z-40">
+                    <div className="absolute top-1/2 right-0.5 -translate-y-1/2 z-10">
                         <button
                             data-comment-cell={cellKey}
                             onClick={(e) => {
@@ -2946,7 +2877,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                                     setHoverCommentCell(cellKey);
                                 }
                             }}
-                            className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors relative p-1"
+                            className="text-gray-500 hover:text-gray-700 transition-colors relative p-1"
                             title={hasComments ? `${comments.length} comment(s)` : 'Add comment'}
                             type="button"
                             style={{ pointerEvents: 'auto' }}
@@ -3049,6 +2980,24 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                                     <textarea
                                         value={quickComment}
                                         onChange={(e) => setQuickComment(e.target.value)}
+                                        onFocus={() => {
+                                            // Mark comment field as dirty when typing
+                                            const fieldId = `comment-${hoverCommentCell}`;
+                                            console.log('🎯 Marking comment field as dirty:', fieldId);
+                                            setDirtyFields(prev => new Set(prev).add(fieldId));
+                                        }}
+                                        onBlur={() => {
+                                            // Clear dirty flag after 3 seconds
+                                            const fieldId = `comment-${hoverCommentCell}`;
+                                            setTimeout(() => {
+                                                console.log('✨ Clearing comment dirty flag:', fieldId);
+                                                setDirtyFields(prev => {
+                                                    const next = new Set(prev);
+                                                    next.delete(fieldId);
+                                                    return next;
+                                                });
+                                            }, 3000);
+                                        }}
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter' && e.ctrlKey) {
                                                 handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
@@ -3171,37 +3120,37 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
             </div>
 
             {/* Legend */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-2.5">
+            <div className="bg-white rounded-lg border border-gray-200 p-2.5">
                 <div className="space-y-1.5">
                     {/* Working Months Info */}
-                    <div className="flex items-center gap-2 pb-1.5 border-b border-gray-100 dark:border-gray-700">
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-primary-50 dark:bg-primary-900 text-primary-700 dark:text-primary-300 text-[10px] font-medium">
+                    <div className="flex items-center gap-2 pb-1.5 border-b border-gray-100">
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 text-[10px] font-medium">
                             <i className="fas fa-calendar-check mr-1 text-[10px]"></i>
                             Working Months
                         </span>
-                        <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                        <span className="text-[10px] text-gray-500">
                             Highlighted columns show current focus months (2 months in arrears)
                         </span>
                     </div>
                     
                     {/* Status Legend */}
                     <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-medium text-gray-600 dark:text-gray-300">Status Progression:</span>
+                        <span className="text-[10px] font-medium text-gray-600">Status Progression:</span>
                         {statusOptions.slice(0, 3).map((option, idx) => (
                             <React.Fragment key={option.value}>
                                 <div className="flex items-center gap-1">
-                                    <div className={`w-3 h-3 rounded ${option.cellColor} border border-gray-300 dark:border-gray-600`}></div>
-                                    <span className="text-[10px] text-gray-600 dark:text-gray-300">{option.label}</span>
+                                    <div className={`w-3 h-3 rounded ${option.cellColor} border border-gray-300`}></div>
+                                    <span className="text-[10px] text-gray-600">{option.label}</span>
                                 </div>
                                 {idx < 2 && (
-                                    <i className="fas fa-arrow-right text-[8px] text-gray-400 dark:text-gray-500"></i>
+                                    <i className="fas fa-arrow-right text-[8px] text-gray-400"></i>
                                 )}
                             </React.Fragment>
                         ))}
-                        <span className="text-gray-300 dark:text-gray-600 mx-1">|</span>
+                        <span className="text-gray-300 mx-1">|</span>
                         <div className="flex items-center gap-1">
-                            <div className={`w-3 h-3 rounded ${statusOptions[3].cellColor} border border-gray-300 dark:border-gray-600`}></div>
-                            <span className="text-[10px] text-gray-600 dark:text-gray-300">{statusOptions[3].label}</span>
+                            <div className={`w-3 h-3 rounded ${statusOptions[3].cellColor} border border-gray-300`}></div>
+                            <span className="text-[10px] text-gray-600">{statusOptions[3].label}</span>
                         </div>
                     </div>
                 </div>
@@ -3213,7 +3162,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th
+                                <th 
                                     className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wide sticky left-0 bg-gray-50 z-50 border-r border-gray-200"
                                     style={{ boxShadow: STICKY_COLUMN_SHADOW }}
                                 >
@@ -3228,7 +3177,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                                                 ? 'bg-primary-50 text-primary-700'
                                                 : 'text-gray-600'
                                         }`}
-                                    >
+                                        >
                                         <div className="flex flex-col items-center gap-0.5">
                                             <span>{month.slice(0, 3)} '{String(selectedYear).slice(-2)}</span>
                                             {workingMonths.includes(idx) && selectedYear === currentYear && (
@@ -3276,10 +3225,10 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                                                 dragOverIndex === sectionIndex ? 'border-t-2 border-primary-500' : ''
                                             }`}
                                         >
-                                            <td
-                                                className="px-2.5 py-2 sticky left-0 bg-gray-100 z-50 border-r border-gray-200"
-                                                style={{ boxShadow: STICKY_COLUMN_SHADOW }}
-                                            >
+                                                    <td 
+                                                        className="px-2.5 py-2 sticky left-0 bg-gray-100 z-50 border-r border-gray-200"
+                                                        style={{ boxShadow: STICKY_COLUMN_SHADOW }}
+                                                    >
                                                 <div className="flex items-center gap-2">
                                                     <i className="fas fa-grip-vertical text-gray-400 text-xs"></i>
                                                     <div className="flex-1">
@@ -3352,7 +3301,7 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
                                                             ? 'border-t-2 border-primary-500' : ''
                                                     }`}
                                                 >
-                                                    <td
+                                                    <td 
                                                         className="px-4 py-1.5 sticky left-0 bg-white z-50 border-r border-gray-200"
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW }}
                                                     >
@@ -3407,8 +3356,12 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
             {showApplyTemplateModal && <ApplyTemplateModal />}
         </div>
     );
-}
+};
 
 // Make available globally
+window.MonthlyDocumentCollectionTracker = MonthlyDocumentCollectionTracker;
+console.log('✅ MonthlyDocumentCollectionTracker component loaded and registered globally');
 
+// Export as default for Vite module
 export default MonthlyDocumentCollectionTracker;
+
