@@ -869,7 +869,7 @@ const ManagementMeetingNotes = () => {
 
     const handleDeleteWeek = async (week) => {
         if (!week?.id) return;
-        if (!confirm('Delete this week and all associated department notes, action items, and comments? This cannot be undone.')) {
+        if (!confirm('Delete the selected week and all associated department notes, action items, and comments? This cannot be undone.')) {
             return;
         }
 
@@ -975,7 +975,7 @@ const ManagementMeetingNotes = () => {
             setSelectedWeek(weekDetails.weekKey);
             setNewWeekStartInput('');
             if (triggeredByInput && typeof alert === 'function') {
-                alert('Weekly notes already exist for this week. Loaded the existing notes instead.');
+                alert('Weekly notes already exist for the selected dates. Loaded the existing notes instead.');
             }
             return existingWeek;
         }
@@ -1048,12 +1048,12 @@ const ManagementMeetingNotes = () => {
                     setSelectedWeek(weekDetails.weekKey);
                     setNewWeekStartInput('');
                     if (triggeredByInput && typeof alert === 'function') {
-                        alert('Weekly notes already exist for this week. Loaded the existing notes instead.');
+                        alert('Weekly notes already exist for the selected dates. Loaded the existing notes instead.');
                     }
                 } catch (loadError) {
                     console.error('Failed to reload monthly notes after duplicate weekly warning:', loadError);
                     if (typeof alert === 'function') {
-                        alert('Weekly notes already exist for this week, but we could not load them automatically. Please refresh and try again.');
+                        alert('Weekly notes already exist for the selected dates, but we could not load them automatically. Please refresh and try again.');
                     }
                 }
             } else if (typeof alert === 'function') {
@@ -1667,7 +1667,11 @@ const ManagementMeetingNotes = () => {
                 await window.DatabaseAPI.deleteComment(commentId);
             } else if (window.DatabaseAPI && typeof window.DatabaseAPI.makeRequest === 'function') {
                 await window.DatabaseAPI.makeRequest(`/meeting-notes?action=comment&id=${commentId}`, {
-                    method: 'DELETE'
+                    method: 'DELETE',
+                    body: JSON.stringify({
+                        id: commentId,
+                        commentId
+                    })
                 });
             } else {
                 throw new Error('DatabaseAPI not available');
@@ -1913,6 +1917,7 @@ const ManagementMeetingNotes = () => {
                         </div>
                         <div className="flex items-center gap-2">
                             <input
+                                type="date"
                                 value={newWeekStartInput}
                                 onChange={(e) => setNewWeekStartInput(e.target.value)}
                                 onKeyDown={(e) => {
@@ -1923,7 +1928,7 @@ const ManagementMeetingNotes = () => {
                                 }}
                                 placeholder="YYYY-MM-DD"
                                 aria-label="Week start date"
-                                title="Enter a week start date (YYYY-MM-DD) to create notes ahead of time"
+                                title="Pick a week start date to create notes ahead of time"
                                 className={`w-36 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition shadow-sm ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'}`}
                             />
                             <button
@@ -2020,7 +2025,7 @@ const ManagementMeetingNotes = () => {
                                     Week Navigation
                                 </p>
                                 <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                                    Focus on this week alongside next week while keeping earlier updates a swipe away. Scroll horizontally to move between weeks in the month.
+                                    Focus on the current week alongside next week while keeping earlier updates a swipe away. Scroll horizontally to move between weeks in the month.
                                 </p>
                             </div>
                         </div>
@@ -2032,7 +2037,7 @@ const ManagementMeetingNotes = () => {
                                     const isActualCurrentWeek = identifier === currentWeekId;
                                     const isActualNextWeek = identifier === nextWeekId;
                                     const isSelected = identifier === selectedWeek;
-                                    const label = isActualCurrentWeek ? 'This Week' : isActualNextWeek ? 'Next Week' : 'View Week';
+                                const label = 'Week Overview';
                                     return (
                                         <button
                                             key={identifier}
@@ -2132,7 +2137,7 @@ const ManagementMeetingNotes = () => {
                                             <div className="flex items-start justify-between gap-3 mb-4">
                                                 <div className="flex-1">
                                                     <p className={`text-xs uppercase tracking-wider font-bold mb-1 ${isActualCurrentWeek ? (isDark ? 'text-primary-300' : 'text-primary-600') : isActualNextWeek ? (isDark ? 'text-amber-300' : 'text-amber-600') : isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                                                        {isActualCurrentWeek ? 'This Week' : isActualNextWeek ? 'Next Week' : 'Week Overview'}
+                                                        Week Overview
                                                     </p>
                                                     <h3 className={`text-base font-bold flex items-center ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
                                                         <i className={`fas fa-calendar-week mr-2 ${isActualCurrentWeek ? 'text-primary-500' : isActualNextWeek ? 'text-amber-500' : 'text-slate-500'}`}></i>
@@ -2315,7 +2320,7 @@ const ManagementMeetingNotes = () => {
                                                                 <window.RichTextEditor
                                                                     value={tempFieldValues[getFieldKey(deptNote.id, 'successes')] ?? ''}
                                                                     onChange={(html) => handleTempValueChange(deptNote.id, 'successes', html)}
-                                                                    placeholder="What went well this week? (Use formatting toolbar for bullets, bold, etc.)"
+                                placeholder="What went well during the week? (Use formatting toolbar for bullets, bold, etc.)"
                                                                     rows={4}
                                                                     isDark={isDark}
                                                                 />
@@ -2331,7 +2336,7 @@ const ManagementMeetingNotes = () => {
                                                         <div>
                                                             <div className="flex items-center justify-between mb-1">
                                                                 <label className={`block text-xs font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
-                                                                    This Week's Plan
+                                                                    Weekly Plan
                                                                 </label>
                                                                 {!editingFields[getFieldKey(deptNote.id, 'weekToFollow')] ? (
                                                                     <button
@@ -2367,7 +2372,7 @@ const ManagementMeetingNotes = () => {
                                                                 <window.RichTextEditor
                                                                     value={tempFieldValues[getFieldKey(deptNote.id, 'weekToFollow')] ?? ''}
                                                                     onChange={(html) => handleTempValueChange(deptNote.id, 'weekToFollow', html)}
-                                                                    placeholder="What's planned for this week? (Use formatting toolbar for bullets, bold, etc.)"
+                                                                    placeholder="What's planned for the upcoming week? (Use formatting toolbar for bullets, bold, etc.)"
                                                                     rows={4}
                                                                     isDark={isDark}
                                                                 />

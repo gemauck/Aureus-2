@@ -293,12 +293,69 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                 // This prevents HTML (404 pages) from being executed as JavaScript
                 // Use no-cache for DailyNotes, Manufacturing, and ProjectProgressTracker to ensure fresh version, default for others
                 const cachePolicy = scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || scriptSrc.includes('ProjectProgressTracker') ? 'no-cache' : 'default';
-                return fetch(scriptSrc, { cache: cachePolicy })
-                .then(response => {
-                    if (!response.ok) {
-                        // File doesn't exist - skip silently
-                        console.warn(`⚠️ Component not found: ${scriptSrc} (skipping)`);
+                
+                // Retry logic for server errors (502, 503, 504)
+                const attemptLoad = (attempt = 1, maxAttempts = 3) => {
+                    return fetch(scriptSrc, { cache: cachePolicy })
+                    .then(response => {
+                        if (!response.ok) {
+                            // Check if this is a retryable server error
+                            const isServerError = response.status === 502 || response.status === 503 || response.status === 504;
+                            const isNotFound = response.status === 404;
+                            
+                            if (isNotFound) {
+                                // 404 means component doesn't exist - skip without retry
+                                console.warn(`⚠️ Component not found: ${scriptSrc} (404, skipping)`);
+                                resolve();
+                                return Promise.resolve(null);
+                            }
+                            
+                            if (isServerError && attempt < maxAttempts) {
+                                // Retry server errors with exponential backoff
+                                const delay = Math.min(300 * Math.pow(2, attempt - 1), 2000); // 300ms, 600ms, 1200ms, max 2000ms
+                                console.warn(`⚠️ Server error ${response.status} loading ${scriptSrc} (attempt ${attempt}/${maxAttempts}, retrying in ${delay}ms)...`);
+                                return new Promise((retryResolve) => {
+                                    setTimeout(() => {
+                                        attemptLoad(attempt + 1, maxAttempts).then(retryResolve);
+                                    }, delay);
+                                });
+                            }
+                            
+                            // Max retries reached or non-retryable error
+                            if (isServerError) {
+                                console.warn(`⚠️ Component failed to load after ${maxAttempts} attempts: ${scriptSrc} (${response.status}, skipping)`);
+                            } else {
+                                console.warn(`⚠️ Component not found: ${scriptSrc} (${response.status}, skipping)`);
+                            }
+                            resolve();
+                            return Promise.resolve(null);
+                        }
+                        
+                        // Success - return response for processing
+                        return response;
+                    })
+                    .catch(error => {
+                        // Network errors - retry if we haven't exceeded max attempts
+                        if (attempt < maxAttempts) {
+                            const delay = Math.min(300 * Math.pow(2, attempt - 1), 2000);
+                            console.warn(`⚠️ Network error loading ${scriptSrc} (attempt ${attempt}/${maxAttempts}, retrying in ${delay}ms):`, error.message);
+                            return new Promise((retryResolve) => {
+                                setTimeout(() => {
+                                    attemptLoad(attempt + 1, maxAttempts).then(retryResolve);
+                                }, delay);
+                            });
+                        }
+                        
+                        // Max retries reached
+                        console.warn(`⚠️ Component failed to load after ${maxAttempts} attempts due to network error: ${scriptSrc}`, error);
                         resolve();
+                        return Promise.resolve(null);
+                    });
+                };
+                
+                return attemptLoad().then(response => {
+                    // If response is null, it means we skipped the component (already resolved)
+                    if (!response) {
                         return;
                     }
                     

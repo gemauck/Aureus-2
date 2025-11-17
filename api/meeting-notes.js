@@ -65,6 +65,9 @@ async function handler(req, res) {
     return forbidden(res, FORBIDDEN_MESSAGE)
   }
 
+  const rawActionParam = req.query?.action ?? req.body?.action ?? ''
+  const action = typeof rawActionParam === 'string' ? rawActionParam.trim().toLowerCase() : ''
+
   // Get all monthly meeting notes
   if (req.method === 'GET' && !req.query.monthKey && !req.query.id) {
     try {
@@ -262,7 +265,7 @@ async function handler(req, res) {
   }
 
   // Create monthly meeting notes
-  if (req.method === 'POST' && !req.query.action) {
+  if (req.method === 'POST' && !action) {
     try {
       const { monthKey } = req.body
 
@@ -300,7 +303,7 @@ async function handler(req, res) {
   }
 
   // Update monthly meeting notes
-  if (req.method === 'PUT' && !req.query.action) {
+  if (req.method === 'PUT' && !action) {
     try {
       const { id, status } = req.body
 
@@ -346,7 +349,7 @@ async function handler(req, res) {
   }
 
   // Delete ALL meeting notes (purge)
-  if (req.method === 'DELETE' && req.query.action === 'purge') {
+  if (req.method === 'DELETE' && action === 'purge') {
     try {
       const { confirm } = req.query
       if (confirm !== 'true') {
@@ -367,7 +370,7 @@ async function handler(req, res) {
   }
 
   // Delete monthly meeting notes
-  if (req.method === 'DELETE' && !req.query.action) {
+  if (req.method === 'DELETE' && !action) {
     try {
       const { id, monthKey } = req.query
       if (!id && !monthKey) {
@@ -391,7 +394,7 @@ async function handler(req, res) {
   }
 
   // Delete weekly meeting notes
-  if (req.method === 'DELETE' && req.query.action === 'weekly') {
+  if (req.method === 'DELETE' && action === 'weekly') {
     try {
       const { id, weeklyNotesId } = req.query
       const targetId = weeklyNotesId || id
@@ -414,7 +417,7 @@ async function handler(req, res) {
   }
 
   // Create weekly meeting notes
-  if (req.method === 'POST' && req.query.action === 'weekly') {
+  if (req.method === 'POST' && action === 'weekly') {
     try {
       const { monthlyNotesId, weekKey, weekStart, weekEnd } = req.body
 
@@ -487,7 +490,7 @@ async function handler(req, res) {
   }
 
   // Update department notes
-  if (req.method === 'PUT' && req.query.action === 'department') {
+  if (req.method === 'PUT' && action === 'department') {
     try {
       const { id, successes, weekToFollow, frustrations, agendaPoints, assignedUserId } = req.body
 
@@ -532,7 +535,7 @@ async function handler(req, res) {
   }
 
   // Create action item
-  if (req.method === 'POST' && req.query.action === 'action-item') {
+  if (req.method === 'POST' && action === 'action-item') {
     try {
       const { monthlyNotesId, weeklyNotesId, departmentNotesId, title, description, status, priority, assignedUserId, dueDate } = req.body
 
@@ -576,7 +579,7 @@ async function handler(req, res) {
   }
 
   // Update action item
-  if (req.method === 'PUT' && req.query.action === 'action-item') {
+  if (req.method === 'PUT' && action === 'action-item') {
     try {
       const { id, title, description, status, priority, assignedUserId, dueDate, completedDate } = req.body
 
@@ -619,7 +622,7 @@ async function handler(req, res) {
   }
 
   // Delete action item
-  if (req.method === 'DELETE' && req.query.action === 'action-item') {
+  if (req.method === 'DELETE' && action === 'action-item') {
     try {
       const { id } = req.query
 
@@ -639,7 +642,7 @@ async function handler(req, res) {
   }
 
   // Create comment
-  if (req.method === 'POST' && req.query.action === 'comment') {
+  if (req.method === 'POST' && action === 'comment') {
     try {
       const { monthlyNotesId, departmentNotesId, actionItemId, content } = req.body
 
@@ -673,8 +676,36 @@ async function handler(req, res) {
     }
   }
 
+  // Delete comment
+  if (req.method === 'DELETE' && action === 'comment') {
+    try {
+      const targetId = req.query.id || req.query.commentId || req.body?.id || req.body?.commentId
+
+      if (!targetId) {
+        return badRequest(res, 'comment id is required')
+      }
+
+      const deletedComment = await prisma.meetingComment.delete({
+        where: { id: targetId },
+        include: {
+          author: {
+            select: { id: true, name: true, email: true }
+          }
+        }
+      })
+
+      return ok(res, { success: true, comment: deletedComment })
+    } catch (error) {
+      if (error.code === 'P2025') {
+        return ok(res, { success: false, message: 'Comment not found' })
+      }
+      console.error('Error deleting comment:', error)
+      return serverError(res, 'Failed to delete comment')
+    }
+  }
+
   // Update user allocation
-  if (req.method === 'POST' && req.query.action === 'allocation') {
+  if (req.method === 'POST' && action === 'allocation') {
     try {
       const { monthlyNotesId, departmentId, userId, role } = req.body
 
@@ -714,7 +745,7 @@ async function handler(req, res) {
   }
 
   // Delete user allocation
-  if (req.method === 'DELETE' && req.query.action === 'allocation') {
+  if (req.method === 'DELETE' && action === 'allocation') {
     try {
       const { monthlyNotesId, departmentId, userId } = req.query
 
@@ -740,7 +771,7 @@ async function handler(req, res) {
   }
 
   // Generate new monthly plan (copy from previous month)
-  if (req.method === 'POST' && req.query.action === 'generate-month') {
+  if (req.method === 'POST' && action === 'generate-month') {
     try {
       const { monthKey, copyFromMonthKey } = req.body
 

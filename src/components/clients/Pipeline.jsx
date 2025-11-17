@@ -121,6 +121,10 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
     const [listSortColumn, setListSortColumn] = useState(null);
     const [listSortDirection, setListSortDirection] = useState('asc');
     
+    const schedulePipelineRefresh = useCallback(() => {
+        setTimeout(() => setRefreshKey((k) => k + 1), 0);
+    }, [setRefreshKey]);
+    
 
     useEffect(() => {
         try {
@@ -1311,6 +1315,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
             return; // Already in target stage
         }
 
+        let didPersistRemotely = false;
         try {
             // Optimistic UI update
             if (itemType === 'lead') {
@@ -1318,24 +1323,29 @@ function doesOpportunityBelongToClient(opportunity, client) {
             } else if (itemType === 'opportunity') {
                 updateOpportunityStageOptimistically(item.clientId, item.id, targetStage);
             }
-            setRefreshKey((k) => k + 1); // Force immediate re-render
 
             // Persist to database
             if (itemType === 'lead') {
                 const updateFn = window.api?.updateLeadStage || window.DatabaseAPI?.updateLeadStage;
                 if (updateFn) {
                     await updateFn(item.id, targetStage);
+                    didPersistRemotely = true;
                 }
             } else if (itemType === 'opportunity') {
                 const updateFn = window.api?.updateOpportunityStage || window.DatabaseAPI?.updateOpportunityStage;
                 if (updateFn && item.clientId) {
                     await updateFn(item.clientId, item.id, targetStage);
+                    didPersistRemotely = true;
                 }
+            }
+            
+            if (didPersistRemotely) {
+                schedulePipelineRefresh();
             }
         } catch (error) {
             console.error('❌ Pipeline: Failed to update stage', error);
             alert('Failed to update stage. Please try again.');
-            setRefreshKey((k) => k + 1); // Revert by refreshing
+            schedulePipelineRefresh(); // Revert by refreshing
         } finally {
             setDraggedItem(null);
             setDraggedType(null);
@@ -1669,9 +1679,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
             console.warn('⚠️ Pipeline: Unable to clear returnToPipeline flag on fallback close', error);
         }
         if (refresh) {
-            setTimeout(() => setRefreshKey(k => k + 1), 0);
+            schedulePipelineRefresh();
         }
-    }, [setRefreshKey]);
+    }, [schedulePipelineRefresh]);
 
     const openDealDetail = (item) => {
         if (!item || !item.id) return;
@@ -1925,6 +1935,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     // Use draggedType from state, or fallback to item.type
                     const finalType = draggedType || item.type;
 
+                    let didPersistRemotely = false;
                     try {
                         // Optimistic UI update
                         if (finalType === 'lead') {
@@ -1932,24 +1943,29 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         } else if (finalType === 'opportunity') {
                             updateOpportunityStageOptimistically(item.clientId, item.id, stage.name);
                         }
-                        setRefreshKey((k) => k + 1);
 
                         // Persist to database
                         if (finalType === 'lead') {
                             const updateFn = window.api?.updateLeadStage || window.DatabaseAPI?.updateLeadStage;
                             if (updateFn) {
                                 await updateFn(item.id, stage.name);
+                                didPersistRemotely = true;
                             }
                         } else if (finalType === 'opportunity') {
                             const updateFn = window.api?.updateOpportunityStage || window.DatabaseAPI?.updateOpportunityStage;
                             if (updateFn && item.clientId) {
                                 await updateFn(item.clientId, item.id, stage.name);
+                                didPersistRemotely = true;
                             }
+                        }
+                        
+                        if (didPersistRemotely) {
+                            schedulePipelineRefresh();
                         }
                     } catch (error) {
                         console.error('❌ Pipeline: Failed to update stage', error);
                         alert('Failed to update stage. Please try again.');
-                        setRefreshKey((k) => k + 1);
+                        schedulePipelineRefresh();
                     } finally {
                         setDraggedItem(null);
                         setDraggedType(null);
@@ -2162,7 +2178,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     <button
                         onClick={() => {
                             console.log('🔄 Pipeline: Manual refresh triggered');
-                            setRefreshKey(k => k + 1);
+                            schedulePipelineRefresh();
                         }}
                         className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition text-sm font-medium"
                     >

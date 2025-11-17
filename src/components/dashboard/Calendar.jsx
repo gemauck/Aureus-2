@@ -665,7 +665,10 @@ const Calendar = () => {
             
             {/* Calendar Widget - Always render unless DailyNotes is open */}
             {!showDailyNotes ? (
-                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border shadow-lg p-3 sm:p-4 w-full max-w-md mx-auto transition-all duration-200`} style={{ display: 'block', visibility: 'visible' }}>
+                <div
+                    className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border shadow-lg p-3 sm:p-4 w-full max-w-md mx-auto transition-all duration-200`}
+                    style={{ display: 'block', visibility: 'visible', maxWidth: '448px', width: '100%', margin: '0 auto' }}
+                >
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 sm:mb-4 gap-2 sm:gap-0">
                         <div className="flex items-center space-x-2 w-full sm:w-auto justify-between sm:justify-start">
                             <button

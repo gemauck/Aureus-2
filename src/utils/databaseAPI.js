@@ -1846,8 +1846,16 @@ const DatabaseAPI = {
 
     async deleteComment(commentId) {
         console.log(`📡 Deleting comment ${commentId} from database...`);
+        if (!commentId) {
+            throw new Error('commentId is required to delete a comment');
+        }
+        const payload = {
+            id: commentId,
+            commentId
+        };
         const response = await this.makeRequest(`/meeting-notes?action=comment&id=${commentId}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            body: JSON.stringify(payload)
         });
         console.log('✅ Comment deleted from database');
         return response;

@@ -2045,7 +2045,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
         return (
             <td 
-                className={`px-2 py-1 text-xs border-l border-gray-100 ${cellBackgroundClass} relative z-20`}
+                className={`px-2 py-1 text-xs border-l border-gray-100 ${cellBackgroundClass} relative`}
             >
                 <div className="min-w-[160px] relative">
                     {/* Status Dropdown */}
@@ -2069,7 +2069,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 }
                             }, 100);
                         }}
-                        className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80 relative z-30`}
+                        className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80 relative`}
                         style={{ pointerEvents: 'auto' }}
                         onClick={(e) => {
                             e.stopPropagation();
@@ -2346,7 +2346,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wide sticky left-0 bg-gray-50 z-10 border-r border-gray-200">
+                                <th className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wide sticky left-0 bg-gray-50 z-40 border-r border-gray-200">
                                     Document / Data
                                 </th>
                                 {months.map((month, idx) => (
@@ -2406,7 +2406,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                 dragOverIndex === sectionIndex ? 'border-t-2 border-primary-500' : ''
                                             }`}
                                         >
-                                            <td className="px-2.5 py-2 sticky left-0 bg-gray-100 z-10 border-r border-gray-200">
+                                                    <td className="px-2.5 py-2 sticky left-0 bg-gray-100 z-40 border-r border-gray-200">
                                                 <div className="flex items-center gap-2">
                                                     <i className="fas fa-grip-vertical text-gray-400 text-xs"></i>
                                                     <div className="flex-1">
@@ -2466,7 +2466,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         ) : (
                                             section.documents.map((document) => (
                                                 <tr key={document.id} className="hover:bg-gray-50">
-                                                    <td className="px-4 py-1.5 sticky left-0 bg-white z-10 border-r border-gray-200">
+                                                    <td className="px-4 py-1.5 sticky left-0 bg-white z-40 border-r border-gray-200">
                                                         <div className="min-w-[200px]">
                                                             <div className="text-xs font-medium text-gray-900">{document.name}</div>
                                                             {document.description && (
