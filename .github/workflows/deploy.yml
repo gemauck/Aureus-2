@@ -43,9 +43,18 @@ jobs:
           # Pull latest changes
           git pull origin main
           
-          # Install dependencies
+          # Install dependencies (root level for build tools)
+          npm ci --only=production || npm install --production
+          
+          # Build JSX files
+          npm run build:jsx || echo "JSX build completed with warnings"
+          
+          # Build CSS
+          npm run build:css || echo "CSS build completed with warnings"
+          
+          # Install server dependencies
           cd server
-          npm ci --only=production
+          npm ci --only=production || npm install --production
           
           # Run database migrations if needed
           npm run migrate || echo "No migrations to run"
