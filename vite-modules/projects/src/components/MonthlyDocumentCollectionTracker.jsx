@@ -97,6 +97,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const editingSectionIdRef = useRef(null);
     const isSavingRef = useRef(false);
     const debouncedSaveTimeoutRef = useRef(null);
+    const lastLocalUpdateRef = useRef(0); // Track last local update timestamp to prevent sync overwrites
     
     // Version-based conflict resolution (best practice instead of time windows)
     const [localVersion, setLocalVersion] = useState(0);
@@ -134,6 +135,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [showApplyTemplateModal, setShowApplyTemplateModal] = useState(false);
     const [editingTemplate, setEditingTemplate] = useState(null);
     const [templates, setTemplates] = useState([]);
+    const [showTemplateList, setShowTemplateList] = useState(true);
     
     // Template storage key
     const TEMPLATES_STORAGE_KEY = 'documentCollectionTemplates';
@@ -2329,8 +2331,31 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
 
     // Template Management Modal
-    const TemplateModal = () => {
-        const [showTemplateList, setShowTemplateList] = useState(!editingTemplate);
+    const TemplateModal = ({ showTemplateList = true, setShowTemplateList }) => {
+        // showTemplateList is now managed by parent component
+        // Add safety check for setShowTemplateList
+        if (!setShowTemplateList) {
+            console.error('TemplateModal: setShowTemplateList prop is missing');
+            return null;
+        }
+        
+        // Reset showTemplateList when editingTemplate changes
+        useEffect(() => {
+            if (!setShowTemplateList) return;
+            if (editingTemplate) {
+                setShowTemplateList(false);
+            } else {
+                setShowTemplateList(true);
+            }
+        }, [editingTemplate, setShowTemplateList]);
+        
+        // Reset showTemplateList when modal closes
+        useEffect(() => {
+            if (!setShowTemplateList) return;
+            if (!showTemplateModal) {
+                setShowTemplateList(true);
+            }
+        }, [showTemplateModal, setShowTemplateList]);
         
         // Debug: Log templates when they change
         useEffect(() => {
@@ -2433,7 +2458,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             {!showTemplateList && (
                                 <button
                                     onClick={() => {
-                                        setShowTemplateList(true);
+                                        if (setShowTemplateList) setShowTemplateList(true);
                                         setEditingTemplate(null);
                                         window.tempTemplateData = null;
                                     }}
@@ -2448,7 +2473,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 onClick={() => {
                                     setShowTemplateModal(false);
                                     setEditingTemplate(null);
-                                    setShowTemplateList(true);
+                                    if (setShowTemplateList) setShowTemplateList(true);
                                     window.tempTemplateData = null;
                                 }} 
                                 className="text-gray-400 hover:text-gray-600 p-1"
@@ -2465,7 +2490,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     <p className="text-xs text-gray-600">Manage your document collection templates</p>
                                     <button
                                         onClick={() => {
-                                            setShowTemplateList(false);
+                                            if (setShowTemplateList) setShowTemplateList(false);
                                             setEditingTemplate(null);
                                             setTemplateFormData({ name: '', description: '', sections: [] });
                                         }}
@@ -2515,7 +2540,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                             <button
                                                                 onClick={() => {
                                                                     setEditingTemplate(template);
-                                                                    setShowTemplateList(false);
+                                                                    if (setShowTemplateList) setShowTemplateList(false);
                                                                     setTemplateFormData({
                                                                         name: template.name,
                                                                         description: template.description || '',
@@ -2664,6 +2689,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     onClick={() => {
                                         setShowTemplateModal(false);
                                         setEditingTemplate(null);
+                                        if (setShowTemplateList) setShowTemplateList(true);
                                         window.tempTemplateData = null;
                                     }}
                                     className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
@@ -3373,7 +3399,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             {/* Modals */}
             {showSectionModal && <SectionModal />}
             {showDocumentModal && <DocumentModal />}
-            {showTemplateModal && <TemplateModal />}
+            {showTemplateModal && <TemplateModal showTemplateList={showTemplateList} setShowTemplateList={setShowTemplateList} />}
             {showApplyTemplateModal && <ApplyTemplateModal />}
         </div>
     );

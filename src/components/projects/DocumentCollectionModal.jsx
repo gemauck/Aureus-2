@@ -19,8 +19,19 @@ const DocumentCollectionModal = ({ document, onSave, onClose, users }) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg w-full max-w-xl">
+        <div 
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            onClick={(e) => {
+                // Only close if clicking directly on the backdrop, not on the modal content
+                if (e.target === e.currentTarget) {
+                    onClose();
+                }
+            }}
+        >
+            <div 
+                className="bg-white rounded-lg w-full max-w-xl"
+                onClick={(e) => e.stopPropagation()}
+            >
                 <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
                     <h2 className="text-base font-semibold text-gray-900">
                         {document ? 'Edit Document Request' : 'Request Document'}

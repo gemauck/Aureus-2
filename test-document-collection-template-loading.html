@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Collection Template Loading Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            margin-top: 0;
+        }
+        h2 {
+            color: #555;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        button {
+            background: #3B82F6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #2563EB;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .success {
+            color: #10B981;
+            font-weight: bold;
+        }
+        .error {
+            color: #EF4444;
+            font-weight: bold;
+        }
+        .warning {
+            color: #F59E0B;
+            font-weight: bold;
+        }
+        .info {
+            color: #3B82F6;
+        }
+        pre {
+            background: #f8f8f8;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            border: 1px solid #ddd;
+        }
+        .log-entry {
+            padding: 8px;
+            margin: 5px 0;
+            border-left: 3px solid #ddd;
+            padding-left: 15px;
+        }
+        .log-entry.success {
+            border-left-color: #10B981;
+            background: #ECFDF5;
+        }
+        .log-entry.error {
+            border-left-color: #EF4444;
+            background: #FEF2F2;
+        }
+        .log-entry.warning {
+            border-left-color: #F59E0B;
+            background: #FFFBEB;
+        }
+        .log-entry.info {
+            border-left-color: #3B82F6;
+            background: #EFF6FF;
+        }
+        .template-item {
+            background: #f9f9f9;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+        .template-item.default {
+            border-color: #3B82F6;
+            background: #EFF6FF;
+        }
+        .template-item h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .badge.default {
+            background: #3B82F6;
+            color: white;
+        }
+        .badge.sections {
+            background: #10B981;
+            color: white;
+        }
+        .section-item {
+            margin: 5px 0;
+            padding: 8px;
+            background: white;
+            border-left: 3px solid #3B82F6;
+            padding-left: 12px;
+        }
+        .document-item {
+            margin: 3px 0 3px 20px;
+            padding: 5px;
+            background: #fafafa;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Document Collection Template Loading Test</h1>
+        <p>This page helps debug why default templates aren't loading in the document collection checklist.</p>
+    </div>
+
+    <div class="container">
+        <h2>1. Authentication Check</h2>
+        <button onclick="checkAuth()">Check Authentication</button>
+        <div id="auth-status"></div>
+    </div>
+
+    <div class="container">
+        <h2>2. Test API Endpoint</h2>
+        <button onclick="testAPIEndpoint()">Test GET /api/document-collection-templates</button>
+        <div id="api-status"></div>
+    </div>
+
+    <div class="container">
+        <h2>3. Check LocalStorage</h2>
+        <button onclick="checkLocalStorage()">Check LocalStorage Templates</button>
+        <div id="localstorage-status"></div>
+    </div>
+
+    <div class="container">
+        <h2>4. Load Templates (Full Flow)</h2>
+        <button onclick="loadTemplatesFull()">Load Templates (Simulate Component)</button>
+        <div id="load-status"></div>
+    </div>
+
+    <div class="container">
+        <h2>5. Templates Found</h2>
+        <div id="templates-display"></div>
+    </div>
+
+    <div class="container">
+        <h2>6. Console Logs</h2>
+        <button onclick="clearLogs()">Clear Logs</button>
+        <div id="logs"></div>
+    </div>
+
+    <script>
+        const TEMPLATES_STORAGE_KEY = 'documentCollectionTemplates';
+        const logs = [];
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = {
+                timestamp,
+                message,
+                type
+            };
+            logs.push(logEntry);
+            updateLogsDisplay();
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        function updateLogsDisplay() {
+            const logsDiv = document.getElementById('logs');
+            logsDiv.innerHTML = logs.slice(-50).reverse().map(entry => 
+                `<div class="log-entry ${entry.type}">
+                    <strong>[${entry.timestamp}]</strong> ${entry.message}
+                </div>`
+            ).join('');
+        }
+
+        function clearLogs() {
+            logs.length = 0;
+            updateLogsDisplay();
+        }
+
+        async function checkAuth() {
+            const statusDiv = document.getElementById('auth-status');
+            statusDiv.innerHTML = '<p class="info">Checking...</p>';
+            
+            try {
+                const storage = window.storage;
+                if (!storage) {
+                    log('❌ window.storage is not available', 'error');
+                    statusDiv.innerHTML = '<p class="error">❌ window.storage is not available</p>';
+                    return;
+                }
+
+                const token = storage.getToken?.();
+                if (!token) {
+                    log('❌ No authentication token found', 'error');
+                    statusDiv.innerHTML = '<p class="error">❌ No authentication token found. Please log in first.</p>';
+                    return;
+                }
+
+                log(`✅ Token found (length: ${token.length})`, 'success');
+                statusDiv.innerHTML = `
+                    <p class="success">✅ Authentication token found</p>
+                    <p class="info">Token length: ${token.length} characters</p>
+                    <p class="info">Token preview: ${token.substring(0, 20)}...</p>
+                `;
+            } catch (error) {
+                log(`❌ Error checking auth: ${error.message}`, 'error');
+                statusDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        }
+
+        async function testAPIEndpoint() {
+            const statusDiv = document.getElementById('api-status');
+            statusDiv.innerHTML = '<p class="info">Testing API endpoint...</p>';
+            
+            try {
+                const storage = window.storage;
+                const token = storage?.getToken?.();
+                
+                if (!token) {
+                    log('❌ No token available for API test', 'error');
+                    statusDiv.innerHTML = '<p class="error">❌ Please check authentication first</p>';
+                    return;
+                }
+
+                log('📡 Fetching from /api/document-collection-templates...', 'info');
+                
+                const response = await fetch('/api/document-collection-templates', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                log(`📡 Response status: ${response.status} ${response.ok ? 'OK' : 'ERROR'}`, response.ok ? 'success' : 'error');
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    log(`❌ API Error: ${response.status} - ${errorText}`, 'error');
+                    statusDiv.innerHTML = `
+                        <p class="error">❌ API Error: ${response.status}</p>
+                        <pre>${errorText}</pre>
+                    `;
+                    return;
+                }
+
+                const responseData = await response.json();
+                log(`✅ API Response received`, 'success');
+                log(`📊 Response structure: ${JSON.stringify(Object.keys(responseData))}`, 'info');
+                log(`📊 Full response preview: ${JSON.stringify(responseData).substring(0, 200)}...`, 'info');
+                
+                // Note: ok() helper wraps in { data: ... }, so response is { data: { templates: [...] } }
+                const templates = responseData?.templates || responseData?.data?.templates || [];
+                log(`📋 Found ${templates.length} template(s) in API response`, templates.length > 0 ? 'success' : 'warning');
+                
+                if (templates.length === 0) {
+                    log(`⚠️ No templates found! Response structure:`, 'warning');
+                    log(`   - responseData.templates: ${responseData?.templates ? 'exists' : 'missing'}`, 'warning');
+                    log(`   - responseData.data: ${responseData?.data ? 'exists' : 'missing'}`, 'warning');
+                    log(`   - responseData.data.templates: ${responseData?.data?.templates ? 'exists' : 'missing'}`, 'warning');
+                }
+                
+                // Check for default templates
+                const defaultTemplates = templates.filter(t => t.isDefault === true);
+                log(`🔵 Found ${defaultTemplates.length} default template(s)`, defaultTemplates.length > 0 ? 'success' : 'warning');
+
+                statusDiv.innerHTML = `
+                    <p class="success">✅ API endpoint is working</p>
+                    <p class="info">Total templates: ${templates.length}</p>
+                    <p class="${defaultTemplates.length > 0 ? 'success' : 'warning'}">
+                        Default templates: ${defaultTemplates.length}
+                    </p>
+                    <details>
+                        <summary>View API Response</summary>
+                        <pre>${JSON.stringify(responseData, null, 2)}</pre>
+                    </details>
+                `;
+
+                // Display templates
+                displayTemplates(templates);
+            } catch (error) {
+                log(`❌ Error testing API: ${error.message}`, 'error');
+                statusDiv.innerHTML = `
+                    <p class="error">❌ Error: ${error.message}</p>
+                    <pre>${error.stack}</pre>
+                `;
+            }
+        }
+
+        function checkLocalStorage() {
+            const statusDiv = document.getElementById('localstorage-status');
+            
+            try {
+                const storedTemplates = localStorage.getItem(TEMPLATES_STORAGE_KEY);
+                
+                if (!storedTemplates) {
+                    log('📦 No templates in localStorage', 'warning');
+                    statusDiv.innerHTML = '<p class="warning">📦 No templates found in localStorage</p>';
+                    return;
+                }
+
+                let localTemplates = [];
+                try {
+                    localTemplates = JSON.parse(storedTemplates);
+                    log(`📦 Found ${localTemplates.length} template(s) in localStorage`, 'success');
+                } catch (e) {
+                    log(`❌ Failed to parse localStorage templates: ${e.message}`, 'error');
+                    statusDiv.innerHTML = `<p class="error">❌ Failed to parse: ${e.message}</p>`;
+                    return;
+                }
+
+                const defaultTemplates = localTemplates.filter(t => t.isDefault === true);
+                
+                statusDiv.innerHTML = `
+                    <p class="success">✅ Templates found in localStorage</p>
+                    <p class="info">Total templates: ${localTemplates.length}</p>
+                    <p class="${defaultTemplates.length > 0 ? 'success' : 'warning'}">
+                        Default templates: ${defaultTemplates.length}
+                    </p>
+                    <details>
+                        <summary>View LocalStorage Data</summary>
+                        <pre>${JSON.stringify(localTemplates, null, 2)}</pre>
+                    </details>
+                `;
+
+                // Display templates
+                displayTemplates(localTemplates);
+            } catch (error) {
+                log(`❌ Error checking localStorage: ${error.message}`, 'error');
+                statusDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        }
+
+        async function loadTemplatesFull() {
+            const statusDiv = document.getElementById('load-status');
+            statusDiv.innerHTML = '<p class="info">Loading templates (simulating component flow)...</p>';
+            
+            try {
+                // Step 1: Load from localStorage
+                log('📦 Step 1: Loading from localStorage...', 'info');
+                const storedTemplates = localStorage.getItem(TEMPLATES_STORAGE_KEY);
+                let localTemplates = [];
+                
+                if (storedTemplates) {
+                    try {
+                        localTemplates = JSON.parse(storedTemplates);
+                        log(`📦 Found ${localTemplates.length} template(s) in localStorage`, 'success');
+                        
+                        // Parse sections
+                        localTemplates = localTemplates.map(t => {
+                            if (typeof t.sections === 'string') {
+                                try {
+                                    t.sections = JSON.parse(t.sections);
+                                } catch (e) {
+                                    log(`⚠️ Failed to parse sections for template ${t.id}: ${e.message}`, 'warning');
+                                    t.sections = [];
+                                }
+                            }
+                            if (!Array.isArray(t.sections)) {
+                                t.sections = [];
+                            }
+                            return t;
+                        });
+                    } catch (e) {
+                        log(`⚠️ Failed to parse stored templates: ${e.message}`, 'warning');
+                    }
+                } else {
+                    log('📦 No templates in localStorage', 'info');
+                }
+
+                // Step 2: Fetch from API
+                log('📡 Step 2: Fetching from API...', 'info');
+                const storage = window.storage;
+                const token = storage?.getToken?.();
+                
+                if (!token) {
+                    log('⚠️ No token, using local templates only', 'warning');
+                    statusDiv.innerHTML = `
+                        <p class="warning">⚠️ No authentication token - using local templates only</p>
+                        <p class="info">Templates found: ${localTemplates.length}</p>
+                    `;
+                    displayTemplates(localTemplates);
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/document-collection-templates', {
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+
+                    log(`📡 API Response: ${response.status} ${response.ok ? 'OK' : 'ERROR'}`, response.ok ? 'success' : 'error');
+
+                    if (response.ok) {
+                        const responseData = await response.json();
+                        // Note: ok() helper wraps in { data: ... }, so check both locations
+                        const apiTemplates = responseData?.templates || responseData?.data?.templates || [];
+                        log(`✅ Loaded ${apiTemplates.length} template(s) from API`, 'success');
+                        
+                        if (apiTemplates.length === 0) {
+                            log(`⚠️ API returned empty array! Check if default template exists in database.`, 'warning');
+                            log(`   Response structure: ${JSON.stringify(Object.keys(responseData))}`, 'warning');
+                        }
+
+                        // Parse sections for API templates
+                        apiTemplates.forEach(t => {
+                            if (typeof t.sections === 'string') {
+                                try {
+                                    t.sections = JSON.parse(t.sections);
+                                } catch (e) {
+                                    log(`⚠️ Failed to parse API template sections: ${e.message}`, 'warning');
+                                    t.sections = [];
+                                }
+                            }
+                            if (!Array.isArray(t.sections)) {
+                                t.sections = [];
+                            }
+                        });
+
+                        // Step 3: Merge templates
+                        log('🔄 Step 3: Merging templates...', 'info');
+                        const templateMap = new Map();
+                        
+                        // Add local templates first
+                        localTemplates.forEach(t => {
+                            if (t.id) templateMap.set(t.id, t);
+                        });
+                        
+                        // Overwrite with API templates
+                        apiTemplates.forEach(t => {
+                            if (t.id) templateMap.set(t.id, t);
+                        });
+                        
+                        const mergedTemplates = Array.from(templateMap.values());
+                        log(`💾 Merged ${mergedTemplates.length} template(s)`, 'success');
+
+                        // Step 4: Save to localStorage
+                        log('💾 Step 4: Saving to localStorage...', 'info');
+                        localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(mergedTemplates));
+                        log('✅ Saved to localStorage', 'success');
+
+                        // Check for default templates
+                        const defaultTemplates = mergedTemplates.filter(t => t.isDefault === true);
+                        log(`🔵 Found ${defaultTemplates.length} default template(s)`, defaultTemplates.length > 0 ? 'success' : 'warning');
+
+                        statusDiv.innerHTML = `
+                            <p class="success">✅ Templates loaded successfully</p>
+                            <p class="info">Total templates: ${mergedTemplates.length}</p>
+                            <p class="${defaultTemplates.length > 0 ? 'success' : 'warning'}">
+                                Default templates: ${defaultTemplates.length}
+                            </p>
+                            <p class="info">Templates saved to localStorage</p>
+                        `;
+
+                        displayTemplates(mergedTemplates);
+                    } else {
+                        const errorText = await response.text();
+                        log(`⚠️ API failed: ${response.status} - ${errorText}`, 'warning');
+                        statusDiv.innerHTML = `
+                            <p class="warning">⚠️ API request failed</p>
+                            <p class="info">Using local templates: ${localTemplates.length}</p>
+                        `;
+                        displayTemplates(localTemplates);
+                    }
+                } catch (apiError) {
+                    log(`❌ API error: ${apiError.message}`, 'error');
+                    statusDiv.innerHTML = `
+                        <p class="error">❌ API Error: ${apiError.message}</p>
+                        <p class="info">Using local templates: ${localTemplates.length}</p>
+                    `;
+                    displayTemplates(localTemplates);
+                }
+            } catch (error) {
+                log(`❌ Error in load flow: ${error.message}`, 'error');
+                statusDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        }
+
+        function displayTemplates(templates) {
+            const displayDiv = document.getElementById('templates-display');
+            
+            if (!templates || templates.length === 0) {
+                displayDiv.innerHTML = '<p class="warning">No templates found</p>';
+                return;
+            }
+
+            const defaultTemplates = templates.filter(t => t.isDefault === true);
+            const regularTemplates = templates.filter(t => !t.isDefault);
+
+            let html = `<h3>Default Templates (${defaultTemplates.length})</h3>`;
+            
+            if (defaultTemplates.length === 0) {
+                html += '<p class="warning">⚠️ No default templates found!</p>';
+            } else {
+                defaultTemplates.forEach(template => {
+                    const sections = Array.isArray(template.sections) ? template.sections : [];
+                    html += `
+                        <div class="template-item default">
+                            <h3>
+                                ${template.name || 'Unnamed Template'}
+                                <span class="badge default">DEFAULT</span>
+                                <span class="badge sections">${sections.length} sections</span>
+                            </h3>
+                            ${template.description ? `<p style="color: #666; margin: 5px 0;">${template.description}</p>` : ''}
+                            <p style="font-size: 11px; color: #999;">ID: ${template.id}</p>
+                            ${sections.length > 0 ? `
+                                <details style="margin-top: 10px;">
+                                    <summary>Sections (${sections.length})</summary>
+                                    ${sections.map((section, idx) => `
+                                        <div class="section-item">
+                                            <strong>${section.name || `Section ${idx + 1}`}</strong>
+                                            ${section.description ? `<p style="font-size: 11px; color: #666; margin: 3px 0;">${section.description}</p>` : ''}
+                                            ${Array.isArray(section.documents) && section.documents.length > 0 ? `
+                                                <div style="margin-top: 5px;">
+                                                    Documents (${section.documents.length}):
+                                                    ${section.documents.map(doc => `
+                                                        <div class="document-item">• ${doc.name || 'Unnamed Document'}</div>
+                                                    `).join('')}
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    `).join('')}
+                                </details>
+                            ` : '<p class="warning">⚠️ No sections in template</p>'}
+                        </div>
+                    `;
+                });
+            }
+
+            if (regularTemplates.length > 0) {
+                html += `<h3 style="margin-top: 30px;">Regular Templates (${regularTemplates.length})</h3>`;
+                regularTemplates.forEach(template => {
+                    const sections = Array.isArray(template.sections) ? template.sections : [];
+                    html += `
+                        <div class="template-item">
+                            <h3>
+                                ${template.name || 'Unnamed Template'}
+                                <span class="badge sections">${sections.length} sections</span>
+                            </h3>
+                            ${template.description ? `<p style="color: #666; margin: 5px 0;">${template.description}</p>` : ''}
+                            <p style="font-size: 11px; color: #999;">ID: ${template.id}</p>
+                        </div>
+                    `;
+                });
+            }
+
+            displayDiv.innerHTML = html;
+        }
+
+        // Auto-run on load
+        window.addEventListener('load', () => {
+            log('🚀 Test page loaded', 'info');
+            log('Click buttons above to test each step', 'info');
+        });
+    </script>
+</body>
+</html>

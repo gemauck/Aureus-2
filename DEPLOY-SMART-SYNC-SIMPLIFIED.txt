@@ -1,0 +1,51 @@
+🚀 DEPLOY SIMPLIFIED SMART SYNC - COPY & PASTE THIS
+========================================================
+
+# Navigate to project directory
+cd "/Users/gemau/Documents/Project ERP/abcotronics-erp-modular"
+
+# Commit changes
+git add src/components/projects/MonthlyDocumentCollectionTracker.jsx
+git commit -m "Fix: Simplify Smart Sync - pure dirty field tracking only"
+
+# Push to GitHub
+git push origin main
+
+# Deploy to droplet
+ssh root@abcoafrica.co.za << 'DEPLOY'
+set -e
+cd /var/www/abcotronics-erp
+echo "📥 Pulling latest code..."
+git pull origin main
+echo "✅ Code updated"
+echo ""
+echo "🏗️ Building JSX..."
+npm run build:jsx || node build-jsx.js
+echo "✅ JSX built"
+echo ""
+echo "🔄 Restarting app..."
+pm2 restart abcotronics-erp
+pm2 save
+echo "✅ Deployment complete!"
+DEPLOY
+
+echo ""
+echo "✅ SIMPLIFIED SMART SYNC DEPLOYED!"
+echo ""
+echo "🔍 What Changed:"
+echo "  • Removed complex version tracking"
+echo "  • Pure dirty field checking only"
+echo "  • Simpler, more predictable behavior"
+echo ""
+echo "🧪 After Deploy:"
+echo "  1. Hard refresh: Cmd+Shift+R (Mac) or Ctrl+Shift+R (Windows)"
+echo "  2. Open browser console (F12)"
+echo "  3. Navigate to Document Collection page"
+echo "  4. Watch for these logs:"
+echo "     - '🔄 Smart Sync enabled'"
+echo "     - '🎯 Marking field as dirty: [id]' (when you focus)"
+echo "     - '⏭️ Skipping sync - user has X dirty field(s)' (while editing)"
+echo ""
+echo "Visit: https://abcoafrica.co.za"
+
+========================================================

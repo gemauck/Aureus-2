@@ -153,3 +153,4 @@ If you want to keep current structure but fix the immediate issue:
 2. Use a separate useEffect that watches `sections` changes
 3. Use a proper version number instead of time windows
 
+

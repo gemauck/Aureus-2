@@ -1284,6 +1284,7 @@ function initializeProjectDetail() {
         
         return (
             <MonthlyDocumentCollectionTracker
+                key={project?.id || 'default'}
                 project={project}
                 onBack={() => setActiveSection('overview')}
             />

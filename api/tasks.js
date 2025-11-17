@@ -69,3 +69,4 @@ async function handler(req, res) {
 
 export default withHttp(withLogging(authRequired(handler)))
 
+
