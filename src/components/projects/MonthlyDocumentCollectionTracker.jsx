@@ -985,10 +985,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         saveTemplates(updatedTemplates);
         setEditingTemplate(null);
-        // Safety check for setShowTemplateList - it's only available in TemplateModal context
-        if (typeof setShowTemplateList === 'function') {
-            setShowTemplateList(true);
-        }
+        // Note: setShowTemplateList is handled by useEffect in TemplateModal when editingTemplate changes
         // Don't close modal, just go back to list view
         } catch (error) {
             console.error('❌ Error saving template:', error);
