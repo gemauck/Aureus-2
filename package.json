@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",
+    "esbuild": "^0.25.11",
     "bcryptjs": "^2.4.3",
     "compression": "^1.7.4",
     "cookie-parser": "^1.4.7",
@@ -63,7 +64,6 @@
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.2.1",
-    "esbuild": "^0.25.11",
     "glob": "^11.0.3",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.0",
