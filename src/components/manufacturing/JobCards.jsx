@@ -2104,119 +2104,145 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
                   </div>
                 </div>
 
-          {/* Stock Used */}
-          {displayData.stockUsed && displayData.stockUsed.length > 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-gray-700">Stock Used</label>
-                {isEditMode && (
-                  <span className="text-xs text-gray-500">Use full edit form to modify stock items</span>
-                )}
-              </div>
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">Item</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">Location</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-700">Quantity</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {displayData.stockUsed.map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="px-4 py-2">{item.itemName || item.sku}</td>
-                        <td className="px-4 py-2">{item.locationName || 'N/A'}</td>
-                        <td className="px-4 py-2 text-right">{item.quantity}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Materials Bought */}
-          {displayData.materialsBought && displayData.materialsBought.length > 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-medium text-gray-700">Materials Bought</label>
-                {isEditMode && (
-                  <span className="text-xs text-gray-500">Use full edit form to modify materials</span>
-                )}
-              </div>
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">Item</th>
-                      <th className="px-4 py-2 text-left font-medium text-gray-700">Description</th>
-                      <th className="px-4 py-2 text-right font-medium text-gray-700">Cost</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {displayData.materialsBought.map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="px-4 py-2">{item.itemName}</td>
-                        <td className="px-4 py-2">{item.description || 'N/A'}</td>
-                        <td className="px-4 py-2 text-right">R {parseFloat(item.cost || 0).toFixed(2)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-gray-50">
-                    <tr>
-                      <td colSpan="2" className="px-4 py-2 text-right font-medium">Total:</td>
-                      <td className="px-4 py-2 text-right font-bold">
-                        R {displayData.materialsBought.reduce((sum, item) => sum + (item.cost || 0), 0).toFixed(2)}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Other Comments */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Other Comments</label>
-            {isEditMode ? (
-              <textarea
-                name="otherComments"
-                value={formData.otherComments}
-                onChange={handleChange}
-                rows={3}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-              />
-            ) : (
-              <p className="text-sm text-gray-900 whitespace-pre-wrap">{displayData.otherComments || 'N/A'}</p>
-            )}
-          </div>
-
-          {/* Photos */}
-          {displayData.photos && displayData.photos.length > 0 && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Photos</label>
-              <div className="grid grid-cols-4 gap-2">
-                {displayData.photos.map((photo, idx) => (
-                  <div key={idx} className="relative">
-                    <img
-                      src={typeof photo === 'string' ? photo : photo.url}
-                      alt={`Photo ${idx + 1}`}
-                      className="w-full h-32 object-cover rounded-lg border border-gray-200"
-                    />
+                {/* Materials & Stock Section */}
+                {(displayData.stockUsed?.length > 0 || displayData.materialsBought?.length > 0) && (
+                  <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-5 border border-gray-200 dark:border-slate-700">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-4 flex items-center">
+                      <i className="fas fa-box mr-2 text-primary-600 dark:text-primary-400"></i>
+                      Materials & Stock
+                    </h3>
+                    <div className="space-y-4">
+                      {displayData.stockUsed && displayData.stockUsed.length > 0 && (
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Stock Used</label>
+                            {isEditMode && (
+                              <span className="text-xs text-gray-500 dark:text-slate-400">Use full edit form to modify stock items</span>
+                            )}
+                          </div>
+                          <div className="border border-gray-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead className="bg-gray-50 dark:bg-slate-800">
+                                <tr>
+                                  <th className="px-4 py-2 text-left font-medium text-gray-700 dark:text-slate-300">Item</th>
+                                  <th className="px-4 py-2 text-left font-medium text-gray-700 dark:text-slate-300">Location</th>
+                                  <th className="px-4 py-2 text-right font-medium text-gray-700 dark:text-slate-300">Quantity</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
+                                {displayData.stockUsed.map((item, idx) => (
+                                  <tr key={idx} className="dark:bg-slate-800">
+                                    <td className="px-4 py-2 dark:text-slate-100">{item.itemName || item.sku}</td>
+                                    <td className="px-4 py-2 dark:text-slate-100">{item.locationName || 'N/A'}</td>
+                                    <td className="px-4 py-2 text-right dark:text-slate-100">{item.quantity}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                      {displayData.materialsBought && displayData.materialsBought.length > 0 && (
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300">Materials Bought</label>
+                            {isEditMode && (
+                              <span className="text-xs text-gray-500 dark:text-slate-400">Use full edit form to modify materials</span>
+                            )}
+                          </div>
+                          <div className="border border-gray-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                            <table className="w-full text-sm">
+                              <thead className="bg-gray-50 dark:bg-slate-800">
+                                <tr>
+                                  <th className="px-4 py-2 text-left font-medium text-gray-700 dark:text-slate-300">Item</th>
+                                  <th className="px-4 py-2 text-left font-medium text-gray-700 dark:text-slate-300">Description</th>
+                                  <th className="px-4 py-2 text-right font-medium text-gray-700 dark:text-slate-300">Cost</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
+                                {displayData.materialsBought.map((item, idx) => (
+                                  <tr key={idx} className="dark:bg-slate-800">
+                                    <td className="px-4 py-2 dark:text-slate-100">{item.itemName}</td>
+                                    <td className="px-4 py-2 dark:text-slate-100">{item.description || 'N/A'}</td>
+                                    <td className="px-4 py-2 text-right dark:text-slate-100">R {parseFloat(item.cost || 0).toFixed(2)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot className="bg-gray-50 dark:bg-slate-800">
+                                <tr>
+                                  <td colSpan="2" className="px-4 py-2 text-right font-medium dark:text-slate-300">Total:</td>
+                                  <td className="px-4 py-2 text-right font-bold dark:text-slate-100">
+                                    R {displayData.materialsBought.reduce((sum, item) => sum + (item.cost || 0), 0).toFixed(2)}
+                                  </td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
+                )}
 
-          {/* Metadata */}
-          <div className="pt-4 border-t border-gray-200 text-xs text-gray-500">
-            <p>Created: {new Date(jobCard.createdAt).toLocaleString('en-ZA')}</p>
-            {jobCard.updatedAt && (
-              <p>Last Updated: {new Date(jobCard.updatedAt).toLocaleString('en-ZA')}</p>
-            )}
-          </div>
+                {/* Job Images Section */}
+                {displayData.photos && displayData.photos.length > 0 && (
+                  <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-5 border border-gray-200 dark:border-slate-700">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-4 flex items-center">
+                      <i className="fas fa-images mr-2 text-primary-600 dark:text-primary-400"></i>
+                      Job Images
+                    </h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {displayData.photos.map((photo, idx) => (
+                        <div key={idx} className="relative group">
+                          <div className="aspect-square rounded-lg overflow-hidden border border-gray-200 dark:border-slate-700">
+                            <img
+                              src={typeof photo === 'string' ? photo : photo.url}
+                              alt={`Job photo ${idx + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Additional Comments Section */}
+                {displayData.otherComments && (
+                  <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-5 border border-gray-200 dark:border-slate-700">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-4 flex items-center">
+                      <i className="fas fa-comment-alt mr-2 text-primary-600 dark:text-primary-400"></i>
+                      Additional Comments
+                    </h3>
+                    <div>
+                      {isEditMode ? (
+                        <textarea
+                          name="otherComments"
+                          value={formData.otherComments}
+                          onChange={handleChange}
+                          rows={3}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                        />
+                      ) : (
+                        <p className="text-sm text-gray-900 dark:text-slate-100 whitespace-pre-wrap">{displayData.otherComments || 'N/A'}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Audit Trail Section */}
+                <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-5 border border-gray-200 dark:border-slate-700">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100 mb-4 flex items-center">
+                    <i className="fas fa-history mr-2 text-primary-600 dark:text-primary-400"></i>
+                    Audit Trail
+                  </h3>
+                  <div className="text-xs text-gray-500 dark:text-slate-400 space-y-1">
+                    <p>Created: {new Date(jobCard.createdAt).toLocaleString('en-ZA')}</p>
+                    {jobCard.updatedAt && (
+                      <p>Last Updated: {new Date(jobCard.updatedAt).toLocaleString('en-ZA')}</p>
+                    )}
+                  </div>
+                </div>
               </>
             );
           })()}
