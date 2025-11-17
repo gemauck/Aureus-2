@@ -16,7 +16,7 @@ const Users = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterRole, setFilterRole] = useState('all');
     const [filterStatus, setFilterStatus] = useState('all');
-    const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'table'
+    const [viewMode, setViewMode] = useState('table'); // 'grid' or 'table'
 
     // Role definitions with permissions (Admin > Manager > User > Guest hierarchy)
     const roleDefinitions = {
@@ -191,6 +191,12 @@ const Users = () => {
                     }
                 }
 
+                // Prepare permissions - map customPermissions to permissions for API
+                let permissions = userData.customPermissions || [];
+                if (!Array.isArray(permissions)) {
+                    permissions = [];
+                }
+
                 const response = await fetch('/api/users', {
                     method: 'PUT',
                     headers: {
@@ -205,7 +211,8 @@ const Users = () => {
                         status: userData.status,
                         department: userData.department || '',
                         phone: userData.phone || '',
-                        accessibleProjectIds: accessibleProjectIds
+                        accessibleProjectIds: accessibleProjectIds,
+                        permissions: permissions
                     })
                 });
 
@@ -237,6 +244,12 @@ const Users = () => {
                     }
                 }
 
+                // Prepare permissions - map customPermissions to permissions for API
+                let permissions = userData.customPermissions || [];
+                if (!Array.isArray(permissions)) {
+                    permissions = [];
+                }
+
                 const response = await fetch('/api/users', {
                     method: 'POST',
                     headers: {
@@ -250,7 +263,8 @@ const Users = () => {
                         status: userData.status,
                         department: userData.department || '',
                         phone: userData.phone || '',
-                        accessibleProjectIds: accessibleProjectIds
+                        accessibleProjectIds: accessibleProjectIds,
+                        permissions: permissions
                     })
                 });
 

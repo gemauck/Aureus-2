@@ -126,6 +126,26 @@ const UserModal = ({ user, onClose, onSave, roleDefinitions, departments }) => {
                 }
             }
             
+            // Parse permissions from user.permissions (API returns it as an array or JSON string)
+            let permissions = [];
+            if (user.permissions) {
+                if (typeof user.permissions === 'string') {
+                    try {
+                        permissions = JSON.parse(user.permissions);
+                        if (!Array.isArray(permissions)) {
+                            permissions = [];
+                        }
+                    } catch (e) {
+                        permissions = [];
+                    }
+                } else if (Array.isArray(user.permissions)) {
+                    permissions = user.permissions;
+                }
+            } else if (user.customPermissions) {
+                // Fallback to customPermissions for backward compatibility
+                permissions = Array.isArray(user.customPermissions) ? user.customPermissions : [];
+            }
+            
             setFormData({
                 name: user.name || '',
                 email: user.email || '',
@@ -133,7 +153,7 @@ const UserModal = ({ user, onClose, onSave, roleDefinitions, departments }) => {
                 role: user.role || 'user',
                 department: user.department || '',
                 status: user.status || 'Active',
-                customPermissions: user.customPermissions || [],
+                customPermissions: permissions,
                 accessibleProjectIds: accessibleProjectIds
             });
         }
@@ -191,13 +211,50 @@ const UserModal = ({ user, onClose, onSave, roleDefinitions, departments }) => {
         onSave(formData);
     };
 
-    const handlePermissionToggle = (permissionId) => {
-        const isSelected = formData.customPermissions.includes(permissionId);
+    const handlePermissionToggle = (permissionKey) => {
+        // Get all available permissions from categories
+        const allPermissions = Object.values(permissionCategories)
+            .map(cat => cat.permission)
+            .concat(
+                permissionCategories.TEAM?.subcategories?.map(sub => sub.permission) || []
+            );
+        
+        // If customPermissions is empty (default state), initialize with all permissions
+        let currentPermissions = formData.customPermissions;
+        if (currentPermissions.length === 0) {
+            // Initialize with all permissions except admin-only ones if user is not admin
+            const isAdmin = formData.role?.toLowerCase() === 'admin';
+            currentPermissions = allPermissions.filter(perm => {
+                const category = Object.values(permissionCategories).find(cat => cat.permission === perm);
+                return !category?.adminOnly || isAdmin;
+            });
+        }
+        
+        // Toggle the permission
+        const isSelected = currentPermissions.includes(permissionKey);
         const updatedPermissions = isSelected
-            ? formData.customPermissions.filter(p => p !== permissionId)
-            : [...formData.customPermissions, permissionId];
+            ? currentPermissions.filter(p => p !== permissionKey)
+            : [...currentPermissions, permissionKey];
         
         setFormData({ ...formData, customPermissions: updatedPermissions });
+    };
+    
+    // Check if a permission category is enabled
+    const isPermissionEnabled = (category) => {
+        // Admin-only categories can only be enabled for admins
+        if (category.adminOnly && formData.role?.toLowerCase() !== 'admin') {
+            return false;
+        }
+        
+        // If no custom permissions are set, all non-admin-only permissions are enabled by default
+        // If custom permissions are set, only explicitly listed permissions are enabled
+        if (formData.customPermissions.length === 0) {
+            // Default: all permissions are enabled (except admin-only for non-admins)
+            return true;
+        }
+        
+        // Custom permissions are set: check if this permission is explicitly included
+        return formData.customPermissions.includes(category.permission);
     };
 
     const getRolePermissions = () => {
@@ -417,24 +474,34 @@ const UserModal = ({ user, onClose, onSave, roleDefinitions, departments }) => {
                         {showPermissions && (
                             <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
                                 <div className="space-y-3">
-                                    <p className="text-xs text-gray-600">
-                                        All users have access to CRM, Projects, Team, Manufacturing, Documents, Leave Platform, Tool, and Reports. Only Admins can access Users.
+                                    <p className="text-xs text-gray-600 mb-3">
+                                        By default, all users have access to most modules. Use custom permissions to restrict or grant specific access. Only Admins can access Users module.
                                     </p>
                                     {Object.values(permissionCategories).map((category) => {
-                                        const hasAccess = hasCategoryAccess(category);
-                                        const isChecked = hasAccess;
+                                        const canEdit = !category.adminOnly || isAdmin;
+                                        const isEnabled = isPermissionEnabled(category);
+                                        const isLocked = category.adminOnly && !isAdmin;
                                         
                                         return (
-                                            <div 
+                                            <label
                                                 key={category.id}
-                                                className={`p-2 rounded border ${
-                                                    category.adminOnly && !isAdmin 
-                                                        ? 'border-gray-300 bg-gray-100 opacity-60' 
-                                                        : 'border-gray-200 bg-white'
+                                                className={`flex items-start gap-3 p-3 rounded border cursor-pointer transition-colors ${
+                                                    isLocked
+                                                        ? 'border-gray-300 bg-gray-100 opacity-60 cursor-not-allowed'
+                                                        : isEnabled
+                                                        ? 'border-primary-200 bg-primary-50'
+                                                        : 'border-gray-200 bg-white hover:bg-gray-50'
                                                 }`}
                                             >
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-2">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isEnabled}
+                                                    onChange={() => canEdit && handlePermissionToggle(category.permission)}
+                                                    disabled={isLocked}
+                                                    className="mt-0.5 w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                />
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-2 mb-1">
                                                         <span className="text-xs font-semibold text-gray-700">
                                                             {category.label}
                                                         </span>
@@ -443,22 +510,64 @@ const UserModal = ({ user, onClose, onSave, roleDefinitions, departments }) => {
                                                                 Admin Only
                                                             </span>
                                                         )}
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className={`text-xs ${isChecked ? 'text-green-600' : 'text-gray-400'}`}>
-                                                            {isChecked ? 'Enabled' : 'Disabled'}
-                                                        </span>
-                                                        {category.adminOnly && !isAdmin && (
-                                                            <i className="fas fa-lock text-xs text-red-500"></i>
+                                                        {isEnabled && (
+                                                            <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded">
+                                                                Enabled
+                                                            </span>
                                                         )}
                                                     </div>
+                                                    <p className="text-[10px] text-gray-500">
+                                                        {category.description}
+                                                    </p>
+                                                    {isLocked && (
+                                                        <p className="text-[10px] text-red-600 mt-1">
+                                                            <i className="fas fa-lock mr-1"></i>
+                                                            Requires admin role
+                                                        </p>
+                                                    )}
                                                 </div>
-                                                <p className="text-[10px] text-gray-500 mt-1">
-                                                    {category.description}
-                                                </p>
-                                            </div>
+                                            </label>
                                         );
                                     })}
+                                    {Object.values(permissionCategories).some(cat => cat.subcategories) && (
+                                        <div className="mt-4 pt-3 border-t border-gray-300">
+                                            <h4 className="text-xs font-semibold text-gray-700 mb-2">Team Subcategories</h4>
+                                            {permissionCategories.TEAM?.subcategories?.map((subcategory) => {
+                                                const canEdit = isAdmin;
+                                                const isEnabled = isPermissionEnabled(subcategory);
+                                                
+                                                return (
+                                                    <label
+                                                        key={subcategory.id}
+                                                        className="flex items-start gap-3 p-2 rounded border border-gray-200 bg-white hover:bg-gray-50 cursor-pointer transition-colors mb-2"
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isEnabled}
+                                                            onChange={() => canEdit && handlePermissionToggle(subcategory.permission)}
+                                                            disabled={!isAdmin}
+                                                            className="mt-0.5 w-3.5 h-3.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500 disabled:opacity-50"
+                                                        />
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-xs font-medium text-gray-700">
+                                                                    {subcategory.label}
+                                                                </span>
+                                                                {isEnabled && (
+                                                                    <span className="text-[10px] px-1.5 py-0.5 bg-green-100 text-green-700 rounded">
+                                                                        Enabled
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-[10px] text-gray-500 mt-0.5">
+                                                                {subcategory.description}
+                                                            </p>
+                                                        </div>
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
