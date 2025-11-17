@@ -360,32 +360,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
   }, []);
   
-  // BEST PRACTICE: Single sync mechanism with version-based conflict resolution
+  // SIMPLER: Just check dirty fields, ignore version tracking
   useEffect(() => {
     const newData = project?.documentSections;
     if (!newData || newData === lastSyncData) return;
     
-    // Skip if user is actively editing
+    // Skip if user is actively editing ANY field
     if (dirtyFields.size > 0) {
-      console.log('⏭️ Skipping sync - user has ' + dirtyFields.size + ' dirty field(s)');
+      console.log('⏭️ Skipping sync - user has ' + dirtyFields.size + ' dirty field(s)', Array.from(dirtyFields));
       return;
     }
     
-    // Version-based conflict resolution (best practice)
+    console.log('🔄 Syncing from server - no dirty fields');
     const parsed = parseSections(newData);
-    const serverVersion = Date.parse(project.updatedAt || new Date().toISOString());
-    
-    // Only sync if server version is newer than local version
-    if (serverVersion > serverVersionRef.current || localVersion === 0) {
-      console.log('🔄 Syncing from server (' + parsed.length + ' sections)');
+    if (parsed.length > 0) {
       setSections(parsed);
-      serverVersionRef.current = serverVersion;
-    } else {
-      console.log('🛡️ Local version is newer - skipping sync to preserve user changes');
     }
     
     setLastSyncData(newData);
-  }, [project?.documentSections, dirtyFields, localVersion]);
+  }, [project?.documentSections, dirtyFields]);
     const [editingSection, setEditingSection] = useState(null);
     const [editingDocument, setEditingDocument] = useState(null);
     const [editingSectionId, setEditingSectionId] = useState(null);
@@ -2988,9 +2981,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const ApplyTemplateModal = () => {
         const [selectedTemplateId, setSelectedTemplateId] = useState(null);
         const [targetYear, setTargetYear] = useState(() => {
-            const year = typeof selectedYear === 'number' && !Number.isNaN(selectedYear) ? selectedYear : currentYear;
-            // Ensure year is never NaN
-            return Number.isNaN(year) ? currentYear : year;
+            const year = typeof selectedYear === 'number' && !Number.isNaN(selectedYear) && Number.isFinite(selectedYear) ? selectedYear : currentYear;
+            // Ensure year is never NaN or invalid
+            const safeYear = Number.isNaN(year) || !Number.isFinite(year) ? currentYear : year;
+            console.log('🔍 ApplyTemplateModal - Initial targetYear:', { selectedYear, currentYear, safeYear });
+            return safeYear;
         });
 
         // Helper to safely parse template sections
@@ -3030,6 +3025,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
         // Ensure all templates have parsed sections when modal is open
         const parsedTemplates = useMemo(() => {
+            if (!Array.isArray(templates) || templates.length === 0) {
+                console.log('🔍 ApplyTemplateModal - No templates available yet');
+                return [];
+            }
             const parsed = templates.map(t => {
                 const parsedSections = parseTemplateSections(t.sections);
                 // Debug: Log if we find any issues
@@ -3043,19 +3042,32 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     });
                 }
                 const finalSections = Array.isArray(parsedSections) ? parsedSections : [];
-                // Validate length is a number
+                // Validate length is a number - if not, force to empty array
                 if (typeof finalSections.length !== 'number' || Number.isNaN(finalSections.length)) {
-                    console.error('❌ Invalid sections.length detected:', {
+                    console.error('❌ Invalid sections.length detected, resetting to empty array:', {
                         templateId: t.id,
                         length: finalSections.length,
                         lengthType: typeof finalSections.length
                     });
+                    return {
+                        ...t,
+                        sections: []
+                    };
                 }
                 return {
                     ...t,
                     sections: finalSections
                 };
             });
+            console.log('🔍 ApplyTemplateModal - parsedTemplates:', parsed.map(t => ({
+                id: t.id,
+                name: t.name,
+                sectionsType: typeof t.sections,
+                sectionsIsArray: Array.isArray(t.sections),
+                sectionsLength: Array.isArray(t.sections) ? t.sections.length : 'N/A',
+                sectionsLengthType: typeof (Array.isArray(t.sections) ? t.sections.length : null),
+                sectionsLengthIsNaN: Number.isNaN(Array.isArray(t.sections) ? t.sections.length : NaN)
+            })));
             return parsed;
         }, [templates]);
 
