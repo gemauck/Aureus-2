@@ -26,7 +26,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         'July', 'August', 'September', 'October', 'November', 'December'
     ];
 
-    const [selectedYear, setSelectedYear] = useState(currentYear);
+    const YEAR_STORAGE_PREFIX = 'documentCollectionSelectedYear_';
+    const getInitialSelectedYear = () => {
+        if (typeof window !== 'undefined' && project?.id) {
+            const storedYear = localStorage.getItem(`${YEAR_STORAGE_PREFIX}${project.id}`);
+            const parsedYear = storedYear ? parseInt(storedYear, 10) : NaN;
+            if (!Number.isNaN(parsedYear)) {
+                return parsedYear;
+            }
+        }
+        return currentYear;
+    };
+    const [selectedYear, setSelectedYear] = useState(getInitialSelectedYear);
     
     // Parse documentSections safely - handle various formats
     const parseSections = (data) => {
@@ -148,6 +159,44 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // Smart Sync with Dirty Field Tracking - Best practice for collaboration
     const [dirtyFields, setDirtyFields] = useState(new Set());
     const [lastSyncData, setLastSyncData] = useState(null);
+    useEffect(() => {
+        if (!project?.id || typeof window === 'undefined') {
+            return;
+        }
+        
+        // Only initialize year when project ID actually changes (not on every render)
+        const projectIdChanged = previousProjectIdRef.current !== project.id;
+        if (!projectIdChanged && previousProjectIdRef.current !== null) {
+            // Project ID hasn't changed, don't reset the year
+            return;
+        }
+        
+        previousProjectIdRef.current = project.id;
+        
+        const storageKey = `${YEAR_STORAGE_PREFIX}${project.id}`;
+        const storedYear = localStorage.getItem(storageKey);
+        const parsedYear = storedYear ? parseInt(storedYear, 10) : NaN;
+        if (!Number.isNaN(parsedYear)) {
+            // Restore from localStorage
+            if (parsedYear !== selectedYear) {
+                console.log('📅 Restoring selected year from localStorage:', parsedYear);
+                setSelectedYear(parsedYear);
+            }
+        } else {
+            // Only set to currentYear on initial load for this project (when no stored value)
+            // This prevents resetting the year when component re-renders
+            console.log('📅 No stored year found, using current year:', currentYear);
+            setSelectedYear(currentYear);
+        }
+    }, [project?.id]); // Only run when project ID changes
+
+    const handleYearChange = (year) => {
+        setSelectedYear(year);
+        if (project?.id && typeof window !== 'undefined') {
+            localStorage.setItem(`${YEAR_STORAGE_PREFIX}${project.id}`, String(year));
+        }
+    };
+
 
   // Smart Sync: Only update fields that aren't currently being edited
   // This allows real-time collaboration while preventing overwrites
@@ -2299,7 +2348,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     <label className="text-[10px] font-medium text-gray-600">Year:</label>
                     <select
                         value={selectedYear}
-                        onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                        onChange={(e) => handleYearChange(parseInt(e.target.value))}
                         className="px-2.5 py-1 text-xs border border-gray-300 rounded-lg bg-white text-gray-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     >
                         {yearOptions.map(year => (
