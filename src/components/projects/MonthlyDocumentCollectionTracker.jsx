@@ -144,23 +144,61 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     });
     const [showSectionModal, setShowSectionModal] = useState(false);
     const [showDocumentModal, setShowDocumentModal] = useState(false);
+    
+    // Smart Sync with Dirty Field Tracking - Best practice for collaboration
+    const [dirtyFields, setDirtyFields] = useState(new Set());
+    const [lastSyncData, setLastSyncData] = useState(null);
 
-  // COMPLETELY DISABLE LiveDataSync for this page - user wants static page after load
-  // This page has explicit save operations, so no automatic syncing needed
+  // Smart Sync: Only update fields that aren't currently being edited
+  // This allows real-time collaboration while preventing overwrites
   useEffect(() => {
-    console.log('🛑 PERMANENTLY pausing LiveDataSync for MonthlyDocumentCollectionTracker');
-    if (window.LiveDataSync && typeof window.LiveDataSync.pause === 'function') {
-      window.LiveDataSync.pause();
+    console.log('🔄 Smart Sync enabled - will sync non-dirty fields only');
+    
+    // Resume LiveDataSync so we get updates
+    if (window.LiveDataSync && typeof window.LiveDataSync.resume === 'function') {
+      window.LiveDataSync.resume();
     }
 
-    // Cleanup: resume on unmount so other pages still get live sync
+    // Cleanup: pause on unmount
     return () => {
-      console.log('▶️ Re-enabling LiveDataSync on unmount');
-      if (window.LiveDataSync && typeof window.LiveDataSync.resume === 'function') {
-        window.LiveDataSync.resume();
+      if (window.LiveDataSync && typeof window.LiveDataSync.pause === 'function') {
+        window.LiveDataSync.pause();
       }
     };
-  }, []); // Empty dependency array = run once on mount
+  }, []);
+  
+  // Smart merge: Only update sections that don't have dirty fields
+  useEffect(() => {
+    // Check if project data has changed
+    const newData = project?.documentSections;
+    if (!newData || newData === lastSyncData) return;
+    
+    // Skip if we recently made a local update (within 2 seconds)
+    const timeSinceLocalUpdate = Date.now() - lastLocalUpdateRef.current;
+    if (timeSinceLocalUpdate < 2000) {
+      console.log('⏭️ Skipping sync - recent local update (' + timeSinceLocalUpdate + 'ms ago)');
+      return;
+    }
+    
+    // Skip if user is actively editing (has dirty fields)
+    if (dirtyFields.size > 0) {
+      console.log('⏭️ Skipping sync - user has ' + dirtyFields.size + ' dirty field(s)');
+      return;
+    }
+    
+    // Safe to sync - no dirty fields
+    const parsed = parseSections(newData);
+    if (parsed.length > 0 && !hasInitializedRef.current) {
+      console.log('🔄 Smart sync: Initial load from server (' + parsed.length + ' sections)');
+      setSections(parsed);
+      hasInitializedRef.current = true;
+    } else if (parsed.length > 0 && hasInitializedRef.current) {
+      console.log('🔄 Smart sync: Updating from server (' + parsed.length + ' sections, no dirty fields)');
+      setSections(parsed);
+    }
+    
+    setLastSyncData(newData);
+  }, [project?.documentSections, dirtyFields]);
     const [editingSection, setEditingSection] = useState(null);
     const [editingDocument, setEditingDocument] = useState(null);
     const [editingSectionId, setEditingSectionId] = useState(null);
@@ -2040,6 +2078,24 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     <select
                         value={status || ''}
                         onChange={(e) => handleUpdateStatus(section.id, document.id, month, e.target.value)}
+                        onFocus={() => {
+                            // Mark field as dirty when user starts editing
+                            const fieldId = cellKey;
+                            console.log('🎯 Marking field as dirty:', fieldId);
+                            setDirtyFields(prev => new Set(prev).add(fieldId));
+                        }}
+                        onBlur={() => {
+                            // Clear dirty flag after 5 seconds of inactivity
+                            const fieldId = cellKey;
+                            setTimeout(() => {
+                                console.log('✨ Clearing dirty flag:', fieldId);
+                                setDirtyFields(prev => {
+                                    const next = new Set(prev);
+                                    next.delete(fieldId);
+                                    return next;
+                                });
+                            }, 5000);
+                        }}
                         className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80 relative z-0`}
                         style={{ pointerEvents: 'auto' }}
                         onClick={(e) => e.stopPropagation()}
@@ -2178,6 +2234,24 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     <textarea
                                         value={quickComment}
                                         onChange={(e) => setQuickComment(e.target.value)}
+                                        onFocus={() => {
+                                            // Mark comment field as dirty when typing
+                                            const fieldId = `comment-${hoverCommentCell}`;
+                                            console.log('🎯 Marking comment field as dirty:', fieldId);
+                                            setDirtyFields(prev => new Set(prev).add(fieldId));
+                                        }}
+                                        onBlur={() => {
+                                            // Clear dirty flag after 3 seconds
+                                            const fieldId = `comment-${hoverCommentCell}`;
+                                            setTimeout(() => {
+                                                console.log('✨ Clearing comment dirty flag:', fieldId);
+                                                setDirtyFields(prev => {
+                                                    const next = new Set(prev);
+                                                    next.delete(fieldId);
+                                                    return next;
+                                                });
+                                            }, 3000);
+                                        }}
                                         onKeyDown={(e) => {
                                             if (e.key === 'Enter' && e.ctrlKey) {
                                                 handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
