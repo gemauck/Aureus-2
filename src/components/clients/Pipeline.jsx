@@ -105,7 +105,7 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
         minValue: '',
         maxValue: '',
         industry: 'All',
-        ageRange: 'All',
+        status: 'All',
         source: 'All'
     });
     const [sortBy, setSortBy] = useState('value-desc');
@@ -1049,20 +1049,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
             items = items.filter(item => item.source === filters.source);
         }
 
-        // Age range filter
-        if (filters.ageRange !== 'All') {
-            const now = new Date();
+        // Status filter
+        if (filters.status !== 'All') {
             items = items.filter(item => {
-                const createdDate = new Date(item.createdDate);
-                const daysDiff = Math.floor((now - createdDate) / (1000 * 60 * 60 * 24));
-                
-                switch (filters.ageRange) {
-                    case 'new': return daysDiff <= 7;
-                    case 'active': return daysDiff > 7 && daysDiff <= 30;
-                    case 'aging': return daysDiff > 30 && daysDiff <= 60;
-                    case 'stale': return daysDiff > 60;
-                    default: return true;
-                }
+                const normalizedStatus = normalizeLifecycleStage(item.status || 'Potential');
+                return normalizedStatus === filters.status;
             });
         }
 
@@ -2262,21 +2253,20 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     </select>
                     
                     <select
-                        value={filters.ageRange}
-                        onChange={(e) => setFilters({ ...filters, ageRange: e.target.value })}
+                        value={filters.status}
+                        onChange={(e) => setFilters({ ...filters, status: e.target.value })}
                         className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
                     >
-                        <option value="All">All Ages</option>
-                        <option value="new">New (≤7d)</option>
-                        <option value="active">Active (8-30d)</option>
-                        <option value="aging">Aging (31-60d)</option>
-                        <option value="stale">Stale (&gt;60d)</option>
+                        <option value="All">All Status</option>
+                        {statusOptions.map(status => (
+                            <option key={status} value={status}>{status}</option>
+                        ))}
                     </select>
                 </div>
 
                 {/* Active Filters Count */}
                 {(filters.search || filters.minValue || filters.maxValue || 
-                  filters.industry !== 'All' || filters.ageRange !== 'All') && (
+                  filters.industry !== 'All' || filters.status !== 'All') && (
                     <div className="flex items-center justify-between pt-2 border-t border-gray-200">
                         <span className="text-sm text-gray-600">
                             {filteredItems.length} of {getPipelineItems().length} deals shown
@@ -2287,7 +2277,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                 minValue: '',
                                 maxValue: '',
                                 industry: 'All',
-                                ageRange: 'All',
+                                status: 'All',
                                 source: 'All'
                             })}
                             className="text-sm text-primary-600 hover:text-primary-700"
