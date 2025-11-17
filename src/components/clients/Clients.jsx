@@ -3834,9 +3834,9 @@ const Clients = React.memo(() => {
 
     // Clients List View
     const ClientsListView = () => (
-        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border flex flex-col h-full`}>
-            <div className="flex-1 overflow-auto -mx-3 sm:mx-0 px-3 sm:px-0" style={{ WebkitOverflowScrolling: 'touch' }}>
-                <table className={`min-w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`} style={{ minWidth: '640px' }}>
+        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border flex flex-col h-full w-full`}>
+            <div className="flex-1 overflow-auto -mx-3 sm:mx-0 px-3 sm:px-0 w-full" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <table className={`w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`} style={{ minWidth: '640px', width: '100%' }}>
                     <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
                         <tr>
                             <th 
@@ -4468,9 +4468,9 @@ const Clients = React.memo(() => {
     // Note: Lead status is now hardcoded as 'active' - removed handleLeadStatusChange function
 
     const LeadsListView = () => (
-        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border flex flex-col h-full`}>
-            <div className="flex-1 overflow-auto">
-                <table className={`min-w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
+        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border flex flex-col h-full w-full`}>
+            <div className="flex-1 overflow-auto w-full">
+                <table className={`w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`} style={{ width: '100%' }}>
                     <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
                         <tr>
                             <th 
