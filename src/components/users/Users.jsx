@@ -153,9 +153,14 @@ const Users = () => {
     };
 
     const handleDeleteUser = async (user) => {
+        console.log('🔴 handleDeleteUser called with user:', user);
+        
         if (!confirm(`Are you sure you want to delete ${user.name}?`)) {
+            console.log('❌ User cancelled deletion');
             return;
         }
+        
+        console.log('✅ User confirmed deletion');
 
         try {
             const token = window.storage?.getToken?.();
@@ -745,11 +750,29 @@ const Users = () => {
 
                                     <div className="flex gap-1.5 pt-2 border-t border-gray-200">
                                         <button
-                                            onClick={() => handleEditUser(user)}
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                handleEditUser(user);
+                                            }}
                                             className="flex-1 px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition font-medium"
                                         >
                                             <i className="fas fa-edit mr-1"></i>
                                             Edit
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                console.log('🔴 Delete button clicked (grid view) for user:', user);
+                                                handleDeleteUser(user);
+                                            }}
+                                            className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition font-medium"
+                                        >
+                                            <i className="fas fa-trash mr-1"></i>
+                                            Delete
                                         </button>
                                     </div>
                                 </div>
@@ -843,14 +866,25 @@ const Users = () => {
                                                 <td className="px-3 py-2">
                                                     <div className="flex gap-1">
                                                         <button
-                                                            onClick={() => handleEditUser(user)}
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                handleEditUser(user);
+                                                            }}
                                                             className="p-1 text-gray-400 hover:text-primary-600 transition"
                                                             title="Edit"
                                                         >
                                                             <i className="fas fa-edit text-xs"></i>
                                                         </button>
                                                         <button
-                                                            onClick={() => handleDeleteUser(user)}
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                console.log('🔴 Delete button clicked for user:', user);
+                                                                handleDeleteUser(user);
+                                                            }}
                                                             className="p-1 text-gray-400 hover:text-red-600 transition"
                                                             title="Delete"
                                                         >
