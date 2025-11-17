@@ -3372,3 +3372,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 window.MonthlyDocumentCollectionTracker = MonthlyDocumentCollectionTracker;
 console.log('✅ MonthlyDocumentCollectionTracker component loaded and registered globally');
 
+// Export as default for Vite module
+export default MonthlyDocumentCollectionTracker;
+
