@@ -111,8 +111,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const initialProjectIdRef = useRef(project?.id);
     
     const [sections, setSections] = useState(() => {
-        // Mark as initialized on first state creation
-        hasInitializedRef.current = true;
         console.log('📋 Initializing sections from project.documentSections:', project.documentSections);
         
         // Check localStorage first for saved sections
@@ -295,6 +293,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
     }, [showTemplateModal]); // Remove loadTemplatesFromAPI from deps to prevent loops
     
+    // Reload templates when Apply Template modal opens (ensures script-created templates are visible)
+    useEffect(() => {
+        if (showApplyTemplateModal) {
+            console.log('📂 Apply Template modal opened, reloading templates...');
+            loadTemplatesFromAPI();
+        }
+    }, [showApplyTemplateModal]); // Remove loadTemplatesFromAPI from deps to prevent loops
+    
     // Save templates to localStorage
     const saveTemplates = (templatesToSave) => {
         if (typeof window !== 'undefined') {
@@ -374,24 +380,37 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
   }, []);
   
-  // SIMPLER: Just check dirty fields, ignore version tracking
+  // Added guard to prevent sync from overwriting freshly loaded data
   useEffect(() => {
     const newData = project?.documentSections;
+
     if (!newData || newData === lastSyncData) return;
+
     
-    // CRITICAL: Skip sync if component just initialized to prevent overwriting
+
+    // CRITICAL: Allow one render cycle before enabling sync
+
     if (!hasInitializedRef.current) {
-      console.log('⏭️ Skipping sync - component still initializing');
-      setLastSyncData(newData);
-      return;
+
+        console.log('🛡️ First render - marking as initialized, will sync on next update');
+
+        hasInitializedRef.current = true;
+
+        setLastSyncData(newData);
+
+        return; // Skip the first sync
+
     }
+
     
+
     // Skip if user is actively editing ANY field
     if (dirtyFields.size > 0) {
       console.log('⏭️ Skipping sync - user has ' + dirtyFields.size + ' dirty field(s)', Array.from(dirtyFields));
       return;
     }
     
+    // Normal sync logic continues...
     console.log('🔄 Syncing from server - no dirty fields');
     const parsed = parseSections(newData);
     if (parsed.length > 0) {

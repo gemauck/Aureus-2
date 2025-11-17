@@ -13,9 +13,20 @@ const DatabaseAPI = {
     // Request deduplication: prevent multiple concurrent requests to the same endpoint
     _pendingRequests: new Map(),
     
-    // Short-term cache for recent responses (5 seconds TTL - increased to reduce redundant calls)
+    // Short-term cache for recent responses with endpoint-specific TTL
     _responseCache: new Map(),
-    _cacheTTL: 5000, // 5 seconds - increased from 2s to reduce excessive API calls
+    _cacheTTL: 30000, // 30 seconds default - increased to reduce excessive API calls
+    // Endpoint-specific cache TTLs (in milliseconds)
+    _endpointCacheTTL: {
+        '/clients': 60000,      // 1 minute - clients don't change frequently
+        '/leads': 60000,        // 1 minute - leads don't change frequently
+        '/projects': 60000,     // 1 minute - projects don't change frequently
+        '/users': 120000,       // 2 minutes - users rarely change
+        '/invoices': 60000,     // 1 minute
+        '/time-entries': 30000, // 30 seconds
+        '/inventory': 120000,   // 2 minutes - inventory changes less frequently
+        '/locations': 300000,   // 5 minutes - locations rarely change
+    },
 
     // Request throttling / rate limiting safeguards
     _maxConcurrentRequests: 4,
@@ -28,7 +39,10 @@ const DatabaseAPI = {
     _cleanCache() {
         const now = Date.now();
         for (const [key, { timestamp }] of this._responseCache.entries()) {
-            if (now - timestamp > this._cacheTTL) {
+            // Extract endpoint from cache key (format: "METHOD:/endpoint")
+            const endpoint = key.split(':').slice(1).join(':');
+            const ttl = this._endpointCacheTTL[endpoint] || this._cacheTTL;
+            if (now - timestamp > ttl) {
                 this._responseCache.delete(key);
             }
         }
@@ -132,9 +146,17 @@ const DatabaseAPI = {
         // Check cache first (only for GET requests)
         if (method === 'GET') {
             const cached = this._responseCache.get(cacheKey);
-            if (cached && (Date.now() - cached.timestamp) < this._cacheTTL) {
-                console.log(`⚡ DatabaseAPI: Serving ${endpoint} from cache`);
-                return cached.data;
+            if (cached) {
+                // Use endpoint-specific TTL if available, otherwise use default
+                const ttl = this._endpointCacheTTL[endpoint] || this._cacheTTL;
+                const age = Date.now() - cached.timestamp;
+                if (age < ttl) {
+                    console.log(`⚡ DatabaseAPI: Serving ${endpoint} from cache (age: ${Math.round(age/1000)}s, TTL: ${Math.round(ttl/1000)}s)`);
+                    return cached.data;
+                } else {
+                    // Remove expired cache entry
+                    this._responseCache.delete(cacheKey);
+                }
             }
         }
         
