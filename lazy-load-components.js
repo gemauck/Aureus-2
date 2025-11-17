@@ -56,6 +56,7 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
         './src/components/projects/ProjectModal.jsx',
         './src/components/projects/ProjectProgressTracker.jsx',
         './src/components/projects/MonthlyDocumentCollectionTracker.jsx',
+        './src/components/projects/DocumentCollectionChecklist.jsx',
         './src/components/projects/CommentsPopup.jsx',
         './src/components/projects/DocumentCollectionModal.jsx',
         // BULLETPROOF: ProjectDetail is loaded explicitly here AND via special handler

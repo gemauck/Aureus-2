@@ -1,0 +1,48 @@
+🚀 DEPLOY SMART SYNC - COPY & PASTE THIS ENTIRE BLOCK
+===========================================================
+
+# Navigate to project directory
+cd "/Users/gemau/Documents/Project ERP/abcotronics-erp-modular"
+
+# Commit changes
+git add src/components/projects/MonthlyDocumentCollectionTracker.jsx
+git commit -m "Feat: Smart Sync with Dirty Field Tracking - best practice for collaboration"
+
+# Push to GitHub
+git push origin main
+
+# Deploy to droplet
+ssh root@abcoafrica.co.za << 'DEPLOY'
+set -e
+cd /var/www/abcotronics-erp
+echo "📥 Pulling latest code..."
+git pull origin main
+echo "✅ Code updated"
+echo ""
+echo "🏗️ Building JSX..."
+npm run build:jsx || node build-jsx.js
+echo "✅ JSX built"
+echo ""
+echo "🔄 Restarting app..."
+pm2 restart abcotronics-erp
+pm2 save
+echo "✅ Deployment complete!"
+DEPLOY
+
+echo ""
+echo "✅ SMART SYNC DEPLOYED!"
+echo ""
+echo "🧪 Test Features:"
+echo "  • Open Document Collection page"
+echo "  • Try typing - no more overwrites!"
+echo "  • Open two tabs to test real-time collaboration"
+echo ""
+echo "📊 How It Works:"
+echo "  • Fields you're editing are marked 'dirty'"
+echo "  • LiveDataSync only updates non-dirty fields"
+echo "  • 5 seconds after you stop editing, field syncs again"
+echo "  • Best practice for multi-user collaboration!"
+echo ""
+echo "Visit: https://abcoafrica.co.za"
+
+===========================================================

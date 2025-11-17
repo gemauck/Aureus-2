@@ -201,6 +201,51 @@ async function handler(req, res) {
         console.log('⚠️ documentSections not provided in update - will not be updated');
       }
       
+      // Handle documentChecklist separately if provided - ensure it's properly saved
+      if (body.documentChecklist !== undefined && body.documentChecklist !== null) {
+        try {
+          if (typeof body.documentChecklist === 'string') {
+            // Already a string, validate it's valid JSON
+            const trimmed = body.documentChecklist.trim();
+            if (trimmed === '') {
+              // Empty string means empty array
+              updateData.documentChecklist = JSON.stringify([]);
+            } else {
+              try {
+                // Validate it's valid JSON
+                const parsed = JSON.parse(trimmed);
+                // If it parsed successfully, use it as-is (it's already a stringified JSON)
+                updateData.documentChecklist = trimmed;
+              } catch (parseError) {
+                console.error('❌ Invalid documentChecklist JSON string:', parseError);
+                // If string is invalid JSON, stringify it (might be double-encoded or corrupted)
+                updateData.documentChecklist = JSON.stringify(body.documentChecklist);
+              }
+            }
+          } else if (Array.isArray(body.documentChecklist)) {
+            // It's an array, stringify it
+            updateData.documentChecklist = JSON.stringify(body.documentChecklist);
+          } else if (typeof body.documentChecklist === 'object') {
+            // It's an object, stringify it
+            updateData.documentChecklist = JSON.stringify(body.documentChecklist);
+          } else {
+            // It's something else (number, boolean, etc.), stringify it
+            updateData.documentChecklist = JSON.stringify(body.documentChecklist);
+          }
+          console.log('✅ documentChecklist will be saved:', {
+            type: typeof body.documentChecklist,
+            isString: typeof body.documentChecklist === 'string',
+            length: typeof body.documentChecklist === 'string' ? body.documentChecklist.length : 'N/A',
+            preview: typeof body.documentChecklist === 'string' ? body.documentChecklist.substring(0, 100) : 'N/A'
+          });
+        } catch (error) {
+          console.error('❌ Error processing documentChecklist:', error);
+          // Don't fail the entire update, but log the error
+        }
+      } else {
+        console.log('⚠️ documentChecklist not provided in update - will not be updated');
+      }
+      
       // Handle monthlyProgress separately if provided - with validation for safety
       if (body.monthlyProgress !== undefined && body.monthlyProgress !== null) {
         try {

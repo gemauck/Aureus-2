@@ -1,0 +1,37 @@
+🚀 DEPLOY LIVEDATASYNC FIX - COPY & PASTE THIS ENTIRE BLOCK
+================================================================
+
+# Navigate to project directory
+cd "/Users/gemau/Documents/Project ERP/abcotronics-erp-modular"
+
+# Commit changes
+git add src/components/projects/MonthlyDocumentCollectionTracker.jsx
+git commit -m "Fix: Disable LiveDataSync on Document Collection page - prevents typing from being overwritten"
+
+# Push to GitHub
+git push origin main
+
+# Deploy to droplet
+ssh root@abcoafrica.co.za << 'DEPLOY'
+set -e
+cd /var/www/abcotronics-erp
+echo "📥 Pulling latest code..."
+git pull origin main
+echo "✅ Code updated"
+echo ""
+echo "🏗️ Building JSX..."
+npm run build:jsx || node build-jsx.js
+echo "✅ JSX built"
+echo ""
+echo "🔄 Restarting app..."
+pm2 restart abcotronics-erp
+pm2 save
+echo "✅ Deployment complete!"
+DEPLOY
+
+echo ""
+echo "✅ DEPLOYMENT COMPLETE!"
+echo "Visit: https://abcoafrica.co.za"
+echo "Test: Go to Document Collection page and try typing - no more overwrites!"
+
+================================================================
