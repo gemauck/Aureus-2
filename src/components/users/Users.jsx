@@ -63,6 +63,15 @@ const Users = () => {
         loadInvitations();
     }, []);
 
+    // Debug: Verify delete buttons are rendered
+    useEffect(() => {
+        const deleteButtons = document.querySelectorAll('button[title="Delete"]');
+        console.log('🔴 Delete buttons found:', deleteButtons.length);
+        if (deleteButtons.length > 0) {
+            console.log('✅ Delete buttons are rendered in the DOM');
+        }
+    }, [users, viewMode]);
+
     const loadUsers = async () => {
         try {
             // Try to load from API first
@@ -1001,6 +1010,7 @@ const Users = () => {
 try {
     window.Users = Users;
     console.log('✅ Users.jsx loaded and registered on window.Users', typeof window.Users);
+    console.log('🔴 Users.jsx: Delete functionality version 2025-01-17 - handleDeleteUser with API call');
 } catch (error) {
     console.error('❌ Users.jsx: Error registering component:', error, error.stack);
 }
