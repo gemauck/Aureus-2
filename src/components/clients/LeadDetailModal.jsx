@@ -16,12 +16,22 @@ const LeadDetailModal = ({
     onPauseSync = null,
     onEditingChange = null
 }) => {
+    // Check if current user is admin (must be before useState that uses it)
+    const user = window.storage?.getUser?.() || {};
+    const isAdmin = user?.role?.toLowerCase() === 'admin';
+    
     // Modal owns its state - start with any provided lead data for instant rendering
     const [lead, setLead] = useState(() => initialLead || null);
     const [isLoading, setIsLoading] = useState(() => !initialLead);
     const [isSaving, setIsSaving] = useState(false);
     const [isAutoSaving, setIsAutoSaving] = useState(false);
-    const [activeTab, setActiveTab] = useState(initialTab);
+    const [activeTab, setActiveTab] = useState(() => {
+        // If user tries to access proposals tab but is not admin, default to overview
+        if (initialTab === 'proposals' && !isAdmin) {
+            return 'overview';
+        }
+        return initialTab;
+    });
     const [hasBeenSaved, setHasBeenSaved] = useState(false); // Track if lead has been saved at least once
     
     // Fetch lead data when leadId changes
@@ -241,8 +251,13 @@ const LeadDetailModal = ({
     
     // Update tab when initialTab prop changes
     useEffect(() => {
-        setActiveTab(initialTab);
-    }, [initialTab]);
+        // If user tries to access proposals tab but is not admin, default to overview
+        if (initialTab === 'proposals' && !isAdmin) {
+            setActiveTab('overview');
+        } else {
+            setActiveTab(initialTab);
+        }
+    }, [initialTab, isAdmin]);
     
     // MANUFACTURING PATTERN: Only sync formData when lead ID changes (switching to different lead)
     // Once modal is open, formData is completely user-controlled - no automatic syncing from props
@@ -505,6 +520,11 @@ const LeadDetailModal = ({
 
     // Handle tab change with auto-save
     const handleTabChange = async (tab) => {
+        // Prevent non-admins from accessing proposals tab
+        if (tab === 'proposals' && !isAdmin) {
+            return;
+        }
+        
         // Auto-save current form data before switching tabs
         // Only save if there's actual data to save (name is required)
         const currentFormData = formDataRef.current || formData;
@@ -1828,7 +1848,7 @@ const LeadDetailModal = ({
                 {/* Tabs */}
                 <div className="border-b border-gray-200 px-3 sm:px-6">
                     <div className="flex flex-wrap gap-2 sm:gap-6">
-                        {['overview', 'contacts', 'calendar', 'projects', 'proposals', 'activity', 'notes'].map(tab => (
+                        {['overview', 'contacts', 'calendar', 'projects', ...(isAdmin ? ['proposals'] : []), 'activity', 'notes'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => handleTabChange(tab)}
@@ -3006,7 +3026,7 @@ const LeadDetailModal = ({
                         )}
 
                         {/* Proposals Tab */}
-                        {activeTab === 'proposals' && (
+                        {activeTab === 'proposals' && isAdmin && (
                             <div className="space-y-4">
                                 <div className="flex justify-between items-center">
                                     <h3 className="text-lg font-semibold text-gray-900">Proposals</h3>

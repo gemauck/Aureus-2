@@ -19,11 +19,18 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
     }
     const isDark = themeResult?.isDark || false;
     
+    // Check if current user is admin
+    const user = window.storage?.getUser?.() || {};
+    const isAdmin = user?.role?.toLowerCase() === 'admin';
+    
     // Modal owns its state - fetch data when opportunityId changes
     const [opportunity, setOpportunity] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
-    const [activeTab, setActiveTab] = useState('overview');
+    const [activeTab, setActiveTab] = useState(() => {
+        // If user tries to access proposals tab but is not admin, default to overview
+        return 'overview';
+    });
     
     // Fetch opportunity data when opportunityId changes
     useEffect(() => {
@@ -101,6 +108,13 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
             setFormData(parsedOpportunity);
         }
     }, [opportunity]);
+    
+    // Redirect non-admins away from proposals tab
+    useEffect(() => {
+        if (activeTab === 'proposals' && !isAdmin) {
+            setActiveTab('overview');
+        }
+    }, [activeTab, isAdmin]);
     
     // Use ref to track latest formData for auto-save
     const formDataRef = useRef(null);
@@ -566,21 +580,23 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                             >
                                 Overview
                             </button>
-                            <button
-                                onClick={() => setActiveTab('proposals')}
-                                className={`py-4 px-2 border-b-2 font-medium text-sm ${
-                                    activeTab === 'proposals'
-                                        ? 'border-primary-600 text-primary-600'
-                                        : `border-transparent ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'}`
-                                }`}
-                            >
-                                Proposals
-                                {formData.proposals?.length > 0 && (
-                                    <span className={`ml-2 px-2 py-0.5 ${isDark ? 'bg-primary-900 text-primary-300' : 'bg-primary-100 text-primary-700'} rounded-full text-xs`}>
-                                        {formData.proposals.length}
-                                    </span>
-                                )}
-                            </button>
+                            {isAdmin && (
+                                <button
+                                    onClick={() => setActiveTab('proposals')}
+                                    className={`py-4 px-2 border-b-2 font-medium text-sm ${
+                                        activeTab === 'proposals'
+                                            ? 'border-primary-600 text-primary-600'
+                                            : `border-transparent ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'}`
+                                    }`}
+                                >
+                                    Proposals
+                                    {formData.proposals?.length > 0 && (
+                                        <span className={`ml-2 px-2 py-0.5 ${isDark ? 'bg-primary-900 text-primary-300' : 'bg-primary-100 text-primary-700'} rounded-full text-xs`}>
+                                            {formData.proposals.length}
+                                        </span>
+                                    )}
+                                </button>
+                            )}
                         </div>
                     </div>
                     
@@ -674,7 +690,7 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                         )}
                         
                         {/* Proposals Tab - Reuse the same code from modal mode */}
-                        {activeTab === 'proposals' && (
+                        {activeTab === 'proposals' && isAdmin && (
                             <div className="space-y-4">
                                 <div className="flex justify-between items-center">
                                     <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Proposals</h3>
@@ -1202,21 +1218,23 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                         >
                             Overview
                         </button>
-                        <button
-                            onClick={() => setActiveTab('proposals')}
-                            className={`py-4 px-2 border-b-2 font-medium text-sm ${
-                                activeTab === 'proposals'
-                                    ? 'border-primary-600 text-primary-600'
-                                    : `border-transparent ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'}`
-                            }`}
-                        >
-                            Proposals
-                            {formData.proposals?.length > 0 && (
-                                <span className={`ml-2 px-2 py-0.5 ${isDark ? 'bg-primary-900 text-primary-300' : 'bg-primary-100 text-primary-700'} rounded-full text-xs`}>
-                                    {formData.proposals.length}
-                                </span>
-                            )}
-                        </button>
+                        {isAdmin && (
+                            <button
+                                onClick={() => setActiveTab('proposals')}
+                                className={`py-4 px-2 border-b-2 font-medium text-sm ${
+                                    activeTab === 'proposals'
+                                        ? 'border-primary-600 text-primary-600'
+                                        : `border-transparent ${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'}`
+                                }`}
+                            >
+                                Proposals
+                                {formData.proposals?.length > 0 && (
+                                    <span className={`ml-2 px-2 py-0.5 ${isDark ? 'bg-primary-900 text-primary-300' : 'bg-primary-100 text-primary-700'} rounded-full text-xs`}>
+                                        {formData.proposals.length}
+                                    </span>
+                                )}
+                            </button>
+                        )}
                     </div>
                 </div>
                 
@@ -1310,7 +1328,7 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                     )}
                     
                     {/* Proposals Tab - Same as LeadDetailModal */}
-                    {activeTab === 'proposals' && (
+                    {activeTab === 'proposals' && isAdmin && (
                         <div className="space-y-4">
                             <div className="flex justify-between items-center">
                                 <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Proposals</h3>

@@ -2914,6 +2914,10 @@ function initializeProjectDetail() {
 
     const TaskDetailModalComponent = taskDetailModalComponent || (typeof window.TaskDetailModal === 'function' ? window.TaskDetailModal : null);
     const CommentsPopupComponent = commentsPopupComponent || (typeof window.CommentsPopup === 'function' ? window.CommentsPopup : null);
+    const ProjectModalComponent = (typeof window.ProjectModal === 'function' ? window.ProjectModal : null);
+    const CustomFieldModalComponent = (typeof window.CustomFieldModal === 'function' ? window.CustomFieldModal : null);
+    const KanbanViewComponent = (typeof window.KanbanView === 'function' ? window.KanbanView : null);
+    const DocumentCollectionModalComponent = (typeof window.DocumentCollectionModal === 'function' ? window.DocumentCollectionModal : null);
 
     return (
         <div className="space-y-4">
@@ -3099,8 +3103,8 @@ function initializeProjectDetail() {
             {viewMode === 'list' ? (
                 <ListView />
             ) : (
-                KanbanView ? (
-                    <KanbanView
+                KanbanViewComponent ? (
+                    <KanbanViewComponent
                         tasks={filteredTopLevelTasks}
                         statusColumns={kanbanColumns}
                         onViewTaskDetail={handleViewTaskDetail}
@@ -3196,16 +3200,32 @@ function initializeProjectDetail() {
                 </div>
             )}
 
-            {showCustomFieldModal && (
-                <CustomFieldModal
+            {showCustomFieldModal && CustomFieldModalComponent && (
+                <CustomFieldModalComponent
                     customFields={customFieldDefinitions}
                     onAdd={handleAddCustomField}
                     onClose={() => setShowCustomFieldModal(false)}
                 />
             )}
+            {showCustomFieldModal && !CustomFieldModalComponent && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg p-4 w-full max-w-sm text-center shadow-lg space-y-2">
+                        <p className="text-sm text-gray-700 font-medium">
+                            Loading custom fields modal...
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => setShowCustomFieldModal(false)}
+                            className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            )}
 
-            {showProjectModal && (
-                <ProjectModal
+            {showProjectModal && ProjectModalComponent && (
+                <ProjectModalComponent
                     project={project}
                     onSave={async (projectData) => {
                         try {
@@ -3247,6 +3267,25 @@ function initializeProjectDetail() {
                     }}
                     onClose={() => setShowProjectModal(false)}
                 />
+            )}
+            {showProjectModal && !ProjectModalComponent && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg p-4 w-full max-w-sm text-center shadow-lg space-y-2">
+                        <p className="text-sm text-gray-700 font-medium">
+                            Loading project settings...
+                        </p>
+                        <p className="text-xs text-gray-500">
+                            This screen opens once ProjectModal finishes loading.
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => setShowProjectModal(false)}
+                            className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
             )}
 
             {showTaskDetailModal && TaskDetailModalComponent && (
@@ -3302,8 +3341,8 @@ function initializeProjectDetail() {
                 </div>
             )}
 
-            {showDocumentModal && (
-                <DocumentCollectionModal
+            {showDocumentModal && DocumentCollectionModalComponent && (
+                <DocumentCollectionModalComponent
                     document={editingDocument}
                     onSave={handleSaveDocument}
                     onClose={() => {
@@ -3312,6 +3351,25 @@ function initializeProjectDetail() {
                     }}
                     users={users}
                 />
+            )}
+            {showDocumentModal && !DocumentCollectionModalComponent && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg p-4 w-full max-w-sm text-center shadow-lg space-y-2">
+                        <p className="text-sm text-gray-700 font-medium">
+                            Loading document modal...
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setShowDocumentModal(false);
+                                setEditingDocument(null);
+                            }}
+                            className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
             )}
         </div>
     );
