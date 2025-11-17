@@ -7,6 +7,22 @@ import { withLogging } from '../../../_lib/logger.js'
 
 async function handler(req, res) {
   try {
+    // LEAVE PLATFORM RESTRICTION: Only allow garethm@abcotronics.co.za until completion
+    const currentUserId = req.user?.sub || req.user?.id
+    if (currentUserId) {
+      const currentUser = await prisma.user.findUnique({
+        where: { id: currentUserId },
+        select: { id: true, email: true, role: true }
+      })
+      
+      if (currentUser) {
+        const userEmail = currentUser.email?.toLowerCase()
+        if (userEmail !== 'garethm@abcotronics.co.za') {
+          return badRequest(res, 'Access denied: Leave platform is temporarily restricted')
+        }
+      }
+    }
+
     if (req.method !== 'POST') {
       return badRequest(res, 'Method not allowed')
     }
@@ -19,8 +35,7 @@ async function handler(req, res) {
     const body = await parseJsonBody(req)
     const { cancelledBy } = body
 
-    // Get current user ID and role
-    const currentUserId = req.user?.sub || req.user?.id
+    // If no user ID, return unauthorized
     if (!currentUserId) {
       return badRequest(res, 'User not authenticated')
     }
@@ -28,7 +43,7 @@ async function handler(req, res) {
     // Get user from database to verify role
     const currentUser = await prisma.user.findUnique({
       where: { id: currentUserId },
-      select: { id: true, role: true }
+      select: { id: true, role: true, email: true }
     })
 
     if (!currentUser) {

@@ -6,6 +6,22 @@ import { withLogging } from '../_lib/logger.js'
 
 async function handler(req, res) {
   try {
+    // LEAVE PLATFORM RESTRICTION: Only allow garethm@abcotronics.co.za until completion
+    const currentUserId = req.user?.sub || req.user?.id
+    if (currentUserId) {
+      const currentUser = await prisma.user.findUnique({
+        where: { id: currentUserId },
+        select: { id: true, email: true, role: true }
+      })
+      
+      if (currentUser) {
+        const userEmail = currentUser.email?.toLowerCase()
+        if (userEmail !== 'garethm@abcotronics.co.za') {
+          return badRequest(res, 'Access denied: Leave platform is temporarily restricted')
+        }
+      }
+    }
+
     if (req.method !== 'POST') {
       return badRequest(res, 'Method not allowed')
     }
