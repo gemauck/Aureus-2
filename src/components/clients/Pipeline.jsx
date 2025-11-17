@@ -1076,21 +1076,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     return (a, b) => directionMultiplier * normalizeLifecycleStage(a.status).localeCompare(normalizeLifecycleStage(b.status));
                 case 'stage':
                     return (a, b) => directionMultiplier * (a.stage || '').localeCompare(b.stage || '');
-                case 'value':
-                    return (a, b) =>
-                        directionMultiplier *
-                        ((Number(a?.value ?? 0) || 0) - (Number(b?.value ?? 0) || 0));
-                case 'age':
-                    return (a, b) =>
-                        directionMultiplier *
-                        (getDealAge(a?.createdDate) - getDealAge(b?.createdDate));
-                case 'expectedClose':
-                    return (a, b) =>
-                        directionMultiplier *
-                        (
-                            (a?.expectedCloseDate ? new Date(a.expectedCloseDate).getTime() : Number.POSITIVE_INFINITY) -
-                            (b?.expectedCloseDate ? new Date(b.expectedCloseDate).getTime() : Number.POSITIVE_INFINITY)
-                        );
                 default:
                     return () => 0;
             }
@@ -2093,15 +2078,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                     {renderSortableHeader('Type', 'type')}
                                     {renderSortableHeader('Status', 'status')}
                                     {renderSortableHeader('AIDA Stage', 'stage')}
-                                    {renderSortableHeader('Value', 'value')}
-                                    {renderSortableHeader('Age', 'age')}
-                                    {renderSortableHeader('Expected Close', 'expectedClose')}
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {items.length === 0 ? (
                                     <tr>
-                                        <td colSpan="8" className="px-4 py-12 text-center text-sm text-gray-500">
+                                        <td colSpan="5" className="px-4 py-12 text-center text-sm text-gray-500">
                                             <i className="fas fa-list-ul text-3xl text-gray-300 mb-3"></i>
                                             <p>No leads or opportunities match your filters.</p>
                                             <p className="text-xs text-gray-400 mt-1">Adjust filters to see more results.</p>
@@ -2109,7 +2091,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                     </tr>
                                 ) : (
                                     items.map(item => {
-                                        const age = getDealAge(item.createdDate);
                                         const isLead = item.type === 'lead';
 
                                         return (
@@ -2156,19 +2137,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                 </td>
                                                 <td className="px-6 py-2">
                                                     <span className="text-sm font-medium text-gray-900">{item.stage}</span>
-                                                </td>
-                                                <td className="px-6 py-2">
-                                                    <span className="text-sm font-semibold text-gray-900">{formatCurrency(item.value)}</span>
-                                                </td>
-                                                <td className="px-6 py-2">
-                                                    <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${getAgeBadgeColor(age)}`}>
-                                                        {age}d
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-2 text-sm text-gray-700">
-                                                    {item.expectedCloseDate
-                                                        ? new Date(item.expectedCloseDate).toLocaleDateString('en-ZA')
-                                                        : 'Not set'}
                                                 </td>
                                             </tr>
                                         );
