@@ -1995,8 +1995,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         };
 
         return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div 
+                className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                onClick={(e) => {
+                    // Only close if clicking directly on the backdrop, not on the modal content
+                    if (e.target === e.currentTarget) {
+                        setShowSectionModal(false);
+                    }
+                }}
+            >
+                <div 
+                    className="bg-white rounded-lg shadow-xl w-full max-w-md"
+                    onClick={(e) => e.stopPropagation()}
+                >
                     <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
                         <h2 className="text-base font-semibold text-gray-900">
                             {editingSection ? 'Edit Section' : 'Add New Section'}
@@ -2176,8 +2187,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         };
 
         return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div 
+                className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                onClick={(e) => {
+                    // Only close if clicking directly on the backdrop, not on the modal content
+                    if (e.target === e.currentTarget) {
+                        handleCloseDocumentModal();
+                    }
+                }}
+            >
+                <div 
+                    className="bg-white rounded-lg shadow-xl w-full max-w-md"
+                    onClick={(e) => e.stopPropagation()}
+                >
                     <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
                         <h2 className="text-base font-semibold text-gray-900">
                             {editingDocument ? 'Edit Document/Data' : 'Add Document/Data'}
@@ -2423,8 +2445,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         };
 
         return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div 
+                className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                onClick={(e) => {
+                    // Only close if clicking directly on the backdrop, not on the modal content
+                    if (e.target === e.currentTarget) {
+                        setShowTemplateModal(false);
+                        setEditingTemplate(null);
+                        setShowTemplateList(true);
+                        window.tempTemplateData = null;
+                    }
+                }}
+            >
+                <div 
+                    className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
+                    onClick={(e) => e.stopPropagation()}
+                >
                     <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
                         <h2 className="text-base font-semibold text-gray-900">
                             {showTemplateList ? 'Template Management' : (editingTemplate ? 'Edit Template' : 'Create Template')}
@@ -2688,7 +2724,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // Apply Template Modal
     const ApplyTemplateModal = () => {
         const [selectedTemplateId, setSelectedTemplateId] = useState(null);
-        const [targetYear, setTargetYear] = useState(selectedYear);
+        const [targetYear, setTargetYear] = useState(() => {
+            const year = typeof selectedYear === 'number' && !Number.isNaN(selectedYear) ? selectedYear : currentYear;
+            return year;
+        });
 
         const handleApply = () => {
             if (selectedTemplateId == null || Number.isNaN(selectedTemplateId)) {
@@ -2704,8 +2743,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         };
 
         return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div 
+                className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+                onClick={(e) => {
+                    // Only close if clicking directly on the backdrop, not on the modal content
+                    if (e.target === e.currentTarget) {
+                        setShowApplyTemplateModal(false);
+                    }
+                }}
+            >
+                <div 
+                    className="bg-white rounded-lg shadow-xl w-full max-w-md"
+                    onClick={(e) => e.stopPropagation()}
+                >
                     <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
                         <h2 className="text-base font-semibold text-gray-900">
                             Apply Template
@@ -2758,11 +2808,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                             </option>
                                         ))}
                                     </select>
-                                    {selectedTemplateId != null && (() => {
+                                    {(() => {
+                                        if (selectedTemplateId == null || Number.isNaN(selectedTemplateId)) {
+                                            return null;
+                                        }
                                         const template = templates.find(t => String(t.id) === String(selectedTemplateId));
-                                        return template?.description ? (
-                                            <p className="mt-1 text-[10px] text-gray-500">{template.description}</p>
-                                        ) : null;
+                                        if (template?.description) {
+                                            return (
+                                                <p className="mt-1 text-[10px] text-gray-500">{template.description}</p>
+                                            );
+                                        }
+                                        return null;
                                     })()}
                                 </div>
 
@@ -2771,10 +2827,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         Target Year
                                     </label>
                                     <select
-                                        value={targetYear}
+                                        value={typeof targetYear === 'number' && !Number.isNaN(targetYear) ? targetYear : currentYear}
                                         onChange={(e) => {
                                             const parsed = parseInt(e.target.value, 10);
-                                            setTargetYear(Number.isNaN(parsed) ? selectedYear : parsed);
+                                            if (Number.isNaN(parsed)) {
+                                                setTargetYear(currentYear);
+                                            } else {
+                                                setTargetYear(parsed);
+                                            }
                                         }}
                                         className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                     >
@@ -2789,14 +2849,26 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     </p>
                                 </div>
 
-                                {selectedTemplateId != null && (() => {
+                                {(() => {
+                                    if (selectedTemplateId == null || Number.isNaN(selectedTemplateId)) {
+                                        return null;
+                                    }
                                     const template = templates.find(t => String(t.id) === String(selectedTemplateId));
-                                    const totalDocs = template?.sections?.reduce((sum, s) => sum + (s.documents?.length || 0), 0) || 0;
+                                    if (!template) {
+                                        return null;
+                                    }
+                                    const sectionsCount = Array.isArray(template.sections) ? template.sections.length : 0;
+                                    const totalDocs = Array.isArray(template.sections) 
+                                        ? template.sections.reduce((sum, s) => {
+                                            const docCount = Array.isArray(s.documents) ? s.documents.length : 0;
+                                            return sum + docCount;
+                                        }, 0)
+                                        : 0;
                                     return (
                                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5">
                                             <p className="text-[10px] font-medium text-blue-900 mb-1">Template Preview:</p>
                                             <p className="text-[10px] text-blue-700">
-                                                • {template?.sections?.length || 0} sections<br/>
+                                                • {sectionsCount} sections<br/>
                                                 • {totalDocs} documents
                                             </p>
                                         </div>
