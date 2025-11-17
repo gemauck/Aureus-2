@@ -24,7 +24,6 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
     const [googleEventId, setGoogleEventId] = useState(null);
     const [googleEventUrl, setGoogleEventUrl] = useState(null);
     const [selectedPhotos, setSelectedPhotos] = useState([]);
-    const [mapLoaded, setMapLoaded] = useState(false);
 
     useEffect(() => {
         if (task) {
@@ -81,27 +80,7 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
         if (isOpen) checkAuth();
     }, [isOpen]);
 
-    // Load Google Maps script
-    useEffect(() => {
-        if (isOpen && !mapLoaded) {
-            const script = document.createElement('script');
-            script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY || ''}&libraries=places`;
-            script.async = true;
-            script.defer = true;
-            script.onload = () => setMapLoaded(true);
-            script.onerror = () => {
-                console.warn('Google Maps script failed to load. Map features will be limited.');
-                setMapLoaded(true); // Still allow form to work
-            };
-            document.head.appendChild(script);
-            return () => {
-                const existingScript = document.querySelector(`script[src*="maps.googleapis.com"]`);
-                if (existingScript) {
-                    // Don't remove as it might be used elsewhere
-                }
-            };
-        }
-    }, [isOpen, mapLoaded]);
+    // Leaflet is already loaded globally, no need to load Google Maps
 
     // Load employees when modal opens
     useEffect(() => {
@@ -201,29 +180,17 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
             [name]: value
         }));
 
-        // If address changed and Google Maps is available, try to geocode
-        if (name === 'address' && value && window.google && window.google.maps) {
-            const geocoder = new window.google.maps.Geocoder();
-            geocoder.geocode({ address: value }, (results, status) => {
-                if (status === 'OK' && results[0]) {
-                    const location = results[0].geometry.location;
-                    setFormData(prev => ({
-                        ...prev,
-                        latitude: location.lat().toString(),
-                        longitude: location.lng().toString()
-                    }));
-                }
-            });
-        }
+        // Note: Geocoding can be added later if needed using a free geocoding service
+        // For now, users can manually enter coordinates or use the LocationPicker component
     };
 
     const getMapUrl = () => {
         if (formData.latitude && formData.longitude) {
-            return `https://www.google.com/maps?q=${formData.latitude},${formData.longitude}`;
+            return `https://www.openstreetmap.org/?mlat=${formData.latitude}&mlon=${formData.longitude}&zoom=15`;
         } else if (formData.address) {
-            return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formData.address)}`;
+            return `https://www.openstreetmap.org/search?query=${encodeURIComponent(formData.address)}`;
         } else if (formData.location) {
-            return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formData.location)}`;
+            return `https://www.openstreetmap.org/search?query=${encodeURIComponent(formData.location)}`;
         }
         return null;
     };
@@ -356,7 +323,7 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
                     <div>
                         <h2 className="text-xl font-bold text-gray-900 dark:text-slate-100">
                             {task ? 'Edit Job Card' : 'Create New Job Card'}
-                        </h2>
+                    </h2>
                         <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
                             {team?.name || 'Team Task'}
                         </p>
@@ -377,33 +344,33 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
                             Job Details
                         </h3>
                         <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-slate-300">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-slate-300">
                                     Job Title <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                    type="text"
-                                    name="title"
-                                    value={formData.title}
-                                    onChange={handleChange}
-                                    required
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                        </label>
+                        <input
+                            type="text"
+                            name="title"
+                            value={formData.title}
+                            onChange={handleChange}
+                            required
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
                                     placeholder="Enter job title"
-                                />
-                            </div>
+                        />
+                    </div>
 
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-slate-300">
-                                    Description
-                                </label>
-                                <textarea
-                                    name="description"
-                                    value={formData.description}
-                                    onChange={handleChange}
-                                    rows="4"
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-slate-300">
+                            Description
+                        </label>
+                        <textarea
+                            name="description"
+                            value={formData.description}
+                            onChange={handleChange}
+                            rows="4"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
                                     placeholder="Enter job description and requirements"
-                                />
+                        />
                             </div>
                         </div>
                     </div>
@@ -415,22 +382,22 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
                             Location & Map
                         </h3>
                         <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-slate-300">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-slate-300">
                                     Location Name
-                                </label>
+                            </label>
                                 <input
                                     type="text"
                                     name="location"
                                     value={formData.location}
                                     onChange={handleLocationChange}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
                                     placeholder="e.g., Site A, Building B, etc."
                                 />
-                            </div>
+                        </div>
 
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-slate-300">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-slate-300">
                                     Full Address
                                 </label>
                                 <input
@@ -460,13 +427,13 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-slate-300">
                                         Longitude
-                                    </label>
+                            </label>
                                     <input
                                         type="text"
                                         name="longitude"
                                         value={formData.longitude}
                                         onChange={handleLocationChange}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
                                         placeholder="Auto-filled from address"
                                     />
                                 </div>
@@ -481,21 +448,20 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
                                         className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
                                     >
                                         <i className="fas fa-map mr-2"></i>
-                                        View on Google Maps
+                                        View on OpenStreetMap
                                     </a>
                                 </div>
                             )}
 
-                            {(formData.latitude && formData.longitude) && (
+                            {(formData.latitude && formData.longitude) && window.MapComponent && (
                                 <div className="mt-4 rounded-lg overflow-hidden border border-gray-300 dark:border-slate-600" style={{ height: '300px' }}>
-                                    <iframe
-                                        width="100%"
-                                        height="100%"
-                                        frameBorder="0"
-                                        style={{ border: 0 }}
-                                        src={`https://www.google.com/maps/embed/v1/place?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY || ''}&q=${formData.latitude},${formData.longitude}`}
-                                        allowFullScreen
-                                    ></iframe>
+                                    <window.MapComponent
+                                        latitude={parseFloat(formData.latitude)}
+                                        longitude={parseFloat(formData.longitude)}
+                                        siteName={formData.location || formData.address || 'Job Location'}
+                                        allowSelection={false}
+                                        defaultZoom={15}
+                                    />
                                 </div>
                             )}
                         </div>
@@ -563,45 +529,45 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
                             Assignment & Scheduling
                         </h3>
                         <div className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-slate-300">
-                                        Assignee
-                                    </label>
-                                    {loadingEmployees ? (
-                                        <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 dark:bg-slate-700 dark:border-slate-600 text-gray-500 dark:text-slate-400 text-sm">
-                                            Loading employee details...
-                                        </div>
-                                    ) : (
-                                        <select
-                                            name="assigneeId"
-                                            value={formData.assigneeId}
-                                            onChange={handleChange}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
-                                        >
-                                            <option value="">Select an assignee</option>
-                                            {employees.map((employee) => (
-                                                <option key={employee.id} value={employee.id}>
-                                                    {employee.name || employee.email || employee.id}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    )}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-slate-300">
+                                Assignee
+                            </label>
+                            {loadingEmployees ? (
+                                <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 dark:bg-slate-700 dark:border-slate-600 text-gray-500 dark:text-slate-400 text-sm">
+                                    Loading employee details...
                                 </div>
+                            ) : (
+                                <select
+                                    name="assigneeId"
+                                    value={formData.assigneeId}
+                                    onChange={handleChange}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                                >
+                                    <option value="">Select an assignee</option>
+                                    {employees.map((employee) => (
+                                        <option key={employee.id} value={employee.id}>
+                                            {employee.name || employee.email || employee.id}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-slate-300">
-                                        Due Date
-                                    </label>
-                                    <input
-                                        type="date"
-                                        name="dueDate"
-                                        value={formData.dueDate}
-                                        onChange={handleChange}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
-                                    />
-                                </div>
-                            </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-slate-300">
+                                Due Date
+                            </label>
+                            <input
+                                type="date"
+                                name="dueDate"
+                                value={formData.dueDate}
+                                onChange={handleChange}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            />
+                        </div>
+                    </div>
                         </div>
                     </div>
 
@@ -627,12 +593,12 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
                                     <option value="completed">Completed</option>
                                     <option value="blocked">Blocked</option>
                                 </select>
-                            </div>
+                    </div>
 
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-slate-300">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-slate-300">
                                     Priority
-                                </label>
+                        </label>
                                 <select
                                     name="priority"
                                     value={formData.priority}
@@ -656,44 +622,44 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
                         </h3>
                         <div className="space-y-3">
                             <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    value={tagInput}
-                                    onChange={(e) => setTagInput(e.target.value)}
-                                    onKeyPress={(e) => {
-                                        if (e.key === 'Enter') {
-                                            e.preventDefault();
-                                            handleAddTag();
-                                        }
-                                    }}
-                                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
-                                    placeholder="Add tag and press Enter"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={handleAddTag}
+                            <input
+                                type="text"
+                                value={tagInput}
+                                onChange={(e) => setTagInput(e.target.value)}
+                                onKeyPress={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        handleAddTag();
+                                    }
+                                }}
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                                placeholder="Add tag and press Enter"
+                            />
+                            <button
+                                type="button"
+                                onClick={handleAddTag}
                                     className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
-                                >
-                                    <i className="fas fa-plus"></i>
-                                </button>
-                            </div>
+                            >
+                                <i className="fas fa-plus"></i>
+                            </button>
+                        </div>
                             {formData.tags.length > 0 && (
-                                <div className="flex flex-wrap gap-2">
-                                    {formData.tags.map((tag, idx) => (
-                                        <span
-                                            key={idx}
+                        <div className="flex flex-wrap gap-2">
+                            {formData.tags.map((tag, idx) => (
+                                <span
+                                    key={idx}
                                             className="inline-flex items-center gap-1 px-3 py-1 bg-primary-100 text-primary-700 rounded-full text-sm font-medium dark:bg-primary-900 dark:text-primary-300"
-                                        >
-                                            {tag}
-                                            <button
-                                                type="button"
-                                                onClick={() => handleRemoveTag(tag)}
+                                >
+                                    {tag}
+                                    <button
+                                        type="button"
+                                        onClick={() => handleRemoveTag(tag)}
                                                 className="text-primary-700 hover:text-primary-900 dark:text-primary-300 dark:hover:text-primary-100 ml-1"
-                                            >
-                                                <i className="fas fa-times text-xs"></i>
-                                            </button>
-                                        </span>
-                                    ))}
+                                    >
+                                        <i className="fas fa-times text-xs"></i>
+                                    </button>
+                                </span>
+                            ))}
                                 </div>
                             )}
                         </div>
@@ -706,68 +672,68 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
                             Google Calendar Integration
                         </h3>
                         <div className="space-y-3">
-                            <div className="flex items-center gap-2 flex-wrap">
-                                {googleEventId ? (
-                                    <>
-                                        <span className="text-sm text-green-600 dark:text-green-400">
-                                            <i className="fas fa-check-circle mr-1"></i>Synced
-                                        </span>
-                                        {googleEventUrl && (
-                                            <a
-                                                href={googleEventUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-sm px-3 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-600 dark:text-white dark:hover:bg-blue-700"
-                                            >
-                                                <i className="fas fa-external-link-alt mr-1"></i>Open
-                                            </a>
-                                        )}
+                        <div className="flex items-center gap-2 flex-wrap">
+                            {googleEventId ? (
+                                <>
+                                    <span className="text-sm text-green-600 dark:text-green-400">
+                                        <i className="fas fa-check-circle mr-1"></i>Synced
+                                    </span>
+                                    {googleEventUrl && (
+                                        <a
+                                            href={googleEventUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-sm px-3 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-600 dark:text-white dark:hover:bg-blue-700"
+                                        >
+                                            <i className="fas fa-external-link-alt mr-1"></i>Open
+                                        </a>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={handleSyncToGoogleCalendar}
+                                        disabled={isSyncingToGoogle || !formData.dueDate}
+                                        className="text-sm px-3 py-1 rounded bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+                                    >
+                                        <i className={`fas ${isSyncingToGoogle ? 'fa-spinner fa-spin' : 'fa-sync-alt'} mr-1`}></i>
+                                        {isSyncingToGoogle ? 'Syncing...' : 'Update'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleRemoveFromGoogleCalendar}
+                                        disabled={isSyncingToGoogle}
+                                        className="text-sm px-3 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 dark:bg-red-600 dark:text-white dark:hover:bg-red-700"
+                                    >
+                                        <i className="fas fa-trash mr-1"></i>Remove
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    {!isGoogleCalendarAuthenticated ? (
+                                        <button
+                                            type="button"
+                                            onClick={handleGoogleCalendarAuth}
+                                            disabled={isSyncingToGoogle}
+                                            className="text-sm px-3 py-1 rounded bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50 dark:bg-green-600 dark:text-white dark:hover:bg-green-700"
+                                        >
+                                            <i className={`fab fa-google mr-1 ${isSyncingToGoogle ? 'fa-spinner fa-spin' : ''}`}></i>
+                                            {isSyncingToGoogle ? 'Connecting...' : 'Connect Google Calendar'}
+                                        </button>
+                                    ) : (
                                         <button
                                             type="button"
                                             onClick={handleSyncToGoogleCalendar}
                                             disabled={isSyncingToGoogle || !formData.dueDate}
-                                            className="text-sm px-3 py-1 rounded bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:opacity-50 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+                                            className="text-sm px-3 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:opacity-50 dark:bg-blue-600 dark:text-white dark:hover:bg-blue-700"
                                         >
-                                            <i className={`fas ${isSyncingToGoogle ? 'fa-spinner fa-spin' : 'fa-sync-alt'} mr-1`}></i>
-                                            {isSyncingToGoogle ? 'Syncing...' : 'Update'}
+                                            <i className={`fas ${isSyncingToGoogle ? 'fa-spinner fa-spin' : 'fa-calendar-plus'} mr-1`}></i>
+                                            {isSyncingToGoogle ? 'Syncing...' : 'Sync to Google Calendar'}
                                         </button>
-                                        <button
-                                            type="button"
-                                            onClick={handleRemoveFromGoogleCalendar}
-                                            disabled={isSyncingToGoogle}
-                                            className="text-sm px-3 py-1 rounded bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 dark:bg-red-600 dark:text-white dark:hover:bg-red-700"
-                                        >
-                                            <i className="fas fa-trash mr-1"></i>Remove
-                                        </button>
-                                    </>
-                                ) : (
-                                    <>
-                                        {!isGoogleCalendarAuthenticated ? (
-                                            <button
-                                                type="button"
-                                                onClick={handleGoogleCalendarAuth}
-                                                disabled={isSyncingToGoogle}
-                                                className="text-sm px-3 py-1 rounded bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50 dark:bg-green-600 dark:text-white dark:hover:bg-green-700"
-                                            >
-                                                <i className={`fab fa-google mr-1 ${isSyncingToGoogle ? 'fa-spinner fa-spin' : ''}`}></i>
-                                                {isSyncingToGoogle ? 'Connecting...' : 'Connect Google Calendar'}
-                                            </button>
-                                        ) : (
-                                            <button
-                                                type="button"
-                                                onClick={handleSyncToGoogleCalendar}
-                                                disabled={isSyncingToGoogle || !formData.dueDate}
-                                                className="text-sm px-3 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:opacity-50 dark:bg-blue-600 dark:text-white dark:hover:bg-blue-700"
-                                            >
-                                                <i className={`fas ${isSyncingToGoogle ? 'fa-spinner fa-spin' : 'fa-calendar-plus'} mr-1`}></i>
-                                                {isSyncingToGoogle ? 'Syncing...' : 'Sync to Google Calendar'}
-                                            </button>
-                                        )}
-                                        {!formData.dueDate && (
-                                            <span className="text-xs text-gray-500 dark:text-slate-400">(Set a due date to enable sync)</span>
-                                        )}
-                                    </>
-                                )}
+                                    )}
+                                    {!formData.dueDate && (
+                                        <span className="text-xs text-gray-500 dark:text-slate-400">(Set a due date to enable sync)</span>
+                                    )}
+                                </>
+                            )}
                             </div>
                         </div>
                     </div>

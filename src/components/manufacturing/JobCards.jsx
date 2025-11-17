@@ -1703,9 +1703,9 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             const longitude = coordsMatch ? coordsMatch[2] : (jobCard.locationLongitude || '');
             const getMapUrl = () => {
               if (latitude && longitude) {
-                return `https://www.google.com/maps?q=${latitude},${longitude}`;
+                return `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}&zoom=15`;
               } else if (locationStr) {
-                return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationStr)}`;
+                return `https://www.openstreetmap.org/search?query=${encodeURIComponent(locationStr)}`;
               }
               return null;
             };
@@ -1936,20 +1936,19 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
                           className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
                         >
                           <i className="fas fa-map mr-2"></i>
-                          View on Google Maps
+                          View on OpenStreetMap
                         </a>
                       </div>
                     )}
-                    {latitude && longitude && (
+                    {latitude && longitude && window.MapComponent && (
                       <div className="mt-4 rounded-lg overflow-hidden border border-gray-300 dark:border-slate-600" style={{ height: '300px' }}>
-                        <iframe
-                          width="100%"
-                          height="100%"
-                          frameBorder="0"
-                          style={{ border: 0 }}
-                          src={`https://www.google.com/maps/embed/v1/place?key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY || ''}&q=${latitude},${longitude}`}
-                          allowFullScreen
-                        ></iframe>
+                        <window.MapComponent
+                          latitude={parseFloat(latitude)}
+                          longitude={parseFloat(longitude)}
+                          siteName={displayData.location || 'Job Location'}
+                          allowSelection={false}
+                          defaultZoom={15}
+                        />
                       </div>
                     )}
                   </div>
