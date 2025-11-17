@@ -1,5 +1,5 @@
 // Get React hooks from window
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
 const storage = window.storage;
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
 
@@ -134,6 +134,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [showApplyTemplateModal, setShowApplyTemplateModal] = useState(false);
     const [editingTemplate, setEditingTemplate] = useState(null);
     const [templates, setTemplates] = useState([]);
+    const [showTemplateList, setShowTemplateList] = useState(true);
     
     // Template storage key
     const TEMPLATES_STORAGE_KEY = 'documentCollectionTemplates';
@@ -2520,8 +2521,24 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
 
     // Template Management Modal
-    const TemplateModal = () => {
-        const [showTemplateList, setShowTemplateList] = useState(!editingTemplate);
+    const TemplateModal = ({ showTemplateList, setShowTemplateList }) => {
+        // showTemplateList is now managed by parent component
+        
+        // Reset showTemplateList when editingTemplate changes
+        useEffect(() => {
+            if (editingTemplate) {
+                setShowTemplateList(false);
+            } else {
+                setShowTemplateList(true);
+            }
+        }, [editingTemplate, setShowTemplateList]);
+        
+        // Reset showTemplateList when modal closes
+        useEffect(() => {
+            if (!showTemplateModal) {
+                setShowTemplateList(true);
+            }
+        }, [showTemplateModal, setShowTemplateList]);
         
         // Debug: Log templates when they change
         useEffect(() => {
@@ -2725,7 +2742,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     }
                                     return (
                                         <div className="space-y-2">
-                                            {templates.map(template => {
+                                            {parsedTemplates.map(template => {
                                             // Ensure sections is an array and safely calculate totalDocs
                                             const sections = Array.isArray(template.sections) ? template.sections : [];
                                             const totalDocs = sections.reduce((sum, s) => {
@@ -2912,6 +2929,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     onClick={() => {
                                         setShowTemplateModal(false);
                                         setEditingTemplate(null);
+                                        setShowTemplateList(true);
                                         window.tempTemplateData = null;
                                     }}
                                     className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
@@ -2957,22 +2975,26 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return [];
         };
 
+        // Ensure all templates have parsed sections when modal is open
+        const parsedTemplates = useMemo(() => {
+            return templates.map(t => ({
+                ...t,
+                sections: parseTemplateSections(t.sections)
+            }));
+        }, [templates]);
+
         const handleApply = () => {
             if (!selectedTemplateId) {
                 alert('Please select a template');
                 return;
             }
-            const template = templates.find(t => String(t.id) === String(selectedTemplateId));
+            const template = parsedTemplates.find(t => String(t.id) === String(selectedTemplateId));
             if (!template) {
                 alert('Template not found');
                 return;
             }
-            // Ensure sections are parsed before applying
-            const templateWithParsedSections = {
-                ...template,
-                sections: parseTemplateSections(template.sections)
-            };
-            handleApplyTemplate(templateWithParsedSections, targetYear);
+            // Sections are already parsed in parsedTemplates
+            handleApplyTemplate(template, targetYear);
         };
 
         return (
@@ -3002,7 +3024,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     </div>
 
                     <div className="p-4 space-y-4">
-                        {templates.length === 0 ? (
+                        {parsedTemplates.length === 0 ? (
                             <div className="text-center py-4">
                                 <p className="text-sm text-gray-600 mb-3">No templates available</p>
                                 <button
@@ -3035,20 +3057,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                     >
                                         <option value="">-- Select a template --</option>
-                                        {templates.map(template => {
-                                            // Parse sections safely for dropdown display
-                                            const sections = (() => {
-                                                if (Array.isArray(template.sections)) return template.sections;
-                                                if (typeof template.sections === 'string') {
-                                                    try {
-                                                        const parsed = JSON.parse(template.sections);
-                                                        return Array.isArray(parsed) ? parsed : [];
-                                                    } catch (e) {
-                                                        return [];
-                                                    }
-                                                }
-                                                return [];
-                                            })();
+                                        {parsedTemplates.map(template => {
+                                            // Sections are already parsed in parsedTemplates
+                                            const sections = Array.isArray(template.sections) ? template.sections : [];
                                             const sectionsCount = sections.length || 0;
                                             return (
                                                 <option key={template.id} value={String(template.id)}>
@@ -3061,7 +3072,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         if (!selectedTemplateId) {
                                             return null;
                                         }
-                                        const template = templates.find(t => String(t.id) === String(selectedTemplateId));
+                                        const template = parsedTemplates.find(t => String(t.id) === String(selectedTemplateId));
                                         if (!template) {
                                             return null;
                                         }
@@ -3105,24 +3116,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     if (!selectedTemplateId) {
                                         return null;
                                     }
-                                    const template = templates.find(t => String(t.id) === String(selectedTemplateId));
+                                    const template = parsedTemplates.find(t => String(t.id) === String(selectedTemplateId));
                                     if (!template) {
                                         return null;
                                     }
-                                    // Parse sections safely - handle string, array, or undefined
-                                    const sections = (() => {
-                                        if (Array.isArray(template.sections)) return template.sections;
-                                        if (typeof template.sections === 'string') {
-                                            try {
-                                                const parsed = JSON.parse(template.sections);
-                                                return Array.isArray(parsed) ? parsed : [];
-                                            } catch (e) {
-                                                console.warn('Failed to parse template sections in preview:', e);
-                                                return [];
-                                            }
-                                        }
-                                        return [];
-                                    })();
+                                    // Sections are already parsed in parsedTemplates
+                                    const sections = Array.isArray(template.sections) ? template.sections : [];
                                     const sectionsCount = sections.length || 0;
                                     const totalDocs = sections.reduce((sum, s) => {
                                         const docCount = Array.isArray(s?.documents) ? (s.documents.length || 0) : 0;
@@ -3720,7 +3719,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             {/* Modals */}
             {showSectionModal && <SectionModal />}
             {showDocumentModal && <DocumentModal />}
-            {showTemplateModal && <TemplateModal />}
+            {showTemplateModal && <TemplateModal showTemplateList={showTemplateList} setShowTemplateList={setShowTemplateList} />}
             {showApplyTemplateModal && <ApplyTemplateModal />}
         </div>
     );
