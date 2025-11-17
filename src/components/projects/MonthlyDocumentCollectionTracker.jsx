@@ -372,32 +372,43 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 throw new Error('Template not found');
             }
             
-            // Check if it's a database template (cuid format: typically 25 chars, or if it's a string longer than 10)
-            const templateIdStr = String(template.id);
-            const isDatabaseTemplate = token && templateIdStr.length > 10 && !templateIdStr.match(/^\d+$/);
+            console.log('🗑️ Deleting template:', templateId, 'Template:', template);
             
-            // Delete from API if it's a database template
-            if (isDatabaseTemplate) {
-                console.log('🗑️ Deleting template from database:', templateId);
-                const response = await fetch(`/api/document-collection-templates/${templateId}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
+            // Always try API first if we have a token
+            if (token) {
+                console.log('🗑️ Attempting to delete from database:', templateId);
+                try {
+                    const response = await fetch(`/api/document-collection-templates/${encodeURIComponent(templateId)}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        console.log('✅ Template deleted from database');
+                    } else {
+                        const errorData = await response.json().catch(() => ({}));
+                        const errorMessage = errorData.error?.message || `API returned ${response.status}`;
+                        
+                        // If it's a 404, the template doesn't exist in DB, so it's a localStorage template
+                        if (response.status === 404) {
+                            console.log('⚠️ Template not found in database (likely localStorage template), continuing...');
+                        } else {
+                            // For other errors, still try to delete from localStorage but show warning
+                            console.warn('⚠️ API deletion failed:', errorMessage, 'Will still remove from localStorage');
+                        }
                     }
-                });
-                
-                if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
-                    const errorMessage = errorData.error?.message || `Failed to delete template (${response.status})`;
-                    throw new Error(errorMessage);
+                } catch (apiError) {
+                    console.warn('⚠️ API deletion error (network/connection issue):', apiError.message);
+                    // Continue with localStorage deletion as fallback
                 }
-                console.log('✅ Template deleted from database');
             } else {
-                console.log('🗑️ Deleting template from localStorage:', templateId);
+                console.log('🗑️ No auth token, deleting from localStorage only:', templateId);
             }
             
-            // Update local state
+            // Always update local state and localStorage (removes from UI immediately)
             const updatedTemplates = templates.filter(t => String(t.id) !== String(templateId));
             setTemplates(updatedTemplates);
             localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(updatedTemplates));
