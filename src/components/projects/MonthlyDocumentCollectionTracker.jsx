@@ -2521,11 +2521,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
 
     // Template Management Modal
-    const TemplateModal = ({ showTemplateList, setShowTemplateList }) => {
+    const TemplateModal = ({ showTemplateList = true, setShowTemplateList }) => {
         // showTemplateList is now managed by parent component
+        // Add safety check for setShowTemplateList
+        if (!setShowTemplateList) {
+            console.error('TemplateModal: setShowTemplateList prop is missing');
+            return null;
+        }
         
         // Reset showTemplateList when editingTemplate changes
         useEffect(() => {
+            if (!setShowTemplateList) return;
             if (editingTemplate) {
                 setShowTemplateList(false);
             } else {
@@ -2535,6 +2541,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         // Reset showTemplateList when modal closes
         useEffect(() => {
+            if (!setShowTemplateList) return;
             if (!showTemplateModal) {
                 setShowTemplateList(true);
             }
@@ -2975,12 +2982,32 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return [];
         };
 
+        // Helper to safely convert any value to a number, preventing NaN
+        const safeNumber = (value) => {
+            const num = Number(value);
+            return Number.isNaN(num) ? 0 : num;
+        };
+
         // Ensure all templates have parsed sections when modal is open
         const parsedTemplates = useMemo(() => {
-            return templates.map(t => ({
-                ...t,
-                sections: parseTemplateSections(t.sections)
-            }));
+            const parsed = templates.map(t => {
+                const parsedSections = parseTemplateSections(t.sections);
+                // Debug: Log if we find any issues
+                if (!Array.isArray(parsedSections)) {
+                    console.warn('⚠️ Template sections not an array after parsing:', {
+                        templateId: t.id,
+                        templateName: t.name,
+                        sectionsType: typeof t.sections,
+                        parsedSectionsType: typeof parsedSections,
+                        parsedSections
+                    });
+                }
+                return {
+                    ...t,
+                    sections: Array.isArray(parsedSections) ? parsedSections : []
+                };
+            });
+            return parsed;
         }, [templates]);
 
         const handleApply = () => {
@@ -3060,10 +3087,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         {parsedTemplates.map(template => {
                                             // Sections are already parsed in parsedTemplates
                                             const sections = Array.isArray(template.sections) ? template.sections : [];
-                                            const sectionsCount = sections.length || 0;
+                                            const displayCount = safeNumber(sections.length);
                                             return (
                                                 <option key={template.id} value={String(template.id)}>
-                                                    {template.name} ({sectionsCount} sections)
+                                                    {template.name} ({displayCount} sections)
                                                 </option>
                                             );
                                         })}
@@ -3122,11 +3149,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     }
                                     // Sections are already parsed in parsedTemplates
                                     const sections = Array.isArray(template.sections) ? template.sections : [];
-                                    const sectionsCount = sections.length || 0;
+                                    const sectionsCount = safeNumber(sections.length);
+                                    
                                     const totalDocs = sections.reduce((sum, s) => {
-                                        const docCount = Array.isArray(s?.documents) ? (s.documents.length || 0) : 0;
-                                        return (sum || 0) + docCount;
-                                    }, 0) || 0;
+                                        const docCount = Array.isArray(s?.documents) ? safeNumber(s.documents.length) : 0;
+                                        return safeNumber(sum) + docCount;
+                                    }, 0);
+                                    
                                     return (
                                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5">
                                             <p className="text-[10px] font-medium text-blue-900 mb-1">Template Preview:</p>
