@@ -120,6 +120,7 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
     const [fallbackDeal, setFallbackDeal] = useState(null); // { type: 'lead' | 'opportunity', id, data, client }
     const [listSortColumn, setListSortColumn] = useState(null);
     const [listSortDirection, setListSortDirection] = useState('asc');
+    const [usingCachedOpportunities, setUsingCachedOpportunities] = useState(false);
     
     const schedulePipelineRefresh = useCallback(() => {
         setTimeout(() => setRefreshKey((k) => k + 1), 0);
@@ -704,14 +705,14 @@ function doesOpportunityBelongToClient(opportunity, client) {
             .filter(Boolean);
 
         if (normalizedCachedClients.length > 0) {
-            const clientsWithoutOpps = normalizedCachedClients.map((client) => ({
-                ...client,
-                opportunities: []
-            }));
-
-            setClients(clientsWithoutOpps);
+            setClients(normalizedCachedClients);
+            setUsingCachedOpportunities(
+                normalizedCachedClients.some(
+                    (client) => Array.isArray(client.opportunities) && client.opportunities.length > 0
+                )
+            );
             console.log(
-                `⚡ Pipeline: Showing ${clientsWithoutOpps.length} cached clients (opportunities loading from API with correct stages)`
+                `⚡ Pipeline: Showing ${normalizedCachedClients.length} cached clients with cached opportunities while API refreshes`
             );
         }
 
@@ -888,6 +889,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 console.log('✅ Pipeline: API data refreshed and cached with opportunities');
                 setIsLoading(false);
                 setDataLoaded(true);
+                setUsingCachedOpportunities(false);
                 return;
             }
         } catch (error) {
@@ -897,6 +899,11 @@ function doesOpportunityBelongToClient(opportunity, client) {
         if (normalizedCachedClients.length > 0 || normalizedCachedLeads.length > 0) {
             setClients(normalizedCachedClients);
             setLeads(normalizedCachedLeads);
+            setUsingCachedOpportunities(
+                normalizedCachedClients.some(
+                    (client) => Array.isArray(client.opportunities) && client.opportunities.length > 0
+                )
+            );
             console.log(
                 '✅ Pipeline: Using cached data - Clients:',
                 normalizedCachedClients.length,
@@ -906,6 +913,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
         } else {
             setClients([]);
             setLeads([]);
+            setUsingCachedOpportunities(false);
             console.log('📭 Pipeline: No cached data available');
         }
 
@@ -2047,6 +2055,46 @@ function doesOpportunityBelongToClient(opportunity, client) {
     const ListView = () => {
         const items = getFilteredItems();
 
+        useEffect(() => {
+            if (viewMode !== 'list') {
+                return;
+            }
+
+            if (typeof window === 'undefined' || typeof document === 'undefined') {
+                return;
+            }
+
+            const labelsToHide = ['Value', 'Age', 'Expected Close'];
+            const hideLegacyColumns = () => {
+                const table = document.querySelector('[data-pipeline-list-table]');
+                if (!table) {
+                    return;
+                }
+
+                const headerCells = Array.from(table.querySelectorAll('thead th'));
+                const bodyRows = Array.from(table.querySelectorAll('tbody tr'));
+
+                headerCells.forEach((th, index) => {
+                    const label = th.textContent?.trim();
+                    if (label && labelsToHide.includes(label)) {
+                        th.style.display = 'none';
+                        bodyRows.forEach((row) => {
+                            const cell = row.children[index];
+                            if (cell) {
+                                cell.style.display = 'none';
+                            }
+                        });
+                    }
+                });
+            };
+
+            const rafId = window.requestAnimationFrame(() => hideLegacyColumns());
+
+            return () => {
+                window.cancelAnimationFrame(rafId);
+            };
+        }, [viewMode, items.length, listSortColumn, listSortDirection]);
+
         const getAriaSort = (column) => {
             if (listSortColumn !== column) {
                 return 'none';
@@ -2086,7 +2134,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
             <div className="space-y-4">
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200">
                     <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
+                        <table className="min-w-full divide-y divide-gray-200" data-pipeline-list-table>
                             <thead className="bg-gray-50">
                                 <tr>
                                     {renderSortableHeader('Name', 'name')}
@@ -2187,6 +2235,15 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     </button>
                 </div>
             </div>
+
+            {usingCachedOpportunities && (
+                <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 text-sm px-3 py-2 rounded-lg">
+                    <i className="fas fa-bolt text-amber-600"></i>
+                    <span>
+                        Showing cached opportunities instantly while fresh stages load from the server.
+                    </span>
+                </div>
+            )}
 
             {/* View Toggle & Filters */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-4">
