@@ -4108,15 +4108,12 @@ const Clients = React.memo(() => {
                                     )}
                                 </div>
                             </th>
-                            <th className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
-                                Actions
-                            </th>
                         </tr>
                     </thead>
                     <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
                         {paginatedClients.length === 0 ? (
                             <tr>
-                                    <td colSpan="6" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    <td colSpan="5" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                         <i className={`fas fa-inbox text-3xl ${isDark ? 'text-gray-600' : 'text-gray-300'} mb-2`}></i>
                                     <p>No clients found</p>
                                 </td>
@@ -4222,21 +4219,6 @@ const Clients = React.memo(() => {
                                         }`}>
                                             {client.status === 'active' ? 'Active' : client.status}
                                         </span>
-                                    </td>
-                                    <td className="px-6 py-2 whitespace-nowrap">
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation(); // Prevent opening the client detail modal
-                                                if (confirm(`Are you sure you want to delete ${client.name}? This action cannot be undone.`)) {
-                                                    handleDeleteClient(client.id);
-                                                }
-                                            }}
-                                            className={`px-3 py-1 text-sm ${isDark ? 'bg-red-900 hover:bg-red-800 text-red-200' : 'bg-red-600 hover:bg-red-700 text-white'} rounded-lg transition-colors font-medium flex items-center gap-2`}
-                                            title="Delete client"
-                                        >
-                                            <i className="fas fa-trash"></i>
-                                            <span className="hidden sm:inline">Delete</span>
-                                        </button>
                                     </td>
                                 </tr>
                             ))
