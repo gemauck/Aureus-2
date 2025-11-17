@@ -106,7 +106,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // Initialize sections from localStorage or props (pure initialization)
     const getStorageKey = () => `documentSections_${project?.id}`;
     
+    // Track if we've initialized to prevent duplicate initialization
+    const hasInitializedRef = useRef(false);
+    const initialProjectIdRef = useRef(project?.id);
+    
     const [sections, setSections] = useState(() => {
+        // Mark as initialized on first state creation
+        hasInitializedRef.current = true;
         console.log('📋 Initializing sections from project.documentSections:', project.documentSections);
         
         // Check localStorage first for saved sections
@@ -267,11 +273,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
     }, []);
     
-    // Load templates on mount
+    // Track if templates have been loaded to prevent duplicate loads
+    const templatesLoadedRef = useRef(false);
+    
+    // Load templates on mount - ONLY ONCE
     useEffect(() => {
+        if (templatesLoadedRef.current) {
+            console.log('⏭️ Templates already loaded, skipping duplicate load');
+            return;
+        }
         console.log('🚀 MonthlyDocumentCollectionTracker: Loading templates on mount');
+        templatesLoadedRef.current = true;
         loadTemplatesFromAPI();
-    }, [loadTemplatesFromAPI]);
+    }, []); // Empty array - load ONLY on mount
     
     // Reload templates when template modal opens
     useEffect(() => {
@@ -279,7 +293,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             console.log('📂 Template modal opened, reloading templates...');
             loadTemplatesFromAPI();
         }
-    }, [showTemplateModal, loadTemplatesFromAPI]);
+    }, [showTemplateModal]); // Remove loadTemplatesFromAPI from deps to prevent loops
     
     // Save templates to localStorage
     const saveTemplates = (templatesToSave) => {
@@ -364,6 +378,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
   useEffect(() => {
     const newData = project?.documentSections;
     if (!newData || newData === lastSyncData) return;
+    
+    // CRITICAL: Skip sync if component just initialized to prevent overwriting
+    if (!hasInitializedRef.current) {
+      console.log('⏭️ Skipping sync - component still initializing');
+      setLastSyncData(newData);
+      return;
+    }
     
     // Skip if user is actively editing ANY field
     if (dirtyFields.size > 0) {
@@ -964,7 +985,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         saveTemplates(updatedTemplates);
         setEditingTemplate(null);
-        setShowTemplateList(true);
+        // Safety check for setShowTemplateList - it's only available in TemplateModal context
+        if (typeof setShowTemplateList === 'function') {
+            setShowTemplateList(true);
+        }
         // Don't close modal, just go back to list view
         } catch (error) {
             console.error('❌ Error saving template:', error);
@@ -2525,7 +2549,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         // Reset showTemplateList when editingTemplate changes
         useEffect(() => {
-            if (!setShowTemplateList) return;
+            if (!setShowTemplateList || typeof setShowTemplateList !== 'function') return;
             if (editingTemplate) {
                 setShowTemplateList(false);
             } else {
@@ -2535,7 +2559,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         // Reset showTemplateList when modal closes
         useEffect(() => {
-            if (!setShowTemplateList) return;
+            if (!setShowTemplateList || typeof setShowTemplateList !== 'function') return;
             if (!showTemplateModal) {
                 setShowTemplateList(true);
             }
