@@ -3180,11 +3180,15 @@ const Clients = React.memo(() => {
             paginatedClients,
             totalClientsPages,
             paginatedLeads,
-            totalLeadsPages
+            totalLeadsPages,
+            clientsStartIndex,
+            clientsEndIndex,
+            leadsStartIndex,
+            leadsEndIndex
         };
     }, [sortedClients, sortedLeads, clientsPage, leadsPage]);
     
-    const { paginatedClients, totalClientsPages, paginatedLeads, totalLeadsPages } = paginationData;
+    const { paginatedClients, totalClientsPages, paginatedLeads, totalLeadsPages, clientsStartIndex, clientsEndIndex, leadsStartIndex, leadsEndIndex } = paginationData;
 
     // Debug pagination - commented to reduce spam
     // console.log(`📄 PAGINATION DEBUG: ${sortedClients.length} clients, showing ${paginatedClients.length} on page ${clientsPage} of ${totalClientsPages}`);
