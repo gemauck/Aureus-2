@@ -145,34 +145,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [showSectionModal, setShowSectionModal] = useState(false);
     const [showDocumentModal, setShowDocumentModal] = useState(false);
 
-  // Pause LiveDataSync when modals are open OR when user is interacting with status/comment controls
+  // COMPLETELY DISABLE LiveDataSync for this page - user wants static page after load
+  // This page has explicit save operations, so no automatic syncing needed
   useEffect(() => {
-    const isModalOpen = showSectionModal || showDocumentModal;
-    const isUserInteracting = isInteractingRef.current || hoverCommentCell !== null;
-    
-    if (isModalOpen || isUserInteracting) {
-      if (isModalOpen) {
-        console.log('🛑 Pausing LiveDataSync - modal is open');
-      } else if (isUserInteracting) {
-        console.log('🛑 Pausing LiveDataSync - user is interacting with status/comment controls');
-      }
-      if (window.LiveDataSync && typeof window.LiveDataSync.pause === 'function') {
-        window.LiveDataSync.pause();
-      }
-    } else {
-      console.log('▶️ Resuming LiveDataSync - modal closed and no user interaction');
-      if (window.LiveDataSync && typeof window.LiveDataSync.resume === 'function') {
-        window.LiveDataSync.resume();
-      }
+    console.log('🛑 PERMANENTLY pausing LiveDataSync for MonthlyDocumentCollectionTracker');
+    if (window.LiveDataSync && typeof window.LiveDataSync.pause === 'function') {
+      window.LiveDataSync.pause();
     }
 
-    // Cleanup: resume on unmount
+    // Cleanup: resume on unmount so other pages still get live sync
     return () => {
+      console.log('▶️ Re-enabling LiveDataSync on unmount');
       if (window.LiveDataSync && typeof window.LiveDataSync.resume === 'function') {
         window.LiveDataSync.resume();
       }
     };
-  }, [showSectionModal, showDocumentModal, hoverCommentCell]);
+  }, []); // Empty dependency array = run once on mount
     const [editingSection, setEditingSection] = useState(null);
     const [editingDocument, setEditingDocument] = useState(null);
     const [editingSectionId, setEditingSectionId] = useState(null);
@@ -183,7 +171,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [quickComment, setQuickComment] = useState(''); // For quick comment input
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 }); // Store popup position
     const commentPopupContainerRef = useRef(null); // Ref for comment popup scrollable container
-    const isInteractingRef = useRef(false); // Track if user is interacting with status/comment controls
     
     // Helper function to immediately save documentSections to database
     const immediatelySaveDocumentSections = async (sectionsToSave) => {
@@ -2053,29 +2040,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     <select
                         value={status || ''}
                         onChange={(e) => handleUpdateStatus(section.id, document.id, month, e.target.value)}
-                        onFocus={() => {
-                            isInteractingRef.current = true;
-                            if (window.LiveDataSync && typeof window.LiveDataSync.pause === 'function') {
-                                window.LiveDataSync.pause();
-                            }
-                        }}
-                        onBlur={() => {
-                            // Delay to allow onChange to complete
-                            setTimeout(() => {
-                                isInteractingRef.current = false;
-                                if (!hoverCommentCell && !showSectionModal && !showDocumentModal) {
-                                    if (window.LiveDataSync && typeof window.LiveDataSync.resume === 'function') {
-                                        window.LiveDataSync.resume();
-                                    }
-                                }
-                            }, 100);
-                        }}
                         className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80 relative z-0`}
                         style={{ pointerEvents: 'auto' }}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            isInteractingRef.current = true;
-                        }}
+                        onClick={(e) => e.stopPropagation()}
                     >
                         <option value="">Select Status</option>
                         {statusOptions.map(option => (
