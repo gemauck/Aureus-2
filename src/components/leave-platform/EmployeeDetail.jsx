@@ -116,10 +116,55 @@ const EmployeeDetail = (props) => {
         
         try {
             const headers = getAuthHeaders();
+            
+            // Prepare update data - only include valid fields that exist in the formData
+            // and match the database schema
+            const updateData = {};
+            
+            // Basic info
+            if (formData.name !== undefined) updateData.name = formData.name;
+            if (formData.phone !== undefined) updateData.phone = formData.phone;
+            
+            // Employment info
+            if (formData.employeeNumber !== undefined) updateData.employeeNumber = formData.employeeNumber;
+            if (formData.position !== undefined) updateData.position = formData.position;
+            if (formData.jobTitle !== undefined) updateData.jobTitle = formData.jobTitle;
+            if (formData.department !== undefined) updateData.department = formData.department;
+            if (formData.employmentStatus !== undefined) updateData.employmentStatus = formData.employmentStatus;
+            
+            // Employment date - convert to proper format if provided
+            if (formData.employmentDate !== undefined) {
+                if (formData.employmentDate) {
+                    // Ensure it's a valid date string
+                    const date = new Date(formData.employmentDate);
+                    if (!isNaN(date.getTime())) {
+                        updateData.employmentDate = date.toISOString();
+                    }
+                } else {
+                    updateData.employmentDate = null;
+                }
+            }
+            
+            // Financial info
+            if (formData.salary !== undefined) {
+                updateData.salary = formData.salary ? parseFloat(formData.salary) : null;
+            }
+            if (formData.taxNumber !== undefined) updateData.taxNumber = formData.taxNumber || null;
+            if (formData.bankName !== undefined) updateData.bankName = formData.bankName || null;
+            if (formData.accountNumber !== undefined) updateData.accountNumber = formData.accountNumber || null;
+            if (formData.branchCode !== undefined) updateData.branchCode = formData.branchCode || null;
+            
+            // Personal info
+            if (formData.idNumber !== undefined) updateData.idNumber = formData.idNumber || null;
+            if (formData.address !== undefined) updateData.address = formData.address || null;
+            if (formData.emergencyContact !== undefined) updateData.emergencyContact = formData.emergencyContact || null;
+            
+            console.log('💾 Saving employee data:', updateData);
+            
             const response = await fetch(`/api/users/${employeeId}`, {
                 method: 'PUT',
                 headers,
-                body: JSON.stringify(formData)
+                body: JSON.stringify(updateData)
             });
 
             if (response.ok) {
@@ -128,8 +173,10 @@ const EmployeeDetail = (props) => {
                 setEditing(false);
                 // Reload to ensure consistency
                 loadEmployeeData();
+                alert('Employee information saved successfully!');
             } else {
-                const errorData = await response.json();
+                const errorData = await response.json().catch(() => ({ message: 'Unknown error' }));
+                console.error('❌ Save failed:', errorData);
                 alert(`Failed to save: ${errorData.message || 'Unknown error'}`);
             }
         } catch (error) {
