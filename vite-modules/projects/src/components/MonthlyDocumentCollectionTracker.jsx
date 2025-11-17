@@ -315,9 +315,11 @@ export function MonthlyDocumentCollectionTracker({ project, onBack }) {
         }
     };
 
-    // Generate year options (current year ± 5 years)
+    // Generate year options (allow selection back to 2015)
+    const MIN_YEAR = 2015;
+    const FUTURE_YEAR_BUFFER = 5;
     const yearOptions = [];
-    for (let i = currentYear - 5; i <= currentYear + 5; i++) {
+    for (let i = MIN_YEAR; i <= currentYear + FUTURE_YEAR_BUFFER; i++) {
         yearOptions.push(i);
     }
 
