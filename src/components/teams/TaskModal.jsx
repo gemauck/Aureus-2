@@ -413,7 +413,7 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
                     </div>
 
                     {/* Google Calendar Sync */}
-                    <div className="p-3 rounded-lg border border-gray-200 dark:border-slate-700">
+                    <div className="px-3 pt-3 pb-1 rounded-lg border border-gray-200 dark:border-slate-700">
                         <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-slate-300">
                             <i className="fab fa-google mr-2"></i>Google Calendar
                         </label>
@@ -482,7 +482,7 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
                         </div>
                     </div>
 
-                    <div className="flex gap-3 border-t border-gray-200 dark:border-slate-700 pt-1 -mt-4">
+                    <div className="flex gap-3 border-t border-gray-200 dark:border-slate-700 pt-2 -mt-8">
                         <button
                             type="button"
                             onClick={onClose}
