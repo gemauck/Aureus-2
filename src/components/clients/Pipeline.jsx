@@ -2063,7 +2063,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
             return (
                 <th
-                    className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500"
+                    className="px-6 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500"
                     aria-sort={getAriaSort(column)}
                     scope="col"
                 >
@@ -2118,7 +2118,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                 className="hover:bg-gray-50 cursor-pointer transition"
                                                 onClick={() => openDealDetail(item)}
                                             >
-                                                <td className="px-6 py-4">
+                                                <td className="px-6 py-2">
                                                     <div className="flex items-center gap-3">
                                                         <button
                                                             type="button"
@@ -2141,31 +2141,31 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         </span>
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-4 text-sm text-gray-700">
+                                                <td className="px-6 py-2 text-sm text-gray-700">
                                                     {isLead ? (item.company || 'Lead') : (item.clientName || 'Unknown Client')}
                                                 </td>
-                                                <td className="px-6 py-4">
+                                                <td className="px-6 py-2">
                                                     <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${isLead ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
                                                         {isLead ? 'Lead' : 'Opportunity'}
                                                     </span>
                                                 </td>
-                                                <td className="px-6 py-4">
+                                                <td className="px-6 py-2">
                                                     <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${getLifecycleBadgeColor(item.status || 'Potential')}`}>
                                                         {item.status || 'Potential'}
                                                     </span>
                                                 </td>
-                                                <td className="px-6 py-4">
+                                                <td className="px-6 py-2">
                                                     <span className="text-sm font-medium text-gray-900">{item.stage}</span>
                                                 </td>
-                                                <td className="px-6 py-4">
+                                                <td className="px-6 py-2">
                                                     <span className="text-sm font-semibold text-gray-900">{formatCurrency(item.value)}</span>
                                                 </td>
-                                                <td className="px-6 py-4">
+                                                <td className="px-6 py-2">
                                                     <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${getAgeBadgeColor(age)}`}>
                                                         {age}d
                                                     </span>
                                                 </td>
-                                                <td className="px-6 py-4 text-sm text-gray-700">
+                                                <td className="px-6 py-2 text-sm text-gray-700">
                                                     {item.expectedCloseDate
                                                         ? new Date(item.expectedCloseDate).toLocaleDateString('en-ZA')
                                                         : 'Not set'}

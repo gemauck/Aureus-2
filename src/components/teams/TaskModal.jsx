@@ -1,5 +1,10 @@
 // Get dependencies from window
-const { useState, useEffect } = React;
+const { useState, useEffect, useMemo, useCallback } = React;
+
+// Cache employees globally to avoid reloading on every modal open
+let cachedEmployees = null;
+let employeesCacheTime = 0;
+const EMPLOYEES_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
     const [formData, setFormData] = useState({
@@ -65,7 +70,7 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
         }
     }, [task, isOpen]);
 
-    // Check Google Calendar auth once
+    // Check Google Calendar auth once - only when modal opens and not already checked recently
     useEffect(() => {
         const checkAuth = async () => {
             try {
@@ -77,19 +82,30 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
                 console.warn('Google Calendar auth check failed:', e?.message || e);
             }
         };
-        if (isOpen) checkAuth();
-    }, [isOpen]);
+        if (isOpen) {
+            // Only check if not already authenticated to avoid unnecessary calls
+            if (!isGoogleCalendarAuthenticated) {
+                checkAuth();
+            }
+        }
+    }, [isOpen]); // Removed isGoogleCalendarAuthenticated from deps to avoid re-checking
 
-    // Leaflet is already loaded globally, no need to load Google Maps
-
-    // Load employees when modal opens
+    // Load employees when modal opens - with caching
     useEffect(() => {
         if (isOpen) {
             loadEmployees();
         }
     }, [isOpen]);
 
-    const loadEmployees = async () => {
+    const loadEmployees = useCallback(async () => {
+        // Check cache first
+        const now = Date.now();
+        if (cachedEmployees && (now - employeesCacheTime) < EMPLOYEES_CACHE_DURATION) {
+            console.log('✅ Using cached employees for TaskModal:', cachedEmployees.length);
+            setEmployees(cachedEmployees);
+            return;
+        }
+
         try {
             setLoadingEmployees(true);
             const token = window.storage?.getToken?.();
@@ -110,6 +126,9 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
                 const responseData = await response.json();
                 const userData = responseData.data?.users || responseData.users || [];
                 console.log('✅ Loaded employees for TaskModal:', userData.length);
+                // Update cache
+                cachedEmployees = userData;
+                employeesCacheTime = now;
                 setEmployees(userData);
             } else {
                 console.error('❌ Failed to load users:', response);
@@ -121,15 +140,15 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
         } finally {
             setLoadingEmployees(false);
         }
-    };
+    }, []);
 
-    const handleChange = (e) => {
+    const handleChange = useCallback((e) => {
         const { name, value } = e.target;
         setFormData(prev => ({
             ...prev,
             [name]: value
         }));
-    };
+    }, []);
 
     const handleAddTag = () => {
         if (tagInput.trim() && !formData.tags.includes(tagInput.trim())) {
@@ -184,7 +203,7 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
         // For now, users can manually enter coordinates or use the LocationPicker component
     };
 
-    const getMapUrl = () => {
+    const getMapUrl = useMemo(() => {
         if (formData.latitude && formData.longitude) {
             return `https://www.openstreetmap.org/?mlat=${formData.latitude}&mlon=${formData.longitude}&zoom=15`;
         } else if (formData.address) {
@@ -193,7 +212,7 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
             return `https://www.openstreetmap.org/search?query=${encodeURIComponent(formData.location)}`;
         }
         return null;
-    };
+    }, [formData.latitude, formData.longitude, formData.address, formData.location]);
 
     const handleGoogleCalendarAuth = async () => {
         setIsSyncingToGoogle(true);
@@ -313,8 +332,6 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
     };
 
     if (!isOpen) return null;
-
-    const mapUrl = getMapUrl();
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -439,10 +456,10 @@ const TaskModal = ({ isOpen, onClose, team, task, onSave }) => {
                                 </div>
                             </div>
 
-                            {mapUrl && (
+                            {getMapUrl && (
                                 <div className="mt-4">
                                     <a
-                                        href={mapUrl}
+                                        href={getMapUrl}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"

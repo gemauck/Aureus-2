@@ -439,8 +439,9 @@ const Teams = () => {
         }
 
         // Poll for the component (components load asynchronously)
+        // Reduced polling frequency and max attempts for better performance
         let attempts = 0;
-        const maxAttempts = 50; // 5 seconds max wait
+        const maxAttempts = 20; // 2 seconds max wait (reduced from 5 seconds)
         const interval = setInterval(() => {
             attempts++;
             if (checkForManagementMeetingNotes() || attempts >= maxAttempts) {
@@ -514,8 +515,8 @@ const Teams = () => {
                 setNotices(notices);
                 setWorkflowExecutions(savedExecutions);
                 
-                // Delay rendering significantly to prevent renderer crash
-                setTimeout(() => setIsReady(true), 500);
+                // Set ready immediately - no artificial delay needed
+                setIsReady(true);
             } catch (error) {
                 console.error('❌ Teams: Error loading data:', error);
                 // Set empty arrays on error to prevent null reference errors
@@ -582,29 +583,31 @@ const Teams = () => {
     };
 
     // Filter data by selected team - memoized to avoid recalculation
+    // Use selectedTeam?.id instead of selectedTeam object to avoid unnecessary recalculations
+    const selectedTeamId = selectedTeam?.id;
     const filteredDocuments = useMemo(() => {
-        return selectedTeam 
-            ? accessibleDocuments.filter(d => d.team === selectedTeam.id)
+        return selectedTeamId 
+            ? accessibleDocuments.filter(d => d.team === selectedTeamId)
             : accessibleDocuments;
-    }, [selectedTeam, accessibleDocuments]);
+    }, [selectedTeamId, accessibleDocuments]);
     
     const filteredWorkflows = useMemo(() => {
-        return selectedTeam 
-            ? accessibleWorkflows.filter(w => w.team === selectedTeam.id)
+        return selectedTeamId 
+            ? accessibleWorkflows.filter(w => w.team === selectedTeamId)
             : accessibleWorkflows;
-    }, [selectedTeam, accessibleWorkflows]);
+    }, [selectedTeamId, accessibleWorkflows]);
     
     const filteredChecklists = useMemo(() => {
-        return selectedTeam 
-            ? accessibleChecklists.filter(c => c.team === selectedTeam.id)
+        return selectedTeamId 
+            ? accessibleChecklists.filter(c => c.team === selectedTeamId)
             : accessibleChecklists;
-    }, [selectedTeam, accessibleChecklists]);
+    }, [selectedTeamId, accessibleChecklists]);
     
     const filteredNotices = useMemo(() => {
-        return selectedTeam 
-            ? accessibleNotices.filter(n => n.team === selectedTeam.id)
+        return selectedTeamId 
+            ? accessibleNotices.filter(n => n.team === selectedTeamId)
             : accessibleNotices;
-    }, [selectedTeam, accessibleNotices]);
+    }, [selectedTeamId, accessibleNotices]);
 
     // Search functionality - inline to avoid circular dependencies
     const displayDocuments = useMemo(() => {

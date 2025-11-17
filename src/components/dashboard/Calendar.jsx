@@ -665,7 +665,7 @@ const Calendar = () => {
             
             {/* Calendar Widget - Always render unless DailyNotes is open */}
             {!showDailyNotes ? (
-                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border shadow-lg p-3 sm:p-4 w-full max-w-sm mx-auto transition-all duration-200`} style={{ display: 'block', visibility: 'visible' }}>
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border shadow-lg p-3 sm:p-4 w-full transition-all duration-200`} style={{ display: 'block', visibility: 'visible' }}>
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-3 sm:mb-4 gap-2 sm:gap-0">
                         <div className="flex items-center space-x-2 w-full sm:w-auto justify-between sm:justify-start">
                             <button
@@ -675,7 +675,7 @@ const Calendar = () => {
                             >
                                 <i className="fas fa-chevron-left"></i>
                             </button>
-                            <h2 className={`text-sm sm:text-base font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'} flex-1 text-center sm:text-left sm:flex-none`}>
+                            <h2 className={`text-sm sm:text-base font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'} flex-1 text-left sm:flex-none`}>
                                 {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
                             </h2>
                             <button

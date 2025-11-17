@@ -2561,7 +2561,6 @@
   div[class*="rounded-xl"][class*="border"][class*="shadow-lg"] {
     width: 100% !important;
     max-width: 100% !important;
-    margin: 0 auto !important;
   }
   
   /* Calendar header - stack on mobile */

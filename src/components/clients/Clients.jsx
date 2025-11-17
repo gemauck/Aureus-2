@@ -3888,7 +3888,7 @@ const Clients = React.memo(() => {
                     <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
                         <tr>
                             <th 
-                                className={`px-6 py-4 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
                                 onClick={() => handleSort('name')}
                             >
                                 <div className="flex items-center">
@@ -3899,7 +3899,7 @@ const Clients = React.memo(() => {
                                 </div>
                             </th>
                             <th 
-                                className={`px-6 py-4 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
                                 onClick={() => handleSort('industry')}
                             >
                                 <div className="flex items-center">
@@ -3909,14 +3909,14 @@ const Clients = React.memo(() => {
                                     )}
                                 </div>
                             </th>
-                            <th className={`px-6 py-4 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
+                            <th className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
                                 Services
                             </th>
-                            <th className={`px-6 py-4 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
+                            <th className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
                                 Tags
                             </th>
                             <th 
-                                className={`px-6 py-4 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
                                 onClick={() => handleSort('status')}
                             >
                                 <div className="flex items-center">
@@ -3946,7 +3946,7 @@ const Clients = React.memo(() => {
                                     onClick={() => handleOpenClient(client)}
                                         className={`${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'} cursor-pointer transition`}
                                 >
-                                    <td className="px-6 py-5 whitespace-nowrap">
+                                    <td className="px-6 py-2 whitespace-nowrap">
                                         <div className="flex items-center gap-3">
                                             <button
                                                 onClick={(e) => handleToggleStar(e, client, false)}
@@ -3965,8 +3965,8 @@ const Clients = React.memo(() => {
                                             <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{client.name}</div>
                                         </div>
                                     </td>
-                                    <td className={`px-6 py-5 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{client.industry}</td>
-                                    <td className="px-6 py-5 whitespace-nowrap">
+                                    <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{client.industry}</td>
+                                    <td className="px-6 py-2 whitespace-nowrap">
                                         <div className="flex flex-wrap gap-1.5">
                                             {(() => {
                                                 const services = Array.isArray(client.services)
@@ -3993,7 +3993,7 @@ const Clients = React.memo(() => {
                                             })()}
                                         </div>
                                     </td>
-                                    <td className="px-6 py-5 whitespace-nowrap">
+                                    <td className="px-6 py-2 whitespace-nowrap">
                                         <div className="flex flex-wrap gap-1.5">
                                             {(() => {
                                                 const tags = Array.isArray(client.tags) 
@@ -4031,7 +4031,7 @@ const Clients = React.memo(() => {
                                             })()}
                                         </div>
                                     </td>
-                                    <td className="px-6 py-5 whitespace-nowrap">
+                                    <td className="px-6 py-2 whitespace-nowrap">
                                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                                             (client.status === 'Active' || client.status === 'active') ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                                         }`}>
@@ -4588,7 +4588,7 @@ const Clients = React.memo(() => {
                                     onClick={() => handleOpenLead(lead)}
                                         className={`${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'} cursor-pointer transition`}
                                 >
-                                    <td className="px-6 py-4 whitespace-nowrap">
+                                    <td className="px-6 py-2 whitespace-nowrap">
                                         <div className="flex items-center gap-3">
                                             <button
                                                 onClick={(e) => handleToggleStar(e, lead, true)}
@@ -4607,8 +4607,8 @@ const Clients = React.memo(() => {
                                             <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.name}</div>
                                         </div>
                                     </td>
-                                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.industry}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
+                                    <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.industry}</td>
+                                    <td className="px-6 py-2 whitespace-nowrap">
                                         <span className={`px-3 py-1 text-xs font-medium rounded-full ${
                                             lead.stage === 'Awareness' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
                                             lead.stage === 'Interest' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
@@ -4618,12 +4618,12 @@ const Clients = React.memo(() => {
                                             {lead.stage}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
+                                    <td className="px-6 py-2 whitespace-nowrap">
                                         <span className={`px-2 py-1 text-xs font-medium rounded ${isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-700'}`}>
                                             Active
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
+                                    <td className="px-6 py-2 whitespace-nowrap">
                                         <div className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
                                             {getTimeSinceFirstContact(lead.firstContactDate)}
                                         </div>
