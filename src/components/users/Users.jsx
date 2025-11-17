@@ -151,11 +151,43 @@ const Users = () => {
         setShowUserModal(true);
     };
 
-    const handleDeleteUser = (user) => {
-        if (confirm(`Are you sure you want to delete ${user.name}?`)) {
-            const updatedUsers = users.filter(u => u.id !== user.id);
-            setUsers(updatedUsers);
-            storage.setUsers(updatedUsers);
+    const handleDeleteUser = async (user) => {
+        if (!confirm(`Are you sure you want to delete ${user.name}?`)) {
+            return;
+        }
+
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                alert('Authentication error: Please refresh the page and try again');
+                return;
+            }
+
+            console.log('🗑️ Deleting user via API:', user.id);
+            
+            const response = await fetch(`/api/users/${user.id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: 'Failed to delete user' }));
+                alert(errorData.message || `Failed to delete user (Status: ${response.status})`);
+                return;
+            }
+
+            const data = await response.json();
+            console.log('✅ User deleted successfully:', data);
+
+            // Reload users from API to reflect the deletion
+            await loadUsers();
+            
+            alert('User deleted successfully');
+        } catch (error) {
+            console.error('❌ Error deleting user:', error);
+            alert(`Failed to delete user: ${error.message}`);
         }
     };
 
