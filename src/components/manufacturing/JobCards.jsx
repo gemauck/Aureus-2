@@ -16,6 +16,12 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [showAddPage, setShowAddPage] = useState(false);
   const [editingJobCard, setEditingJobCard] = useState(null);
+  const [selectedJobCard, setSelectedJobCard] = useState(null);
+  const [isDetailView, setIsDetailView] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortField, setSortField] = useState('createdAt');
+  const [sortDirection, setSortDirection] = useState('desc');
   const [formData, setFormData] = useState({
     agentName: '',
     otherTechnicians: [],
@@ -781,7 +787,24 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       }
 
       alert(editingJobCard ? 'Job card updated successfully!' : 'Job card created successfully!');
-      closeJobCardModal();
+      
+      // If we're in detail view, update the selected job card
+      if (isDetailView && selectedJobCard) {
+        // Reload job cards to get the latest data
+        await loadJobCardsRef.current?.();
+        // Find the updated card
+        const allCards = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
+        const updatedCard = allCards.find(jc => jc.id === (editingJobCard?.id || jobCardData.id));
+        if (updatedCard) {
+          setSelectedJobCard(updatedCard);
+          setIsEditMode(false);
+          setEditingJobCard(null);
+        }
+      } else {
+        // Reload job cards to refresh the list
+        await loadJobCardsRef.current?.();
+        closeJobCardModal();
+      }
     } catch (error) {
       console.error('Error saving job card:', error);
       alert(`Failed to save job card: ${error.message}`);
@@ -868,6 +891,9 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   const closeJobCardModal = useCallback(() => {
     setShowAddPage(false);
     setEditingJobCard(null);
+    setIsDetailView(false);
+    setSelectedJobCard(null);
+    setIsEditMode(false);
     resetForm();
   }, [resetForm]);
 
@@ -889,7 +915,78 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   const openEditPage = (jobCard) => {
     setEditingJobCard(jobCard);
     setShowAddPage(true);
+    setIsDetailView(false);
+    setSelectedJobCard(null);
   };
+
+  const openDetailView = (jobCard) => {
+    setSelectedJobCard(jobCard);
+    setIsDetailView(true);
+    setIsEditMode(false);
+    setShowAddPage(false);
+    setEditingJobCard(null);
+  };
+
+  const closeDetailView = () => {
+    setIsDetailView(false);
+    setSelectedJobCard(null);
+    setIsEditMode(false);
+  };
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Filter and sort job cards
+  const filteredAndSortedJobCards = useCallback(() => {
+    let filtered = [...jobCards];
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(jc => {
+        return (
+          (jc.jobCardNumber || '').toLowerCase().includes(query) ||
+          (jc.agentName || '').toLowerCase().includes(query) ||
+          (jc.clientName || '').toLowerCase().includes(query) ||
+          (jc.siteName || '').toLowerCase().includes(query) ||
+          (jc.reasonForVisit || '').toLowerCase().includes(query) ||
+          (jc.diagnosis || '').toLowerCase().includes(query) ||
+          (jc.status || '').toLowerCase().includes(query) ||
+          (jc.location || '').toLowerCase().includes(query)
+        );
+      });
+    }
+
+    // Apply sorting
+    filtered.sort((a, b) => {
+      let aVal = a[sortField];
+      let bVal = b[sortField];
+
+      // Handle different data types
+      if (sortField === 'createdAt' || sortField === 'timeOfArrival' || sortField === 'timeOfDeparture') {
+        aVal = aVal ? new Date(aVal).getTime() : 0;
+        bVal = bVal ? new Date(bVal).getTime() : 0;
+      } else if (typeof aVal === 'string') {
+        aVal = aVal.toLowerCase();
+        bVal = (bVal || '').toLowerCase();
+      } else {
+        aVal = aVal || 0;
+        bVal = bVal || 0;
+      }
+
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return filtered;
+  }, [jobCards, searchQuery, sortField, sortDirection]);
 
   // Filter technicians/users - show only active users
   const availableTechnicians = users.filter(u => u.status !== 'inactive' && u.status !== 'suspended');
@@ -1478,6 +1575,516 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     );
   }
 
+  // Detail view component
+  const renderDetailView = () => {
+    if (!selectedJobCard) return null;
+
+    const jobCard = selectedJobCard;
+    const displayData = isEditMode ? formData : jobCard;
+
+    return (
+      <div className="bg-white rounded-lg border border-gray-200">
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={closeDetailView}
+              className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"
+            >
+              <i className="fas fa-arrow-left mr-2"></i>Back to List
+            </button>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                {jobCard.jobCardNumber || `Job Card ${jobCard.id.slice(-6)}`}
+              </h2>
+              <p className="text-sm text-gray-500">
+                {isEditMode ? 'Edit Mode' : 'View Mode'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {!isEditMode && (
+              <>
+                <button
+                  onClick={() => {
+                    setEditingJobCard(jobCard);
+                    setIsEditMode(true);
+                    // Initialize form data for editing
+                    setFormData({
+                      agentName: jobCard.agentName || '',
+                      otherTechnicians: jobCard.otherTechnicians || [],
+                      clientId: jobCard.clientId || '',
+                      clientName: jobCard.clientName || '',
+                      siteId: jobCard.siteId || '',
+                      siteName: jobCard.siteName || '',
+                      location: jobCard.location || '',
+                      timeOfDeparture: jobCard.timeOfDeparture ? jobCard.timeOfDeparture.substring(0, 16) : '',
+                      timeOfArrival: jobCard.timeOfArrival ? jobCard.timeOfArrival.substring(0, 16) : '',
+                      vehicleUsed: jobCard.vehicleUsed || '',
+                      kmReadingBefore: jobCard.kmReadingBefore || '',
+                      kmReadingAfter: jobCard.kmReadingAfter || '',
+                      reasonForVisit: jobCard.reasonForVisit || '',
+                      diagnosis: jobCard.diagnosis || '',
+                      actionsTaken: jobCard.actionsTaken || '',
+                      stockUsed: jobCard.stockUsed || [],
+                      materialsBought: jobCard.materialsBought || [],
+                      otherComments: jobCard.otherComments || '',
+                      photos: jobCard.photos || [],
+                      status: jobCard.status || 'draft'
+                    });
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                >
+                  <i className="fas fa-edit mr-2"></i>Edit
+                </button>
+                <button
+                  onClick={() => handleDelete(jobCard.id)}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
+                >
+                  <i className="fas fa-trash mr-2"></i>Delete
+                </button>
+              </>
+            )}
+            {isEditMode && (
+              <>
+                <button
+                  onClick={() => {
+                    setIsEditMode(false);
+                    setEditingJobCard(null);
+                  }}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSave}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                >
+                  <i className="fas fa-save mr-2"></i>Save Changes
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="p-6 space-y-6 max-h-[calc(100vh-300px)] overflow-y-auto">
+          {/* Status Badge */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-700">Status:</span>
+            {isEditMode ? (
+              <select
+                name="status"
+                value={formData.status}
+                onChange={handleChange}
+                className="px-3 py-1 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="draft">Draft</option>
+                <option value="submitted">Submitted</option>
+                <option value="completed">Completed</option>
+              </select>
+            ) : (
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                displayData.status === 'completed' ? 'bg-green-100 text-green-700' :
+                displayData.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
+                'bg-gray-100 text-gray-700'
+              }`}>
+                {displayData.status || 'draft'}
+              </span>
+            )}
+          </div>
+
+          {/* Basic Information */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Agent Name</label>
+              {isEditMode ? (
+                <select
+                  name="agentName"
+                  value={formData.agentName}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                >
+                  <option value="">Select technician</option>
+                  {availableTechnicians.map(tech => (
+                    <option key={tech.id} value={tech.name || tech.email}>
+                      {tech.name || tech.email}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-sm text-gray-900">{displayData.agentName || 'N/A'}</p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Other Technicians</label>
+              {isEditMode ? (
+                <div>
+                  <div className="flex gap-2 mb-2">
+                    <select
+                      value={technicianInput}
+                      onChange={(e) => setTechnicianInput(e.target.value)}
+                      className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                    >
+                      <option value="">Select technician to add</option>
+                      {availableTechnicians
+                        .filter(tech => !formData.otherTechnicians.includes(tech.name || tech.email))
+                        .map(tech => (
+                          <option key={tech.id} value={tech.name || tech.email}>
+                            {tech.name || tech.email}
+                          </option>
+                        ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleAddTechnician}
+                      disabled={!technicianInput}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      <i className="fas fa-plus"></i>
+                    </button>
+                  </div>
+                  {formData.otherTechnicians.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {formData.otherTechnicians.map((technician, idx) => (
+                        <span key={idx} className="flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded text-sm">
+                          {technician}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveTechnician(technician)}
+                            className="hover:text-blue-900"
+                          >
+                            <i className="fas fa-times text-xs"></i>
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-900">
+                  {displayData.otherTechnicians && displayData.otherTechnicians.length > 0
+                    ? displayData.otherTechnicians.join(', ')
+                    : 'N/A'}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Client</label>
+              {isEditMode ? (
+                <select
+                  name="clientId"
+                  value={formData.clientId}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                >
+                  <option value="">Select client</option>
+                  {clients.map(client => (
+                    <option key={client.id} value={client.id}>{client.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-sm text-gray-900">{displayData.clientName || 'N/A'}</p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Site</label>
+              {isEditMode ? (
+                <select
+                  name="siteId"
+                  value={formData.siteId}
+                  onChange={handleChange}
+                  disabled={!formData.clientId || availableSites.length === 0}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg disabled:bg-gray-100"
+                >
+                  <option value="">Select site</option>
+                  {availableSites.map(site => (
+                    <option key={site.id || site.name} value={site.id || site.name}>
+                      {site.name || site}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="text-sm text-gray-900">{displayData.siteName || 'N/A'}</p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+              {isEditMode ? (
+                window.LocationPicker ? (
+                  <LocationPicker 
+                    onLocationSelect={handleLocationSelect}
+                    initialLocation={formData.location}
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    name="location"
+                    value={formData.location}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  />
+                )
+              ) : (
+                <p className="text-sm text-gray-900">{displayData.location || 'N/A'}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Dates and Times */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Time of Departure</label>
+              {isEditMode ? (
+                <input
+                  type="datetime-local"
+                  name="timeOfDeparture"
+                  value={formData.timeOfDeparture}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                />
+              ) : (
+                <p className="text-sm text-gray-900">
+                  {displayData.timeOfDeparture ? new Date(displayData.timeOfDeparture).toLocaleString('en-ZA') : 'N/A'}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Time of Arrival</label>
+              {isEditMode ? (
+                <input
+                  type="datetime-local"
+                  name="timeOfArrival"
+                  value={formData.timeOfArrival}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                />
+              ) : (
+                <p className="text-sm text-gray-900">
+                  {displayData.timeOfArrival ? new Date(displayData.timeOfArrival).toLocaleString('en-ZA') : 'N/A'}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Vehicle Information */}
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Vehicle Used</label>
+              {isEditMode ? (
+                <input
+                  type="text"
+                  name="vehicleUsed"
+                  value={formData.vehicleUsed}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                />
+              ) : (
+                <p className="text-sm text-gray-900">{displayData.vehicleUsed || 'N/A'}</p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">KM Reading Before</label>
+              {isEditMode ? (
+                <input
+                  type="number"
+                  step="0.1"
+                  name="kmReadingBefore"
+                  value={formData.kmReadingBefore}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                />
+              ) : (
+                <p className="text-sm text-gray-900">{displayData.kmReadingBefore || 'N/A'}</p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">KM Reading After</label>
+              {isEditMode ? (
+                <input
+                  type="number"
+                  step="0.1"
+                  name="kmReadingAfter"
+                  value={formData.kmReadingAfter}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                />
+              ) : (
+                <p className="text-sm text-gray-900">{displayData.kmReadingAfter || 'N/A'}</p>
+              )}
+            </div>
+          </div>
+
+          {displayData.kmReadingBefore && displayData.kmReadingAfter && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-sm font-medium text-blue-900">
+                Travel Distance: {Math.max(0, parseFloat(displayData.kmReadingAfter || 0) - parseFloat(displayData.kmReadingBefore || 0)).toFixed(1)} km
+              </p>
+            </div>
+          )}
+
+          {/* Work Details */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Reason for Visit</label>
+            {isEditMode ? (
+              <textarea
+                name="reasonForVisit"
+                value={formData.reasonForVisit}
+                onChange={handleChange}
+                rows={3}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+              />
+            ) : (
+              <p className="text-sm text-gray-900 whitespace-pre-wrap">{displayData.reasonForVisit || 'N/A'}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Diagnosis</label>
+            {isEditMode ? (
+              <textarea
+                name="diagnosis"
+                value={formData.diagnosis}
+                onChange={handleChange}
+                rows={4}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+              />
+            ) : (
+              <p className="text-sm text-gray-900 whitespace-pre-wrap">{displayData.diagnosis || 'N/A'}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Actions Taken</label>
+            {isEditMode ? (
+              <textarea
+                name="actionsTaken"
+                value={formData.actionsTaken}
+                onChange={handleChange}
+                rows={4}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+              />
+            ) : (
+              <p className="text-sm text-gray-900 whitespace-pre-wrap">{displayData.actionsTaken || 'N/A'}</p>
+            )}
+          </div>
+
+          {/* Stock Used */}
+          {displayData.stockUsed && displayData.stockUsed.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">Stock Used</label>
+                {isEditMode && (
+                  <span className="text-xs text-gray-500">Use full edit form to modify stock items</span>
+                )}
+              </div>
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium text-gray-700">Item</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-700">Location</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-700">Quantity</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {displayData.stockUsed.map((item, idx) => (
+                      <tr key={idx}>
+                        <td className="px-4 py-2">{item.itemName || item.sku}</td>
+                        <td className="px-4 py-2">{item.locationName || 'N/A'}</td>
+                        <td className="px-4 py-2 text-right">{item.quantity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Materials Bought */}
+          {displayData.materialsBought && displayData.materialsBought.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">Materials Bought</label>
+                {isEditMode && (
+                  <span className="text-xs text-gray-500">Use full edit form to modify materials</span>
+                )}
+              </div>
+              <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium text-gray-700">Item</th>
+                      <th className="px-4 py-2 text-left font-medium text-gray-700">Description</th>
+                      <th className="px-4 py-2 text-right font-medium text-gray-700">Cost</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {displayData.materialsBought.map((item, idx) => (
+                      <tr key={idx}>
+                        <td className="px-4 py-2">{item.itemName}</td>
+                        <td className="px-4 py-2">{item.description || 'N/A'}</td>
+                        <td className="px-4 py-2 text-right">R {parseFloat(item.cost || 0).toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-gray-50">
+                    <tr>
+                      <td colSpan="2" className="px-4 py-2 text-right font-medium">Total:</td>
+                      <td className="px-4 py-2 text-right font-bold">
+                        R {displayData.materialsBought.reduce((sum, item) => sum + (item.cost || 0), 0).toFixed(2)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Other Comments */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Other Comments</label>
+            {isEditMode ? (
+              <textarea
+                name="otherComments"
+                value={formData.otherComments}
+                onChange={handleChange}
+                rows={3}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+              />
+            ) : (
+              <p className="text-sm text-gray-900 whitespace-pre-wrap">{displayData.otherComments || 'N/A'}</p>
+            )}
+          </div>
+
+          {/* Photos */}
+          {displayData.photos && displayData.photos.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Photos</label>
+              <div className="grid grid-cols-4 gap-2">
+                {displayData.photos.map((photo, idx) => (
+                  <div key={idx} className="relative">
+                    <img
+                      src={typeof photo === 'string' ? photo : photo.url}
+                      alt={`Photo ${idx + 1}`}
+                      className="w-full h-32 object-cover rounded-lg border border-gray-200"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Metadata */}
+          <div className="pt-4 border-t border-gray-200 text-xs text-gray-500">
+            <p>Created: {new Date(jobCard.createdAt).toLocaleString('en-ZA')}</p>
+            {jobCard.updatedAt && (
+              <p>Last Updated: {new Date(jobCard.updatedAt).toLocaleString('en-ZA')}</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // List view
   if (isLoading) {
     return (
@@ -1488,13 +2095,20 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     );
   }
 
+  // Show detail view if a job card is selected
+  if (isDetailView && selectedJobCard) {
+    return renderDetailView();
+  }
+
+  const sortedJobCards = filteredAndSortedJobCards();
+
   return (
     <div ref={jobCardsContainerRef} data-jobcards-root className="bg-white rounded-lg border border-gray-200">
       <div className="p-4 border-b border-gray-200 flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Job Cards</h2>
           <p className="text-sm text-gray-500 mt-1">
-            {jobCards.length} job card{jobCards.length !== 1 ? 's' : ''}
+            {sortedJobCards.length} of {jobCards.length} job card{jobCards.length !== 1 ? 's' : ''}
             {!isOnline && <span className="ml-2 text-orange-600">⚠️ Offline</span>}
           </p>
         </div>
@@ -1504,6 +2118,28 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
         >
           <i className="fas fa-plus mr-2"></i>Add Job Card
         </button>
+      </div>
+
+      {/* Search Bar */}
+      <div className="p-4 border-b border-gray-200">
+        <div className="relative">
+          <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search job cards by number, agent, client, site, reason, status..."
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <i className="fas fa-times"></i>
+            </button>
+          )}
+        </div>
       </div>
 
       {jobCards.length === 0 ? (
@@ -1519,66 +2155,171 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             Create Your First Job Card
           </button>
         </div>
+      ) : sortedJobCards.length === 0 ? (
+        <div className="p-12 text-center">
+          <i className="fas fa-search text-4xl mb-4 text-gray-300"></i>
+          <p className="text-gray-600 font-medium mb-2">No job cards match your search</p>
+          <button
+            onClick={() => setSearchQuery('')}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+          >
+            Clear Search
+          </button>
+        </div>
       ) : (
-        <div className="p-4">
-          <div className="space-y-3">
-            {jobCards.map(jobCard => (
-              <div key={jobCard.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <h3 className="font-semibold text-gray-900">
-                        {jobCard.jobCardNumber || `Job Card ${jobCard.id.slice(-6)}`}
-                      </h3>
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${
-                        jobCard.status === 'completed' ? 'bg-green-100 text-green-700' :
-                        jobCard.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>
-                        {jobCard.status || 'draft'}
-                      </span>
-                    </div>
-                    <div className="text-sm text-gray-600 space-y-1">
-                      <p><span className="font-medium">Agent:</span> {jobCard.agentName}</p>
-                      {jobCard.clientName && (
-                        <p><span className="font-medium">Client:</span> {jobCard.clientName}
-                          {jobCard.siteName && ` - ${jobCard.siteName}`}
-                        </p>
-                      )}
-                      {jobCard.reasonForVisit && (
-                        <p className="text-gray-700 mt-2 line-clamp-2">{jobCard.reasonForVisit}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                      {jobCard.timeOfArrival && (
-                        <span><i className="fas fa-clock mr-1"></i>{new Date(jobCard.timeOfArrival).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}</span>
-                      )}
-                      {jobCard.travelKilometers > 0 && (
-                        <span><i className="fas fa-route mr-1"></i>{jobCard.travelKilometers} km</span>
-                      )}
-                      <span>{new Date(jobCard.createdAt).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                    </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th 
+                  className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('jobCardNumber')}
+                >
+                  <div className="flex items-center gap-2">
+                    Job Card #
+                    {sortField === 'jobCardNumber' && (
+                      <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-xs`}></i>
+                    )}
                   </div>
-                  <div className="flex gap-2 ml-4">
-                    <button
-                      onClick={() => openEditPage(jobCard)}
-                      className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"
-                      title="Edit"
-                    >
-                      <i className="fas fa-edit"></i>
-                    </button>
-                    <button
-                      onClick={() => handleDelete(jobCard.id)}
-                      className="px-3 py-1 text-sm border border-red-300 text-red-600 rounded hover:bg-red-50"
-                      title="Delete"
-                    >
-                      <i className="fas fa-trash"></i>
-                    </button>
+                </th>
+                <th 
+                  className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('status')}
+                >
+                  <div className="flex items-center gap-2">
+                    Status
+                    {sortField === 'status' && (
+                      <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-xs`}></i>
+                    )}
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                </th>
+                <th 
+                  className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('agentName')}
+                >
+                  <div className="flex items-center gap-2">
+                    Agent
+                    {sortField === 'agentName' && (
+                      <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-xs`}></i>
+                    )}
+                  </div>
+                </th>
+                <th 
+                  className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('clientName')}
+                >
+                  <div className="flex items-center gap-2">
+                    Client
+                    {sortField === 'clientName' && (
+                      <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-xs`}></i>
+                    )}
+                  </div>
+                </th>
+                <th 
+                  className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('siteName')}
+                >
+                  <div className="flex items-center gap-2">
+                    Site
+                    {sortField === 'siteName' && (
+                      <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-xs`}></i>
+                    )}
+                  </div>
+                </th>
+                <th 
+                  className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('timeOfArrival')}
+                >
+                  <div className="flex items-center gap-2">
+                    Date
+                    {sortField === 'timeOfArrival' && (
+                      <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-xs`}></i>
+                    )}
+                  </div>
+                </th>
+                <th 
+                  className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => handleSort('travelKilometers')}
+                >
+                  <div className="flex items-center gap-2">
+                    Distance
+                    {sortField === 'travelKilometers' && (
+                      <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-xs`}></i>
+                    )}
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {sortedJobCards.map(jobCard => (
+                <tr 
+                  key={jobCard.id} 
+                  className="hover:bg-gray-50 cursor-pointer transition"
+                  onClick={() => openDetailView(jobCard)}
+                >
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">
+                      {jobCard.jobCardNumber || `JC${jobCard.id.slice(-6)}`}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      jobCard.status === 'completed' ? 'bg-green-100 text-green-700' :
+                      jobCard.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
+                      'bg-gray-100 text-gray-700'
+                    }`}>
+                      {jobCard.status || 'draft'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{jobCard.agentName || 'N/A'}</div>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{jobCard.clientName || 'N/A'}</div>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{jobCard.siteName || 'N/A'}</div>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">
+                      {jobCard.timeOfArrival 
+                        ? new Date(jobCard.timeOfArrival).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric', year: 'numeric' })
+                        : jobCard.createdAt 
+                          ? new Date(jobCard.createdAt).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric', year: 'numeric' })
+                          : 'N/A'
+                      }
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">
+                      {jobCard.travelKilometers > 0 ? `${jobCard.travelKilometers.toFixed(1)} km` : 'N/A'}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm font-medium" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => openEditPage(jobCard)}
+                        className="text-blue-600 hover:text-blue-900"
+                        title="Edit"
+                      >
+                        <i className="fas fa-edit"></i>
+                      </button>
+                      <button
+                        onClick={() => handleDelete(jobCard.id)}
+                        className="text-red-600 hover:text-red-900"
+                        title="Delete"
+                      >
+                        <i className="fas fa-trash"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
