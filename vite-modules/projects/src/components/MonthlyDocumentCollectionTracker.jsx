@@ -152,7 +152,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [selectedYear, setSelectedYear] = useState(getInitialSelectedYear);
     
     // ✅ NEW SIMPLE ARCHITECTURE: Database as single source of truth
-    const [sections, setSections] = useState([]);
+    // Store sections organized by year: { [year]: sections[] }
+    const [sectionsByYear, setSectionsByYear] = useState({});
+    // Current year's sections (derived from sectionsByYear[selectedYear])
+    const sections = sectionsByYear[selectedYear] || [];
     
     // Modal state storage key (persists across remounts) - use ref to avoid dependency issues
     const modalStateKeyRef = useRef(`docCollectionModalState_${project?.id || 'default'}`);
@@ -252,6 +255,134 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const api = getAPI();
     const normalizeSections = useCallback((value) => (Array.isArray(value) ? value : []), []);
     const serializeSections = useCallback((value) => JSON.stringify(normalizeSections(value)), [normalizeSections]);
+    
+    // Helper to organize sections by year from flat array
+    const organizeSectionsByYear = useCallback((flatSections) => {
+        const organized = {};
+        const allYears = new Set();
+        
+        // First, collect all years from existing month keys
+        flatSections.forEach(section => {
+            section.documents?.forEach(doc => {
+                if (doc.collectionStatus) {
+                    Object.keys(doc.collectionStatus).forEach(key => {
+                        const match = key.match(/-(\d{4})$/);
+                        if (match) allYears.add(parseInt(match[1]));
+                    });
+                }
+                if (doc.comments) {
+                    Object.keys(doc.comments).forEach(key => {
+                        const match = key.match(/-(\d{4})$/);
+                        if (match) allYears.add(parseInt(match[1]));
+                    });
+                }
+            });
+        });
+        
+        // Always include current year and selected year
+        allYears.add(currentYear);
+        if (selectedYear !== currentYear) {
+            allYears.add(selectedYear);
+        }
+        
+        // If no year data found, at least have current year
+        if (allYears.size === 0) {
+            allYears.add(currentYear);
+        }
+        
+        // For each year, create a copy of sections with only that year's data
+        allYears.forEach(year => {
+            organized[year] = flatSections.map(section => ({
+                ...section,
+                documents: section.documents?.map(doc => {
+                    const yearCollectionStatus = {};
+                    const yearComments = {};
+                    
+                    // Filter collectionStatus for this year
+                    if (doc.collectionStatus) {
+                        Object.keys(doc.collectionStatus).forEach(key => {
+                            if (key.endsWith(`-${year}`)) {
+                                yearCollectionStatus[key] = doc.collectionStatus[key];
+                            }
+                        });
+                    }
+                    
+                    // Filter comments for this year
+                    if (doc.comments) {
+                        Object.keys(doc.comments).forEach(key => {
+                            if (key.endsWith(`-${year}`)) {
+                                yearComments[key] = doc.comments[key];
+                            }
+                        });
+                    }
+                    
+                    return {
+                        ...doc,
+                        collectionStatus: yearCollectionStatus,
+                        comments: yearComments
+                    };
+                }) || []
+            }));
+        });
+        
+        return organized;
+    }, [currentYear, selectedYear]);
+    
+    // Helper to merge sectionsByYear back into flat array for saving
+    const mergeSectionsByYear = useCallback((sectionsByYearObj) => {
+        const allSections = {};
+        const allYears = Object.keys(sectionsByYearObj).map(y => parseInt(y));
+        
+        // For each year's sections, merge the data
+        allYears.forEach(year => {
+            const yearSections = sectionsByYearObj[year] || [];
+            yearSections.forEach((section, sectionIdx) => {
+                const sectionKey = section.id || `section-${sectionIdx}`;
+                if (!allSections[sectionKey]) {
+                    // Initialize section structure
+                    allSections[sectionKey] = {
+                        ...section,
+                        documents: {}
+                    };
+                }
+                
+                // Merge documents
+                section.documents?.forEach((doc, docIdx) => {
+                    const docKey = doc.id || `doc-${docIdx}`;
+                    if (!allSections[sectionKey].documents[docKey]) {
+                        allSections[sectionKey].documents[docKey] = {
+                            ...doc,
+                            collectionStatus: {},
+                            comments: {}
+                        };
+                    }
+                    
+                    // Merge collectionStatus
+                    if (doc.collectionStatus) {
+                        Object.keys(doc.collectionStatus).forEach(key => {
+                            allSections[sectionKey].documents[docKey].collectionStatus[key] = doc.collectionStatus[key];
+                        });
+                    }
+                    
+                    // Merge comments
+                    if (doc.comments) {
+                        Object.keys(doc.comments).forEach(key => {
+                            if (!allSections[sectionKey].documents[docKey].comments[key]) {
+                                allSections[sectionKey].documents[docKey].comments[key] = [];
+                            }
+                            allSections[sectionKey].documents[docKey].comments[key] = doc.comments[key];
+                        });
+                    }
+                });
+            });
+        });
+        
+        // Convert back to array format
+        return Object.values(allSections).map(section => ({
+            ...section,
+            documents: Object.values(section.documents)
+        }));
+    }, []);
 
     // ✅ LOAD DATA FROM DATABASE ON MOUNT - Fetch fresh data
     // ⚠️ IMPORTANT: Only load on initial mount or when project ID actually changes (not on every prop update)
@@ -308,8 +439,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 
                 // Set initial state from prop (even if empty) and sync snapshot baseline
                 const initialSections = normalizeSections(parsed);
-                setSections(initialSections);
-                lastSavedSnapshotRef.current = serializeSections(initialSections);
+                const organizedByYear = organizeSectionsByYear(initialSections);
+                setSectionsByYear(organizedByYear);
+                // Create snapshot from merged data for comparison
+                const mergedForSnapshot = mergeSectionsByYear(organizedByYear);
+                lastSavedSnapshotRef.current = serializeSections(mergedForSnapshot);
                 
                 // Then fetch fresh data from database to ensure we have latest
                 // Only on initial load or when project changes
@@ -328,14 +462,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         }
                         
                         const normalizedFresh = normalizeSections(freshParsed);
+                        const organizedFresh = organizeSectionsByYear(normalizedFresh);
                         // Only update if different (avoid unnecessary re-renders)
-                        if (JSON.stringify(normalizedFresh) !== JSON.stringify(sections)) {
+                        const currentMerged = mergeSectionsByYear(sectionsByYear);
+                        const freshMerged = mergeSectionsByYear(organizedFresh);
+                        if (JSON.stringify(freshMerged) !== JSON.stringify(currentMerged)) {
                             console.log('🔄 Updating sections from fresh database data');
-                            setSections(normalizedFresh);
+                            setSectionsByYear(organizedFresh);
                         }
-                        lastSavedSnapshotRef.current = serializeSections(normalizedFresh);
+                        lastSavedSnapshotRef.current = serializeSections(freshMerged);
                     } else {
-                        lastSavedSnapshotRef.current = serializeSections(initialSections);
+                        lastSavedSnapshotRef.current = serializeSections(mergedForSnapshot);
                     }
                 } catch (error) {
                     console.warn('⚠️ Could not fetch fresh project data, using prop data:', error);
@@ -348,7 +485,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         };
         
         loadData();
-    }, [project?.id, normalizeSections, serializeSections, api]); // Only depend on project ID - modal check is done inside effect
+    }, [project?.id, normalizeSections, serializeSections, api, organizeSectionsByYear, mergeSectionsByYear]); // Only depend on project ID - modal check is done inside effect
 
     // Keep the modal/interaction state ref up to date without re-running auto-save
     useEffect(() => {
@@ -374,7 +511,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     useEffect(() => {
         if (!project?.id || !hasLoadedInitialDataRef.current) return;
         
-        const currentSnapshot = serializeSections(sections);
+        // Merge all years' data for snapshot comparison
+        const mergedSections = mergeSectionsByYear(sectionsByYear);
+        const currentSnapshot = serializeSections(mergedSections);
         if (currentSnapshot === lastSavedSnapshotRef.current) {
             // Nothing new to save; clear pending state if any
             if (pendingSaveRef.current) {
@@ -397,7 +536,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         console.log('📝 Data changed, scheduling auto-save...');
         pendingSaveRef.current = {
-            sections: normalizeSections(sections),
+            sections: normalizeSections(mergedSections),
             snapshot: currentSnapshot
         };
         
@@ -410,11 +549,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 if (!pendingSaveRef.current) return;
                 
                 // Double-check snapshot hasn't changed while waiting
-                const latestSnapshot = serializeSections(sections);
+                const latestMerged = mergeSectionsByYear(sectionsByYear);
+                const latestSnapshot = serializeSections(latestMerged);
                 if (latestSnapshot !== pendingSaveRef.current.snapshot) {
                     console.log('⏭️ Skipping auto-save: data changed during debounce, rescheduling...');
                     pendingSaveRef.current = {
-                        sections: normalizeSections(sections),
+                        sections: normalizeSections(latestMerged),
                         snapshot: latestSnapshot
                     };
                     scheduleSave();
@@ -458,26 +598,32 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 saveTimeoutRef.current = null;
             }
         };
-    }, [project?.id, sections, api, normalizeSections, serializeSections]);
+    }, [project?.id, sectionsByYear, api, normalizeSections, serializeSections, mergeSectionsByYear]);
     
     // ✅ SAVE ON PAGE UNLOAD (prevent data loss)
     useEffect(() => {
         const handleBeforeUnload = async (e) => {
-            if (!project?.id || !pendingSaveRef.current) return;
+            if (!project?.id) return;
             
-            // Save immediately without debounce
-            try {
-                await api.saveDocumentSections(project.id, pendingSaveRef.current.sections);
-                lastSavedSnapshotRef.current = pendingSaveRef.current.snapshot;
-                console.log('✅ Saved pending changes on navigation');
-            } catch (error) {
-                console.error('❌ Error saving on navigation:', error);
+            // Merge all years' data and save
+            const mergedSections = mergeSectionsByYear(sectionsByYear);
+            const mergedSnapshot = serializeSections(mergedSections);
+            
+            // Only save if there are pending changes
+            if (mergedSnapshot !== lastSavedSnapshotRef.current) {
+                try {
+                    await api.saveDocumentSections(project.id, normalizeSections(mergedSections));
+                    lastSavedSnapshotRef.current = mergedSnapshot;
+                    console.log('✅ Saved pending changes on navigation');
+                } catch (error) {
+                    console.error('❌ Error saving on navigation:', error);
+                }
             }
         };
         
         window.addEventListener('beforeunload', handleBeforeUnload);
         return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-    }, [project?.id]);
+    }, [project?.id, sectionsByYear, mergeSectionsByYear, normalizeSections, serializeSections, api]);
 
     // ✅ LOAD TEMPLATES ONLY WHEN MODALS OPEN
     useEffect(() => {
@@ -561,7 +707,47 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         if (project?.id && typeof window !== 'undefined') {
             localStorage.setItem(`${YEAR_STORAGE_PREFIX}${project.id}`, String(year));
         }
+        // Ensure the selected year has sections initialized (copy from current year if needed)
+        setSectionsByYear(prev => {
+            if (!prev[year] || prev[year].length === 0) {
+                // If year doesn't have data, initialize with empty array or copy structure from another year
+                const existingYear = Object.keys(prev).find(y => prev[y] && prev[y].length > 0);
+                if (existingYear) {
+                    // Copy structure but clear year-specific data (status/comments)
+                    return {
+                        ...prev,
+                        [year]: prev[existingYear].map(section => ({
+                            ...section,
+                            documents: section.documents?.map(doc => ({
+                                ...doc,
+                                collectionStatus: {},
+                                comments: {}
+                            })) || []
+                        }))
+                    };
+                } else {
+                    // No existing data, just ensure year exists
+                    return {
+                        ...prev,
+                        [year]: []
+                    };
+                }
+            }
+            return prev;
+        });
     };
+    
+    // Helper to update sections for the selected year
+    const updateSectionsForYear = useCallback((updater, year = selectedYear) => {
+        setSectionsByYear(prev => {
+            const currentYearSections = prev[year] || [];
+            const updated = typeof updater === 'function' ? updater(currentYearSections) : updater;
+            return {
+                ...prev,
+                [year]: updated
+            };
+        });
+    }, [selectedYear]);
 
     useEffect(() => {
         if (!hasInitialScrolled.current && sections.length > 0 && tableRef.current && selectedYear === currentYear) {
@@ -731,7 +917,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const currentUser = getCurrentUser();
 
         if (editingSection) {
-            setSections(prev => prev.map(s => 
+            updateSectionsForYear(prev => prev.map(s => 
                 s.id === editingSection.id ? { ...s, ...sectionData } : s
             ));
             
@@ -750,7 +936,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 ...sectionData,
                 documents: []
             };
-            setSections(prev => [...prev, newSection]);
+            updateSectionsForYear(prev => [...prev, newSection]);
             
             if (window.AuditLogger) {
                 window.AuditLogger.log('create', 'projects', {
@@ -773,7 +959,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         if (!confirm(`Delete section "${section.name}" and all its documents?`)) return;
         
-        setSections(prev => prev.filter(s => s.id !== sectionId));
+        updateSectionsForYear(prev => prev.filter(s => s.id !== sectionId));
         
         if (window.AuditLogger) {
             window.AuditLogger.log('delete', 'projects', {
@@ -919,7 +1105,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             }))
         }));
 
-        setSections(prev => [...prev, ...newSections]);
+        updateSectionsForYear(prev => [...prev, ...newSections], targetYear);
 
         if (window.AuditLogger) {
             window.AuditLogger.log('create', 'projects', {
@@ -988,7 +1174,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         const currentUser = getCurrentUser();
         
-        setSections(prev => prev.map(s => {
+        updateSectionsForYear(prev => prev.map(s => {
             if (s.id === currentSectionId) {
                 if (editingDocument) {
                     return {
@@ -1026,7 +1212,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         if (!section || !document) return;
         
         if (confirm('Delete this document/data item?')) {
-            setSections(prev => prev.map(s => {
+            updateSectionsForYear(prev => prev.map(s => {
                 if (s.id === sectionId) {
                     return {
                         ...s,
@@ -1039,7 +1225,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
 
     const handleUpdateStatus = (sectionId, documentId, month, status) => {
-        setSections(prev => prev.map(s => {
+        updateSectionsForYear(prev => prev.map(s => {
             if (s.id === sectionId) {
                 return {
                     ...s,
@@ -1073,7 +1259,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             authorRole: currentUser.role
         };
 
-        setSections(prev => prev.map(s => {
+        updateSectionsForYear(prev => prev.map(s => {
             if (s.id === sectionId) {
                 return {
                     ...s,
@@ -1114,7 +1300,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         if (!confirm('Delete this comment?')) return;
         
-        setSections(prev => prev.map(s => {
+        updateSectionsForYear(prev => prev.map(s => {
             if (s.id === sectionId) {
                 return {
                     ...s,
@@ -1277,7 +1463,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const handleDrop = (e, dropIndex) => {
         e.preventDefault();
         if (draggedSection && draggedSection.index !== dropIndex) {
-            setSections(prev => {
+            updateSectionsForYear(prev => {
                 const reordered = [...prev];
                 const [removed] = reordered.splice(draggedSection.index, 1);
                 reordered.splice(dropIndex, 0, removed);
@@ -1322,7 +1508,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const handleDocumentDrop = (e, sectionId, dropIndex) => {
         e.preventDefault();
         if (draggedDocument && draggedDocument.sectionId === sectionId && draggedDocument.documentIndex !== dropIndex) {
-            setSections(prev => prev.map(section => {
+            updateSectionsForYear(prev => prev.map(section => {
                 if (section.id === sectionId) {
                     const reordered = [...section.documents];
                     const [removed] = reordered.splice(draggedDocument.documentIndex, 1);
