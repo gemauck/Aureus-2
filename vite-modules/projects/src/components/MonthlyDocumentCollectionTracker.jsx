@@ -181,6 +181,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     // Refs to track modal/form state for auto-save (always have latest values)
     const modalsOpenRef = useRef(false);
+    const hasLoadedInitialDataRef = useRef(false);
 
     // Template storage key
     const TEMPLATES_STORAGE_KEY = 'documentCollectionTemplates';
@@ -189,8 +190,29 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const api = getAPI();
 
     // ✅ LOAD DATA FROM DATABASE ON MOUNT - Fetch fresh data
+    // ⚠️ IMPORTANT: Don't reload data while modals are open to prevent form closure
     useEffect(() => {
         if (!project?.id) return;
+        
+        // Reset initial load flag when project ID changes
+        if (previousProjectIdRef.current !== project.id) {
+            hasLoadedInitialDataRef.current = false;
+            previousProjectIdRef.current = project.id;
+        }
+        
+        // Update ref with current modal state before checking
+        const isAnyModalOpen = showSectionModal || showDocumentModal || showTemplateModal || showApplyTemplateModal;
+        const isCommentPopupOpen = hoverCommentCell !== null;
+        const isCurrentlyExporting = isExporting;
+        const isCurrentlyEditing = editingSection !== null || editingDocument !== null || editingTemplate !== null;
+        modalsOpenRef.current = isAnyModalOpen || isCommentPopupOpen || isCurrentlyExporting || isCurrentlyEditing;
+        
+        // Don't reload data if any modal/form is open (prevents form from closing)
+        // But allow initial load if we haven't loaded data yet
+        if (modalsOpenRef.current && hasLoadedInitialDataRef.current) {
+            console.log('⏸️ Data reload skipped: modal/form is open');
+            return;
+        }
         
         const loadData = async () => {
             setIsLoading(true);
@@ -241,11 +263,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
             } finally {
                 setIsLoading(false);
+                hasLoadedInitialDataRef.current = true;
             }
         };
         
         loadData();
-    }, [project?.id]); // Only depend on project ID, not documentSections to avoid loops
+    }, [project?.id]); // Only depend on project ID - modal check is done inside effect
 
     // ✅ AUTO-SAVE TO DATABASE AFTER 1 SECOND OF INACTIVITY
     // ⚠️ IMPORTANT: Don't auto-save while modals, forms, or popups are open to prevent them from closing
