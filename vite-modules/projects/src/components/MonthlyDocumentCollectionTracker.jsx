@@ -12,12 +12,13 @@ const getAPI = () => {
         // Fallback: create minimal API wrapper that matches the service interface
         window.DocumentCollectionAPI = {
             updateToken: () => {},
-            saveDocumentSections: async (projectId, sections) => {
+            saveDocumentSections: async (projectId, sections, skipParentUpdate = false) => {
                 const result = await window.DatabaseAPI.updateProject(projectId, {
                     documentSections: JSON.stringify(sections)
                 });
-                // Update parent component's project prop if available
-                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                // Update parent component's project prop if available and not skipping
+                // Skip parent update for auto-saves to prevent refresh issues
+                if (!skipParentUpdate && window.updateViewingProject && typeof window.updateViewingProject === 'function') {
                     const updatedProject = result?.data?.project || result?.project || result?.data;
                     if (updatedProject) {
                         window.updateViewingProject({
@@ -431,7 +432,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 
                 try {
                     console.log('💾 Saving sections to database:', pendingSaveRef.current.sections.length, 'sections');
-                    await api.saveDocumentSections(project.id, pendingSaveRef.current.sections, false);
+                    // ⚠️ FIXED: Pass true to skipParentUpdate for auto-saves to prevent refresh issues
+                    // Auto-saves should not update the parent project prop to avoid interrupting user input
+                    await api.saveDocumentSections(project.id, pendingSaveRef.current.sections, true);
                     console.log('✅ Sections saved successfully');
                     lastSavedSnapshotRef.current = pendingSaveRef.current.snapshot;
                     pendingSaveRef.current = null;

@@ -790,6 +790,8 @@ const Projects = () => {
     }, [viewingProject]);
     
     // BULLETPROOF: Listen for when ProjectDetail loads globally and force re-render
+    // ⚠️ FIXED: Removed periodic setInterval that was causing constant re-renders
+    // Only check when ProjectDetail becomes available, not continuously
     useEffect(() => {
         const checkProjectDetail = () => {
             if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
@@ -799,20 +801,16 @@ const Projects = () => {
                     setWaitingForProjectDetail(false);
                     setForceRender(prev => prev + 1);
                 }
-                // Force a re-render by updating state if we're viewing a project
-                if (viewingProject) {
-                    // Trigger a state update to force re-render
-                    setViewingProject({ ...viewingProject });
-                    setForceRender(prev => prev + 1);
-                }
+                // REMOVED: Periodic re-render that was causing refresh issues
+                // Only update state when ProjectDetail first becomes available
             }
         };
         
         // Check immediately
         checkProjectDetail();
         
-        // Check periodically even when not viewing a project
-        const interval = setInterval(checkProjectDetail, 200);
+        // REMOVED: Periodic interval that was causing constant re-renders every 200ms
+        // This was the main cause of the refresh issue
         
         // Also check on window load events
         window.addEventListener('load', checkProjectDetail);
@@ -828,11 +826,10 @@ const Projects = () => {
         window.addEventListener('componentLoaded', handleComponentLoaded);
         
         return () => {
-            clearInterval(interval);
             window.removeEventListener('load', checkProjectDetail);
             window.removeEventListener('componentLoaded', handleComponentLoaded);
         };
-    }, [projectDetailAvailable, viewingProject]);
+    }, [projectDetailAvailable]); // Removed viewingProject from dependencies to prevent re-renders
 
     // Helper function to sync existing projects with clients
     // This is a non-critical operation - failures won't crash the component
