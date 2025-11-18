@@ -3,6 +3,36 @@ const { useState, useEffect, useRef, useCallback } = React;
 const storage = window.storage;
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
 
+// Initialize API service
+const getAPI = () => {
+    if (!window.DocumentCollectionAPI) {
+        console.warn('⚠️ DocumentCollectionAPI not loaded, initializing...');
+        // Try to load the service if available
+        if (typeof window.DocumentCollectionAPIService !== 'undefined') {
+            window.DocumentCollectionAPI = new window.DocumentCollectionAPIService();
+        } else {
+            // Fallback: create minimal API wrapper
+            window.DocumentCollectionAPI = {
+                updateToken: () => {},
+                saveDocumentSections: async (projectId, sections) => {
+                    return window.DatabaseAPI.updateProject(projectId, {
+                        documentSections: JSON.stringify(sections)
+                    });
+                },
+                fetchProject: async (projectId) => {
+                    return window.DatabaseAPI.getProject(projectId);
+                },
+                getTemplates: async () => [],
+                getTemplate: async () => null,
+                createTemplate: async () => null,
+                updateTemplate: async () => null,
+                deleteTemplate: async () => true,
+            };
+        }
+    }
+    return window.DocumentCollectionAPI;
+};
+
 const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth(); // 0-11
@@ -60,48 +90,138 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
     const previousProjectIdRef = useRef(project?.id);
+    const [isSaving, setIsSaving] = useState(false);
+    const [saveError, setSaveError] = useState(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const saveTimeoutRef = useRef(null);
+    const pendingSaveRef = useRef(null);
 
     // Template storage key
     const TEMPLATES_STORAGE_KEY = 'documentCollectionTemplates';
+    
+    // Get API service instance
+    const api = getAPI();
 
-    // ✅ LOAD DATA FROM DATABASE ON MOUNT
+    // ✅ LOAD DATA FROM DATABASE ON MOUNT - Fetch fresh data
     useEffect(() => {
-        if (!project?.documentSections) return;
+        if (!project?.id) return;
         
-        console.log('📋 MonthlyDocumentCollectionTracker: Loading data from database');
-        let parsed = [];
-        try {
-            if (typeof project.documentSections === 'string') {
-                parsed = JSON.parse(project.documentSections);
-            } else if (Array.isArray(project.documentSections)) {
-                parsed = project.documentSections;
+        const loadData = async () => {
+            setIsLoading(true);
+            try {
+                // First, try to load from prop (fast initial render)
+                let parsed = [];
+                if (project?.documentSections) {
+                    try {
+                        if (typeof project.documentSections === 'string') {
+                            parsed = JSON.parse(project.documentSections);
+                        } else if (Array.isArray(project.documentSections)) {
+                            parsed = project.documentSections;
+                        }
+                    } catch (e) {
+                        console.warn('Failed to parse documentSections from prop:', e);
+                    }
+                }
+                
+                // Set initial state from prop
+                if (parsed.length > 0) {
+                    setSections(Array.isArray(parsed) ? parsed : []);
+                }
+                
+                // Then fetch fresh data from database to ensure we have latest
+                try {
+                    const freshProject = await api.fetchProject(project.id);
+                    if (freshProject?.documentSections) {
+                        let freshParsed = [];
+                        try {
+                            if (typeof freshProject.documentSections === 'string') {
+                                freshParsed = JSON.parse(freshProject.documentSections);
+                            } else if (Array.isArray(freshProject.documentSections)) {
+                                freshParsed = freshProject.documentSections;
+                            }
+                        } catch (e) {
+                            console.warn('Failed to parse fresh documentSections:', e);
+                        }
+                        
+                        // Only update if different (avoid unnecessary re-renders)
+                        if (JSON.stringify(freshParsed) !== JSON.stringify(sections)) {
+                            console.log('🔄 Updating sections from fresh database data');
+                            setSections(Array.isArray(freshParsed) ? freshParsed : []);
+                        }
+                    }
+                } catch (error) {
+                    console.warn('⚠️ Could not fetch fresh project data, using prop data:', error);
+                    // Continue with prop data if fetch fails
+                }
+            } finally {
+                setIsLoading(false);
             }
-        } catch (e) {
-            console.warn('Failed to parse documentSections:', e);
-        }
+        };
         
-        console.log('✅ Loaded sections from project:', parsed.length, 'sections');
-        setSections(Array.isArray(parsed) ? parsed : []);
-    }, [project?.id, project?.documentSections]);
+        loadData();
+    }, [project?.id]); // Only depend on project ID, not documentSections to avoid loops
 
     // ✅ AUTO-SAVE TO DATABASE AFTER 1 SECOND OF INACTIVITY
     useEffect(() => {
-        if (!project?.id || sections.length === 0) return;
+        if (!project?.id) return;
+        
+        // Clear any pending save
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+        }
+        
+        // Store pending save
+        pendingSaveRef.current = sections;
         
         const timeout = setTimeout(async () => {
-            console.log('💾 Saving sections to database:', sections.length, 'sections');
+            if (!pendingSaveRef.current) return;
+            
+            setIsSaving(true);
+            setSaveError(null);
+            
             try {
-                await window.DatabaseAPI.updateProject(project.id, {
-                    documentSections: JSON.stringify(sections)
-                });
+                console.log('💾 Saving sections to database:', pendingSaveRef.current.length, 'sections');
+                await api.saveDocumentSections(project.id, pendingSaveRef.current);
                 console.log('✅ Sections saved successfully');
+                pendingSaveRef.current = null;
             } catch (error) {
                 console.error('❌ Error saving sections:', error);
+                setSaveError(error.message || 'Failed to save sections');
+                // Show user-friendly error notification
+                if (window.showNotification) {
+                    window.showNotification('Failed to save document sections. Please try again.', 'error');
+                }
+            } finally {
+                setIsSaving(false);
             }
         }, 1000);
         
-        return () => clearTimeout(timeout);
+        saveTimeoutRef.current = timeout;
+        
+        return () => {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+            }
+        };
     }, [sections, project?.id]);
+    
+    // ✅ SAVE ON PAGE UNLOAD (prevent data loss)
+    useEffect(() => {
+        const handleBeforeUnload = async (e) => {
+            if (!project?.id || !pendingSaveRef.current) return;
+            
+            // Save immediately without debounce
+            try {
+                await api.saveDocumentSections(project.id, pendingSaveRef.current);
+                console.log('✅ Saved pending changes on navigation');
+            } catch (error) {
+                console.error('❌ Error saving on navigation:', error);
+            }
+        };
+        
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [project?.id]);
 
     // ✅ LOAD TEMPLATES ONLY WHEN MODALS OPEN
     useEffect(() => {
@@ -113,39 +233,39 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     const loadTemplates = async () => {
         try {
-            // Load from localStorage first
+            // Load from localStorage first (optimistic loading)
             const stored = localStorage.getItem(TEMPLATES_STORAGE_KEY);
             if (stored) {
-                const parsed = JSON.parse(stored);
-                setTemplates(Array.isArray(parsed) ? parsed : []);
+                try {
+                    const parsed = JSON.parse(stored);
+                    setTemplates(Array.isArray(parsed) ? parsed : []);
+                } catch (e) {
+                    console.warn('Failed to parse stored templates:', e);
+                }
             }
             
-            // Then fetch from API
-            const token = window.storage?.getToken?.();
-            if (!token) return;
-            
-            const response = await fetch('/api/document-collection-templates', {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                const apiTemplates = data?.templates || data?.data?.templates || [];
+            // Then fetch fresh data from API
+            try {
+                const apiTemplates = await api.getTemplates();
                 console.log('✅ Loaded templates from API:', apiTemplates.length);
                 setTemplates(apiTemplates);
                 localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(apiTemplates));
+            } catch (error) {
+                console.error('❌ Error loading templates from API:', error);
+                // Keep localStorage data if API fails
             }
         } catch (error) {
             console.error('❌ Error loading templates:', error);
         }
     };
 
-    const saveTemplates = (templatesToSave) => {
+    const saveTemplates = async (templatesToSave) => {
+        // Update local state immediately (optimistic update)
         localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(templatesToSave));
         setTemplates(templatesToSave);
+        
+        // Note: Templates are saved individually via createTemplate/updateTemplate/deleteTemplate
+        // This function only manages local state and localStorage
     };
 
     // Initialize year when project ID changes
@@ -367,106 +487,37 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
 
     const handleDeleteTemplate = async (templateId) => {
-        console.log('🗑️ handleDeleteTemplate called with ID:', templateId, 'Type:', typeof templateId);
-        
         if (!confirm('Delete this template? This action cannot be undone.')) {
-            console.log('❌ User cancelled deletion');
             return;
         }
         
         try {
-            console.log('🗑️ Starting deletion process...');
-            console.log('🗑️ Current templates:', templates.map(t => ({ id: t.id, name: t.name })));
-            
-            const token = window.storage?.getToken?.();
-            console.log('🗑️ Token available:', !!token, 'Token length:', token?.length);
-            
-            const template = templates.find(t => {
-                const match = String(t.id) === String(templateId);
-                if (!match) {
-                    console.log('🗑️ Template ID mismatch:', { 
-                        templateId: t.id, 
-                        type: typeof t.id, 
-                        targetId: templateId, 
-                        targetType: typeof templateId,
-                        match: String(t.id) === String(templateId)
-                    });
-                }
-                return match;
-            });
-            
+            const template = templates.find(t => String(t.id) === String(templateId));
             if (!template) {
-                console.error('❌ Template not found in templates array');
-                console.error('❌ Looking for ID:', templateId, 'Type:', typeof templateId);
-                console.error('❌ Available template IDs:', templates.map(t => ({ id: t.id, type: typeof t.id })));
                 throw new Error(`Template not found. ID: ${templateId}`);
             }
             
-            console.log('🗑️ Found template to delete:', { id: template.id, name: template.name });
-            
-            // Always try API first if we have a token
-            if (token) {
-                console.log('🗑️ Attempting to delete from database:', templateId);
-                const apiUrl = `/api/document-collection-templates/${encodeURIComponent(templateId)}`;
-                console.log('🗑️ API URL:', apiUrl);
-                
-                try {
-                    const response = await fetch(apiUrl, {
-                        method: 'DELETE',
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    
-                    console.log('🗑️ API Response status:', response.status, response.statusText);
-                    
-                    if (response.ok) {
-                        const responseData = await response.json().catch(() => ({}));
-                        console.log('✅ Template deleted from database:', responseData);
-                    } else {
-                        const errorData = await response.json().catch(() => ({}));
-                        const errorMessage = errorData.error?.message || `API returned ${response.status}`;
-                        
-                        console.log('🗑️ API Response not OK:', {
-                            status: response.status,
-                            statusText: response.statusText,
-                            error: errorData
-                        });
-                        
-                        // If it's a 404, the template doesn't exist in DB, so it's a localStorage template
-                        if (response.status === 404) {
-                            console.log('⚠️ Template not found in database (likely localStorage template), continuing...');
-                        } else {
-                            // For other errors, still try to delete from localStorage but show warning
-                            console.warn('⚠️ API deletion failed:', errorMessage, 'Will still remove from localStorage');
-                        }
-                    }
-                } catch (apiError) {
-                    console.error('❌ API deletion error:', apiError);
-                    console.error('❌ Error details:', {
-                        message: apiError.message,
-                        stack: apiError.stack,
-                        name: apiError.name
-                    });
-                    // Continue with localStorage deletion as fallback
+            // Try to delete from API (if it exists in database)
+            try {
+                await api.deleteTemplate(templateId);
+                console.log('✅ Template deleted from database');
+            } catch (error) {
+                // If 404, template doesn't exist in DB (localStorage-only template)
+                // Continue with localStorage deletion
+                if (error.message && error.message.includes('404')) {
+                    console.log('⚠️ Template not found in database (localStorage template), continuing...');
+                } else {
+                    console.warn('⚠️ API deletion failed, will still remove from localStorage:', error.message);
                 }
-            } else {
-                console.log('🗑️ No auth token, deleting from localStorage only:', templateId);
             }
             
             // Always update local state and localStorage (removes from UI immediately)
-            console.log('🗑️ Removing template from local state...');
             const updatedTemplates = templates.filter(t => String(t.id) !== String(templateId));
-            console.log('🗑️ Templates after filter:', updatedTemplates.length, 'removed:', templates.length - updatedTemplates.length);
+            await saveTemplates(updatedTemplates);
             
-            setTemplates(updatedTemplates);
-            localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(updatedTemplates));
-            
-            console.log('✅ Template deleted successfully from UI and localStorage');
+            console.log('✅ Template deleted successfully');
         } catch (error) {
             console.error('❌ Error deleting template:', error);
-            console.error('❌ Error stack:', error.stack);
             alert('Failed to delete template: ' + error.message);
         }
     };
