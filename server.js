@@ -1118,6 +1118,12 @@ app.get('*', (req, res) => {
     return res.status(404).json({ error: 'API endpoint not found' })
   }
   
+  // CRITICAL: Set no-cache headers for index.html to prevent stale deployments
+  // This ensures browsers always fetch the latest version after deployment
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+  res.setHeader('Pragma', 'no-cache')
+  res.setHeader('Expires', '0')
+  
   // Serve index.html for all other routes (SPA routing)
   res.sendFile(path.join(rootDir, 'index.html'))
 })
