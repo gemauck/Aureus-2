@@ -3,32 +3,126 @@ const { useState, useEffect, useRef, useCallback } = React;
 const storage = window.storage;
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
 
+// Import API service - this will register DocumentCollectionAPI on window
+// The service file exports a class that auto-registers on window when imported
+try {
+    // Try to import the API service if using ES modules
+    if (typeof import !== 'undefined') {
+        import('./services/documentCollectionAPI.js').catch(() => {
+            // If import fails, use fallback initialization below
+        });
+    }
+} catch (e) {
+    // Import not available, will use fallback
+}
+
 // Initialize API service
 const getAPI = () => {
     if (!window.DocumentCollectionAPI) {
-        console.warn('⚠️ DocumentCollectionAPI not loaded, initializing...');
-        // Try to load the service if available
-        if (typeof window.DocumentCollectionAPIService !== 'undefined') {
-            window.DocumentCollectionAPI = new window.DocumentCollectionAPIService();
-        } else {
-            // Fallback: create minimal API wrapper
-            window.DocumentCollectionAPI = {
-                updateToken: () => {},
-                saveDocumentSections: async (projectId, sections) => {
-                    return window.DatabaseAPI.updateProject(projectId, {
-                        documentSections: JSON.stringify(sections)
+        console.warn('⚠️ DocumentCollectionAPI not loaded, initializing fallback...');
+        // Fallback: create minimal API wrapper that matches the service interface
+        window.DocumentCollectionAPI = {
+            updateToken: () => {},
+            saveDocumentSections: async (projectId, sections) => {
+                const result = await window.DatabaseAPI.updateProject(projectId, {
+                    documentSections: JSON.stringify(sections)
+                });
+                // Update parent component's project prop if available
+                if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                    const updatedProject = result?.data?.project || result?.project || result?.data;
+                    if (updatedProject) {
+                        window.updateViewingProject({
+                            ...updatedProject,
+                            documentSections: JSON.stringify(sections)
+                        });
+                    }
+                }
+                return result;
+            },
+            fetchProject: async (projectId) => {
+                const result = await window.DatabaseAPI.getProject(projectId);
+                return result?.data?.project || result?.project || result?.data || result;
+            },
+            getTemplates: async () => {
+                try {
+                    const token = window.storage?.getToken?.();
+                    if (!token) return [];
+                    const response = await fetch('/api/document-collection-templates', {
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        }
                     });
-                },
-                fetchProject: async (projectId) => {
-                    return window.DatabaseAPI.getProject(projectId);
-                },
-                getTemplates: async () => [],
-                getTemplate: async () => null,
-                createTemplate: async () => null,
-                updateTemplate: async () => null,
-                deleteTemplate: async () => true,
-            };
-        }
+                    if (response.ok) {
+                        const data = await response.json();
+                        return data?.data?.templates || data?.templates || [];
+                    }
+                    return [];
+                } catch (error) {
+                    console.error('❌ Error fetching templates:', error);
+                    return [];
+                }
+            },
+            getTemplate: async () => null,
+            createTemplate: async (templateData) => {
+                try {
+                    const token = window.storage?.getToken?.();
+                    if (!token) throw new Error('No auth token');
+                    const response = await fetch('/api/document-collection-templates', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(templateData)
+                    });
+                    if (!response.ok) throw new Error(`API returned ${response.status}`);
+                    const data = await response.json();
+                    return data?.data?.template || data?.template;
+                } catch (error) {
+                    console.error('❌ Error creating template:', error);
+                    throw error;
+                }
+            },
+            updateTemplate: async (templateId, templateData) => {
+                try {
+                    const token = window.storage?.getToken?.();
+                    if (!token) throw new Error('No auth token');
+                    const response = await fetch(`/api/document-collection-templates/${encodeURIComponent(templateId)}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(templateData)
+                    });
+                    if (!response.ok) throw new Error(`API returned ${response.status}`);
+                    const data = await response.json();
+                    return data?.data?.template || data?.template;
+                } catch (error) {
+                    console.error('❌ Error updating template:', error);
+                    throw error;
+                }
+            },
+            deleteTemplate: async (templateId) => {
+                try {
+                    const token = window.storage?.getToken?.();
+                    if (!token) throw new Error('No auth token');
+                    const response = await fetch(`/api/document-collection-templates/${encodeURIComponent(templateId)}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    if (!response.ok) throw new Error(`API returned ${response.status}`);
+                    return true;
+                } catch (error) {
+                    console.error('❌ Error deleting template:', error);
+                    throw error;
+                }
+            },
+        };
     }
     return window.DocumentCollectionAPI;
 };

@@ -3,6 +3,8 @@ import Projects from './components/Projects';
 import ProjectDetail from './components/ProjectDetail';
 import ProjectModal from './components/ProjectModal';
 import MonthlyDocumentCollectionTracker from './components/MonthlyDocumentCollectionTracker';
+// Import API service to ensure it's included in the build and registers on window
+import './services/documentCollectionAPI.js';
 
 // ProjectsModule - Main entry point for the Projects Vite module
 // This wraps the Projects component and provides integration with the main app
