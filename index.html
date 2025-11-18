@@ -638,11 +638,13 @@
                 // Check if script already exists - remove old ones with timestamp cache busting
                 const existingScripts = document.querySelectorAll('script[src*="projects-module.js"]');
                 const VITE_PROJECTS_VERSION = '20250127-doc-collection-refactor-v2';
+                console.log('🔍 Checking for existing scripts. Found:', existingScripts.length);
                 existingScripts.forEach(oldScript => {
                     const src = oldScript.src || oldScript.getAttribute('src') || '';
-                    // Remove scripts with timestamp cache busting (old version)
-                    if (src.includes('projects-module.js') && /v=\d{13}/.test(src)) {
-                        console.log('🗑️ Removing old cached script:', src);
+                    console.log('🔍 Existing script found:', src);
+                    // Remove scripts with timestamp cache busting (old version) OR wrong version
+                    if (src.includes('projects-module.js') && (/v=\d{13}/.test(src) || !src.includes(VITE_PROJECTS_VERSION))) {
+                        console.log('🗑️ Removing old/wrong version script:', src);
                         oldScript.remove();
                     }
                 });
@@ -718,6 +720,8 @@
                 link.onerror = () => console.warn('⚠️ Failed to load Vite Projects CSS');
                 document.head.appendChild(link);
                 console.log('✅ Vite Projects module loading...');
+                console.log('📦 Script URL:', script.src);
+                console.log('📦 CSS URL:', link.href);
             } else {
                 // Retry after a short delay
                 setTimeout(loadViteProjectsModule, 50);
