@@ -21,6 +21,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const hasInitialScrolled = useRef(false);
     const saveTimeoutRef = useRef(null);
     const isSavingRef = useRef(false);
+    const previousProjectIdRef = useRef(project?.id);
+    const hasLoadedInitialDataRef = useRef(false);
 
     const months = [
         'January', 'February', 'March', 'April', 'May', 'June',
@@ -119,11 +121,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // ============================================================
     // LOAD DATA FROM DATABASE ON MOUNT
     // ============================================================
-    
-    useEffect(() => {
-        console.log('📋 MonthlyDocumentCollectionTracker: Loading data from database');
-        loadFromDatabase();
-    }, [project?.id]); // Reload when project changes
+    // ⚠️ IMPORTANT: Only load on initial mount or when project ID actually changes (not on every prop update)
     
     const loadFromDatabase = async () => {
         if (!project?.id) return;
@@ -139,8 +137,33 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             setSections([]);
         } finally {
             setIsLoading(false);
+            hasLoadedInitialDataRef.current = true;
         }
     };
+    
+    useEffect(() => {
+        if (!project?.id) return;
+        
+        // Check if this is a new project (project ID actually changed)
+        const isNewProject = previousProjectIdRef.current !== project.id;
+        
+        // Reset initial load flag when project ID changes
+        if (isNewProject) {
+            hasLoadedInitialDataRef.current = false;
+            previousProjectIdRef.current = project.id;
+        }
+        
+        // Only load data if:
+        // 1. This is the initial load (hasn't loaded data yet)
+        // 2. OR this is a new project (project ID changed)
+        if (!isNewProject && hasLoadedInitialDataRef.current) {
+            // Already loaded data for this project, don't reload
+            return;
+        }
+        
+        console.log('📋 MonthlyDocumentCollectionTracker: Loading data from database');
+        loadFromDatabase();
+    }, [project?.id]); // Only depend on project ID
     
     // ============================================================
     // SIMPLE AUTO-SAVE - Debounced, saves entire state
@@ -212,6 +235,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         setIsLoadingTemplates(true);
         
         try {
+            // Get list of deleted template IDs (templates user has deleted)
+            const deletedTemplatesKey = 'abcotronics_deleted_template_ids';
+            const deletedIds = JSON.parse(localStorage.getItem(deletedTemplatesKey) || '[]');
+            
             // Try to load from API first
             const token = window.storage?.getToken?.();
             if (token) {
@@ -227,8 +254,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     // API wraps response in { data: { templates: [...] } }
                     const apiTemplates = data?.data?.templates || data?.templates || [];
                     
+                    // Filter out templates that user has deleted (even if they're default templates)
+                    const filteredTemplates = apiTemplates.filter(t => !deletedIds.includes(String(t.id)));
+                    console.log(`📋 Filtered out ${apiTemplates.length - filteredTemplates.length} deleted template(s)`);
+                    
                     // Ensure sections are parsed for each template
-                    const parsedTemplates = apiTemplates.map(t => ({
+                    const parsedTemplates = filteredTemplates.map(t => ({
                         ...t,
                         sections: parseSections(t.sections)
                     }));
@@ -397,7 +428,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
             console.log('🗑️ Found template to delete:', { id: template.id, name: template.name });
             
+            // Check if template is a default template
+            if (template.isDefault) {
+                alert('Default templates cannot be deleted.');
+                return;
+            }
+            
             // Always try API first if we have a token
+            let apiDeleteSuccess = false;
             if (token) {
                 console.log('🗑️ Attempting to delete from database:', templateId);
                 const apiUrl = `/api/document-collection-templates/${encodeURIComponent(templateId)}`;
@@ -417,6 +455,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     if (response.ok) {
                         const responseData = await response.json().catch(() => ({}));
                         console.log('✅ Template deleted from database:', responseData);
+                        apiDeleteSuccess = true;
                     } else {
                         const errorData = await response.json().catch(() => ({}));
                         const errorMessage = errorData.error?.message || `API returned ${response.status}`;
@@ -427,36 +466,69 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             error: errorData
                         });
                         
+                        // Check if error is about default templates
+                        if (errorMessage.includes('Default templates cannot be deleted')) {
+                            // For default templates, we'll hide them locally even though they can't be deleted from DB
+                            apiDeleteSuccess = true;
+                            // Track this as a default template that should be hidden
+                            const deletedTemplatesKey = 'abcotronics_deleted_template_ids';
+                            const deletedIds = JSON.parse(localStorage.getItem(deletedTemplatesKey) || '[]');
+                            if (!deletedIds.includes(String(templateId))) {
+                                deletedIds.push(String(templateId));
+                                localStorage.setItem(deletedTemplatesKey, JSON.stringify(deletedIds));
+                                console.log('📝 Tracked deleted default template ID to prevent it from reappearing');
+                            }
+                        }
+                        
                         // If it's a 404, the template doesn't exist in DB, so it's a localStorage template
                         if (response.status === 404) {
                             console.log('⚠️ Template not found in database (likely localStorage template), continuing...');
+                            apiDeleteSuccess = true; // Allow deletion for localStorage-only templates
                         } else {
-                            // For other errors, still try to delete from localStorage but show warning
-                            console.warn('⚠️ API deletion failed:', errorMessage, 'Will still remove from localStorage');
+                            // For other errors, don't remove from localStorage
+                            console.error('❌ API deletion failed:', errorMessage);
+                            throw new Error(errorMessage);
                         }
                     }
                 } catch (apiError) {
-                    console.error('❌ API deletion error:', apiError);
-                    console.error('❌ Error details:', {
-                        message: apiError.message,
-                        stack: apiError.stack,
-                        name: apiError.name
-                    });
-                    // Continue with localStorage deletion as fallback
+                    // Check if error is about default templates
+                    if (apiError.message && apiError.message.includes('Default templates cannot be deleted')) {
+                        // For default templates, we'll hide them locally even though they can't be deleted from DB
+                        apiDeleteSuccess = true;
+                        // Track this as a default template that should be hidden
+                        const deletedTemplatesKey = 'abcotronics_deleted_template_ids';
+                        const deletedIds = JSON.parse(localStorage.getItem(deletedTemplatesKey) || '[]');
+                        if (!deletedIds.includes(String(templateId))) {
+                            deletedIds.push(String(templateId));
+                            localStorage.setItem(deletedTemplatesKey, JSON.stringify(deletedIds));
+                            console.log('📝 Tracked deleted default template ID to prevent it from reappearing');
+                        }
+                    } else {
+                        console.error('❌ API deletion error:', apiError);
+                        console.error('❌ Error details:', {
+                            message: apiError.message,
+                            stack: apiError.stack,
+                            name: apiError.name
+                        });
+                        throw apiError;
+                    }
                 }
             } else {
                 console.log('🗑️ No auth token, deleting from localStorage only:', templateId);
+                apiDeleteSuccess = true; // Allow deletion when no token (localStorage-only)
             }
             
-            // Always update local state and localStorage (removes from UI immediately)
-            console.log('🗑️ Removing template from local state...');
-            const updatedTemplates = templates.filter(t => String(t.id) !== String(templateId));
-            console.log('🗑️ Templates after filter:', updatedTemplates.length, 'removed:', templates.length - updatedTemplates.length);
-            
-            setTemplates(updatedTemplates);
-            localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(updatedTemplates));
-            
-            console.log('✅ Template deleted successfully from UI and localStorage');
+            // Only update local state and localStorage if API deletion succeeded or was 404/no token
+            if (apiDeleteSuccess) {
+                console.log('🗑️ Removing template from local state...');
+                const updatedTemplates = templates.filter(t => String(t.id) !== String(templateId));
+                console.log('🗑️ Templates after filter:', updatedTemplates.length, 'removed:', templates.length - updatedTemplates.length);
+                
+                setTemplates(updatedTemplates);
+                localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(updatedTemplates));
+                
+                console.log('✅ Template deleted successfully from UI and localStorage');
+            }
         } catch (error) {
             console.error('❌ Error deleting template:', error);
             console.error('❌ Error stack:', error.stack);
@@ -541,6 +613,47 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     for (let i = MIN_YEAR; i <= currentYear + FUTURE_YEAR_BUFFER; i++) {
         yearOptions.push(i);
     }
+    
+    // ============================================================
+    // YEAR-BASED DATA HELPERS - Ensure independent lists per year
+    // ============================================================
+    
+    // Create a month key scoped to the selected year
+    const getMonthKey = (month, year = selectedYear) => {
+        return `${month}-${year}`;
+    };
+    
+    // Get status for a specific month in the selected year only
+    const getStatusForYear = (collectionStatus, month, year = selectedYear) => {
+        if (!collectionStatus) return null;
+        const monthKey = getMonthKey(month, year);
+        return collectionStatus[monthKey] || null;
+    };
+    
+    // Get comments for a specific month in the selected year only
+    const getCommentsForYear = (comments, month, year = selectedYear) => {
+        if (!comments) return [];
+        const monthKey = getMonthKey(month, year);
+        return comments[monthKey] || [];
+    };
+    
+    // Set status for a specific month in the selected year only
+    const setStatusForYear = (collectionStatus, month, status, year = selectedYear) => {
+        const monthKey = getMonthKey(month, year);
+        return {
+            ...collectionStatus,
+            [monthKey]: status
+        };
+    };
+    
+    // Set comments for a specific month in the selected year only
+    const setCommentsForYear = (comments, month, newComments, year = selectedYear) => {
+        const monthKey = getMonthKey(month, year);
+        return {
+            ...comments,
+            [monthKey]: newComments
+        };
+    };
     
     // ============================================================
     // STATUS OPTIONS
@@ -690,13 +803,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     ...section,
                     documents: section.documents.map(doc => {
                         if (doc.id === documentId) {
-                            const monthKey = `${month}-${selectedYear}`;
                             return {
                                 ...doc,
-                                collectionStatus: {
-                                    ...doc.collectionStatus,
-                                    [monthKey]: status
-                                }
+                                collectionStatus: setStatusForYear(doc.collectionStatus || {}, month, status, selectedYear)
                             };
                         }
                         return doc;
@@ -711,7 +820,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         if (!commentText.trim()) return;
         
         const currentUser = getCurrentUser();
-        const monthKey = `${month}-${selectedYear}`;
         const newComment = {
             id: Date.now(),
             text: commentText,
@@ -727,13 +835,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     ...section,
                     documents: section.documents.map(doc => {
                         if (doc.id === documentId) {
-                            const existingComments = doc.comments?.[monthKey] || [];
+                            const existingComments = getCommentsForYear(doc.comments, month, selectedYear);
                             return {
                                 ...doc,
-                                comments: {
-                                    ...doc.comments,
-                                    [monthKey]: [...existingComments, newComment]
-                                }
+                                comments: setCommentsForYear(doc.comments || {}, month, [...existingComments, newComment], selectedYear)
                             };
                         }
                         return doc;
@@ -750,7 +855,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const currentUser = getCurrentUser();
         const section = sections.find(s => s.id === sectionId);
         const document = section?.documents.find(d => d.id === documentId);
-        const comment = document?.comments?.[`${month}-${selectedYear}`]?.find(c => c.id === commentId);
+        const existingComments = getCommentsForYear(document?.comments, month, selectedYear);
+        const comment = existingComments.find(c => c.id === commentId);
         
         const canDelete = comment?.authorId === currentUser.id || 
                          currentUser.role === 'Admin' || 
@@ -763,21 +869,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         if (!confirm('Delete this comment?')) return;
         
-        const monthKey = `${month}-${selectedYear}`;
-        
         setSections(prev => prev.map(section => {
             if (section.id === sectionId) {
                 return {
                     ...section,
                     documents: section.documents.map(doc => {
                         if (doc.id === documentId) {
-                            const existingComments = doc.comments?.[monthKey] || [];
+                            const updatedComments = existingComments.filter(c => c.id !== commentId);
                             return {
                                 ...doc,
-                                comments: {
-                                    ...doc.comments,
-                                    [monthKey]: existingComments.filter(c => c.id !== commentId)
-                                }
+                                comments: setCommentsForYear(doc.comments || {}, month, updatedComments, selectedYear)
                             };
                         }
                         return doc;
@@ -789,13 +890,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
     
     const getDocumentStatus = (document, month) => {
-        const monthKey = `${month}-${selectedYear}`;
-        return document.collectionStatus?.[monthKey] || null;
+        return getStatusForYear(document.collectionStatus, month, selectedYear);
     };
     
     const getDocumentComments = (document, month) => {
-        const monthKey = `${month}-${selectedYear}`;
-        return document.comments?.[monthKey] || [];
+        return getCommentsForYear(document.comments, month, selectedYear);
     };
     
     // ============================================================
@@ -870,12 +969,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     const row = [`  ${document.name}${document.description ? ' - ' + document.description : ''}`];
                     
                     months.forEach(month => {
-                        const monthKey = `${month}-${selectedYear}`;
-                        const status = document.collectionStatus?.[monthKey];
+                        const status = getStatusForYear(document.collectionStatus, month, selectedYear);
                         const statusLabel = status ? statusOptions.find(s => s.value === status)?.label : '';
                         row.push(statusLabel || '');
                         
-                        const comments = document.comments?.[monthKey] || [];
+                        const comments = getCommentsForYear(document.comments, month, selectedYear);
                         const commentsText = comments.map(c => {
                             const date = new Date(c.date).toLocaleString('en-ZA', {
                                 year: 'numeric', month: 'short', day: '2-digit',
@@ -1287,18 +1385,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                     >
                                                         <i className="fas fa-edit"></i>
                                                     </button>
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.preventDefault();
-                                                            e.stopPropagation();
-                                                            console.log('🗑️ Delete button clicked for template:', template.id);
-                                                            deleteTemplate(template.id);
-                                                        }}
-                                                        className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded"
-                                                        title="Delete template"
-                                                    >
-                                                        <i className="fas fa-trash"></i>
-                                                    </button>
+                                                    {!template.isDefault && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                console.log('🗑️ Delete button clicked for template:', template.id);
+                                                                deleteTemplate(template.id);
+                                                            }}
+                                                            className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded"
+                                                            title="Delete template"
+                                                        >
+                                                            <i className="fas fa-trash"></i>
+                                                        </button>
+                                                    )}
+                                                    {template.isDefault && (
+                                                        <span className="px-2 py-1 text-xs text-gray-400" title="Default template">
+                                                            <i className="fas fa-lock"></i>
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
