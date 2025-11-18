@@ -253,6 +253,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
+    const [commentInputAvailable, setCommentInputAvailable] = useState(() => 
+        typeof window !== 'undefined' && typeof window.CommentInputWithMentions === 'function'
+    );
     const previousProjectIdRef = useRef(project?.id);
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState(null);
@@ -275,23 +278,38 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const organizeSectionsByYear = useCallback((flatSections) => {
         const organized = {};
         const allYears = new Set();
+        const sectionYearsMap = new Map(); // Track which sections have data for which years
         
-        // First, collect all years from existing month keys
-        flatSections.forEach(section => {
+        // First, collect all years from existing month keys and map sections to years
+        flatSections.forEach((section, sectionIdx) => {
+            const sectionYears = new Set();
+            
             section.documents?.forEach(doc => {
                 if (doc.collectionStatus) {
                     Object.keys(doc.collectionStatus).forEach(key => {
-                        const match = key.match(/-(\d{4})$/);
-                        if (match) allYears.add(parseInt(match[1]));
+                        // Check for year in format "-YYYY" or template marker "_template-YYYY"
+                        const match = key.match(/-(\d{4})$/) || key.match(/_template-(\d{4})$/);
+                        if (match) {
+                            const year = parseInt(match[1]);
+                            allYears.add(year);
+                            sectionYears.add(year);
+                        }
                     });
                 }
                 if (doc.comments) {
                     Object.keys(doc.comments).forEach(key => {
                         const match = key.match(/-(\d{4})$/);
-                        if (match) allYears.add(parseInt(match[1]));
+                        if (match) {
+                            const year = parseInt(match[1]);
+                            allYears.add(year);
+                            sectionYears.add(year);
+                        }
                     });
                 }
             });
+            
+            // Store which years this section has data for
+            sectionYearsMap.set(section.id || sectionIdx, sectionYears);
         });
         
         // Always include current year and selected year
@@ -305,39 +323,52 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             allYears.add(currentYear);
         }
         
-        // For each year, create a copy of sections with only that year's data
+        // For each year, only include sections that have data for that year
+        // Sections without any year data are excluded (they're new and haven't been saved yet)
         allYears.forEach(year => {
-            organized[year] = flatSections.map(section => ({
-                ...section,
-                documents: section.documents?.map(doc => {
-                    const yearCollectionStatus = {};
-                    const yearComments = {};
+            organized[year] = flatSections
+                .map((section, sectionIdx) => {
+                    const sectionId = section.id || sectionIdx;
+                    const hasDataForYear = sectionYearsMap.get(sectionId)?.has(year) || false;
                     
-                    // Filter collectionStatus for this year
-                    if (doc.collectionStatus) {
-                        Object.keys(doc.collectionStatus).forEach(key => {
-                            if (key.endsWith(`-${year}`)) {
-                                yearCollectionStatus[key] = doc.collectionStatus[key];
-                            }
-                        });
+                    // Only include section if it has data (status or comments) for this year
+                    // This ensures sections added to one year don't appear in other years
+                    if (hasDataForYear) {
+                        return {
+                            ...section,
+                            documents: section.documents?.map(doc => {
+                                const yearCollectionStatus = {};
+                                const yearComments = {};
+                                
+                                // Filter collectionStatus for this year
+                                if (doc.collectionStatus) {
+                                    Object.keys(doc.collectionStatus).forEach(key => {
+                                        if (key.endsWith(`-${year}`)) {
+                                            yearCollectionStatus[key] = doc.collectionStatus[key];
+                                        }
+                                    });
+                                }
+                                
+                                // Filter comments for this year
+                                if (doc.comments) {
+                                    Object.keys(doc.comments).forEach(key => {
+                                        if (key.endsWith(`-${year}`)) {
+                                            yearComments[key] = doc.comments[key];
+                                        }
+                                    });
+                                }
+                                
+                                return {
+                                    ...doc,
+                                    collectionStatus: yearCollectionStatus,
+                                    comments: yearComments
+                                };
+                            }) || []
+                        };
                     }
-                    
-                    // Filter comments for this year
-                    if (doc.comments) {
-                        Object.keys(doc.comments).forEach(key => {
-                            if (key.endsWith(`-${year}`)) {
-                                yearComments[key] = doc.comments[key];
-                            }
-                        });
-                    }
-                    
-                    return {
-                        ...doc,
-                        collectionStatus: yearCollectionStatus,
-                        comments: yearComments
-                    };
-                }) || []
-            }));
+                    return null; // Exclude section for this year if it has no data
+                })
+                .filter(section => section !== null); // Remove null entries
         });
         
         return organized;
@@ -347,48 +378,73 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const mergeSectionsByYear = useCallback((sectionsByYearObj) => {
         const allSections = {};
         const allYears = Object.keys(sectionsByYearObj).map(y => parseInt(y));
+        const sectionYearMap = new Map(); // Track which year each section was added to
         
-        // For each year's sections, merge the data
+        // First pass: identify which sections belong to which years
+        allYears.forEach(year => {
+            const yearSections = sectionsByYearObj[year] || [];
+            yearSections.forEach((section) => {
+                const sectionKey = section.id;
+                if (sectionKey) {
+                    // Track that this section exists in this year
+                    if (!sectionYearMap.has(sectionKey)) {
+                        sectionYearMap.set(sectionKey, new Set());
+                    }
+                    sectionYearMap.get(sectionKey).add(year);
+                }
+            });
+        });
+        
+        // Second pass: merge data, but only include sections in years where they exist
         allYears.forEach(year => {
             const yearSections = sectionsByYearObj[year] || [];
             yearSections.forEach((section, sectionIdx) => {
                 const sectionKey = section.id || `section-${sectionIdx}`;
-                if (!allSections[sectionKey]) {
-                    // Initialize section structure
-                    allSections[sectionKey] = {
-                        ...section,
-                        documents: {}
-                    };
-                }
+                const sectionYears = sectionYearMap.get(section.id) || new Set([year]);
                 
-                // Merge documents
-                section.documents?.forEach((doc, docIdx) => {
-                    const docKey = doc.id || `doc-${docIdx}`;
-                    if (!allSections[sectionKey].documents[docKey]) {
-                        allSections[sectionKey].documents[docKey] = {
-                            ...doc,
-                            collectionStatus: {},
-                            comments: {}
+                // Only process this section if it belongs to this year
+                if (!section.id || sectionYears.has(year)) {
+                    if (!allSections[sectionKey]) {
+                        // Initialize section structure
+                        allSections[sectionKey] = {
+                            ...section,
+                            documents: {}
                         };
                     }
                     
-                    // Merge collectionStatus
-                    if (doc.collectionStatus) {
-                        Object.keys(doc.collectionStatus).forEach(key => {
-                            allSections[sectionKey].documents[docKey].collectionStatus[key] = doc.collectionStatus[key];
-                        });
-                    }
-                    
-                    // Merge comments
-                    if (doc.comments) {
-                        Object.keys(doc.comments).forEach(key => {
-                            if (!allSections[sectionKey].documents[docKey].comments[key]) {
-                                allSections[sectionKey].documents[docKey].comments[key] = [];
-                            }
-                            allSections[sectionKey].documents[docKey].comments[key] = doc.comments[key];
-                        });
-                    }
-                });
+                    // Merge documents
+                    section.documents?.forEach((doc, docIdx) => {
+                        const docKey = doc.id || `doc-${docIdx}`;
+                        if (!allSections[sectionKey].documents[docKey]) {
+                            allSections[sectionKey].documents[docKey] = {
+                                ...doc,
+                                collectionStatus: {},
+                                comments: {}
+                            };
+                        }
+                        
+                        // Merge collectionStatus (only for this year's data)
+                        if (doc.collectionStatus) {
+                            Object.keys(doc.collectionStatus).forEach(key => {
+                                if (key.endsWith(`-${year}`)) {
+                                    allSections[sectionKey].documents[docKey].collectionStatus[key] = doc.collectionStatus[key];
+                                }
+                            });
+                        }
+                        
+                        // Merge comments (only for this year's data)
+                        if (doc.comments) {
+                            Object.keys(doc.comments).forEach(key => {
+                                if (key.endsWith(`-${year}`)) {
+                                    if (!allSections[sectionKey].documents[docKey].comments[key]) {
+                                        allSections[sectionKey].documents[docKey].comments[key] = [];
+                                    }
+                                    allSections[sectionKey].documents[docKey].comments[key] = doc.comments[key];
+                                }
+                            });
+                        }
+                    });
+                }
             });
         });
         
@@ -687,6 +743,32 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     }, [project?.id, sectionsByYear]); // ⚠️ FIXED: Only depend on project ID and sectionsByYear
     // Removed mergeSectionsByYear, normalizeSections, serializeSections, api - these are stable callbacks
 
+    // ✅ CHECK FOR CommentInputWithMentions AVAILABILITY
+    useEffect(() => {
+        // Check immediately
+        if (typeof window.CommentInputWithMentions === 'function' && !commentInputAvailable) {
+            setCommentInputAvailable(true);
+        }
+        
+        // Also listen for when it becomes available
+        const checkInterval = setInterval(() => {
+            if (typeof window.CommentInputWithMentions === 'function') {
+                setCommentInputAvailable(true);
+                clearInterval(checkInterval);
+            }
+        }, 500);
+        
+        // Stop checking after 10 seconds
+        const timeout = setTimeout(() => {
+            clearInterval(checkInterval);
+        }, 10000);
+        
+        return () => {
+            clearInterval(checkInterval);
+            clearTimeout(timeout);
+        };
+    }, [commentInputAvailable]);
+    
     // ✅ LOAD TEMPLATES ONLY WHEN MODALS OPEN
     useEffect(() => {
         if (!showTemplateModal && !showApplyTemplateModal) return;
@@ -1092,7 +1174,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 id: `doc-${Date.now()}-${sectionIdx}-${docIdx}-${Math.random()}`,
                 name: doc.name,
                 description: doc.description || '',
-                collectionStatus: {},
+                // Add a placeholder status to mark this document as belonging to targetYear
+                // This ensures the section is only included in the target year when organizing
+                collectionStatus: {
+                    [`_template-${targetYear}`]: 'template-applied' // Placeholder marker
+                },
                 comments: {}
             }))
         }));
@@ -2311,10 +2397,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         
                         <div>
                             <div className="text-[10px] font-semibold text-gray-600 mb-1">Add Comment</div>
-                            {window.CommentInputWithMentions ? (
+                            {commentInputAvailable && typeof window.CommentInputWithMentions === 'function' ? (
                                 <window.CommentInputWithMentions
                                     onSubmit={(commentText) => {
-                                        handleAddComment(parseInt(sectionId), parseInt(documentId), month, commentText);
+                                        if (commentText && commentText.trim()) {
+                                            handleAddComment(parseInt(sectionId), parseInt(documentId), month, commentText);
+                                        }
                                     }}
                                     placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
                                     rows={2}
@@ -2327,18 +2415,23 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         value={quickComment}
                                         onChange={(e) => setQuickComment(e.target.value)}
                                         onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && e.ctrlKey) {
-                                                handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
+                                            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                                e.preventDefault();
+                                                if (quickComment.trim()) {
+                                                    handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
+                                                }
                                             }
                                         }}
-                                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
                                         rows="2"
-                                        placeholder="Type comment... (Ctrl+Enter to submit, Loading mention support...)"
+                                        placeholder="Type comment... (Ctrl/Cmd+Enter to submit)"
                                         autoFocus
                                     />
                                     <button
                                         onClick={() => {
-                                            handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
+                                            if (quickComment.trim()) {
+                                                handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
+                                            }
                                         }}
                                         disabled={!quickComment.trim()}
                                         className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
