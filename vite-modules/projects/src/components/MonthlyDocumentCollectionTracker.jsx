@@ -366,10 +366,108 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         setShowTemplateModal(true);
     };
 
-    const handleDeleteTemplate = (templateId) => {
-        if (confirm('Delete this template? This action cannot be undone.')) {
-            const updatedTemplates = templates.filter(t => t.id !== templateId);
-            saveTemplates(updatedTemplates);
+    const handleDeleteTemplate = async (templateId) => {
+        console.log('🗑️ handleDeleteTemplate called with ID:', templateId, 'Type:', typeof templateId);
+        
+        if (!confirm('Delete this template? This action cannot be undone.')) {
+            console.log('❌ User cancelled deletion');
+            return;
+        }
+        
+        try {
+            console.log('🗑️ Starting deletion process...');
+            console.log('🗑️ Current templates:', templates.map(t => ({ id: t.id, name: t.name })));
+            
+            const token = window.storage?.getToken?.();
+            console.log('🗑️ Token available:', !!token, 'Token length:', token?.length);
+            
+            const template = templates.find(t => {
+                const match = String(t.id) === String(templateId);
+                if (!match) {
+                    console.log('🗑️ Template ID mismatch:', { 
+                        templateId: t.id, 
+                        type: typeof t.id, 
+                        targetId: templateId, 
+                        targetType: typeof templateId,
+                        match: String(t.id) === String(templateId)
+                    });
+                }
+                return match;
+            });
+            
+            if (!template) {
+                console.error('❌ Template not found in templates array');
+                console.error('❌ Looking for ID:', templateId, 'Type:', typeof templateId);
+                console.error('❌ Available template IDs:', templates.map(t => ({ id: t.id, type: typeof t.id })));
+                throw new Error(`Template not found. ID: ${templateId}`);
+            }
+            
+            console.log('🗑️ Found template to delete:', { id: template.id, name: template.name });
+            
+            // Always try API first if we have a token
+            if (token) {
+                console.log('🗑️ Attempting to delete from database:', templateId);
+                const apiUrl = `/api/document-collection-templates/${encodeURIComponent(templateId)}`;
+                console.log('🗑️ API URL:', apiUrl);
+                
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    console.log('🗑️ API Response status:', response.status, response.statusText);
+                    
+                    if (response.ok) {
+                        const responseData = await response.json().catch(() => ({}));
+                        console.log('✅ Template deleted from database:', responseData);
+                    } else {
+                        const errorData = await response.json().catch(() => ({}));
+                        const errorMessage = errorData.error?.message || `API returned ${response.status}`;
+                        
+                        console.log('🗑️ API Response not OK:', {
+                            status: response.status,
+                            statusText: response.statusText,
+                            error: errorData
+                        });
+                        
+                        // If it's a 404, the template doesn't exist in DB, so it's a localStorage template
+                        if (response.status === 404) {
+                            console.log('⚠️ Template not found in database (likely localStorage template), continuing...');
+                        } else {
+                            // For other errors, still try to delete from localStorage but show warning
+                            console.warn('⚠️ API deletion failed:', errorMessage, 'Will still remove from localStorage');
+                        }
+                    }
+                } catch (apiError) {
+                    console.error('❌ API deletion error:', apiError);
+                    console.error('❌ Error details:', {
+                        message: apiError.message,
+                        stack: apiError.stack,
+                        name: apiError.name
+                    });
+                    // Continue with localStorage deletion as fallback
+                }
+            } else {
+                console.log('🗑️ No auth token, deleting from localStorage only:', templateId);
+            }
+            
+            // Always update local state and localStorage (removes from UI immediately)
+            console.log('🗑️ Removing template from local state...');
+            const updatedTemplates = templates.filter(t => String(t.id) !== String(templateId));
+            console.log('🗑️ Templates after filter:', updatedTemplates.length, 'removed:', templates.length - updatedTemplates.length);
+            
+            setTemplates(updatedTemplates);
+            localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(updatedTemplates));
+            
+            console.log('✅ Template deleted successfully from UI and localStorage');
+        } catch (error) {
+            console.error('❌ Error deleting template:', error);
+            console.error('❌ Error stack:', error.stack);
+            alert('Failed to delete template: ' + error.message);
         }
     };
 
@@ -1231,8 +1329,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                             <i className="fas fa-edit"></i>
                                                         </button>
                                                         <button
-                                                            onClick={() => handleDeleteTemplate(template.id)}
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                console.log('🗑️ Delete button clicked for template:', template.id);
+                                                                handleDeleteTemplate(template.id);
+                                                            }}
                                                             className="px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+                                                            title="Delete template"
                                                         >
                                                             <i className="fas fa-trash"></i>
                                                         </button>
