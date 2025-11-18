@@ -238,6 +238,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [isLoading, setIsLoading] = useState(false);
     const saveTimeoutRef = useRef(null);
     const pendingSaveRef = useRef(null);
+    const lastSavedSnapshotRef = useRef(null);
     
     // Refs to track modal/form state for auto-save (always have latest values)
     const modalsOpenRef = useRef(false);
@@ -248,6 +249,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     // Get API service instance
     const api = getAPI();
+    const normalizeSections = useCallback((value) => (Array.isArray(value) ? value : []), []);
+    const serializeSections = useCallback((value) => JSON.stringify(normalizeSections(value)), [normalizeSections]);
 
     // ✅ LOAD DATA FROM DATABASE ON MOUNT - Fetch fresh data
     // ⚠️ IMPORTANT: Only load on initial mount or when project ID actually changes (not on every prop update)
@@ -302,10 +305,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     }
                 }
                 
-                // Set initial state from prop
-                if (parsed.length > 0) {
-                    setSections(Array.isArray(parsed) ? parsed : []);
-                }
+                // Set initial state from prop (even if empty) and sync snapshot baseline
+                const initialSections = normalizeSections(parsed);
+                setSections(initialSections);
+                lastSavedSnapshotRef.current = serializeSections(initialSections);
                 
                 // Then fetch fresh data from database to ensure we have latest
                 // Only on initial load or when project changes
@@ -323,11 +326,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             console.warn('Failed to parse fresh documentSections:', e);
                         }
                         
+                        const normalizedFresh = normalizeSections(freshParsed);
                         // Only update if different (avoid unnecessary re-renders)
-                        if (JSON.stringify(freshParsed) !== JSON.stringify(sections)) {
+                        if (JSON.stringify(normalizedFresh) !== JSON.stringify(sections)) {
                             console.log('🔄 Updating sections from fresh database data');
-                            setSections(Array.isArray(freshParsed) ? freshParsed : []);
+                            setSections(normalizedFresh);
                         }
+                        lastSavedSnapshotRef.current = serializeSections(normalizedFresh);
+                    } else {
+                        lastSavedSnapshotRef.current = serializeSections(initialSections);
                     }
                 } catch (error) {
                     console.warn('⚠️ Could not fetch fresh project data, using prop data:', error);
@@ -340,78 +347,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         };
         
         loadData();
-    }, [project?.id]); // Only depend on project ID - modal check is done inside effect
+    }, [project?.id, normalizeSections, serializeSections, api]); // Only depend on project ID - modal check is done inside effect
 
-    // ✅ AUTO-SAVE TO DATABASE AFTER 1 SECOND OF INACTIVITY
-    // ⚠️ IMPORTANT: Don't auto-save while modals, forms, or popups are open to prevent them from closing
+    // Keep the modal/interaction state ref up to date without re-running auto-save
     useEffect(() => {
-        if (!project?.id) return;
-        
-        // Update ref with current modal/form state (always has latest values)
         const isAnyModalOpen = showSectionModal || showDocumentModal || showTemplateModal || showApplyTemplateModal;
         const isCommentPopupOpen = hoverCommentCell !== null;
         const isCurrentlyExporting = isExporting;
         const isCurrentlyEditing = editingSection !== null || editingDocument !== null || editingTemplate !== null;
         modalsOpenRef.current = isAnyModalOpen || isCommentPopupOpen || isCurrentlyExporting || isCurrentlyEditing;
-        
-        // Don't auto-save if any modal, form, or interactive element is open
-        // This prevents forms/popups from closing unexpectedly during user interaction
-        if (modalsOpenRef.current) {
-            return;
-        }
-        
-        // Clear any pending save
-        if (saveTimeoutRef.current) {
-            clearTimeout(saveTimeoutRef.current);
-        }
-        
-        // Store pending save
-        pendingSaveRef.current = sections;
-        
-        const timeout = setTimeout(async () => {
-            if (!pendingSaveRef.current) return;
-            
-            // Double-check modal state using ref (always has latest values, even in closure)
-            if (modalsOpenRef.current) {
-                console.log('⏸️ Auto-save skipped: modal/form is open');
-                return;
-            }
-            
-            setIsSaving(true);
-            setSaveError(null);
-            
-            try {
-                // Skip parent update to prevent re-render that might close modals
-                // (Even though we checked modals are closed, be extra safe)
-                console.log('💾 Saving sections to database:', pendingSaveRef.current.length, 'sections');
-                await api.saveDocumentSections(project.id, pendingSaveRef.current, false);
-                console.log('✅ Sections saved successfully');
-                pendingSaveRef.current = null;
-            } catch (error) {
-                console.error('❌ Error saving sections:', error);
-                setSaveError(error.message || 'Failed to save sections');
-                // Show user-friendly error notification
-                if (window.showNotification) {
-                    window.showNotification('Failed to save document sections. Please try again.', 'error');
-                }
-            } finally {
-                setIsSaving(false);
-            }
-        }, 1000);
-        
-        saveTimeoutRef.current = timeout;
-        
-        return () => {
-            if (saveTimeoutRef.current) {
-                clearTimeout(saveTimeoutRef.current);
-            }
-        };
     }, [
-        sections, 
-        project?.id, 
-        showSectionModal, 
-        showDocumentModal, 
-        showTemplateModal, 
+        showSectionModal,
+        showDocumentModal,
+        showTemplateModal,
         showApplyTemplateModal,
         hoverCommentCell,
         isExporting,
@@ -420,6 +368,95 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         editingTemplate
     ]);
     
+    // ✅ AUTO-SAVE TO DATABASE AFTER 1 SECOND OF INACTIVITY
+    // ⚠️ IMPORTANT: Don't auto-save while modals, forms, or popups are open to prevent them from closing
+    useEffect(() => {
+        if (!project?.id || !hasLoadedInitialDataRef.current) return;
+        
+        const currentSnapshot = serializeSections(sections);
+        if (currentSnapshot === lastSavedSnapshotRef.current) {
+            // Nothing new to save; clear pending state if any
+            if (pendingSaveRef.current) {
+                console.log('⏭️ Skipping auto-save: data unchanged (snapshot matches)');
+                pendingSaveRef.current = null;
+            }
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
+            }
+            return;
+        }
+        
+        // Only schedule save if snapshot actually changed
+        const previousSnapshot = pendingSaveRef.current?.snapshot;
+        if (previousSnapshot === currentSnapshot) {
+            // Already have this snapshot scheduled, don't reschedule
+            return;
+        }
+        
+        console.log('📝 Data changed, scheduling auto-save...');
+        pendingSaveRef.current = {
+            sections: normalizeSections(sections),
+            snapshot: currentSnapshot
+        };
+        
+        const scheduleSave = () => {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+            }
+            
+            saveTimeoutRef.current = setTimeout(async () => {
+                if (!pendingSaveRef.current) return;
+                
+                // Double-check snapshot hasn't changed while waiting
+                const latestSnapshot = serializeSections(sections);
+                if (latestSnapshot !== pendingSaveRef.current.snapshot) {
+                    console.log('⏭️ Skipping auto-save: data changed during debounce, rescheduling...');
+                    pendingSaveRef.current = {
+                        sections: normalizeSections(sections),
+                        snapshot: latestSnapshot
+                    };
+                    scheduleSave();
+                    return;
+                }
+                
+                if (modalsOpenRef.current) {
+                    console.log('⏸️ Auto-save deferred: modal/form is open');
+                    scheduleSave();
+                    return;
+                }
+                
+                setIsSaving(true);
+                setSaveError(null);
+                
+                try {
+                    console.log('💾 Saving sections to database:', pendingSaveRef.current.sections.length, 'sections');
+                    await api.saveDocumentSections(project.id, pendingSaveRef.current.sections, false);
+                    console.log('✅ Sections saved successfully');
+                    lastSavedSnapshotRef.current = pendingSaveRef.current.snapshot;
+                    pendingSaveRef.current = null;
+                } catch (error) {
+                    console.error('❌ Error saving sections:', error);
+                    setSaveError(error.message || 'Failed to save sections');
+                    if (window.showNotification) {
+                        window.showNotification('Failed to save document sections. Please try again.', 'error');
+                    }
+                } finally {
+                    setIsSaving(false);
+                }
+            }, 1000);
+        };
+        
+        scheduleSave();
+        
+        return () => {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
+            }
+        };
+    }, [project?.id, sections, api, normalizeSections, serializeSections]);
+    
     // ✅ SAVE ON PAGE UNLOAD (prevent data loss)
     useEffect(() => {
         const handleBeforeUnload = async (e) => {
@@ -427,7 +464,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
             // Save immediately without debounce
             try {
-                await api.saveDocumentSections(project.id, pendingSaveRef.current);
+                await api.saveDocumentSections(project.id, pendingSaveRef.current.sections);
+                lastSavedSnapshotRef.current = pendingSaveRef.current.snapshot;
                 console.log('✅ Saved pending changes on navigation');
             } catch (error) {
                 console.error('❌ Error saving on navigation:', error);
@@ -448,20 +486,24 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     const loadTemplates = async () => {
         try {
+            // Get list of deleted template IDs (templates user has deleted) - do this first
+            const deletedTemplatesKey = 'abcotronics_deleted_template_ids';
+            const deletedIds = JSON.parse(localStorage.getItem(deletedTemplatesKey) || '[]');
+            
             // Load from localStorage first (optimistic loading)
             const stored = localStorage.getItem(TEMPLATES_STORAGE_KEY);
             if (stored) {
                 try {
                     const parsed = JSON.parse(stored);
-                    setTemplates(Array.isArray(parsed) ? parsed : []);
+                    // Filter out deleted templates from localStorage as well
+                    const filteredStored = Array.isArray(parsed) 
+                        ? parsed.filter(t => !deletedIds.includes(String(t.id)))
+                        : [];
+                    setTemplates(filteredStored);
                 } catch (e) {
                     console.warn('Failed to parse stored templates:', e);
                 }
             }
-            
-            // Get list of deleted template IDs (templates user has deleted)
-            const deletedTemplatesKey = 'abcotronics_deleted_template_ids';
-            const deletedIds = JSON.parse(localStorage.getItem(deletedTemplatesKey) || '[]');
             
             // Then fetch fresh data from API
             try {
@@ -476,7 +518,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(filteredTemplates));
             } catch (error) {
                 console.error('❌ Error loading templates from API:', error);
-                // Keep localStorage data if API fails
+                // Keep localStorage data if API fails (but still filtered)
             }
         } catch (error) {
             console.error('❌ Error loading templates:', error);
@@ -762,13 +804,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 throw new Error(`Template not found. ID: ${templateId}`);
             }
             
-            // Check if template is a default template
-            if (template.isDefault) {
-                alert('Default templates cannot be deleted.');
-                return;
-            }
-            
             // Try to delete from API (if it exists in database)
+            // Note: We allow attempting to delete default templates - the API will reject it,
+            // but we'll track it as deleted locally so it doesn't reappear
             let apiDeleteSuccess = false;
             let isDefaultTemplate = false;
             try {
@@ -798,15 +836,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 const updatedTemplates = templates.filter(t => String(t.id) !== String(templateId));
                 await saveTemplates(updatedTemplates);
                 
-                // Track deleted template ID only if it's a default template (can't be deleted from DB)
-                // Non-default templates that are successfully deleted won't come back from API anyway
-                if (isDefaultTemplate || template.isDefault) {
-                    const deletedTemplatesKey = 'abcotronics_deleted_template_ids';
-                    const deletedIds = JSON.parse(localStorage.getItem(deletedTemplatesKey) || '[]');
-                    if (!deletedIds.includes(String(templateId))) {
-                        deletedIds.push(String(templateId));
-                        localStorage.setItem(deletedTemplatesKey, JSON.stringify(deletedIds));
+                // Track deleted template ID to prevent it from reappearing
+                // This is especially important for default templates that can't be deleted from the DB
+                const deletedTemplatesKey = 'abcotronics_deleted_template_ids';
+                const deletedIds = JSON.parse(localStorage.getItem(deletedTemplatesKey) || '[]');
+                if (!deletedIds.includes(String(templateId))) {
+                    deletedIds.push(String(templateId));
+                    localStorage.setItem(deletedTemplatesKey, JSON.stringify(deletedIds));
+                    if (isDefaultTemplate || template.isDefault) {
                         console.log('📝 Tracked deleted default template ID to prevent it from reappearing');
+                    } else {
+                        console.log('📝 Tracked deleted template ID (will be filtered on next load)');
                     }
                 }
                 
@@ -1672,20 +1712,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                         >
                                                             <i className="fas fa-edit"></i>
                                                         </button>
-                                                        {!template.isDefault && (
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.preventDefault();
-                                                                    e.stopPropagation();
-                                                                    console.log('🗑️ Delete button clicked for template:', template.id);
-                                                                    handleDeleteTemplate(template.id);
-                                                                }}
-                                                                className="px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
-                                                                title="Delete template"
-                                                            >
-                                                                <i className="fas fa-trash"></i>
-                                                            </button>
-                                                        )}
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                console.log('🗑️ Delete button clicked for template:', template.id);
+                                                                handleDeleteTemplate(template.id);
+                                                            }}
+                                                            className="px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
+                                                            title={template.isDefault ? "Hide default template (cannot be deleted from database)" : "Delete template"}
+                                                        >
+                                                            <i className="fas fa-trash"></i>
+                                                        </button>
                                                         {template.isDefault && (
                                                             <span className="px-2 py-1 text-xs text-gray-400" title="Default template">
                                                                 <i className="fas fa-lock"></i>
@@ -1969,11 +2007,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             <td 
                 className={`px-2 py-1 text-xs border-l border-gray-100 ${cellBackgroundClass} relative z-0`}
             >
-                <div className="min-w-[160px] relative">
+                <div className="min-w-[160px] relative flex items-center gap-1">
                     <select
                         value={status || ''}
                         onChange={(e) => handleUpdateStatus(section.id, document.id, month, e.target.value)}
-                        className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80 relative z-0`}
+                        className={`flex-1 px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80 relative z-0`}
                     >
                         <option value="">Select Status</option>
                         {statusOptions.map(option => (
@@ -1983,7 +2021,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         ))}
                     </select>
                     
-                    <div className="absolute top-1/2 right-0.5 -translate-y-1/2 z-10">
+                    <div className="flex-shrink-0 z-10">
                         <button
                             data-comment-cell={cellKey}
                             onClick={(e) => {
@@ -2002,8 +2040,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     setHoverCommentCell(cellKey);
                                 }
                             }}
-                            className="text-gray-500 hover:text-gray-700 transition-colors relative p-1"
+                            className="text-gray-500 hover:text-primary-600 transition-colors relative p-1 rounded hover:bg-gray-100"
                             type="button"
+                            title="Add or view comments"
                         >
                             <i className="fas fa-comment text-base"></i>
                             {hasComments && (

@@ -67,7 +67,7 @@ const CommentsPopup = ({ task, isSubtask, parentId, onAddComment, onClose, posit
                     ) : (
                         <div className="space-y-2">
                             {recentComments.map((comment) => (
-                                <div key={comment.id} className="bg-gray-50 rounded-lg p-2 border border-gray-100">
+                                <div key={comment.id} className="bg-gray-50/30 rounded-lg p-2 border border-gray-200/30">
                                     <div className="flex items-start gap-2 mb-1">
                                         <div className="w-5 h-5 rounded-full bg-primary-600 flex items-center justify-center text-white font-semibold text-[8px] flex-shrink-0">
                                             {(comment.author || comment.createdBy || 'U').charAt(0).toUpperCase()}
