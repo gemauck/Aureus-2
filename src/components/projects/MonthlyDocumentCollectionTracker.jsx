@@ -240,69 +240,48 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
     
     // ============================================================
-    // TEMPLATE MANAGEMENT - Backend storage with localStorage fallback
+    // TEMPLATE MANAGEMENT - Database storage only
     // ============================================================
     
-    const TEMPLATES_STORAGE_KEY = 'documentCollectionTemplates';
-    
     const loadTemplates = async () => {
-        console.log('📂 Loading templates...');
+        console.log('📂 Loading templates from database...');
         setIsLoadingTemplates(true);
         
         try {
-            // Get list of deleted template IDs (templates user has deleted)
-            const deletedTemplatesKey = 'abcotronics_deleted_template_ids';
-            const deletedIds = JSON.parse(localStorage.getItem(deletedTemplatesKey) || '[]');
-            
-            // Try to load from API first
             const token = window.storage?.getToken?.();
-            if (token) {
-                const response = await fetch('/api/document-collection-templates', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    // API wraps response in { data: { templates: [...] } }
-                    const apiTemplates = data?.data?.templates || data?.templates || [];
-                    
-                    // Filter out templates that user has deleted (even if they're default templates)
-                    const filteredTemplates = apiTemplates.filter(t => !deletedIds.includes(String(t.id)));
-                    console.log(`📋 Filtered out ${apiTemplates.length - filteredTemplates.length} deleted template(s)`);
-                    
-                    // Ensure sections are parsed for each template
-                    const parsedTemplates = filteredTemplates.map(t => ({
-                        ...t,
-                        sections: parseSections(t.sections)
-                    }));
-                    
-                    console.log('✅ Loaded', parsedTemplates.length, 'templates from API');
-                    setTemplates(parsedTemplates);
-                    
-                    // Save to localStorage as backup
-                    localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(parsedTemplates));
-                    return;
-                }
+            if (!token) {
+                console.warn('⚠️ No auth token, cannot load templates');
+                setTemplates([]);
+                setIsLoadingTemplates(false);
+                return;
             }
             
-            // Fallback to localStorage
-            const stored = localStorage.getItem(TEMPLATES_STORAGE_KEY);
-            if (stored) {
-                const parsedTemplates = JSON.parse(stored).map(t => ({
-                    ...t,
-                    sections: parseSections(t.sections)
-                }));
-                console.log('✅ Loaded', parsedTemplates.length, 'templates from localStorage');
-                setTemplates(parsedTemplates);
-            } else {
-                console.log('📭 No templates found');
-                setTemplates([]);
+            const response = await fetch('/api/document-collection-templates', {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Failed to load templates: ${response.status} ${response.statusText}`);
             }
+            
+            const data = await response.json();
+            // API wraps response in { data: { templates: [...] } }
+            const apiTemplates = data?.data?.templates || data?.templates || [];
+            
+            // Ensure sections are parsed for each template
+            const parsedTemplates = apiTemplates.map(t => ({
+                ...t,
+                sections: parseSections(t.sections)
+            }));
+            
+            console.log('✅ Loaded', parsedTemplates.length, 'templates from database');
+            setTemplates(parsedTemplates);
         } catch (error) {
             console.error('❌ Error loading templates:', error);
+            alert('Failed to load templates: ' + error.message);
             setTemplates([]);
         } finally {
             setIsLoadingTemplates(false);
@@ -319,81 +298,55 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const saveTemplate = async (templateData) => {
         try {
             const token = window.storage?.getToken?.();
-            const currentUser = getCurrentUser();
-            
-            let savedTemplate;
-            
-            if (editingTemplate) {
-                // Update existing template
-                if (token && typeof editingTemplate.id === 'string' && editingTemplate.id.length > 15) {
-                    // Update via API (database template)
-                    const response = await fetch(`/api/document-collection-templates/${editingTemplate.id}`, {
-                        method: 'PUT',
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(templateData)
-                    });
-                    
-                    if (response.ok) {
-                        const data = await response.json();
-                        // API wraps response in { data: { template: {...} } }
-                        savedTemplate = data?.data?.template || data?.template;
-                    } else {
-                        throw new Error('Failed to update template');
-                    }
-                } else {
-                    // Update locally (localStorage template)
-                    savedTemplate = {
-                        ...editingTemplate,
-                        ...templateData,
-                        updatedAt: new Date().toISOString(),
-                        updatedBy: currentUser.name || currentUser.email
-                    };
-                }
-                
-                setTemplates(prev => prev.map(t => t.id === editingTemplate.id ? savedTemplate : t));
-            } else {
-                // Create new template
-                if (token) {
-                    // Create via API
-                    const response = await fetch('/api/document-collection-templates', {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(templateData)
-                    });
-                    
-                    if (response.ok) {
-                        const data = await response.json();
-                        // API wraps response in { data: { template: {...} } }
-                        savedTemplate = data?.data?.template || data?.template;
-                    } else {
-                        throw new Error('Failed to create template');
-                    }
-                } else {
-                    // Create locally
-                    savedTemplate = {
-                        id: Date.now().toString(),
-                        ...templateData,
-                        createdAt: new Date().toISOString(),
-                        createdBy: currentUser.name || currentUser.email,
-                        updatedAt: new Date().toISOString(),
-                        updatedBy: currentUser.name || currentUser.email
-                    };
-                }
-                
-                setTemplates(prev => [...prev, savedTemplate]);
+            if (!token) {
+                throw new Error('Authentication required to save templates');
             }
             
-            // Update localStorage
-            const updatedTemplates = editingTemplate 
-                ? templates.map(t => t.id === editingTemplate.id ? savedTemplate : t)
-                : [...templates, savedTemplate];
-            localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(updatedTemplates));
+            const currentUser = getCurrentUser();
+            
+            if (editingTemplate) {
+                // Update existing template in database
+                const response = await fetch(`/api/document-collection-templates/${editingTemplate.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        ...templateData,
+                        updatedBy: currentUser.name || currentUser.email
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to update template');
+                }
+                
+                console.log('✅ Template updated in database');
+            } else {
+                // Create new template in database
+                const response = await fetch('/api/document-collection-templates', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        ...templateData,
+                        createdBy: currentUser.name || currentUser.email,
+                        updatedBy: currentUser.name || currentUser.email
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to create template');
+                }
+                
+                console.log('✅ Template created in database');
+            }
+            
+            // Reload templates from database to get fresh data
+            await loadTemplates();
             
             console.log('✅ Template saved successfully');
             setEditingTemplate(null);
@@ -406,147 +359,44 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
     
     const deleteTemplate = async (templateId) => {
-        console.log('🗑️ deleteTemplate called with ID:', templateId, 'Type:', typeof templateId);
-        
         if (!confirm('Delete this template? This action cannot be undone.')) {
-            console.log('❌ User cancelled deletion');
             return;
         }
         
         try {
-            console.log('🗑️ Starting deletion process...');
-            console.log('🗑️ Current templates:', templates.map(t => ({ id: t.id, name: t.name })));
-            
             const token = window.storage?.getToken?.();
-            console.log('🗑️ Token available:', !!token, 'Token length:', token?.length);
+            if (!token) {
+                throw new Error('Authentication required to delete templates');
+            }
             
-            const template = templates.find(t => {
-                const match = String(t.id) === String(templateId);
-                if (!match) {
-                    console.log('🗑️ Template ID mismatch:', { 
-                        templateId: t.id, 
-                        type: typeof t.id, 
-                        targetId: templateId, 
-                        targetType: typeof templateId,
-                        match: String(t.id) === String(templateId)
-                    });
-                }
-                return match;
-            });
-            
+            const template = templates.find(t => String(t.id) === String(templateId));
             if (!template) {
-                console.error('❌ Template not found in templates array');
-                console.error('❌ Looking for ID:', templateId, 'Type:', typeof templateId);
-                console.error('❌ Available template IDs:', templates.map(t => ({ id: t.id, type: typeof t.id })));
                 throw new Error(`Template not found. ID: ${templateId}`);
             }
             
-            console.log('🗑️ Found template to delete:', { id: template.id, name: template.name });
-            
-            // Check if template is a default template
-            if (template.isDefault) {
-                alert('Default templates cannot be deleted.');
-                return;
-            }
-            
-            // Always try API first if we have a token
-            let apiDeleteSuccess = false;
-            if (token) {
-                console.log('🗑️ Attempting to delete from database:', templateId);
-                const apiUrl = `/api/document-collection-templates/${encodeURIComponent(templateId)}`;
-                console.log('🗑️ API URL:', apiUrl);
-                
-                try {
-                    const response = await fetch(apiUrl, {
-                        method: 'DELETE',
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    
-                    console.log('🗑️ API Response status:', response.status, response.statusText);
-                    
-                    if (response.ok) {
-                        const responseData = await response.json().catch(() => ({}));
-                        console.log('✅ Template deleted from database:', responseData);
-                        apiDeleteSuccess = true;
-                    } else {
-                        const errorData = await response.json().catch(() => ({}));
-                        const errorMessage = errorData.error?.message || `API returned ${response.status}`;
-                        
-                        console.log('🗑️ API Response not OK:', {
-                            status: response.status,
-                            statusText: response.statusText,
-                            error: errorData
-                        });
-                        
-                        // Check if error is about default templates
-                        if (errorMessage.includes('Default templates cannot be deleted')) {
-                            // For default templates, we'll hide them locally even though they can't be deleted from DB
-                            apiDeleteSuccess = true;
-                            // Track this as a default template that should be hidden
-                            const deletedTemplatesKey = 'abcotronics_deleted_template_ids';
-                            const deletedIds = JSON.parse(localStorage.getItem(deletedTemplatesKey) || '[]');
-                            if (!deletedIds.includes(String(templateId))) {
-                                deletedIds.push(String(templateId));
-                                localStorage.setItem(deletedTemplatesKey, JSON.stringify(deletedIds));
-                                console.log('📝 Tracked deleted default template ID to prevent it from reappearing');
-                            }
-                        }
-                        
-                        // If it's a 404, the template doesn't exist in DB, so it's a localStorage template
-                        if (response.status === 404) {
-                            console.log('⚠️ Template not found in database (likely localStorage template), continuing...');
-                            apiDeleteSuccess = true; // Allow deletion for localStorage-only templates
-                        } else {
-                            // For other errors, don't remove from localStorage
-                            console.error('❌ API deletion failed:', errorMessage);
-                            throw new Error(errorMessage);
-                        }
-                    }
-                } catch (apiError) {
-                    // Check if error is about default templates
-                    if (apiError.message && apiError.message.includes('Default templates cannot be deleted')) {
-                        // For default templates, we'll hide them locally even though they can't be deleted from DB
-                        apiDeleteSuccess = true;
-                        // Track this as a default template that should be hidden
-                        const deletedTemplatesKey = 'abcotronics_deleted_template_ids';
-                        const deletedIds = JSON.parse(localStorage.getItem(deletedTemplatesKey) || '[]');
-                        if (!deletedIds.includes(String(templateId))) {
-                            deletedIds.push(String(templateId));
-                            localStorage.setItem(deletedTemplatesKey, JSON.stringify(deletedIds));
-                            console.log('📝 Tracked deleted default template ID to prevent it from reappearing');
-                        }
-                    } else {
-                        console.error('❌ API deletion error:', apiError);
-                        console.error('❌ Error details:', {
-                            message: apiError.message,
-                            stack: apiError.stack,
-                            name: apiError.name
-                        });
-                        throw apiError;
-                    }
+            // Delete from database
+            const response = await fetch(`/api/document-collection-templates/${encodeURIComponent(templateId)}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
                 }
-            } else {
-                console.log('🗑️ No auth token, deleting from localStorage only:', templateId);
-                apiDeleteSuccess = true; // Allow deletion when no token (localStorage-only)
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                const errorMessage = errorData.error?.message || `Failed to delete template: ${response.status}`;
+                throw new Error(errorMessage);
             }
             
-            // Only update local state and localStorage if API deletion succeeded or was 404/no token
-            if (apiDeleteSuccess) {
-                console.log('🗑️ Removing template from local state...');
-                const updatedTemplates = templates.filter(t => String(t.id) !== String(templateId));
-                console.log('🗑️ Templates after filter:', updatedTemplates.length, 'removed:', templates.length - updatedTemplates.length);
-                
-                setTemplates(updatedTemplates);
-                localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(updatedTemplates));
-                
-                console.log('✅ Template deleted successfully from UI and localStorage');
-            }
+            console.log('✅ Template deleted from database');
+            
+            // Reload templates from database
+            await loadTemplates();
+            
+            console.log('✅ Template deleted successfully');
         } catch (error) {
             console.error('❌ Error deleting template:', error);
-            console.error('❌ Error stack:', error.stack);
             alert('Failed to delete template: ' + error.message);
         }
     };

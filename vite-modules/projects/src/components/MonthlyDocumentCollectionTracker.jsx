@@ -36,7 +36,10 @@ const getAPI = () => {
             getTemplates: async () => {
                 try {
                     const token = window.storage?.getToken?.();
-                    if (!token) return [];
+                    if (!token) {
+                        console.warn('⚠️ No auth token available for fetching templates');
+                        return [];
+                    }
                     const response = await fetch('/api/document-collection-templates', {
                         headers: {
                             'Authorization': `Bearer ${token}`,
@@ -45,9 +48,23 @@ const getAPI = () => {
                     });
                     if (response.ok) {
                         const data = await response.json();
-                        return data?.data?.templates || data?.templates || [];
+                        const templates = data?.data?.templates || data?.templates || [];
+                        console.log('📋 API returned templates:', templates.length);
+                        if (templates.length > 0) {
+                            console.log('First template structure:', {
+                                id: templates[0].id,
+                                name: templates[0].name,
+                                hasSections: !!templates[0].sections,
+                                sectionsType: typeof templates[0].sections,
+                                sectionsLength: Array.isArray(templates[0].sections) ? templates[0].sections.length : 'not array'
+                            });
+                        }
+                        return templates;
+                    } else {
+                        const errorText = await response.text();
+                        console.error('❌ API error response:', response.status, errorText);
+                        return [];
                     }
-                    return [];
                 } catch (error) {
                     console.error('❌ Error fetching templates:', error);
                     return [];
@@ -248,9 +265,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const modalsOpenRef = useRef(false);
     const hasLoadedInitialDataRef = useRef(false);
 
-    // Template storage key
-    const TEMPLATES_STORAGE_KEY = 'documentCollectionTemplates';
-    
     // Get API service instance
     const api = getAPI();
     const normalizeSections = useCallback((value) => (Array.isArray(value) ? value : []), []);
@@ -635,53 +649,24 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     const loadTemplates = async () => {
         try {
-            // Get list of deleted template IDs (templates user has deleted) - do this first
-            const deletedTemplatesKey = 'abcotronics_deleted_template_ids';
-            const deletedIds = JSON.parse(localStorage.getItem(deletedTemplatesKey) || '[]');
-            
-            // Load from localStorage first (optimistic loading)
-            const stored = localStorage.getItem(TEMPLATES_STORAGE_KEY);
-            if (stored) {
-                try {
-                    const parsed = JSON.parse(stored);
-                    // Filter out deleted templates from localStorage as well
-                    const filteredStored = Array.isArray(parsed) 
-                        ? parsed.filter(t => !deletedIds.includes(String(t.id)))
-                        : [];
-                    setTemplates(filteredStored);
-                } catch (e) {
-                    console.warn('Failed to parse stored templates:', e);
-                }
-            }
-            
-            // Then fetch fresh data from API
-            try {
-                const apiTemplates = await api.getTemplates();
-                console.log('✅ Loaded templates from API:', apiTemplates.length);
-                
-                // Filter out templates that user has deleted (even if they're default templates)
-                const filteredTemplates = apiTemplates.filter(t => !deletedIds.includes(String(t.id)));
-                console.log(`📋 Filtered out ${apiTemplates.length - filteredTemplates.length} deleted template(s)`);
-                
-                setTemplates(filteredTemplates);
-                localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(filteredTemplates));
-            } catch (error) {
-                console.error('❌ Error loading templates from API:', error);
-                // Keep localStorage data if API fails (but still filtered)
-            }
+            // Fetch templates from database only
+            const apiTemplates = await api.getTemplates();
+            console.log('✅ Loaded templates from database:', apiTemplates.length);
+            console.log('📋 Templates:', apiTemplates.map(t => ({ 
+                id: t.id, 
+                name: t.name, 
+                sectionsCount: t.sections?.length || 0,
+                hasSections: !!t.sections,
+                sectionsType: typeof t.sections
+            })));
+            setTemplates(apiTemplates);
         } catch (error) {
-            console.error('❌ Error loading templates:', error);
+            console.error('❌ Error loading templates from database:', error);
+            alert('Failed to load templates: ' + error.message);
+            setTemplates([]);
         }
     };
 
-    const saveTemplates = async (templatesToSave) => {
-        // Update local state immediately (optimistic update)
-        localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(templatesToSave));
-        setTemplates(templatesToSave);
-        
-        // Note: Templates are saved individually via createTemplate/updateTemplate/deleteTemplate
-        // This function only manages local state and localStorage
-    };
 
     // Initialize year when project ID changes
     useEffect(() => {
@@ -993,54 +978,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 throw new Error(`Template not found. ID: ${templateId}`);
             }
             
-            // Try to delete from API (if it exists in database)
-            // Note: We allow attempting to delete default templates - the API will reject it,
-            // but we'll track it as deleted locally so it doesn't reappear
-            let apiDeleteSuccess = false;
-            let isDefaultTemplate = false;
-            try {
-                await api.deleteTemplate(templateId);
-                console.log('✅ Template deleted from database');
-                apiDeleteSuccess = true;
-                // Template successfully deleted from DB, so we don't need to track it
-            } catch (error) {
-                // Check if error is about default templates
-                if (error.message && error.message.includes('Default templates cannot be deleted')) {
-                    isDefaultTemplate = true;
-                    // For default templates, we'll hide them locally even though they can't be deleted from DB
-                    apiDeleteSuccess = true;
-                } else if (error.message && error.message.includes('404')) {
-                    // If 404, template doesn't exist in DB (localStorage-only template)
-                    console.log('⚠️ Template not found in database (localStorage template), continuing...');
-                    apiDeleteSuccess = true; // Allow deletion for localStorage-only templates
-                } else {
-                    // For other errors, don't remove from localStorage
-                    console.error('❌ API deletion failed:', error.message);
-                    throw error;
-                }
-            }
+            // Delete from database
+            await api.deleteTemplate(templateId);
+            console.log('✅ Template deleted from database');
             
-            // Only update local state and localStorage if API deletion succeeded or was 404/default
-            if (apiDeleteSuccess) {
-                const updatedTemplates = templates.filter(t => String(t.id) !== String(templateId));
-                await saveTemplates(updatedTemplates);
-                
-                // Track deleted template ID to prevent it from reappearing
-                // This is especially important for default templates that can't be deleted from the DB
-                const deletedTemplatesKey = 'abcotronics_deleted_template_ids';
-                const deletedIds = JSON.parse(localStorage.getItem(deletedTemplatesKey) || '[]');
-                if (!deletedIds.includes(String(templateId))) {
-                    deletedIds.push(String(templateId));
-                    localStorage.setItem(deletedTemplatesKey, JSON.stringify(deletedIds));
-                    if (isDefaultTemplate || template.isDefault) {
-                        console.log('📝 Tracked deleted default template ID to prevent it from reappearing');
-                    } else {
-                        console.log('📝 Tracked deleted template ID (will be filtered on next load)');
-                    }
-                }
-                
-                console.log('✅ Template deleted successfully');
-            }
+            // Reload templates from database
+            await loadTemplates();
+            
+            console.log('✅ Template deleted successfully');
         } catch (error) {
             console.error('❌ Error deleting template:', error);
             alert('Failed to delete template: ' + error.message);
@@ -1049,33 +994,27 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     const handleSaveTemplate = async (templateData) => {
         const currentUser = getCurrentUser();
-        let savedTemplate;
         
         try {
             if (editingTemplate) {
-                // Update existing template
-                savedTemplate = await api.updateTemplate(editingTemplate.id, {
+                // Update existing template in database
+                await api.updateTemplate(editingTemplate.id, {
                     ...templateData,
                     updatedBy: currentUser.name || currentUser.email
                 });
-                
-                // Update local state
-                const updatedTemplates = templates.map(t => 
-                    t.id === editingTemplate.id ? savedTemplate : t
-                );
-                await saveTemplates(updatedTemplates);
+                console.log('✅ Template updated in database');
             } else {
-                // Create new template
-                savedTemplate = await api.createTemplate({
+                // Create new template in database
+                await api.createTemplate({
                     ...templateData,
                     createdBy: currentUser.name || currentUser.email,
                     updatedBy: currentUser.name || currentUser.email
                 });
-                
-                // Update local state
-                const updatedTemplates = [...templates, savedTemplate];
-                await saveTemplates(updatedTemplates);
+                console.log('✅ Template created in database');
             }
+            
+            // Reload templates from database to get fresh data
+            await loadTemplates();
             
             setEditingTemplate(null);
             setShowTemplateList(true);
@@ -1088,22 +1027,30 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const handleApplyTemplate = (template, targetYear) => {
         if (!template || !template.sections || template.sections.length === 0) {
             alert('Template is empty or invalid');
+            console.error('Template validation failed:', { template, hasSections: template?.sections?.length });
             return;
         }
 
+        console.log('📋 Applying template:', template.name, 'to year:', targetYear);
+        console.log('Template sections:', template.sections.length);
+
         const currentUser = getCurrentUser();
         
-        const newSections = template.sections.map(section => ({
-            id: Date.now() + Math.random(),
+        const newSections = template.sections.map((section, sectionIdx) => ({
+            id: `section-${Date.now()}-${sectionIdx}-${Math.random()}`,
             name: section.name,
             description: section.description || '',
-            documents: (section.documents || []).map(doc => ({
-                id: Date.now() + Math.random(),
+            documents: (section.documents || []).map((doc, docIdx) => ({
+                id: `doc-${Date.now()}-${sectionIdx}-${docIdx}-${Math.random()}`,
                 name: doc.name,
                 description: doc.description || '',
-                collectionStatus: {}
+                collectionStatus: {},
+                comments: {}
             }))
         }));
+
+        console.log('📋 Created new sections:', newSections.length);
+        console.log('Total documents:', newSections.reduce((sum, s) => sum + (s.documents?.length || 0), 0));
 
         updateSectionsForYear(prev => [...prev, ...newSections], targetYear);
 
@@ -2076,11 +2023,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 alert('Please select a template');
                 return;
             }
-            const template = templates.find(t => t.id === selectedTemplateId);
+            console.log('🔍 Looking for template with ID:', selectedTemplateId);
+            console.log('Available templates:', templates.map(t => ({ id: t.id, name: t.name })));
+            const template = templates.find(t => String(t.id) === String(selectedTemplateId));
             if (!template) {
-                alert('Template not found');
+                console.error('❌ Template not found. Selected ID:', selectedTemplateId);
+                console.error('Available template IDs:', templates.map(t => t.id));
+                alert('Template not found. Please check the console for details.');
                 return;
             }
+            console.log('✅ Found template:', template.name);
             handleApplyTemplate(template, targetYear);
         };
 
@@ -2121,7 +2073,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     </label>
                                     <select
                                         value={selectedTemplateId || ''}
-                                        onChange={(e) => setSelectedTemplateId(e.target.value ? parseInt(e.target.value) : null)}
+                                        onChange={(e) => setSelectedTemplateId(e.target.value || null)}
                                         className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                     >
                                         <option value="">-- Select a template --</option>

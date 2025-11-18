@@ -80,6 +80,31 @@ const getMonthKeyFromDate = (date) => {
     return `${date.getFullYear()}-${padTwo(date.getMonth() + 1)}`;
 };
 
+// Helper function to decode HTML entities and ensure proper HTML rendering
+const decodeHtmlContent = (html) => {
+    if (!html || typeof html !== 'string') return html || '';
+    
+    // If the content contains escaped HTML entities, decode them
+    // Check if content has escaped HTML tags (like &lt;div&gt; instead of <div>)
+    if (html.includes('&lt;') || html.includes('&gt;') || html.includes('&amp;') || html.includes('&quot;') || html.includes('&#39;')) {
+        // Create a temporary element to decode HTML entities
+        const textarea = document.createElement('textarea');
+        textarea.innerHTML = html;
+        let decoded = textarea.value;
+        
+        // If still contains escaped entities, decode again (handles double-encoding)
+        if (decoded.includes('&lt;') || decoded.includes('&gt;') || decoded.includes('&amp;')) {
+            textarea.innerHTML = decoded;
+            decoded = textarea.value;
+        }
+        
+        return decoded;
+    }
+    
+    // If no escaped entities found, return as-is (already valid HTML)
+    return html;
+};
+
 const normalizeMonthKeyInput = (value) => {
     if (!value && value !== 0) return null;
     if (value instanceof Date) {
@@ -2342,7 +2367,7 @@ const ManagementMeetingNotes = () => {
                                                             ) : (
                                                                 <div 
                                                                     className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'} ${!editingFields[getFieldKey(deptNote.id, 'successes')] ? (isDark ? 'cursor-not-allowed opacity-75' : 'cursor-not-allowed opacity-60') : ''}`}
-                                                                    dangerouslySetInnerHTML={{ __html: deptNote.successes || '' }}
+                                                                    dangerouslySetInnerHTML={{ __html: decodeHtmlContent(deptNote.successes || '') }}
                                                                 />
                                                             )}
                                                         </div>
@@ -2405,7 +2430,7 @@ const ManagementMeetingNotes = () => {
                                                             ) : (
                                                                 <div 
                                                                     className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'} ${!editingFields[getFieldKey(deptNote.id, 'weekToFollow')] ? (isDark ? 'cursor-not-allowed opacity-75' : 'cursor-not-allowed opacity-60') : ''}`}
-                                                                    dangerouslySetInnerHTML={{ __html: deptNote.weekToFollow || '' }}
+                                                                    dangerouslySetInnerHTML={{ __html: decodeHtmlContent(deptNote.weekToFollow || '') }}
                                                                 />
                                                             )}
                                                         </div>
@@ -2468,7 +2493,7 @@ const ManagementMeetingNotes = () => {
                                                             ) : (
                                                                 <div 
                                                                     className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'} ${!editingFields[getFieldKey(deptNote.id, 'frustrations')] ? (isDark ? 'cursor-not-allowed opacity-75' : 'cursor-not-allowed opacity-60') : ''}`}
-                                                                    dangerouslySetInnerHTML={{ __html: deptNote.frustrations || '' }}
+                                                                    dangerouslySetInnerHTML={{ __html: decodeHtmlContent(deptNote.frustrations || '') }}
                                                                 />
                                                             )}
                                                         </div>
