@@ -1603,7 +1603,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             <button
                                 type="button"
                                 onClick={() => setShowSectionModal(false)}
-                                className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50/50 transition-colors font-medium"
                             >
                                 Cancel
                             </button>
@@ -1698,7 +1698,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             <button
                                 type="button"
                                 onClick={handleCloseDocumentModal}
-                                className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50/50 transition-colors font-medium"
                             >
                                 Cancel
                             </button>
@@ -1867,7 +1867,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         {templates.map(template => {
                                         const totalDocs = template.sections?.reduce((sum, s) => sum + (s.documents?.length || 0), 0) || 0;
                                         return (
-                                            <div key={template.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
+                                            <div key={template.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50/30 hover:bg-gray-50/50 transition-colors">
                                                 <div className="flex justify-between items-start">
                                                     <div className="flex-1">
                                                         <h3 className="text-sm font-semibold text-gray-900 mb-1">{template.name}</h3>
@@ -1967,7 +1967,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 
                                 <div className="space-y-3">
                                     {templateFormData.sections.map((section, sectionIndex) => (
-                                        <div key={sectionIndex} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                                        <div key={sectionIndex} className="border border-gray-200 rounded-lg p-3 bg-gray-50/30">
                                             <div className="flex items-start justify-between mb-2">
                                                 <div className="flex-1 space-y-2">
                                                     <input
@@ -2043,7 +2043,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         setShowTemplateList(true);
                                         window.tempTemplateData = null;
                                     }}
-                                    className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                    className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50/50 transition-colors font-medium"
                                 >
                                     Cancel
                                 </button>
@@ -2154,7 +2154,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     <button
                                         type="button"
                                         onClick={() => setShowApplyTemplateModal(false)}
-                                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50/50 transition-colors font-medium"
                                     >
                                         Cancel
                                     </button>
@@ -2229,7 +2229,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     setHoverCommentCell(cellKey);
                                 }
                             }}
-                            className="text-gray-500 hover:text-primary-600 transition-colors relative p-1 rounded hover:bg-gray-100"
+                            className="text-gray-500 hover:text-primary-600 transition-colors relative p-1 rounded hover:bg-gray-50/50"
                             type="button"
                             title="Add or view comments"
                         >
@@ -2278,7 +2278,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         const authorEmail = comment.authorEmail || comment.createdByEmail;
                                         
                                         return (
-                                            <div key={comment.id || idx} className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5 relative group">
+                                            <div key={comment.id || idx} className="pb-2 border-b last:border-b-0 bg-gray-50/30 rounded p-1.5 relative group">
                                                 <p className="text-xs text-gray-700 whitespace-pre-wrap pr-6">{comment.text}</p>
                                                 <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
                                                     <span className="font-medium">
@@ -2311,28 +2311,42 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         
                         <div>
                             <div className="text-[10px] font-semibold text-gray-600 mb-1">Add Comment</div>
-                            <textarea
-                                value={quickComment}
-                                onChange={(e) => setQuickComment(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && e.ctrlKey) {
-                                        handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
-                                    }
-                                }}
-                                className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                rows="2"
-                                placeholder="Type comment... (Ctrl+Enter to submit)"
-                                autoFocus
-                            />
-                            <button
-                                onClick={() => {
-                                    handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
-                                }}
-                                disabled={!quickComment.trim()}
-                                className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Add Comment
-                            </button>
+                            {window.CommentInputWithMentions ? (
+                                <window.CommentInputWithMentions
+                                    onSubmit={(commentText) => {
+                                        handleAddComment(parseInt(sectionId), parseInt(documentId), month, commentText);
+                                    }}
+                                    placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
+                                    rows={2}
+                                    showButton={true}
+                                    autoFocus={true}
+                                />
+                            ) : (
+                                <>
+                                    <textarea
+                                        value={quickComment}
+                                        onChange={(e) => setQuickComment(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && e.ctrlKey) {
+                                                handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
+                                            }
+                                        }}
+                                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                        rows="2"
+                                        placeholder="Type comment... (Ctrl+Enter to submit, Loading mention support...)"
+                                        autoFocus
+                                    />
+                                    <button
+                                        onClick={() => {
+                                            handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
+                                        }}
+                                        disabled={!quickComment.trim()}
+                                        className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Add Comment
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
                 );
@@ -2342,7 +2356,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 <div className="flex items-center gap-2">
                     <button 
                         onClick={onBack} 
-                        className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                        className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50/50 rounded-lg transition-colors"
                     >
                         <i className="fas fa-arrow-left"></i>
                     </button>
@@ -2453,10 +2467,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 <div className="relative overflow-x-auto" ref={tableRef}>
                     <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
+                        <thead className="bg-gray-50/30">
                             <tr>
                                 <th 
-                                    className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wide sticky left-0 bg-gray-50 z-50 border-r border-gray-200"
+                                    className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wide sticky left-0 bg-gray-50/30 z-50 border-r border-gray-200"
                                     style={{ boxShadow: STICKY_COLUMN_SHADOW }}
                                 >
                                     Document / Data
@@ -2513,12 +2527,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                             onDragEnter={(e) => handleDragEnter(e, sectionIndex)}
                                             onDragLeave={handleDragLeave}
                                             onDrop={(e) => handleDrop(e, sectionIndex)}
-                                            className={`bg-gray-100 cursor-grab active:cursor-grabbing ${
+                                            className={`bg-gray-50/50 cursor-grab active:cursor-grabbing ${
                                                 dragOverIndex === sectionIndex ? 'border-t-2 border-primary-500' : ''
                                             }`}
                                         >
                                                     <td 
-                                                        className="px-2.5 py-2 sticky left-0 bg-gray-100 z-50 border-r border-gray-200"
+                                                        className="px-2.5 py-2 sticky left-0 bg-gray-50/50 z-50 border-r border-gray-200"
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW }}
                                                     >
                                                 <div className="flex items-center gap-2">
@@ -2585,7 +2599,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                     onDragEnter={(e) => handleDocumentDragEnter(e, section.id, documentIndex)}
                                                     onDragLeave={handleDocumentDragLeave}
                                                     onDrop={(e) => handleDocumentDrop(e, section.id, documentIndex)}
-                                                    className={`hover:bg-gray-50 cursor-grab active:cursor-grabbing ${
+                                                    className={`hover:bg-gray-50/30 cursor-grab active:cursor-grabbing ${
                                                         dragOverDocumentIndex?.sectionId === section.id && dragOverDocumentIndex?.documentIndex === documentIndex 
                                                             ? 'border-t-2 border-primary-500' : ''
                                                     }`}
