@@ -522,31 +522,42 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
     };
 
-    const handleSaveTemplate = (templateData) => {
+    const handleSaveTemplate = async (templateData) => {
         const currentUser = getCurrentUser();
-        let updatedTemplates;
+        let savedTemplate;
         
-        if (editingTemplate) {
-            updatedTemplates = templates.map(t => 
-                t.id === editingTemplate.id 
-                    ? { ...t, ...templateData, updatedAt: new Date().toISOString(), updatedBy: currentUser.name || currentUser.email }
-                    : t
-            );
-        } else {
-            const newTemplate = {
-                id: Date.now(),
-                ...templateData,
-                createdAt: new Date().toISOString(),
-                createdBy: currentUser.name || currentUser.email,
-                updatedAt: new Date().toISOString(),
-                updatedBy: currentUser.name || currentUser.email
-            };
-            updatedTemplates = [...templates, newTemplate];
+        try {
+            if (editingTemplate) {
+                // Update existing template
+                savedTemplate = await api.updateTemplate(editingTemplate.id, {
+                    ...templateData,
+                    updatedBy: currentUser.name || currentUser.email
+                });
+                
+                // Update local state
+                const updatedTemplates = templates.map(t => 
+                    t.id === editingTemplate.id ? savedTemplate : t
+                );
+                await saveTemplates(updatedTemplates);
+            } else {
+                // Create new template
+                savedTemplate = await api.createTemplate({
+                    ...templateData,
+                    createdBy: currentUser.name || currentUser.email,
+                    updatedBy: currentUser.name || currentUser.email
+                });
+                
+                // Update local state
+                const updatedTemplates = [...templates, savedTemplate];
+                await saveTemplates(updatedTemplates);
+            }
+            
+            setEditingTemplate(null);
+            setShowTemplateList(true);
+        } catch (error) {
+            console.error('❌ Error saving template:', error);
+            alert('Failed to save template: ' + error.message);
         }
-        
-        saveTemplates(updatedTemplates);
-        setEditingTemplate(null);
-        setShowTemplateList(true);
     };
 
     const handleApplyTemplate = (template, targetYear) => {
