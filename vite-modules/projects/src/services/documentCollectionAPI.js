@@ -62,8 +62,11 @@ class DocumentCollectionAPI {
 
     /**
      * Save document sections to project
+     * @param {string} projectId - The project ID
+     * @param {Array} sections - The document sections to save
+     * @param {boolean} skipParentUpdate - If true, skip updating parent component (useful when modals are open)
      */
-    async saveDocumentSections(projectId, sections) {
+    async saveDocumentSections(projectId, sections, skipParentUpdate = false) {
         if (!projectId) {
             throw new Error('Project ID is required');
         }
@@ -73,8 +76,9 @@ class DocumentCollectionAPI {
                 documentSections: JSON.stringify(sections)
             });
 
-            // Update parent component's project prop if available
-            if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+            // Update parent component's project prop if available and not skipping
+            // Skip parent update when modals/forms are open to prevent them from closing
+            if (!skipParentUpdate && window.updateViewingProject && typeof window.updateViewingProject === 'function') {
                 const updatedProject = result?.data?.project || result?.project || result?.data;
                 if (updatedProject) {
                     window.updateViewingProject({

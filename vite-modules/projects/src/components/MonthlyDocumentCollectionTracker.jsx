@@ -178,6 +178,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [isLoading, setIsLoading] = useState(false);
     const saveTimeoutRef = useRef(null);
     const pendingSaveRef = useRef(null);
+    
+    // Refs to track modal/form state for auto-save (always have latest values)
+    const modalsOpenRef = useRef(false);
 
     // Template storage key
     const TEMPLATES_STORAGE_KEY = 'documentCollectionTemplates';
@@ -249,14 +252,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     useEffect(() => {
         if (!project?.id) return;
         
-        // Don't auto-save if any modal, form, or interactive element is open
-        // This prevents forms/popups from closing unexpectedly during user interaction
+        // Update ref with current modal/form state (always has latest values)
         const isAnyModalOpen = showSectionModal || showDocumentModal || showTemplateModal || showApplyTemplateModal;
         const isCommentPopupOpen = hoverCommentCell !== null;
         const isCurrentlyExporting = isExporting;
         const isCurrentlyEditing = editingSection !== null || editingDocument !== null || editingTemplate !== null;
+        modalsOpenRef.current = isAnyModalOpen || isCommentPopupOpen || isCurrentlyExporting || isCurrentlyEditing;
         
-        if (isAnyModalOpen || isCommentPopupOpen || isCurrentlyExporting || isCurrentlyEditing) {
+        // Don't auto-save if any modal, form, or interactive element is open
+        // This prevents forms/popups from closing unexpectedly during user interaction
+        if (modalsOpenRef.current) {
             return;
         }
         
@@ -271,13 +276,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const timeout = setTimeout(async () => {
             if (!pendingSaveRef.current) return;
             
-            // Double-check all interactive states are still closed before saving
-            const stillAnyModalOpen = showSectionModal || showDocumentModal || showTemplateModal || showApplyTemplateModal;
-            const stillCommentPopupOpen = hoverCommentCell !== null;
-            const stillExporting = isExporting;
-            const stillEditing = editingSection !== null || editingDocument !== null || editingTemplate !== null;
-            
-            if (stillAnyModalOpen || stillCommentPopupOpen || stillExporting || stillEditing) {
+            // Double-check modal state using ref (always has latest values, even in closure)
+            if (modalsOpenRef.current) {
+                console.log('⏸️ Auto-save skipped: modal/form is open');
                 return;
             }
             
@@ -285,8 +286,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             setSaveError(null);
             
             try {
+                // Skip parent update to prevent re-render that might close modals
+                // (Even though we checked modals are closed, be extra safe)
                 console.log('💾 Saving sections to database:', pendingSaveRef.current.length, 'sections');
-                await api.saveDocumentSections(project.id, pendingSaveRef.current);
+                await api.saveDocumentSections(project.id, pendingSaveRef.current, false);
                 console.log('✅ Sections saved successfully');
                 pendingSaveRef.current = null;
             } catch (error) {
