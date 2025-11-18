@@ -260,6 +260,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const saveTimeoutRef = useRef(null);
     const pendingSaveRef = useRef(null);
     const lastSavedSnapshotRef = useRef(null);
+    const lastProjectDocumentSectionsRef = useRef(null); // Track last documentSections to prevent unnecessary reloads
     
     // Refs to track modal/form state for auto-save (always have latest values)
     const modalsOpenRef = useRef(false);
@@ -406,18 +407,34 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         // Check if this is a new project (project ID actually changed)
         const isNewProject = previousProjectIdRef.current !== project.id;
         
+        // Also check if documentSections actually changed (not just prop reference)
+        const currentDocumentSections = typeof project.documentSections === 'string' 
+            ? project.documentSections 
+            : JSON.stringify(project.documentSections || []);
+        const lastDocumentSections = lastProjectDocumentSectionsRef.current;
+        const documentSectionsChanged = currentDocumentSections !== lastDocumentSections;
+        
         // Reset initial load flag when project ID changes
         if (isNewProject) {
             hasLoadedInitialDataRef.current = false;
             previousProjectIdRef.current = project.id;
+            lastProjectDocumentSectionsRef.current = currentDocumentSections;
         }
         
         // Only load data if:
         // 1. This is the initial load (hasn't loaded data yet)
         // 2. OR this is a new project (project ID changed)
-        if (!isNewProject && hasLoadedInitialDataRef.current) {
-            // Already loaded data for this project, don't reload
+        // 3. OR documentSections actually changed (not just prop reference)
+        if (!isNewProject && hasLoadedInitialDataRef.current && !documentSectionsChanged) {
+            // Already loaded data for this project and data hasn't changed, don't reload
+            console.log('⏭️ Skipping reload: project data unchanged');
             return;
+        }
+        
+        // Update the ref to track current documentSections
+        if (!isNewProject && documentSectionsChanged) {
+            console.log('🔄 DocumentSections changed, will reload data');
+            lastProjectDocumentSectionsRef.current = currentDocumentSections;
         }
         
         // Update ref with current modal state before checking
@@ -427,11 +444,23 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const isCurrentlyEditing = editingSection !== null || editingDocument !== null || editingTemplate !== null;
         modalsOpenRef.current = isAnyModalOpen || isCommentPopupOpen || isCurrentlyExporting || isCurrentlyEditing;
         
-        // Don't reload data if any modal/form is open (prevents form from closing)
+        // ⚠️ CRITICAL: Don't reload if user has unsaved changes (prevents overwriting comments in progress)
+        const currentSectionsSnapshot = serializeSections(mergeSectionsByYear(sectionsByYear));
+        const hasUnsavedChanges = currentSectionsSnapshot !== lastSavedSnapshotRef.current;
+        
+        // Don't reload data if:
+        // 1. Any modal/form is open (prevents form from closing)
+        // 2. User has unsaved changes (prevents overwriting comments/text in progress)
         // But allow initial load if we haven't loaded data yet
-        if (modalsOpenRef.current && hasLoadedInitialDataRef.current) {
-            console.log('⏸️ Data reload skipped: modal/form is open');
-            return;
+        if (hasLoadedInitialDataRef.current) {
+            if (modalsOpenRef.current) {
+                console.log('⏸️ Data reload skipped: modal/form is open');
+                return;
+            }
+            if (hasUnsavedChanges) {
+                console.log('⏸️ Data reload skipped: user has unsaved changes (prevents overwriting comments)');
+                return;
+            }
         }
         
         const loadData = async () => {
@@ -478,13 +507,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         const normalizedFresh = normalizeSections(freshParsed);
                         const organizedFresh = organizeSectionsByYear(normalizedFresh);
                         // Only update if different (avoid unnecessary re-renders)
+                        // ⚠️ CRITICAL: Don't overwrite local changes - check if we have unsaved changes first
                         const currentMerged = mergeSectionsByYear(sectionsByYear);
                         const freshMerged = mergeSectionsByYear(organizedFresh);
+                        const currentSnapshot = serializeSections(currentMerged);
+                        const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
+                        
                         if (JSON.stringify(freshMerged) !== JSON.stringify(currentMerged)) {
-                            console.log('🔄 Updating sections from fresh database data');
-                            setSectionsByYear(organizedFresh);
+                            if (hasUnsavedChanges) {
+                                // Don't overwrite user's unsaved changes!
+                                console.log('⏸️ Skipping database update: user has unsaved changes');
+                            } else {
+                                console.log('🔄 Updating sections from fresh database data');
+                                setSectionsByYear(organizedFresh);
+                                lastSavedSnapshotRef.current = serializeSections(freshMerged);
+                            }
+                        } else {
+                            // Data is the same, just update snapshot if needed
+                            lastSavedSnapshotRef.current = serializeSections(freshMerged);
                         }
-                        lastSavedSnapshotRef.current = serializeSections(freshMerged);
                     } else {
                         lastSavedSnapshotRef.current = serializeSections(mergedForSnapshot);
                     }
@@ -499,7 +540,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         };
         
         loadData();
-    }, [project?.id, normalizeSections, serializeSections, api, organizeSectionsByYear, mergeSectionsByYear]); // Only depend on project ID - modal check is done inside effect
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [project?.id]); // ⚠️ FIXED: Only depend on project ID to prevent unnecessary reloads
+    // Removed normalizeSections, serializeSections, api, organizeSectionsByYear, mergeSectionsByYear from dependencies
+    // These are stable callbacks and don't need to trigger reloads. Using them inside the effect is safe.
 
     // Keep the modal/interaction state ref up to date without re-running auto-save
     useEffect(() => {
@@ -612,7 +656,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 saveTimeoutRef.current = null;
             }
         };
-    }, [project?.id, sectionsByYear, api, normalizeSections, serializeSections, mergeSectionsByYear]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [project?.id, sectionsByYear]); // ⚠️ FIXED: Only depend on project ID and sectionsByYear
+    // Removed api, normalizeSections, serializeSections, mergeSectionsByYear - these are stable callbacks
     
     // ✅ SAVE ON PAGE UNLOAD (prevent data loss)
     useEffect(() => {
@@ -637,7 +683,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         window.addEventListener('beforeunload', handleBeforeUnload);
         return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-    }, [project?.id, sectionsByYear, mergeSectionsByYear, normalizeSections, serializeSections, api]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [project?.id, sectionsByYear]); // ⚠️ FIXED: Only depend on project ID and sectionsByYear
+    // Removed mergeSectionsByYear, normalizeSections, serializeSections, api - these are stable callbacks
 
     // ✅ LOAD TEMPLATES ONLY WHEN MODALS OPEN
     useEffect(() => {
