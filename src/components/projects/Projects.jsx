@@ -1289,7 +1289,48 @@ const Projects = () => {
             
             // Expose a function to update viewingProject from child components
             // This allows ProjectDetail to refresh the project data after saving
+            // ⚠️ FIXED: Prevent unnecessary re-renders by checking if project actually changed
             window.updateViewingProject = (updatedProject) => {
+                if (!updatedProject || !updatedProject.id) {
+                    console.warn('⚠️ updateViewingProject called with invalid project');
+                    return;
+                }
+                
+                // Only update if we're actually viewing this project
+                if (!viewingProject || viewingProject.id !== updatedProject.id) {
+                    console.log('⏭️ Skipping updateViewingProject: not viewing this project');
+                    return;
+                }
+                
+                // Check if the project data actually changed (deep comparison for documentSections)
+                const currentDocumentSections = viewingProject.documentSections;
+                const newDocumentSections = updatedProject.documentSections;
+                const documentSectionsChanged = currentDocumentSections !== newDocumentSections;
+                
+                // If only documentSections changed and we're in document collection view, skip update
+                // This prevents reloads when auto-saving document sections
+                if (documentSectionsChanged && !updatedProject.skipDocumentSectionsUpdate) {
+                    const isDocumentCollectionView = window.location.hash.includes('documentCollection') || 
+                                                     (viewingProject.hasDocumentCollectionProcess && 
+                                                      documentSectionsChanged);
+                    if (isDocumentCollectionView) {
+                        console.log('⏭️ Skipping updateViewingProject: documentSections changed during document collection editing');
+                        return;
+                    }
+                }
+                
+                // Check if other important fields changed
+                const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'tasks', 'taskLists'];
+                const hasImportantChanges = importantFields.some(field => {
+                    return JSON.stringify(viewingProject[field]) !== JSON.stringify(updatedProject[field]);
+                });
+                
+                if (!hasImportantChanges && !documentSectionsChanged) {
+                    console.log('⏭️ Skipping updateViewingProject: no important changes detected');
+                    return;
+                }
+                
+                console.log('🔄 updateViewingProject: updating project (important changes detected)');
                 console.log('🔄 Updating viewingProject from child component:', {
                     id: updatedProject.id,
                     hasDocumentCollectionProcess: updatedProject.hasDocumentCollectionProcess
@@ -1846,8 +1887,8 @@ const Projects = () => {
                         console.log('✅ Effect: ProjectDetail loaded successfully');
                         setProjectDetailAvailable(true);
                         setWaitingForProjectDetail(false);
-                        // Force re-render
-                        setViewingProject({ ...viewingProject });
+                        // REMOVED: Force re-render that was causing refresh issues
+                        // React will re-render automatically when projectDetailAvailable changes
                     } else if (retryCount < maxRetries) {
                         retryCount++;
                         console.log(`🔄 Effect: Load failed, retrying in 500ms... (${retryCount}/${maxRetries})`);
@@ -1862,31 +1903,9 @@ const Projects = () => {
             attemptLoad();
         }
         
-        // Continuous polling while viewing project - check every 200ms (more aggressive)
-        const checkInterval = setInterval(() => {
-            if (window.ProjectDetail) {
-                if (!projectDetailAvailable) {
-                    console.log('✅ Effect: ProjectDetail found during polling!');
-                    setProjectDetailAvailable(true);
-                    setWaitingForProjectDetail(false);
-                    setViewingProject({ ...viewingProject });
-                }
-            } else if (!waitingForProjectDetail) {
-                // Component disappeared? Try loading again
-                console.warn('⚠️ Effect: ProjectDetail disappeared, reloading...');
-                setWaitingForProjectDetail(true);
-                loadProjectDetail().then(loaded => {
-                    setWaitingForProjectDetail(false);
-                    if (loaded && window.ProjectDetail) {
-                        setProjectDetailAvailable(true);
-                        setViewingProject({ ...viewingProject });
-                    }
-                });
-            }
-        }, 200); // Check every 200ms (more frequent)
-        
-        return () => clearInterval(checkInterval);
-    }, [viewingProject, waitingForProjectDetail, projectDetailAvailable]);
+        // ⚠️ FIXED: Removed continuous polling that was causing constant re-renders
+        // Only check when viewingProject changes, not continuously
+        // The component will be available when needed without constant polling
 
     // BULLETPROOF: Immediate check when viewingProject changes (runs synchronously before paint)
     React.useLayoutEffect(() => {
