@@ -635,26 +635,47 @@
                     return;
                 }
                 
-                // Check if script already exists
+                // Check if script already exists - remove old ones with timestamp cache busting
+                const existingScripts = document.querySelectorAll('script[src*="projects-module.js"]');
+                const VITE_PROJECTS_VERSION = '20250127-doc-collection-refactor-v2';
+                existingScripts.forEach(oldScript => {
+                    const src = oldScript.src || oldScript.getAttribute('src') || '';
+                    // Remove scripts with timestamp cache busting (old version)
+                    if (src.includes('projects-module.js') && /v=\d{13}/.test(src)) {
+                        console.log('🗑️ Removing old cached script:', src);
+                        oldScript.remove();
+                    }
+                });
+                
+                // Check again after cleanup
                 const existingScript = document.querySelector('script[src*="projects-module.js"]');
                 if (existingScript) {
-                    console.log('✅ Vite Projects module script already added, waiting for load...');
-                    // Listen for the component to become available
-                    const checkExisting = setInterval(() => {
-                        if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
-                            console.log('✅ MonthlyDocumentCollectionTracker became available from existing script');
-                            clearInterval(checkExisting);
-                        }
-                    }, 100);
-                    setTimeout(() => clearInterval(checkExisting), 5000);
-                    return;
+                    const src = existingScript.src || existingScript.getAttribute('src') || '';
+                    // Only use existing script if it has the correct version
+                    if (src.includes(VITE_PROJECTS_VERSION)) {
+                        console.log('✅ Vite Projects module script already added with correct version, waiting for load...');
+                        // Listen for the component to become available
+                        const checkExisting = setInterval(() => {
+                            if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                                console.log('✅ MonthlyDocumentCollectionTracker became available from existing script');
+                                clearInterval(checkExisting);
+                            }
+                        }, 100);
+                        setTimeout(() => clearInterval(checkExisting), 5000);
+                        return;
+                    } else {
+                        console.log('🗑️ Removing existing script with wrong version:', src);
+                        existingScript.remove();
+                    }
                 }
                 
                 const script = document.createElement('script');
                 script.type = 'module';
                 // Cache busting with version - update this when deploying new changes
+                // IMPORTANT: This version must match the one used above
                 const VITE_PROJECTS_VERSION = '20250127-doc-collection-refactor-v2';
                 script.src = './dist/vite-projects/projects-module.js?v=' + VITE_PROJECTS_VERSION;
+                console.log('📦 Loading vite projects module with version:', VITE_PROJECTS_VERSION);
                 script.onload = () => {
                     console.log('✅ Vite Projects module script loaded successfully');
                     // Poll for components to become available (more robust than fixed timeout)
