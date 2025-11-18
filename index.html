@@ -653,7 +653,7 @@
                 const script = document.createElement('script');
                 script.type = 'module';
                 // Cache busting with version - update this when deploying new changes
-                const VITE_PROJECTS_VERSION = '20250127-doc-collection-refactor';
+                const VITE_PROJECTS_VERSION = '20250127-doc-collection-refactor-v2';
                 script.src = './dist/vite-projects/projects-module.js?v=' + VITE_PROJECTS_VERSION;
                 script.onload = () => {
                     console.log('✅ Vite Projects module script loaded successfully');
@@ -692,7 +692,7 @@
                 const link = document.createElement('link');
                 link.rel = 'stylesheet';
                     // Cache busting with version - update this when deploying new changes
-                    const VITE_PROJECTS_VERSION = '20250127-doc-collection-refactor';
+                    const VITE_PROJECTS_VERSION = '20250127-doc-collection-refactor-v2';
                     link.href = './dist/vite-projects/projects-index.css?v=' + VITE_PROJECTS_VERSION;
                 link.onerror = () => console.warn('⚠️ Failed to load Vite Projects CSS');
                 document.head.appendChild(link);
