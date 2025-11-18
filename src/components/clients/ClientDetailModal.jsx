@@ -2246,6 +2246,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             <option>Mining</option>
                                             <option>Forestry</option>
                                             <option>Agriculture</option>
+                                            <option>Diesel Supply</option>
+                                            <option>Logistics</option>
                                             <option>Other</option>
                                         </select>
                                     </div>

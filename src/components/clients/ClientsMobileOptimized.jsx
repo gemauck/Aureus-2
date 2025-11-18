@@ -411,6 +411,8 @@ const ClientsMobileOptimized = () => {
                         <option>Retail</option>
                         <option>Education</option>
                         <option>Government</option>
+                        <option>Diesel Supply</option>
+                        <option>Logistics</option>
                         <option>Other</option>
                     </select>
                     

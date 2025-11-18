@@ -83,6 +83,8 @@ const ClientModal = ({ client, onSave, onClose }) => {
                                 <option>Mining</option>
                                 <option>Forestry</option>
                                 <option>Agriculture</option>
+                                <option>Diesel Supply</option>
+                                <option>Logistics</option>
                                 <option>Other</option>
                             </select>
                         </div>

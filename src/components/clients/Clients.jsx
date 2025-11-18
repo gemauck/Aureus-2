@@ -5244,6 +5244,8 @@ const Clients = React.memo(() => {
                                 <option value="Mining">Mining</option>
                                 <option value="Forestry">Forestry</option>
                                 <option value="Agriculture">Agriculture</option>
+                                <option value="Diesel Supply">Diesel Supply</option>
+                                <option value="Logistics">Logistics</option>
                                 <option value="Other">Other</option>
                             </select>
                         </div>

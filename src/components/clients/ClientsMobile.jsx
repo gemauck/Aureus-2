@@ -279,6 +279,8 @@ const ClientsMobile = () => {
                             <option value="Manufacturing">Manufacturing</option>
                             <option value="Healthcare">Healthcare</option>
                             <option value="Finance">Finance</option>
+                            <option value="Diesel Supply">Diesel Supply</option>
+                            <option value="Logistics">Logistics</option>
                         </select>
                         
                         <select
