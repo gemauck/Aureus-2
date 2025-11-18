@@ -154,6 +154,12 @@ const RichTextEditor = ({
                 contentEditable
                 onInput={handleInput}
                 onKeyDown={(e) => {
+                    // Prevent form submission on Enter (unless in a list)
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                        // Allow Ctrl/Cmd+Enter for line breaks
+                        return;
+                    }
+                    
                     // Handle Enter key for lists
                     if (e.key === 'Enter') {
                         const selection = window.getSelection();
@@ -170,6 +176,8 @@ const RichTextEditor = ({
                                 node = node.parentNode;
                             }
                         }
+                        // Prevent form submission on Enter outside of lists
+                        // The default behavior will create a new line, which is what we want
                     }
                 }}
                 onPaste={(e) => {

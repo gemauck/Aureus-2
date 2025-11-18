@@ -199,7 +199,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return;
         }
         
-        if (!project?.id) return;
+        if (!project?.id) {
+            console.warn('⚠️ Cannot save: No project ID');
+            return;
+        }
+        
+        if (isLoading) {
+            console.log('⏭️ Still loading data, skipping save');
+            return;
+        }
         
         isSavingRef.current = true;
         
@@ -208,6 +216,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
             if (!window.DatabaseAPI || typeof window.DatabaseAPI.updateProject !== 'function') {
                 throw new Error('DatabaseAPI.updateProject is not available');
+            }
+            
+            // Validate sections data before saving
+            if (!Array.isArray(sections)) {
+                throw new Error('Sections data is not an array');
             }
             
             const updatePayload = {
@@ -219,6 +232,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
         } catch (error) {
             console.error('❌ Error saving to database:', error);
+            // Don't throw - allow user to continue working
+            // The auto-save will retry on next change
         } finally {
             isSavingRef.current = false;
         }
@@ -600,12 +615,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // YEAR SELECTION
     // ============================================================
     
-    const handleYearChange = (year) => {
+    const handleYearChange = useCallback((year) => {
+        if (!year || isNaN(year)) {
+            console.warn('Invalid year provided:', year);
+            return;
+        }
+        
+        console.log(`📅 Year changed to: ${year}`);
         setSelectedYear(year);
         if (project?.id && typeof window !== 'undefined') {
             localStorage.setItem(`${YEAR_STORAGE_PREFIX}${project.id}`, String(year));
         }
-    };
+    }, [project?.id]);
     
     const MIN_YEAR = 2015;
     const FUTURE_YEAR_BUFFER = 5;
@@ -796,25 +817,33 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // STATUS AND COMMENTS
     // ============================================================
     
-    const handleUpdateStatus = (sectionId, documentId, month, status) => {
-        setSections(prev => prev.map(section => {
-            if (section.id === sectionId) {
-                return {
-                    ...section,
-                    documents: section.documents.map(doc => {
-                        if (doc.id === documentId) {
-                            return {
-                                ...doc,
-                                collectionStatus: setStatusForYear(doc.collectionStatus || {}, month, status, selectedYear)
-                            };
-                        }
-                        return doc;
-                    })
-                };
-            }
-            return section;
-        }));
-    };
+    const handleUpdateStatus = useCallback((sectionId, documentId, month, status) => {
+        setSections(prev => {
+            // Use functional update to ensure we're working with latest state
+            const updated = prev.map(section => {
+                if (section.id === sectionId) {
+                    return {
+                        ...section,
+                        documents: section.documents.map(doc => {
+                            if (doc.id === documentId) {
+                                return {
+                                    ...doc,
+                                    collectionStatus: setStatusForYear(doc.collectionStatus || {}, month, status, selectedYear)
+                                };
+                            }
+                            return doc;
+                        })
+                    };
+                }
+                return section;
+            });
+            
+            // Log status change for debugging
+            console.log(`📝 Status updated: ${documentId} - ${month} ${selectedYear} = ${status}`);
+            
+            return updated;
+        });
+    }, [selectedYear]);
     
     const handleAddComment = (sectionId, documentId, month, commentText) => {
         if (!commentText.trim()) return;
@@ -1091,7 +1120,26 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 <div className="min-w-[160px] relative">
                     <select
                         value={status || ''}
-                        onChange={(e) => handleUpdateStatus(section.id, document.id, month, e.target.value)}
+                        onChange={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const newStatus = e.target.value;
+                            handleUpdateStatus(section.id, document.id, month, newStatus);
+                        }}
+                        onBlur={(e) => {
+                            // Ensure state is saved on blur
+                            const newStatus = e.target.value;
+                            if (newStatus !== status) {
+                                handleUpdateStatus(section.id, document.id, month, newStatus);
+                            }
+                        }}
+                        aria-label={`Status for ${document.name || 'document'} in ${month} ${selectedYear}`}
+                        role="combobox"
+                        aria-haspopup="listbox"
+                        data-section-id={section.id}
+                        data-document-id={document.id}
+                        data-month={month}
+                        data-year={selectedYear}
                         className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80`}
                     >
                         <option value="">Select Status</option>
@@ -1632,7 +1680,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     <label className="block text-xs font-medium text-gray-700 mb-1.5">Select Template *</label>
                                     <select
                                         value={selectedTemplateId || ''}
-                                        onChange={(e) => setSelectedTemplateId(e.target.value)}
+                                        onChange={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            setSelectedTemplateId(e.target.value);
+                                        }}
+                                        onBlur={(e) => {
+                                            // Ensure selection is saved on blur
+                                            const newValue = e.target.value;
+                                            if (newValue !== selectedTemplateId) {
+                                                setSelectedTemplateId(newValue);
+                                            }
+                                        }}
+                                        aria-label="Select template to apply"
+                                        role="combobox"
+                                        aria-haspopup="listbox"
+                                        data-testid="template-selector"
                                         className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                                     >
                                         <option value="">-- Select a template --</option>
@@ -1780,7 +1843,24 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     <label className="text-[10px] font-medium text-gray-600">Year:</label>
                     <select
                         value={selectedYear}
-                        onChange={(e) => handleYearChange(parseInt(e.target.value))}
+                        onChange={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const newYear = parseInt(e.target.value, 10);
+                            if (!isNaN(newYear)) {
+                                handleYearChange(newYear);
+                            }
+                        }}
+                        onBlur={(e) => {
+                            const newYear = parseInt(e.target.value, 10);
+                            if (!isNaN(newYear) && newYear !== selectedYear) {
+                                handleYearChange(newYear);
+                            }
+                        }}
+                        aria-label="Select year for document collection tracker"
+                        role="combobox"
+                        aria-haspopup="listbox"
+                        data-testid="year-selector"
                         className="px-2.5 py-1 text-xs border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500"
                     >
                         {yearOptions.map(year => (

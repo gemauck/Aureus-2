@@ -1100,7 +1100,11 @@ const ManagementMeetingNotes = () => {
     };
 
     // Submit changes to a field
-    const handleSubmitField = async (departmentNotesId, field) => {
+    const handleSubmitField = async (e, departmentNotesId, field) => {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
         const fieldKey = getFieldKey(departmentNotesId, field);
         const value = tempFieldValues[fieldKey] ?? '';
         
@@ -2288,6 +2292,7 @@ const ManagementMeetingNotes = () => {
                                                                 </label>
                                                                 {!editingFields[getFieldKey(deptNote.id, 'successes')] ? (
                                                                     <button
+                                                                        type="button"
                                                                         onClick={() => handleStartEdit(deptNote.id, 'successes', deptNote.successes)}
                                                                         className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                                                                         title="Edit"
@@ -2298,7 +2303,16 @@ const ManagementMeetingNotes = () => {
                                                                 ) : (
                                                                     <div className="flex gap-1">
                                                                         <button
-                                                                            onClick={() => handleSubmitField(deptNote.id, 'successes')}
+                                                                            type="button"
+                                                                            onClick={(e) => {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
+                                                                                handleSubmitField(e, deptNote.id, 'successes');
+                                                                            }}
+                                                                            onMouseDown={(e) => {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
+                                                                            }}
                                                                             className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-green-700 text-green-200 hover:bg-green-600' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
                                                                             title="Submit"
                                                                         >
@@ -2306,6 +2320,7 @@ const ManagementMeetingNotes = () => {
                                                                             Submit
                                                                         </button>
                                                                         <button
+                                                                            type="button"
                                                                             onClick={() => handleCancelEdit(deptNote.id, 'successes')}
                                                                             className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-red-900 text-red-200 hover:bg-red-800' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
                                                                             title="Cancel"
@@ -2340,6 +2355,7 @@ const ManagementMeetingNotes = () => {
                                                                 </label>
                                                                 {!editingFields[getFieldKey(deptNote.id, 'weekToFollow')] ? (
                                                                     <button
+                                                                        type="button"
                                                                         onClick={() => handleStartEdit(deptNote.id, 'weekToFollow', deptNote.weekToFollow)}
                                                                         className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                                                                         title="Edit"
@@ -2350,7 +2366,16 @@ const ManagementMeetingNotes = () => {
                                                                 ) : (
                                                                     <div className="flex gap-1">
                                                                         <button
-                                                                            onClick={() => handleSubmitField(deptNote.id, 'weekToFollow')}
+                                                                            type="button"
+                                                                            onClick={(e) => {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
+                                                                                handleSubmitField(e, deptNote.id, 'weekToFollow');
+                                                                            }}
+                                                                            onMouseDown={(e) => {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
+                                                                            }}
                                                                             className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-green-700 text-green-200 hover:bg-green-600' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
                                                                             title="Submit"
                                                                         >
@@ -2358,6 +2383,7 @@ const ManagementMeetingNotes = () => {
                                                                             Submit
                                                                         </button>
                                                                         <button
+                                                                            type="button"
                                                                             onClick={() => handleCancelEdit(deptNote.id, 'weekToFollow')}
                                                                             className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-red-900 text-red-200 hover:bg-red-800' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
                                                                             title="Cancel"
@@ -2392,6 +2418,7 @@ const ManagementMeetingNotes = () => {
                                                                 </label>
                                                                 {!editingFields[getFieldKey(deptNote.id, 'frustrations')] ? (
                                                                     <button
+                                                                        type="button"
                                                                         onClick={() => handleStartEdit(deptNote.id, 'frustrations', deptNote.frustrations)}
                                                                         className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                                                                         title="Edit"
@@ -2402,7 +2429,16 @@ const ManagementMeetingNotes = () => {
                                                                 ) : (
                                                                     <div className="flex gap-1">
                                                                         <button
-                                                                            onClick={() => handleSubmitField(deptNote.id, 'frustrations')}
+                                                                            type="button"
+                                                                            onClick={(e) => {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
+                                                                                handleSubmitField(e, deptNote.id, 'frustrations');
+                                                                            }}
+                                                                            onMouseDown={(e) => {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
+                                                                            }}
                                                                             className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-green-700 text-green-200 hover:bg-green-600' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
                                                                             title="Submit"
                                                                         >
@@ -2410,6 +2446,7 @@ const ManagementMeetingNotes = () => {
                                                                             Submit
                                                                         </button>
                                                                         <button
+                                                                            type="button"
                                                                             onClick={() => handleCancelEdit(deptNote.id, 'frustrations')}
                                                                             className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-red-900 text-red-200 hover:bg-red-800' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
                                                                             title="Cancel"
