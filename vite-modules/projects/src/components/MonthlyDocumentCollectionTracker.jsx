@@ -152,10 +152,70 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     // ✅ NEW SIMPLE ARCHITECTURE: Database as single source of truth
     const [sections, setSections] = useState([]);
-    const [showSectionModal, setShowSectionModal] = useState(false);
-    const [showDocumentModal, setShowDocumentModal] = useState(false);
-    const [showTemplateModal, setShowTemplateModal] = useState(false);
-    const [showApplyTemplateModal, setShowApplyTemplateModal] = useState(false);
+    
+    // Modal state storage key (persists across remounts) - use ref to avoid dependency issues
+    const modalStateKeyRef = useRef(`docCollectionModalState_${project?.id || 'default'}`);
+    
+    // Update modal state key when project ID changes
+    useEffect(() => {
+        if (previousProjectIdRef.current !== project?.id) {
+            // Clear old project's modal state
+            if (previousProjectIdRef.current) {
+                try {
+                    sessionStorage.removeItem(`docCollectionModalState_${previousProjectIdRef.current}`);
+                } catch (e) {
+                    console.warn('Failed to clear old modal state:', e);
+                }
+            }
+            previousProjectIdRef.current = project?.id;
+            modalStateKeyRef.current = `docCollectionModalState_${project?.id || 'default'}`;
+        }
+    }, [project?.id]);
+    
+    // Restore modal state from sessionStorage on mount (persists across remounts)
+    const getStoredModalState = (projectId) => {
+        const key = `docCollectionModalState_${projectId || 'default'}`;
+        try {
+            const stored = sessionStorage.getItem(key);
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                return {
+                    showSectionModal: parsed.showSectionModal || false,
+                    showDocumentModal: parsed.showDocumentModal || false,
+                    showTemplateModal: parsed.showTemplateModal || false,
+                    showApplyTemplateModal: parsed.showApplyTemplateModal || false
+                };
+            }
+        } catch (e) {
+            console.warn('Failed to parse stored modal state:', e);
+        }
+        return {
+            showSectionModal: false,
+            showDocumentModal: false,
+            showTemplateModal: false,
+            showApplyTemplateModal: false
+        };
+    };
+    
+    const initialModalState = getStoredModalState(project?.id);
+    const [showSectionModal, setShowSectionModal] = useState(initialModalState.showSectionModal);
+    const [showDocumentModal, setShowDocumentModal] = useState(initialModalState.showDocumentModal);
+    const [showTemplateModal, setShowTemplateModal] = useState(initialModalState.showTemplateModal);
+    const [showApplyTemplateModal, setShowApplyTemplateModal] = useState(initialModalState.showApplyTemplateModal);
+    
+    // Persist modal state to sessionStorage whenever it changes
+    useEffect(() => {
+        try {
+            sessionStorage.setItem(modalStateKeyRef.current, JSON.stringify({
+                showSectionModal,
+                showDocumentModal,
+                showTemplateModal,
+                showApplyTemplateModal
+            }));
+        } catch (e) {
+            console.warn('Failed to store modal state:', e);
+        }
+    }, [showSectionModal, showDocumentModal, showTemplateModal, showApplyTemplateModal]);
     const [editingTemplate, setEditingTemplate] = useState(null);
     const [templates, setTemplates] = useState([]);
     const [showTemplateList, setShowTemplateList] = useState(true);
