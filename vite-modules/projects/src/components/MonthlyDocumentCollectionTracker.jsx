@@ -3,20 +3,9 @@ const { useState, useEffect, useRef, useCallback } = React;
 const storage = window.storage;
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
 
-// Import API service - this will register DocumentCollectionAPI on window
-// The service file exports a class that auto-registers on window when imported
-try {
-    // Try to import the API service if using ES modules
-    if (typeof import !== 'undefined') {
-        import('./services/documentCollectionAPI.js').catch(() => {
-            // If import fails, use fallback initialization below
-        });
-    }
-} catch (e) {
-    // Import not available, will use fallback
-}
-
 // Initialize API service
+// Note: The API service is imported in ProjectsModule.jsx to ensure it's bundled
+// If it's not available, we use the fallback implementation below
 const getAPI = () => {
     if (!window.DocumentCollectionAPI) {
         console.warn('⚠️ DocumentCollectionAPI not loaded, initializing fallback...');
