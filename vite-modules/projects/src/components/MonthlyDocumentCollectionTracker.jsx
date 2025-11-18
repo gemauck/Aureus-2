@@ -245,8 +245,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     }, [project?.id]); // Only depend on project ID, not documentSections to avoid loops
 
     // ✅ AUTO-SAVE TO DATABASE AFTER 1 SECOND OF INACTIVITY
+    // ⚠️ IMPORTANT: Don't auto-save while modals, forms, or popups are open to prevent them from closing
     useEffect(() => {
         if (!project?.id) return;
+        
+        // Don't auto-save if any modal, form, or interactive element is open
+        // This prevents forms/popups from closing unexpectedly during user interaction
+        const isAnyModalOpen = showSectionModal || showDocumentModal || showTemplateModal || showApplyTemplateModal;
+        const isCommentPopupOpen = hoverCommentCell !== null;
+        const isCurrentlyExporting = isExporting;
+        const isCurrentlyEditing = editingSection !== null || editingDocument !== null || editingTemplate !== null;
+        
+        if (isAnyModalOpen || isCommentPopupOpen || isCurrentlyExporting || isCurrentlyEditing) {
+            return;
+        }
         
         // Clear any pending save
         if (saveTimeoutRef.current) {
@@ -258,6 +270,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         const timeout = setTimeout(async () => {
             if (!pendingSaveRef.current) return;
+            
+            // Double-check all interactive states are still closed before saving
+            const stillAnyModalOpen = showSectionModal || showDocumentModal || showTemplateModal || showApplyTemplateModal;
+            const stillCommentPopupOpen = hoverCommentCell !== null;
+            const stillExporting = isExporting;
+            const stillEditing = editingSection !== null || editingDocument !== null || editingTemplate !== null;
+            
+            if (stillAnyModalOpen || stillCommentPopupOpen || stillExporting || stillEditing) {
+                return;
+            }
             
             setIsSaving(true);
             setSaveError(null);
@@ -286,7 +308,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 clearTimeout(saveTimeoutRef.current);
             }
         };
-    }, [sections, project?.id]);
+    }, [
+        sections, 
+        project?.id, 
+        showSectionModal, 
+        showDocumentModal, 
+        showTemplateModal, 
+        showApplyTemplateModal,
+        hoverCommentCell,
+        isExporting,
+        editingSection,
+        editingDocument,
+        editingTemplate
+    ]);
     
     // ✅ SAVE ON PAGE UNLOAD (prevent data loss)
     useEffect(() => {
