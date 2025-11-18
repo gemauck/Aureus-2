@@ -1,6 +1,7 @@
 /**
  * Document Collection API Service
  * Clean, centralized API service for document collection operations
+ * Version: 20250127-refactor
  */
 
 class DocumentCollectionAPI {

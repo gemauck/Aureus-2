@@ -2128,6 +2128,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 };
 
 window.MonthlyDocumentCollectionTracker = MonthlyDocumentCollectionTracker;
-console.log('✅ MonthlyDocumentCollectionTracker component loaded (OVERHAULED SIMPLE VERSION)');
+console.log('✅ MonthlyDocumentCollectionTracker component loaded (v20250127-refactored-API)');
 
 export default MonthlyDocumentCollectionTracker;
