@@ -981,6 +981,7 @@ export function ProjectDetail({ project, onBack, onDelete }) {
         
         return (
             <MonthlyDocumentCollectionTracker
+                key={`doc-tracker-${project?.id || 'default'}`}
                 project={project}
                 onBack={() => setActiveSection('overview')}
             />

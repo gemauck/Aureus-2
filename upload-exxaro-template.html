@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Exxaro Grootegeluk Template</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2196f3;
+        }
+        button {
+            background: #2196f3;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #1976d2;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        .status.success {
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            color: #2e7d32;
+            display: block;
+        }
+        .status.error {
+            background: #ffebee;
+            border-left: 4px solid #f44336;
+            color: #c62828;
+            display: block;
+        }
+        .status.info {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            color: #1565c0;
+            display: block;
+        }
+        pre {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📋 Upload Exxaro Grootegeluk Template</h1>
+        <p class="subtitle">Document Collection Checklist Template for 2025</p>
+        
+        <div class="info">
+            <strong>⚠️ Important:</strong> You must be logged into the ERP application in another tab/window for this to work. 
+            This page needs to access your authentication token from the main application.
+        </div>
+
+        <button id="uploadBtn" onclick="uploadTemplate()">Upload Template</button>
+        <button onclick="checkAuth()">Check Authentication</button>
+
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        // Get token from parent window or localStorage
+        function getToken() {
+            // Try to get from parent window (if opened from main app)
+            if (window.opener && window.opener.storage) {
+                return window.opener.storage.getToken();
+            }
+            // Try to get from localStorage (if same origin)
+            try {
+                const storage = localStorage.getItem('auth') || localStorage.getItem('token');
+                if (storage) {
+                    try {
+                        const parsed = JSON.parse(storage);
+                        return parsed.token || parsed.accessToken || storage;
+                    } catch (e) {
+                        return storage;
+                    }
+                }
+            } catch (e) {
+                console.warn('Could not access localStorage:', e);
+            }
+            return null;
+        }
+
+        function getAPIBase() {
+            // Try to get from parent window
+            if (window.opener && window.opener.DatabaseAPI) {
+                return window.opener.DatabaseAPI.API_BASE;
+            }
+            // Default to current origin
+            return window.location.origin;
+        }
+
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+        }
+
+        async function checkAuth() {
+            const token = getToken();
+            if (token) {
+                showStatus('✅ Authentication token found!', 'success');
+            } else {
+                showStatus('❌ No authentication token found. Please make sure you are logged into the main application.', 'error');
+            }
+        }
+
+        async function uploadTemplate() {
+            const btn = document.getElementById('uploadBtn');
+            btn.disabled = true;
+            showStatus('📤 Uploading template...', 'info');
+
+            try {
+                const token = getToken();
+                if (!token) {
+                    throw new Error('No authentication token found. Please make sure you are logged into the main application.');
+                }
+
+                const templateData = {
+                    name: 'Exxaro Grootegeluk document collection checklist for 2025',
+                    description: 'Document collection checklist template for Exxaro Grootegeluk project for the year 2025',
+                    sections: [
+                        {
+                            id: 'file1',
+                            name: 'File 1',
+                            documents: [
+                                { id: 'file1-doc1', name: 'Mining Right', collectionStatus: {}, comments: {} },
+                                { id: 'file1-doc2', name: 'CIPC Documents', collectionStatus: {}, comments: {} },
+                                { id: 'file1-doc3', name: 'Diesel Refund Registration', collectionStatus: {}, comments: {} },
+                                { id: 'file1-doc4', name: 'VAT Registration', collectionStatus: {}, comments: {} },
+                                { id: 'file1-doc5', name: 'Title Deed / Lease Agreement', collectionStatus: {}, comments: {} },
+                                { id: 'file1-doc6', name: 'Environmental Authorisations', collectionStatus: {}, comments: {} },
+                                { id: 'file1-doc7', name: 'Summary of Operations and Activities', collectionStatus: {}, comments: {} },
+                                { id: 'file1-doc8', name: 'Descriptions of Specialised Data Systems', collectionStatus: {}, comments: {} },
+                                { id: 'file1-doc9', name: 'File 1 Explanation', collectionStatus: {}, comments: {} }
+                            ]
+                        },
+                        {
+                            id: 'file2',
+                            name: 'File 2',
+                            documents: [
+                                { id: 'file2-doc1', name: 'Fuel Supply Contract', collectionStatus: {}, comments: {} },
+                                { id: 'file2-doc2', name: 'Mining Contractors Contracts', collectionStatus: {}, comments: {} },
+                                { id: 'file2-doc3', name: 'Sale of Product Contracts', collectionStatus: {}, comments: {} },
+                                { id: 'file2-doc4', name: 'File 2 Explanation', collectionStatus: {}, comments: {} }
+                            ]
+                        },
+                        {
+                            id: 'file3',
+                            name: 'File 3',
+                            documents: [
+                                { id: 'file3-doc1', name: 'Tank and Pump Configuration', collectionStatus: {}, comments: {} },
+                                { id: 'file3-doc2', name: 'Diagram of Fuel System', collectionStatus: {}, comments: {} },
+                                { id: 'file3-doc3', name: 'Photos of meter', collectionStatus: {}, comments: {} },
+                                { id: 'file3-doc4', name: 'Delivery Notes', collectionStatus: {}, comments: {} },
+                                { id: 'file3-doc5', name: 'Invoices', collectionStatus: {}, comments: {} },
+                                { id: 'file3-doc6', name: 'Remittance Advices', collectionStatus: {}, comments: {} },
+                                { id: 'file3-doc7', name: 'Proof of payments', collectionStatus: {}, comments: {} },
+                                { id: 'file3-doc8', name: 'Tank Reconcilliations', collectionStatus: {}, comments: {} },
+                                { id: 'file3-doc9', name: 'Photos of Meter Readings', collectionStatus: {}, comments: {} },
+                                { id: 'file3-doc10', name: 'Meter Readings', collectionStatus: {}, comments: {} },
+                                { id: 'file3-doc11', name: 'Calibration Certificates', collectionStatus: {}, comments: {} },
+                                { id: 'file3-doc12', name: 'Document', collectionStatus: {}, comments: {} }
+                            ]
+                        },
+                        {
+                            id: 'file4',
+                            name: 'File 4',
+                            documents: [
+                                { id: 'file4-doc1', name: 'Asset Register - Combined Assets', collectionStatus: {}, comments: {} },
+                                { id: 'file4-doc2', name: 'Asset Register - Mining Assets', collectionStatus: {}, comments: {} },
+                                { id: 'file4-doc3', name: 'Asset Register - Non Mining Assets', collectionStatus: {}, comments: {} },
+                                { id: 'file4-doc4', name: 'Driver List', collectionStatus: {}, comments: {} },
+                                { id: 'file4-doc5', name: 'File 4 Explanation', collectionStatus: {}, comments: {} }
+                            ]
+                        },
+                        {
+                            id: 'file5',
+                            name: 'File 5',
+                            documents: [
+                                { id: 'file5-doc1', name: 'Description and Literature of FMS', collectionStatus: {}, comments: {} },
+                                { id: 'file5-doc2', name: 'FMS Raw Data', collectionStatus: {}, comments: {} },
+                                { id: 'file5-doc3', name: 'Detailed Fuel Refund Report', collectionStatus: {}, comments: {} },
+                                { id: 'file5-doc4', name: 'Fuel Refund Logbook Per Asset', collectionStatus: {}, comments: {} },
+                                { id: 'file5-doc5', name: 'Claim Comparison [if applicable]', collectionStatus: {}, comments: {} },
+                                { id: 'file5-doc6', name: 'File 5 Explanation', collectionStatus: {}, comments: {} }
+                            ]
+                        },
+                        {
+                            id: 'file6',
+                            name: 'File 6',
+                            documents: [
+                                { id: 'file6-doc1', name: 'Monthly Survey Reports', collectionStatus: {}, comments: {} },
+                                { id: 'file6-doc2', name: 'Production Reports', collectionStatus: {}, comments: {} },
+                                { id: 'file6-doc3', name: 'Asset Activity Reports', collectionStatus: {}, comments: {} },
+                                { id: 'file6-doc4', name: 'Asset Tagging Reports', collectionStatus: {}, comments: {} },
+                                { id: 'file6-doc5', name: 'Diesel Cost Component', collectionStatus: {}, comments: {} },
+                                { id: 'file6-doc6', name: 'Sales of Coal', collectionStatus: {}, comments: {} },
+                                { id: 'file6-doc7', name: 'Weighbridge Data', collectionStatus: {}, comments: {} },
+                                { id: 'file6-doc8', name: 'Contractor Invoices', collectionStatus: {}, comments: {} },
+                                { id: 'file6-doc9', name: 'Contractor Remittances', collectionStatus: {}, comments: {} },
+                                { id: 'file6-doc10', name: 'Contractor Proof of payment', collectionStatus: {}, comments: {} },
+                                { id: 'file6-doc11', name: 'File 6 Explanation', collectionStatus: {}, comments: {} }
+                            ]
+                        },
+                        {
+                            id: 'file7',
+                            name: 'File 7',
+                            documents: [
+                                { id: 'file7-doc1', name: 'Annual Financial Statements', collectionStatus: {}, comments: {} },
+                                { id: 'file7-doc2', name: 'Management Accounts', collectionStatus: {}, comments: {} },
+                                { id: 'file7-doc3', name: 'Any deviations (theft, loss etc)', collectionStatus: {}, comments: {} },
+                                { id: 'file7-doc4', name: 'Fuel Caps Exceeded', collectionStatus: {}, comments: {} },
+                                { id: 'file7-doc5', name: 'VAT 201 - Monthly', collectionStatus: {}, comments: {} },
+                                { id: 'file7-doc6', name: 'File 7 Explanation', collectionStatus: {}, comments: {} }
+                            ]
+                        }
+                    ],
+                    isDefault: false
+                };
+
+                const apiBase = getAPIBase();
+                const response = await fetch(`${apiBase}/api/document-collection-templates`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify(templateData)
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`API returned ${response.status}: ${errorText}`);
+                }
+
+                const result = await response.json();
+                const templateId = result.data?.template?.id || result.template?.id;
+                
+                showStatus(`✅ Template uploaded successfully! Template ID: ${templateId}`, 'success');
+                console.log('Full response:', result);
+            } catch (error) {
+                showStatus(`❌ Error: ${error.message}`, 'error');
+                console.error('Upload error:', error);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // Auto-check auth on load
+        window.addEventListener('load', () => {
+            checkAuth();
+        });
+    </script>
+</body>
+</html>
+
