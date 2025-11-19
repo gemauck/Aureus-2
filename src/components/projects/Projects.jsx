@@ -1295,6 +1295,11 @@ const Projects = () => {
                     console.warn('⚠️ updateViewingProject called with invalid project');
                     return;
                 }
+
+                if (updatedProject.skipDocumentSectionsUpdate) {
+                    console.log('⏭️ Skipping updateViewingProject: skipDocumentSectionsUpdate flag set');
+                    return;
+                }
                 
                 // Only update if we're actually viewing this project
                 if (!viewingProject || viewingProject.id !== updatedProject.id) {

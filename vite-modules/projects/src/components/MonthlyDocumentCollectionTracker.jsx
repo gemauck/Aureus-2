@@ -23,7 +23,8 @@ const getAPI = () => {
                     if (updatedProject) {
                         window.updateViewingProject({
                             ...updatedProject,
-                            documentSections: JSON.stringify(sections)
+                            documentSections: JSON.stringify(sections),
+                            skipDocumentSectionsUpdate: true
                         });
                     }
                 }
@@ -154,6 +155,34 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         'January', 'February', 'March', 'April', 'May', 'June',
         'July', 'August', 'September', 'October', 'November', 'December'
     ];
+
+    const getSectionsCacheKey = (projectId) => projectId ? `docCollectionSectionsCache_${projectId}` : null;
+
+    const loadSectionsFromCache = (projectId) => {
+        const cacheKey = getSectionsCacheKey(projectId);
+        if (!cacheKey) return null;
+        try {
+            const cached = sessionStorage.getItem(cacheKey);
+            if (!cached) return null;
+            const parsed = JSON.parse(cached);
+            if (parsed && typeof parsed === 'object') {
+                return parsed;
+            }
+        } catch (error) {
+            console.warn('Failed to read document collection cache:', error);
+        }
+        return null;
+    };
+
+    const persistSectionsToCache = (projectId, sections) => {
+        const cacheKey = getSectionsCacheKey(projectId);
+        if (!cacheKey) return;
+        try {
+            sessionStorage.setItem(cacheKey, JSON.stringify(sections));
+        } catch (error) {
+            console.warn('Failed to persist document collection cache:', error);
+        }
+    };
 
     const YEAR_STORAGE_PREFIX = 'documentCollectionSelectedYear_';
     const getInitialSelectedYear = () => {
@@ -564,7 +593,24 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         // ⚠️ CRITICAL: If we don't have data in state but think we've loaded, we need to reload
         // This can happen if the component remounts and state is reset but sessionStorage persists
-        const needsReload = !hasDataInState && (hasLoadedInitialDataRef.current || hasLoadedInSession);
+        let needsReload = !hasDataInState && (hasLoadedInitialDataRef.current || hasLoadedInSession);
+        
+        if (needsReload) {
+            const cachedSections = loadSectionsFromCache(project.id);
+            if (cachedSections) {
+                console.log('♻️ Restoring document collection data from cache', {
+                    projectId: project.id,
+                    years: Object.keys(cachedSections)
+                });
+                setSectionsByYear(cachedSections);
+                hasLoadedInitialDataRef.current = true;
+                lastSavedSnapshotRef.current = serializeSections(mergeSectionsByYear(cachedSections));
+                try {
+                    sessionStorage.setItem(sessionLoadedKey, 'true');
+                } catch {}
+                return;
+            }
+        }
         
         // ✅ ONLY skip loading if:
         // 1. This is NOT a new project AND
@@ -649,6 +695,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 const initialSections = normalizeSections(parsed);
                 const organizedByYear = organizeSectionsByYear(initialSections);
                 setSectionsByYear(organizedByYear);
+                persistSectionsToCache(project.id, organizedByYear);
                 // Create snapshot from merged data for comparison
                 const mergedForSnapshot = mergeSectionsByYear(organizedByYear);
                 lastSavedSnapshotRef.current = serializeSections(mergedForSnapshot);
@@ -698,6 +745,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 } else {
                                     console.log('🔄 Updating sections from fresh database data');
                                     setSectionsByYear(organizedFresh);
+                                    persistSectionsToCache(project.id, organizedFresh);
                                     lastSavedSnapshotRef.current = serializeSections(freshMerged);
                                 }
                             } else {
@@ -729,6 +777,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     }, [project?.id]); // ⚠️ FIXED: Only depend on project ID to prevent unnecessary reloads
     // Removed normalizeSections, serializeSections, api, organizeSectionsByYear, mergeSectionsByYear from dependencies
     // These are stable callbacks and don't need to trigger reloads. Using them inside the effect is safe.
+
+    useEffect(() => {
+        if (!project?.id) return;
+        if (!hasLoadedInitialDataRef.current) return;
+        persistSectionsToCache(project.id, sectionsByYear);
+    }, [project?.id, sectionsByYear]);
 
     // Keep the modal/interaction state ref up to date without re-running auto-save
     useEffect(() => {

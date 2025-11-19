@@ -637,7 +637,7 @@
                 
                 // Check if script already exists - remove old ones with timestamp cache busting
                 const existingScripts = document.querySelectorAll('script[src*="projects-module.js"]');
-                const VITE_PROJECTS_VERSION = '20250127-doc-collection-refactor-v2';
+                const VITE_PROJECTS_VERSION = '20251119-doc-collection-cache';
                 console.log('🔍 Checking for existing scripts. Found:', existingScripts.length);
                 existingScripts.forEach(oldScript => {
                     const src = oldScript.src || oldScript.getAttribute('src') || '';
