@@ -149,7 +149,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const workingMonths = getWorkingMonths();
     const tableRef = useRef(null);
     const monthRefs = useRef({});
-    const hasInitialScrolled = useRef(false);
 
     const months = [
         'January', 'February', 'March', 'April', 'May', 'June',
@@ -1096,31 +1095,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         });
     }, [selectedYear]);
 
-    useEffect(() => {
-        if (!hasInitialScrolled.current && sections.length > 0 && tableRef.current && selectedYear === currentYear) {
-            setTimeout(() => {
-                scrollToWorkingMonths();
-                hasInitialScrolled.current = true;
-            }, 100);
-        }
-    }, [sections, selectedYear]);
-
-    const scrollToWorkingMonths = () => {
-        const firstWorkingMonthName = months[workingMonths[0]];
-        const firstMonthElement = monthRefs.current[firstWorkingMonthName];
-        
-        if (firstMonthElement && tableRef.current) {
-            const container = tableRef.current;
-            const elementLeft = firstMonthElement.offsetLeft;
-            const documentColumnWidth = 250;
-            const scrollPosition = elementLeft - documentColumnWidth - 100;
-            
-            container.scrollTo({
-                left: Math.max(0, scrollPosition),
-                behavior: 'smooth'
-            });
-        }
-    };
+    // REMOVED: Auto-navigate to working months on load
+    // The scrollToWorkingMonths function and useEffect have been removed
 
     const yearOptions = [];
     const MIN_YEAR = 2015;
