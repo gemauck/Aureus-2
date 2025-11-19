@@ -1100,6 +1100,12 @@ const Projects = () => {
     };
 
     const handleViewProject = async (project) => {
+        // Skip if we're already viewing this exact project (prevent unnecessary re-renders)
+        if (viewingProject && viewingProject.id === project.id) {
+            console.log('⏭️ Already viewing this project, skipping handleViewProject');
+            return;
+        }
+        
         console.log('Viewing project:', project);
         console.log('ProjectDetail component exists:', !!window.ProjectDetail, 'type:', typeof window.ProjectDetail);
         console.log('🔍 ProjectDetail initialization state:', {
@@ -1364,8 +1370,28 @@ const Projects = () => {
             // Only set viewingProject if ProjectDetail is available
             if (window.ProjectDetail) {
                 console.log('✅ ProjectDetail is available, setting viewingProject');
-                // Create a new object reference to ensure React detects the change
-                setViewingProject({ ...normalizedProject });
+                // Only update if the project actually changed (prevent unnecessary re-renders)
+                setViewingProject(prev => {
+                    // If it's the same project ID, check if data actually changed
+                    if (prev && prev.id === normalizedProject.id) {
+                        // Compare important fields to see if anything actually changed
+                        const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'tasks', 'taskLists', 'documentSections'];
+                        const hasChanges = importantFields.some(field => {
+                            const prevValue = prev[field];
+                            const newValue = normalizedProject[field];
+                            // Use JSON.stringify for deep comparison of objects/arrays
+                            return JSON.stringify(prevValue) !== JSON.stringify(newValue);
+                        });
+                        
+                        if (!hasChanges) {
+                            console.log('⏭️ Skipping viewingProject update: project data unchanged');
+                            return prev; // Return previous object to prevent re-render
+                        }
+                        console.log('🔄 Updating viewingProject: project data changed');
+                    }
+                    // Create a new object reference only when data actually changed
+                    return { ...normalizedProject };
+                });
             } else {
                 console.error('❌ ProjectDetail still not available after loading attempt');
                 console.error('🔍 Debug info:', {
