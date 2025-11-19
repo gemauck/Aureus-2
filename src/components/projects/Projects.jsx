@@ -2125,6 +2125,9 @@ const Projects = () => {
         }
     }
 
+    // Get modal component
+    const ModalComponent = showModal ? (window.ProjectModal && typeof window.ProjectModal === 'function' ? window.ProjectModal : null) : null;
+
     return (
         <div className="space-y-3 sm:space-y-4">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0">
@@ -2502,43 +2505,36 @@ const Projects = () => {
             )}
 
             {/* Add/Edit Modal */}
-            {showModal && (() => {
-                const ModalComponent = projectModalComponent || (window.ProjectModal && typeof window.ProjectModal === 'function' ? window.ProjectModal : null);
-                
-                if (ModalComponent) {
-                    return (
-                        <ModalComponent
-                            project={selectedProject}
-                            onSave={handleSaveProject}
-                            onDelete={handleDeleteProject}
-                            onClose={() => {
-                                setShowModal(false);
-                                setSelectedProject(null);
-                            }}
-                        />
-                    );
-                } else {
-                    return (
-                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-                            <div className="bg-white rounded-lg p-3 sm:p-4 w-full max-w-md max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
-                                <h2 className="text-lg font-semibold text-gray-900 mb-2">Loading Project Editor</h2>
-                                <p className="text-sm text-gray-600 mb-3">Please wait while the project editor loads...</p>
-                                <div className="flex justify-end">
-                                    <button
-                                        onClick={() => {
-                                            setShowModal(false);
-                                            setSelectedProject(null);
-                                        }}
-                                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
-                            </div>
+            {showModal && ModalComponent && (
+                <ModalComponent
+                    project={selectedProject}
+                    onSave={handleSaveProject}
+                    onDelete={handleDeleteProject}
+                    onClose={() => {
+                        setShowModal(false);
+                        setSelectedProject(null);
+                    }}
+                />
+            )}
+            {showModal && !ModalComponent && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+                    <div className="bg-white rounded-lg p-3 sm:p-4 w-full max-w-md max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+                        <h2 className="text-lg font-semibold text-gray-900 mb-2">Loading Project Editor</h2>
+                        <p className="text-sm text-gray-600 mb-3">Please wait while the project editor loads...</p>
+                        <div className="flex justify-end">
+                            <button
+                                onClick={() => {
+                                    setShowModal(false);
+                                    setSelectedProject(null);
+                                }}
+                                className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                            >
+                                Cancel
+                            </button>
                         </div>
-                    );
-                }
-            })()}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
