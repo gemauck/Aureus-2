@@ -268,7 +268,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     // Refs to track modal/form state for auto-save (always have latest values)
     const modalsOpenRef = useRef(false);
-    const hasLoadedInitialDataRef = useRef(false);
+    // Use sessionStorage to persist loaded state across remounts (same session, same project)
+    const getLoadedStateKey = () => `docTracker_loaded_${project?.id || 'default'}`;
+    const hasLoadedInitialDataRef = useRef(() => {
+        if (!project?.id) return false;
+        try {
+            const stored = sessionStorage.getItem(getLoadedStateKey());
+            return stored === 'true';
+        } catch {
+            return false;
+        }
+    }());
 
     // Get API service instance
     const api = getAPI();
@@ -569,6 +579,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         if (isNewProject) {
             hasLoadedInitialDataRef.current = false;
             previousProjectIdRef.current = project.id;
+            // Clear sessionStorage for old project
+            try {
+                const oldKey = `docTracker_loaded_${previousProjectIdRef.current}`;
+                sessionStorage.removeItem(oldKey);
+            } catch {}
             // Update documentSections ref for tracking, but don't use it to trigger reloads
             const currentDocumentSections = typeof project.documentSections === 'string' 
                 ? project.documentSections 
@@ -576,14 +591,29 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             lastProjectDocumentSectionsRef.current = currentDocumentSections;
         }
         
+        // Check sessionStorage to see if we've already loaded for this project in this session
+        const sessionLoadedKey = getLoadedStateKey();
+        let hasLoadedInSession = false;
+        try {
+            hasLoadedInSession = sessionStorage.getItem(sessionLoadedKey) === 'true';
+        } catch {}
+        
         // ✅ ONLY load data if:
         // 1. This is the initial load (hasn't loaded data yet)
         // 2. OR this is a new project (project ID changed)
         // ❌ REMOVED: documentSections change detection - this was causing constant reloads
         // The component should only reload when navigating to a different project or on initial mount
-        if (!isNewProject && hasLoadedInitialDataRef.current) {
+        if (!isNewProject && (hasLoadedInitialDataRef.current || hasLoadedInSession)) {
             // Already loaded data for this project, don't reload
-            console.log('⏭️ Skipping reload: already loaded data for this project');
+            console.log('⏭️ Skipping reload: already loaded data for this project', {
+                refLoaded: hasLoadedInitialDataRef.current,
+                sessionLoaded: hasLoadedInSession,
+                projectId: project.id
+            });
+            // Sync ref with sessionStorage
+            if (hasLoadedInSession && !hasLoadedInitialDataRef.current) {
+                hasLoadedInitialDataRef.current = true;
+            }
             return;
         }
         
@@ -689,6 +719,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             } finally {
                 setIsLoading(false);
                 hasLoadedInitialDataRef.current = true;
+                // Persist loaded state to sessionStorage to survive remounts
+                try {
+                    sessionStorage.setItem(getLoadedStateKey(), 'true');
+                } catch (e) {
+                    console.warn('Failed to persist loaded state to sessionStorage:', e);
+                }
             }
         };
         
@@ -941,16 +977,50 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 const existingYear = Object.keys(prev).find(y => prev[y] && prev[y].length > 0);
                 if (existingYear) {
                     // Copy structure but clear year-specific data (status/comments)
+                    // CRITICAL: Filter out sections with template markers for other years
                     return {
                         ...prev,
-                        [year]: prev[existingYear].map(section => ({
-                            ...section,
-                            documents: section.documents?.map(doc => ({
-                                ...doc,
-                                collectionStatus: {},
-                                comments: {}
-                            })) || []
-                        }))
+                        [year]: prev[existingYear]
+                            .filter(section => {
+                                // Check if section has a template marker for a specific year
+                                let hasTemplateMarker = false;
+                                let templateMarkerYear = null;
+                                
+                                section.documents?.forEach(doc => {
+                                    if (doc.collectionStatus) {
+                                        Object.keys(doc.collectionStatus).forEach(key => {
+                                            if (key.startsWith('_template-')) {
+                                                const match = key.match(/_template-(\d{4})/);
+                                                if (match) {
+                                                    hasTemplateMarker = true;
+                                                    templateMarkerYear = parseInt(match[1]);
+                                                }
+                                            }
+                                        });
+                                    }
+                                });
+                                
+                                // Only include section if it doesn't have a template marker, or if template marker matches target year
+                                if (hasTemplateMarker) {
+                                    if (templateMarkerYear === year) {
+                                        console.log(`✅ Year change: Including section ${section.id} in year ${year} (template marker matches)`);
+                                        return true;
+                                    } else {
+                                        console.log(`🚫 Year change: Excluding section ${section.id} from year ${year} (template marker: ${templateMarkerYear})`);
+                                        return false;
+                                    }
+                                }
+                                // No template marker, include it
+                                return true;
+                            })
+                            .map(section => ({
+                                ...section,
+                                documents: section.documents?.map(doc => ({
+                                    ...doc,
+                                    collectionStatus: {},
+                                    comments: {}
+                                })) || []
+                            }))
                     };
                 } else {
                     // No existing data, just ensure year exists
