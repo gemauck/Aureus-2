@@ -562,30 +562,41 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const hasDataInState = Object.keys(sectionsByYear).length > 0 && 
             Object.values(sectionsByYear).some(yearSections => yearSections.length > 0);
         
-        // ✅ ONLY load data if:
-        // 1. This is the initial load (hasn't loaded data yet)
-        // 2. OR this is a new project (project ID changed)
+        // ⚠️ CRITICAL: If we don't have data in state but think we've loaded, we need to reload
+        // This can happen if the component remounts and state is reset but sessionStorage persists
+        const needsReload = !hasDataInState && (hasLoadedInitialDataRef.current || hasLoadedInSession);
+        
+        // ✅ ONLY skip loading if:
+        // 1. This is NOT a new project AND
+        // 2. We have data in state (actual data exists)
         // ❌ REMOVED: documentSections change detection - this was causing constant reloads
         // The component should only reload when navigating to a different project or on initial mount
-        if (!isNewProject && (hasLoadedInitialDataRef.current || hasLoadedInSession || hasDataInState)) {
-            // Already loaded data for this project, don't reload
-            console.log('⏭️ Skipping reload: already loaded data for this project', {
+        if (!isNewProject && hasDataInState) {
+            // Already have data in state, don't reload
+            console.log('⏭️ Skipping reload: data already in state', {
                 refLoaded: hasLoadedInitialDataRef.current,
                 sessionLoaded: hasLoadedInSession,
                 hasDataInState: hasDataInState,
                 projectId: project.id
             });
             // Sync ref with sessionStorage
-            if ((hasLoadedInSession || hasDataInState) && !hasLoadedInitialDataRef.current) {
+            if (!hasLoadedInitialDataRef.current) {
                 hasLoadedInitialDataRef.current = true;
-                // Update sessionStorage if we have data but it wasn't set
-                if (!hasLoadedInSession && hasDataInState) {
-                    try {
-                        sessionStorage.setItem(sessionLoadedKey, 'true');
-                    } catch {}
-                }
+                try {
+                    sessionStorage.setItem(sessionLoadedKey, 'true');
+                } catch {}
             }
             return;
+        }
+        
+        // If we need to reload (state is empty but we think we've loaded), log it
+        if (needsReload) {
+            console.log('🔄 Reloading: state is empty but sessionStorage says loaded (component remounted)', {
+                refLoaded: hasLoadedInitialDataRef.current,
+                sessionLoaded: hasLoadedInSession,
+                hasDataInState: hasDataInState,
+                projectId: project.id
+            });
         }
         
         // Update ref with current modal state before checking
