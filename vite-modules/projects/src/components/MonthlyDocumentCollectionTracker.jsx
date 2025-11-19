@@ -287,9 +287,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         flatSections.forEach((section, sectionIdx) => {
             const sectionYears = new Set();
-            const sectionId = section.id || sectionIdx;
+            const sectionId = section.id || `section-${sectionIdx}`;
             let templateYear = null;
             
+            // First pass: check for template markers (highest priority)
             section.documents?.forEach(doc => {
                 if (doc.collectionStatus) {
                     Object.keys(doc.collectionStatus).forEach(key => {
@@ -298,43 +299,53 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             const match = key.match(/_template-(\d{4})/);
                             if (match) {
                                 templateYear = parseInt(match[1]);
+                                console.log(`🔍 Found template marker for section ${sectionId}: _template-${templateYear}`);
                                 allYears.add(templateYear);
                                 // Template marker means section ONLY belongs to this year
                                 sectionTemplateMarkers.set(sectionId, templateYear);
                                 sectionYears.add(templateYear);
-                            }
-                        } else {
-                            // Check for regular year in format "-YYYY"
-                            const match = key.match(/-(\d{4})$/);
-                            if (match) {
-                                const year = parseInt(match[1]);
-                                // Only add if this section doesn't have a template marker
-                                // (template markers are exclusive)
-                                if (!templateYear) {
-                                    allYears.add(year);
-                                    sectionYears.add(year);
-                                }
-                            }
-                        }
-                    });
-                }
-                if (doc.comments) {
-                    Object.keys(doc.comments).forEach(key => {
-                        const match = key.match(/-(\d{4})$/);
-                        if (match) {
-                            const year = parseInt(match[1]);
-                            // Only add if this section doesn't have a template marker
-                            if (!templateYear) {
-                                allYears.add(year);
-                                sectionYears.add(year);
                             }
                         }
                     });
                 }
             });
             
+            // Second pass: only check regular year data if no template marker found
+            if (templateYear === null) {
+                section.documents?.forEach(doc => {
+                    if (doc.collectionStatus) {
+                        Object.keys(doc.collectionStatus).forEach(key => {
+                            // Skip template markers (already processed)
+                            if (!key.startsWith('_template-')) {
+                                // Check for regular year in format "-YYYY"
+                                const match = key.match(/-(\d{4})$/);
+                                if (match) {
+                                    const year = parseInt(match[1]);
+                                    allYears.add(year);
+                                    sectionYears.add(year);
+                                }
+                            }
+                        });
+                    }
+                    if (doc.comments) {
+                        Object.keys(doc.comments).forEach(key => {
+                            const match = key.match(/-(\d{4})$/);
+                            if (match) {
+                                const year = parseInt(match[1]);
+                                allYears.add(year);
+                                sectionYears.add(year);
+                            }
+                        });
+                    }
+                });
+            }
+            
             // Store which years this section has data for
             sectionYearsMap.set(sectionId, sectionYears);
+            
+            if (templateYear !== null) {
+                console.log(`✅ Section ${sectionId} marked for year ${templateYear} only`);
+            }
         });
         
         // Always include current year and selected year
@@ -354,23 +365,28 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         allYears.forEach(year => {
             organized[year] = flatSections
                 .map((section, sectionIdx) => {
-                    const sectionId = section.id || sectionIdx;
-                    const hasDataForYear = sectionYearsMap.get(sectionId)?.has(year) || false;
+                    const sectionId = section.id || `section-${sectionIdx}`;
                     
                     // Check if this section has a template marker (from our map)
                     const templateMarkerYear = sectionTemplateMarkers.get(sectionId);
                     const hasTemplateMarker = templateMarkerYear !== null && templateMarkerYear !== undefined;
                     
-                    // Only include section if it has data for this year
-                    // CRITICAL: If it has a template marker, it MUST match this year exactly, otherwise exclude
-                    const shouldInclude = hasTemplateMarker
-                        ? (templateMarkerYear === year)
-                        : hasDataForYear;
-                    
-                    // Debug logging for template sections
-                    if (hasTemplateMarker && templateMarkerYear !== year) {
-                        console.log(`🚫 Excluding section ${sectionId} from year ${year} (template marker: ${templateMarkerYear})`);
+                    // CRITICAL: If section has template marker, it MUST match this year exactly
+                    // If it doesn't match, exclude it completely (don't even check hasDataForYear)
+                    if (hasTemplateMarker) {
+                        if (templateMarkerYear !== year) {
+                            console.log(`🚫 Organize: Excluding section ${sectionId} from year ${year} (template marker: ${templateMarkerYear})`);
+                            return null; // Exclude this section for this year
+                        } else {
+                            console.log(`✅ Organize: Including section ${sectionId} in year ${year} (template marker matches)`);
+                        }
                     }
+                    
+                    // For sections without template markers, check if they have data for this year
+                    const hasDataForYear = sectionYearsMap.get(sectionId)?.has(year) || false;
+                    const shouldInclude = hasTemplateMarker
+                        ? (templateMarkerYear === year) // Should always be true if we got here
+                        : hasDataForYear;
                     
                     if (shouldInclude) {
                         return {
