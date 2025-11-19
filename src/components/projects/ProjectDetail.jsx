@@ -305,13 +305,24 @@ function initializeProjectDetail() {
         // Wrap with React.memo to prevent unnecessary re-renders when props haven't changed
         // This prevents MonthlyDocumentCollectionTracker from remounting unnecessarily
         return memo(DocumentCollectionProcessSectionInner, (prevProps, nextProps) => {
-            // Only re-render if these specific props change
-            return (
-                prevProps.project?.id === nextProps.project?.id &&
-                prevProps.hasDocumentCollectionProcess === nextProps.hasDocumentCollectionProcess &&
-                prevProps.activeSection === nextProps.activeSection &&
-                prevProps.onBack === nextProps.onBack
-            );
+            // React.memo comparison: return true if props are equal (skip re-render), false if different (re-render)
+            const projectIdEqual = prevProps.project?.id === nextProps.project?.id;
+            const hasDocCollectionEqual = prevProps.hasDocumentCollectionProcess === nextProps.hasDocumentCollectionProcess;
+            const activeSectionEqual = prevProps.activeSection === nextProps.activeSection;
+            const onBackEqual = prevProps.onBack === nextProps.onBack;
+            
+            const propsEqual = projectIdEqual && hasDocCollectionEqual && activeSectionEqual && onBackEqual;
+            
+            if (!propsEqual) {
+                console.log('🔄 DocumentCollectionProcessSection: Props changed, allowing re-render', {
+                    projectId: projectIdEqual,
+                    hasDocCollection: hasDocCollectionEqual,
+                    activeSection: activeSectionEqual,
+                    onBack: onBackEqual
+                });
+            }
+            
+            return propsEqual; // Return true if equal (skip re-render), false if different (re-render)
         });
     })();
 
@@ -439,6 +450,11 @@ function initializeProjectDetail() {
     
     // Tab navigation state - restore last section per project when available
     const [activeSection, setActiveSection] = useState(() => getStoredActiveSection(project?.id));
+    
+    // Memoize the back callback to prevent DocumentCollectionProcessSection from re-rendering
+    const handleBackToOverview = useCallback(() => {
+        setActiveSection('overview');
+    }, []);
     
     // Persist activeSection to sessionStorage (for navigation within the same session)
     useEffect(() => {
@@ -3312,7 +3328,7 @@ function initializeProjectDetail() {
                     project={project}
                     hasDocumentCollectionProcess={hasDocumentCollectionProcess}
                     activeSection={activeSection}
-                    onBack={() => setActiveSection('overview')}
+                    onBack={handleBackToOverview}
                 />
             )}
 
