@@ -293,6 +293,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const pendingSaveRef = useRef(null);
     const lastSavedSnapshotRef = useRef(null);
     const lastProjectDocumentSectionsRef = useRef(null); // Track last documentSections to prevent unnecessary reloads
+    const isRestoringFromCacheRef = useRef(false); // Track when restoring from cache to skip auto-save
     
     // Refs to track modal/form state for auto-save (always have latest values)
     const modalsOpenRef = useRef(false);
@@ -601,12 +602,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     projectId: project.id,
                     years: Object.keys(cachedSections)
                 });
+                // Set flag to skip auto-save when restoring from cache
+                isRestoringFromCacheRef.current = true;
                 setSectionsByYear(cachedSections);
                 hasLoadedInitialDataRef.current = true;
                 lastSavedSnapshotRef.current = serializeSections(mergeSectionsByYear(cachedSections));
                 try {
                     sessionStorage.setItem(sessionLoadedKey, 'true');
                 } catch {}
+                // Clear the flag after a short delay to allow state to update
+                setTimeout(() => {
+                    isRestoringFromCacheRef.current = false;
+                }, 100);
                 return;
             }
         }
@@ -806,6 +813,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // ⚠️ IMPORTANT: Don't auto-save while modals, forms, or popups are open to prevent them from closing
     useEffect(() => {
         if (!project?.id || !hasLoadedInitialDataRef.current) return;
+        
+        // Skip auto-save if we're restoring from cache (prevents unnecessary save attempts)
+        if (isRestoringFromCacheRef.current) {
+            return;
+        }
         
         // Merge all years' data for snapshot comparison
         const mergedSections = mergeSectionsByYear(sectionsByYear);
