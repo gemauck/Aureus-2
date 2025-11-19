@@ -301,9 +301,16 @@ function initializeProjectDetail() {
                 );
             }
 
+            // Only render MonthlyDocumentCollectionTracker when activeSection is documentCollection
+            // This prevents it from being rendered when not needed, but DocumentCollectionProcessSection
+            // stays mounted to prevent remounting issues
+            if (activeSection !== 'documentCollection') {
+                return null;
+            }
+            
             return (
                 <MonthlyDocumentCollectionTracker
-                    key={project?.id || 'default'}
+                    key={`tracker-${project?.id || 'default'}`}
                     project={project}
                     onBack={handleBackToOverview}
                 />
@@ -3331,8 +3338,12 @@ function initializeProjectDetail() {
                 </>
             )}
 
-            {activeSection === 'documentCollection' && (
+            {/* Always render DocumentCollectionProcessSection when hasDocumentCollectionProcess is true */}
+            {/* This prevents remounting when switching between sections */}
+            {/* Use a stable key based on project ID to prevent remounts */}
+            {hasDocumentCollectionProcess && (
                 <DocumentCollectionProcessSection
+                    key={`doc-collection-${project?.id || 'default'}`}
                     project={project}
                     hasDocumentCollectionProcess={hasDocumentCollectionProcess}
                     activeSection={activeSection}
