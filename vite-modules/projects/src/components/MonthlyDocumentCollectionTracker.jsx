@@ -578,10 +578,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const isCurrentlyEditing = editingSection !== null || editingDocument !== null || editingTemplate !== null;
         modalsOpenRef.current = isAnyModalOpen || isCommentPopupOpen || isCurrentlyExporting || isCurrentlyEditing;
         
-        // ⚠️ CRITICAL: Don't reload if user has unsaved changes (prevents overwriting comments in progress)
-        const currentSectionsSnapshot = serializeSections(mergeSectionsByYear(sectionsByYear));
-        const hasUnsavedChanges = currentSectionsSnapshot !== lastSavedSnapshotRef.current;
-        
         // Don't reload data if:
         // 1. Any modal/form is open (prevents form from closing)
         // 2. User has unsaved changes (prevents overwriting comments/text in progress)
@@ -591,13 +587,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 console.log('⏸️ Data reload skipped: modal/form is open');
                 return;
             }
-            if (hasUnsavedChanges) {
-                console.log('⏸️ Data reload skipped: user has unsaved changes (prevents overwriting comments)');
-                return;
+            // ⚠️ CRITICAL: Only check for unsaved changes if we've already loaded data
+            // On initial load, lastSavedSnapshotRef.current will be null, so we need to skip this check
+            if (lastSavedSnapshotRef.current !== null) {
+                const currentSectionsSnapshot = serializeSections(mergeSectionsByYear(sectionsByYear));
+                const hasUnsavedChanges = currentSectionsSnapshot !== lastSavedSnapshotRef.current;
+                if (hasUnsavedChanges) {
+                    console.log('⏸️ Data reload skipped: user has unsaved changes (prevents overwriting comments)');
+                    return;
+                }
             }
         }
         
         const loadData = async () => {
+            console.log('📋 MonthlyDocumentCollectionTracker: Loading data from database');
             setIsLoading(true);
             try {
                 // First, try to load from prop (fast initial render)
@@ -1032,10 +1035,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
 
     const statusOptions = [
-        { value: 'not-collected', label: 'Not Collected', color: 'bg-red-400 text-white font-semibold', cellColor: 'bg-red-400 border-l-4 border-red-700 shadow-sm' },
-        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-yellow-400 text-white font-semibold', cellColor: 'bg-yellow-400 border-l-4 border-yellow-700 shadow-sm' },
-        { value: 'collected', label: 'Collected', color: 'bg-green-500 text-white font-semibold', cellColor: 'bg-green-500 border-l-4 border-green-700 shadow-sm' },
-        { value: 'unavailable', label: 'Unavailable', color: 'bg-gray-400 text-white font-semibold', cellColor: 'bg-gray-400 border-l-4 border-gray-700 shadow-sm' }
+        { value: 'not-collected', label: 'Not Collected', color: 'bg-red-400 text-white font-semibold', cellColor: 'bg-red-100 border-l-4 border-red-300 shadow-sm' },
+        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-yellow-400 text-white font-semibold', cellColor: 'bg-yellow-100 border-l-4 border-yellow-300 shadow-sm' },
+        { value: 'collected', label: 'Collected', color: 'bg-green-500 text-white font-semibold', cellColor: 'bg-green-100 border-l-4 border-green-300 shadow-sm' },
+        { value: 'unavailable', label: 'Unavailable', color: 'bg-gray-400 text-white font-semibold', cellColor: 'bg-gray-100 border-l-4 border-gray-300 shadow-sm' }
     ];
 
     const getStatusConfig = (status) => {
