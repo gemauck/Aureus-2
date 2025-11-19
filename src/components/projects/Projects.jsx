@@ -1970,7 +1970,8 @@ const Projects = () => {
                         console.log('✅ LayoutEffect: ProjectDetail loaded successfully');
                         setProjectDetailAvailable(true);
                         setWaitingForProjectDetail(false);
-                        setViewingProject(prev => prev ? { ...prev } : null);
+                        // REMOVED: Creating new object reference causes unnecessary re-renders
+                        // setViewingProject(prev => prev ? { ...prev } : null);
                     } else {
                         setWaitingForProjectDetail(false);
                     }
