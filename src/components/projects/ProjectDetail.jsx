@@ -190,9 +190,9 @@ function initializeProjectDetail() {
     // Extract DocumentCollectionProcessSection outside ProjectDetail to prevent recreation on every render
     // This ensures the component reference is stable and doesn't cause MonthlyDocumentCollectionTracker to remount
     const DocumentCollectionProcessSection = (() => {
-        const { useState: useStateSection, useEffect: useEffectSection } = window.React;
+        const { useState: useStateSection, useEffect: useEffectSection, memo } = window.React;
         
-        return ({
+        const DocumentCollectionProcessSectionInner = ({
             project,
             hasDocumentCollectionProcess,
             activeSection,
@@ -301,6 +301,18 @@ function initializeProjectDetail() {
                 />
             );
         };
+        
+        // Wrap with React.memo to prevent unnecessary re-renders when props haven't changed
+        // This prevents MonthlyDocumentCollectionTracker from remounting unnecessarily
+        return memo(DocumentCollectionProcessSectionInner, (prevProps, nextProps) => {
+            // Only re-render if these specific props change
+            return (
+                prevProps.project?.id === nextProps.project?.id &&
+                prevProps.hasDocumentCollectionProcess === nextProps.hasDocumentCollectionProcess &&
+                prevProps.activeSection === nextProps.activeSection &&
+                prevProps.onBack === nextProps.onBack
+            );
+        });
     })();
 
     const parseDocumentSections = (data) => {
