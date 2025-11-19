@@ -558,21 +558,32 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             hasLoadedInSession = sessionStorage.getItem(sessionLoadedKey) === 'true';
         } catch {}
         
+        // Also check if we already have data in state (sectionsByYear has data)
+        const hasDataInState = Object.keys(sectionsByYear).length > 0 && 
+            Object.values(sectionsByYear).some(yearSections => yearSections.length > 0);
+        
         // ✅ ONLY load data if:
         // 1. This is the initial load (hasn't loaded data yet)
         // 2. OR this is a new project (project ID changed)
         // ❌ REMOVED: documentSections change detection - this was causing constant reloads
         // The component should only reload when navigating to a different project or on initial mount
-        if (!isNewProject && (hasLoadedInitialDataRef.current || hasLoadedInSession)) {
+        if (!isNewProject && (hasLoadedInitialDataRef.current || hasLoadedInSession || hasDataInState)) {
             // Already loaded data for this project, don't reload
             console.log('⏭️ Skipping reload: already loaded data for this project', {
                 refLoaded: hasLoadedInitialDataRef.current,
                 sessionLoaded: hasLoadedInSession,
+                hasDataInState: hasDataInState,
                 projectId: project.id
             });
             // Sync ref with sessionStorage
-            if (hasLoadedInSession && !hasLoadedInitialDataRef.current) {
+            if ((hasLoadedInSession || hasDataInState) && !hasLoadedInitialDataRef.current) {
                 hasLoadedInitialDataRef.current = true;
+                // Update sessionStorage if we have data but it wasn't set
+                if (!hasLoadedInSession && hasDataInState) {
+                    try {
+                        sessionStorage.setItem(sessionLoadedKey, 'true');
+                    } catch {}
+                }
             }
             return;
         }
@@ -649,25 +660,39 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         
                         const normalizedFresh = normalizeSections(freshParsed);
                         const organizedFresh = organizeSectionsByYear(normalizedFresh);
-                        // Only update if different (avoid unnecessary re-renders)
-                        // ⚠️ CRITICAL: Don't overwrite local changes - check if we have unsaved changes first
-                        const currentMerged = mergeSectionsByYear(sectionsByYear);
-                        const freshMerged = mergeSectionsByYear(organizedFresh);
-                        const currentSnapshot = serializeSections(currentMerged);
-                        const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
                         
-                        if (JSON.stringify(freshMerged) !== JSON.stringify(currentMerged)) {
-                            if (hasUnsavedChanges) {
-                                // Don't overwrite user's unsaved changes!
-                                console.log('⏸️ Skipping database update: user has unsaved changes');
+                        // ⚠️ CRITICAL: Check if we already have data in state
+                        // If we do, don't overwrite it - the user might be editing
+                        const hasExistingData = Object.keys(sectionsByYear).length > 0 && 
+                            Object.values(sectionsByYear).some(yearSections => yearSections.length > 0);
+                        
+                        if (hasExistingData) {
+                            // We already have data loaded, don't overwrite it
+                            console.log('⏸️ Skipping database update: data already loaded in state (preserving user edits)');
+                            // Just update the snapshot to match current state
+                            const currentMerged = mergeSectionsByYear(sectionsByYear);
+                            lastSavedSnapshotRef.current = serializeSections(currentMerged);
+                        } else {
+                            // Only update if different (avoid unnecessary re-renders)
+                            // ⚠️ CRITICAL: Don't overwrite local changes - check if we have unsaved changes first
+                            const currentMerged = mergeSectionsByYear(sectionsByYear);
+                            const freshMerged = mergeSectionsByYear(organizedFresh);
+                            const currentSnapshot = serializeSections(currentMerged);
+                            const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
+                            
+                            if (JSON.stringify(freshMerged) !== JSON.stringify(currentMerged)) {
+                                if (hasUnsavedChanges) {
+                                    // Don't overwrite user's unsaved changes!
+                                    console.log('⏸️ Skipping database update: user has unsaved changes');
+                                } else {
+                                    console.log('🔄 Updating sections from fresh database data');
+                                    setSectionsByYear(organizedFresh);
+                                    lastSavedSnapshotRef.current = serializeSections(freshMerged);
+                                }
                             } else {
-                                console.log('🔄 Updating sections from fresh database data');
-                                setSectionsByYear(organizedFresh);
+                                // Data is the same, just update snapshot if needed
                                 lastSavedSnapshotRef.current = serializeSections(freshMerged);
                             }
-                        } else {
-                            // Data is the same, just update snapshot if needed
-                            lastSavedSnapshotRef.current = serializeSections(freshMerged);
                         }
                     } else {
                         lastSavedSnapshotRef.current = serializeSections(mergedForSnapshot);
