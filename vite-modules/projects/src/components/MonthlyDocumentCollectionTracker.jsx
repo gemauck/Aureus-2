@@ -270,7 +270,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const modalsOpenRef = useRef(false);
     // Use sessionStorage to persist loaded state across remounts (same session, same project)
     const getLoadedStateKey = (projectId) => `docTracker_loaded_${projectId || 'default'}`;
-    const hasLoadedInitialDataRef = useRef(() => {
+    const hasLoadedInitialDataRef = useRef((() => {
         if (!project?.id) return false;
         try {
             const stored = sessionStorage.getItem(getLoadedStateKey(project.id));
@@ -278,7 +278,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         } catch {
             return false;
         }
-    }());
+    })());
 
     // Get API service instance
     const api = getAPI();
@@ -1231,8 +1231,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }, currentUser);
             }
         } else {
+            // Create unique section ID with timestamp and random to ensure year independence
             const newSection = {
-                id: Date.now(),
+                id: `section-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                 ...sectionData,
                 documents: []
             };
@@ -1453,9 +1454,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             doc.id === editingDocument.id ? { ...doc, ...documentData } : doc
                         )
                     };
-                } else {
-                    const newDocument = {
-                        id: Date.now(),
+                    } else {
+                        // Create unique document ID to ensure year independence
+                        const newDocument = {
+                        id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                         ...documentData,
                         collectionStatus: {},
                         comments: {}
