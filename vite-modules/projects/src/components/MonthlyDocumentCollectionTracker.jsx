@@ -577,13 +577,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         // Reset initial load flag when project ID changes
         if (isNewProject) {
+            const oldProjectId = previousProjectIdRef.current;
             hasLoadedInitialDataRef.current = false;
             previousProjectIdRef.current = project.id;
             // Clear sessionStorage for old project
-            try {
-                const oldKey = `docTracker_loaded_${previousProjectIdRef.current}`;
-                sessionStorage.removeItem(oldKey);
-            } catch {}
+            if (oldProjectId) {
+                try {
+                    const oldKey = getLoadedStateKey(oldProjectId);
+                    sessionStorage.removeItem(oldKey);
+                } catch {}
+            }
             // Update documentSections ref for tracking, but don't use it to trigger reloads
             const currentDocumentSections = typeof project.documentSections === 'string' 
                 ? project.documentSections 
