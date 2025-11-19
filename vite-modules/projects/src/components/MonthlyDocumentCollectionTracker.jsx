@@ -342,13 +342,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 
                                 // Filter collectionStatus for this year
                                 // Include both regular year keys (e.g., "January-2025") and template markers (e.g., "_template-2025")
+                                // Keep template markers so we can track which sections belong to which years
                                 if (doc.collectionStatus) {
                                     Object.keys(doc.collectionStatus).forEach(key => {
                                         if (key.endsWith(`-${year}`) || key === `_template-${year}`) {
-                                            // Skip template markers when organizing (they're just for tracking)
-                                            if (!key.startsWith('_template-')) {
-                                                yearCollectionStatus[key] = doc.collectionStatus[key];
-                                            }
+                                            yearCollectionStatus[key] = doc.collectionStatus[key];
                                         }
                                     });
                                 }
@@ -428,10 +426,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         }
                         
                         // Merge collectionStatus (only for this year's data)
-                        // Exclude template markers (they're just for tracking, not actual data)
+                        // Include template markers so we can track which sections belong to which years
                         if (doc.collectionStatus) {
                             Object.keys(doc.collectionStatus).forEach(key => {
-                                if (key.endsWith(`-${year}`) && !key.startsWith('_template-')) {
+                                if (key.endsWith(`-${year}`) || key === `_template-${year}`) {
                                     allSections[sectionKey].documents[docKey].collectionStatus[key] = doc.collectionStatus[key];
                                 }
                             });
