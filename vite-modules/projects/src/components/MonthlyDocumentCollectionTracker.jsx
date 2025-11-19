@@ -325,15 +325,37 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         // For each year, only include sections that have data for that year
         // Sections without any year data are excluded (they're new and haven't been saved yet)
+        // CRITICAL: Sections with template markers should ONLY appear in the year they're marked for
         allYears.forEach(year => {
             organized[year] = flatSections
                 .map((section, sectionIdx) => {
                     const sectionId = section.id || sectionIdx;
                     const hasDataForYear = sectionYearsMap.get(sectionId)?.has(year) || false;
                     
-                    // Only include section if it has data (status or comments) for this year
-                    // This ensures sections added to one year don't appear in other years
-                    if (hasDataForYear) {
+                    // Check if this section has a template marker for a specific year
+                    let hasTemplateMarker = false;
+                    let templateMarkerYear = null;
+                    section.documents?.forEach(doc => {
+                        if (doc.collectionStatus) {
+                            Object.keys(doc.collectionStatus).forEach(key => {
+                                if (key.startsWith('_template-')) {
+                                    const match = key.match(/_template-(\d{4})/);
+                                    if (match) {
+                                        hasTemplateMarker = true;
+                                        templateMarkerYear = parseInt(match[1]);
+                                    }
+                                }
+                            });
+                        }
+                    });
+                    
+                    // Only include section if it has data for this year
+                    // If it has a template marker, it MUST match this year exactly
+                    const shouldInclude = hasTemplateMarker
+                        ? (templateMarkerYear === year)
+                        : hasDataForYear;
+                    
+                    if (shouldInclude) {
                         return {
                             ...section,
                             documents: section.documents?.map(doc => {
@@ -398,14 +420,37 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         });
         
         // Second pass: merge data, but only include sections in years where they exist
+        // CRITICAL: Sections with template markers should ONLY appear in the year they're marked for
         allYears.forEach(year => {
             const yearSections = sectionsByYearObj[year] || [];
             yearSections.forEach((section, sectionIdx) => {
                 const sectionKey = section.id || `section-${sectionIdx}`;
                 const sectionYears = sectionYearMap.get(section.id) || new Set([year]);
                 
+                // Check if this section has a template marker for a specific year
+                let hasTemplateMarker = false;
+                let templateMarkerYear = null;
+                section.documents?.forEach(doc => {
+                    if (doc.collectionStatus) {
+                        Object.keys(doc.collectionStatus).forEach(key => {
+                            if (key.startsWith('_template-')) {
+                                const match = key.match(/_template-(\d{4})/);
+                                if (match) {
+                                    hasTemplateMarker = true;
+                                    templateMarkerYear = parseInt(match[1]);
+                                }
+                            }
+                        });
+                    }
+                });
+                
                 // Only process this section if it belongs to this year
-                if (!section.id || sectionYears.has(year)) {
+                // If it has a template marker, it ONLY belongs to that year
+                const belongsToThisYear = hasTemplateMarker 
+                    ? (templateMarkerYear === year)
+                    : (sectionYears.has(year));
+                
+                if (belongsToThisYear) {
                     if (!allSections[sectionKey]) {
                         // Initialize section structure
                         allSections[sectionKey] = {
@@ -466,34 +511,26 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         // Check if this is a new project (project ID actually changed)
         const isNewProject = previousProjectIdRef.current !== project.id;
         
-        // Also check if documentSections actually changed (not just prop reference)
-        const currentDocumentSections = typeof project.documentSections === 'string' 
-            ? project.documentSections 
-            : JSON.stringify(project.documentSections || []);
-        const lastDocumentSections = lastProjectDocumentSectionsRef.current;
-        const documentSectionsChanged = currentDocumentSections !== lastDocumentSections;
-        
         // Reset initial load flag when project ID changes
         if (isNewProject) {
             hasLoadedInitialDataRef.current = false;
             previousProjectIdRef.current = project.id;
+            // Update documentSections ref for tracking, but don't use it to trigger reloads
+            const currentDocumentSections = typeof project.documentSections === 'string' 
+                ? project.documentSections 
+                : JSON.stringify(project.documentSections || []);
             lastProjectDocumentSectionsRef.current = currentDocumentSections;
         }
         
-        // Only load data if:
+        // ✅ ONLY load data if:
         // 1. This is the initial load (hasn't loaded data yet)
         // 2. OR this is a new project (project ID changed)
-        // 3. OR documentSections actually changed (not just prop reference)
-        if (!isNewProject && hasLoadedInitialDataRef.current && !documentSectionsChanged) {
-            // Already loaded data for this project and data hasn't changed, don't reload
-            console.log('⏭️ Skipping reload: project data unchanged');
+        // ❌ REMOVED: documentSections change detection - this was causing constant reloads
+        // The component should only reload when navigating to a different project or on initial mount
+        if (!isNewProject && hasLoadedInitialDataRef.current) {
+            // Already loaded data for this project, don't reload
+            console.log('⏭️ Skipping reload: already loaded data for this project');
             return;
-        }
-        
-        // Update the ref to track current documentSections
-        if (!isNewProject && documentSectionsChanged) {
-            console.log('🔄 DocumentSections changed, will reload data');
-            lastProjectDocumentSectionsRef.current = currentDocumentSections;
         }
         
         // Update ref with current modal state before checking
