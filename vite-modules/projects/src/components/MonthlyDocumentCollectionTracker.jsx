@@ -442,129 +442,86 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     }, [currentYear, selectedYear]);
     
     // Helper to merge sectionsByYear back into flat array for saving
+    // CRITICAL: Each year's sections are completely independent
+    // Use year-specific keys to prevent sections from different years from being merged
     const mergeSectionsByYear = useCallback((sectionsByYearObj) => {
-        const allSections = {};
+        const allSections = [];
         const allYears = Object.keys(sectionsByYearObj).map(y => parseInt(y));
-        const sectionYearMap = new Map(); // Track which year each section was added to
-        const sectionTemplateYearMap = new Map(); // Track template marker years for sections
         
-        // First pass: identify which sections belong to which years and check for template markers
+        // Process each year completely independently
         allYears.forEach(year => {
             const yearSections = sectionsByYearObj[year] || [];
-            yearSections.forEach((section) => {
-                const sectionKey = section.id;
-                if (sectionKey) {
-                    // Check for template marker first
-                    let templateYear = null;
-                    section.documents?.forEach(doc => {
-                        if (doc.collectionStatus) {
-                            Object.keys(doc.collectionStatus).forEach(key => {
-                                if (key.startsWith('_template-')) {
-                                    const match = key.match(/_template-(\d{4})/);
-                                    if (match) {
-                                        templateYear = parseInt(match[1]);
-                                    }
-                                }
-                            });
-                        }
-                    });
-                    
-                    // If section has template marker, it ONLY belongs to that year
-                    if (templateYear !== null) {
-                        sectionTemplateYearMap.set(sectionKey, templateYear);
-                        // Only track in the template year
-                        if (templateYear === year) {
-                            if (!sectionYearMap.has(sectionKey)) {
-                                sectionYearMap.set(sectionKey, new Set());
-                            }
-                            sectionYearMap.get(sectionKey).add(year);
-                        }
-                    } else {
-                        // No template marker, track normally
-                        if (!sectionYearMap.has(sectionKey)) {
-                            sectionYearMap.set(sectionKey, new Set());
-                        }
-                        sectionYearMap.get(sectionKey).add(year);
-                    }
-                }
-            });
-        });
-        
-        // Second pass: merge data, but only include sections in years where they exist
-        // CRITICAL: Sections with template markers should ONLY appear in the year they're marked for
-        allYears.forEach(year => {
-            const yearSections = sectionsByYearObj[year] || [];
+            
             yearSections.forEach((section, sectionIdx) => {
-                const sectionKey = section.id || `section-${sectionIdx}`;
+                // Check if this section has a template marker
+                let hasTemplateMarker = false;
+                let templateMarkerYear = null;
                 
-                // Check if this section has a template marker (from our map)
-                const templateMarkerYear = sectionTemplateYearMap.get(section.id);
-                const hasTemplateMarker = templateMarkerYear !== null && templateMarkerYear !== undefined;
+                section.documents?.forEach(doc => {
+                    if (doc.collectionStatus) {
+                        Object.keys(doc.collectionStatus).forEach(key => {
+                            if (key.startsWith('_template-')) {
+                                const match = key.match(/_template-(\d{4})/);
+                                if (match) {
+                                    hasTemplateMarker = true;
+                                    templateMarkerYear = parseInt(match[1]);
+                                }
+                            }
+                        });
+                    }
+                });
                 
                 // CRITICAL: If section has template marker, it ONLY belongs to that year
                 // Skip entirely if template marker year doesn't match current year
                 if (hasTemplateMarker && templateMarkerYear !== year) {
-                    console.log(`🚫 Merge: Skipping section ${sectionKey} for year ${year} (template marker: ${templateMarkerYear})`);
+                    console.log(`🚫 Merge: Skipping section ${section.id} for year ${year} (template marker: ${templateMarkerYear})`);
                     return; // Skip this section for this year
                 }
                 
-                // For sections without template markers, check if they belong to this year
-                const sectionYears = sectionYearMap.get(section.id) || new Set([year]);
-                const belongsToThisYear = hasTemplateMarker 
-                    ? (templateMarkerYear === year) // Should always be true if we got here
-                    : (sectionYears.has(year));
-                
-                if (belongsToThisYear) {
-                    if (!allSections[sectionKey]) {
-                        // Initialize section structure
-                        allSections[sectionKey] = {
-                            ...section,
-                            documents: {}
-                        };
-                    }
-                    
-                    // Merge documents
-                    section.documents?.forEach((doc, docIdx) => {
-                        const docKey = doc.id || `doc-${docIdx}`;
-                        if (!allSections[sectionKey].documents[docKey]) {
-                            allSections[sectionKey].documents[docKey] = {
-                                ...doc,
-                                collectionStatus: {},
-                                comments: {}
-                            };
-                        }
+                // Create a year-specific copy of the section
+                // This ensures complete independence - same section ID in different years = separate entries
+                const yearSpecificSection = {
+                    ...section,
+                    // Add year identifier to section ID to ensure uniqueness across years
+                    // This prevents sections from being merged across years
+                    _year: year, // Internal marker for year (won't be saved)
+                    documents: section.documents?.map(doc => {
+                        const yearCollectionStatus = {};
+                        const yearComments = {};
                         
-                        // Merge collectionStatus (only for this year's data)
-                        // Include template markers so we can track which sections belong to which years
+                        // Only include data for this specific year
                         if (doc.collectionStatus) {
                             Object.keys(doc.collectionStatus).forEach(key => {
                                 if (key.endsWith(`-${year}`) || key === `_template-${year}`) {
-                                    allSections[sectionKey].documents[docKey].collectionStatus[key] = doc.collectionStatus[key];
+                                    yearCollectionStatus[key] = doc.collectionStatus[key];
                                 }
                             });
                         }
                         
-                        // Merge comments (only for this year's data)
                         if (doc.comments) {
                             Object.keys(doc.comments).forEach(key => {
                                 if (key.endsWith(`-${year}`)) {
-                                    if (!allSections[sectionKey].documents[docKey].comments[key]) {
-                                        allSections[sectionKey].documents[docKey].comments[key] = [];
-                                    }
-                                    allSections[sectionKey].documents[docKey].comments[key] = doc.comments[key];
+                                    yearComments[key] = doc.comments[key];
                                 }
                             });
                         }
-                    });
-                }
+                        
+                        return {
+                            ...doc,
+                            collectionStatus: yearCollectionStatus,
+                            comments: yearComments
+                        };
+                    }) || []
+                };
+                
+                // Remove the internal _year marker before saving
+                delete yearSpecificSection._year;
+                
+                allSections.push(yearSpecificSection);
             });
         });
         
-        // Convert back to array format
-        return Object.values(allSections).map(section => ({
-            ...section,
-            documents: Object.values(section.documents)
-        }));
+        return allSections;
     }, []);
 
     // ✅ LOAD DATA FROM DATABASE ON MOUNT - Fetch fresh data
@@ -1260,6 +1217,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         if (!confirm(`Delete section "${section.name}" and all its documents?`)) return;
         
+        // CRITICAL: Only delete from the selected year - other years remain unaffected
+        // Each year's sections are completely independent
         updateSectionsForYear(prev => prev.filter(s => s.id !== sectionId));
         
         if (window.AuditLogger) {
@@ -1484,6 +1443,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         if (!section || !document) return;
         
         if (confirm('Delete this document/data item?')) {
+            // CRITICAL: Only delete from the selected year - other years remain unaffected
+            // Each year's documents are completely independent
             updateSectionsForYear(prev => prev.map(s => {
                 if (s.id === sectionId) {
                     return {
