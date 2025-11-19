@@ -201,6 +201,14 @@ function initializeProjectDetail() {
             console.log('🔵 DocumentCollectionProcessSection rendering...');
             console.log('  - hasDocumentCollectionProcess:', hasDocumentCollectionProcess);
             console.log('  - activeSection:', activeSection);
+            
+            // Track component lifecycle
+            useEffectSection(() => {
+                console.log('✅ DocumentCollectionProcessSection mounted');
+                return () => {
+                    console.log('❌ DocumentCollectionProcessSection unmounting');
+                };
+            }, []);
 
             const handleBackToOverview = typeof onBack === 'function' ? onBack : () => {};
             const MonthlyDocumentCollectionTracker = window.MonthlyDocumentCollectionTracker;
