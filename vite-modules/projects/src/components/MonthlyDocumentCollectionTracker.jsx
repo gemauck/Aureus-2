@@ -269,11 +269,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // Refs to track modal/form state for auto-save (always have latest values)
     const modalsOpenRef = useRef(false);
     // Use sessionStorage to persist loaded state across remounts (same session, same project)
-    const getLoadedStateKey = () => `docTracker_loaded_${project?.id || 'default'}`;
+    const getLoadedStateKey = (projectId) => `docTracker_loaded_${projectId || 'default'}`;
     const hasLoadedInitialDataRef = useRef(() => {
         if (!project?.id) return false;
         try {
-            const stored = sessionStorage.getItem(getLoadedStateKey());
+            const stored = sessionStorage.getItem(getLoadedStateKey(project.id));
             return stored === 'true';
         } catch {
             return false;
@@ -592,7 +592,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
         
         // Check sessionStorage to see if we've already loaded for this project in this session
-        const sessionLoadedKey = getLoadedStateKey();
+        const sessionLoadedKey = getLoadedStateKey(project.id);
         let hasLoadedInSession = false;
         try {
             hasLoadedInSession = sessionStorage.getItem(sessionLoadedKey) === 'true';
@@ -721,7 +721,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 hasLoadedInitialDataRef.current = true;
                 // Persist loaded state to sessionStorage to survive remounts
                 try {
-                    sessionStorage.setItem(getLoadedStateKey(), 'true');
+                    sessionStorage.setItem(getLoadedStateKey(project.id), 'true');
                 } catch (e) {
                     console.warn('Failed to persist loaded state to sessionStorage:', e);
                 }
