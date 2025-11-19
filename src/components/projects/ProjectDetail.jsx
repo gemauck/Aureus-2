@@ -187,115 +187,121 @@ function initializeProjectDetail() {
     const KanbanView = window.KanbanView;
     const DocumentCollectionModal = window.DocumentCollectionModal;
 
-    const DocumentCollectionProcessSection = ({
-        project,
-        hasDocumentCollectionProcess,
-        activeSection,
-        onBack
-    }) => {
-        console.log('🔵 DocumentCollectionProcessSection rendering...');
-        console.log('  - hasDocumentCollectionProcess:', hasDocumentCollectionProcess);
-        console.log('  - activeSection:', activeSection);
+    // Extract DocumentCollectionProcessSection outside ProjectDetail to prevent recreation on every render
+    // This ensures the component reference is stable and doesn't cause MonthlyDocumentCollectionTracker to remount
+    const DocumentCollectionProcessSection = (() => {
+        const { useState: useStateSection, useEffect: useEffectSection } = window.React;
+        
+        return ({
+            project,
+            hasDocumentCollectionProcess,
+            activeSection,
+            onBack
+        }) => {
+            console.log('🔵 DocumentCollectionProcessSection rendering...');
+            console.log('  - hasDocumentCollectionProcess:', hasDocumentCollectionProcess);
+            console.log('  - activeSection:', activeSection);
 
-        const handleBackToOverview = typeof onBack === 'function' ? onBack : () => {};
-        const MonthlyDocumentCollectionTracker = window.MonthlyDocumentCollectionTracker;
-        const [trackerReady, setTrackerReady] = useState(() => !!MonthlyDocumentCollectionTracker);
-        const [loadAttempts, setLoadAttempts] = useState(0);
-        const maxAttempts = 50; // 5 seconds (50 * 100ms)
+            const handleBackToOverview = typeof onBack === 'function' ? onBack : () => {};
+            const MonthlyDocumentCollectionTracker = window.MonthlyDocumentCollectionTracker;
+            const [trackerReady, setTrackerReady] = useStateSection(() => !!MonthlyDocumentCollectionTracker);
+            const [loadAttempts, setLoadAttempts] = useStateSection(0);
+            const maxAttempts = 50; // 5 seconds (50 * 100ms)
 
-        useEffect(() => {
-            if (trackerReady) return;
+            useEffectSection(() => {
+                if (trackerReady) return;
 
-            const checkComponent = () => {
-                if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
-                    console.log('✅ MonthlyDocumentCollectionTracker loaded!');
-                    setTrackerReady(true);
-                    return true;
-                }
-                return false;
-            };
-
-            if (checkComponent()) return;
-
-            const handleViteReady = () => {
-                console.log('📢 viteProjectsReady event received');
-                if (checkComponent()) {
-                    window.removeEventListener('viteProjectsReady', handleViteReady);
-                }
-            };
-            window.addEventListener('viteProjectsReady', handleViteReady);
-
-            const interval = setInterval(() => {
-                setLoadAttempts(prev => {
-                    const newAttempts = prev + 1;
-                    if (newAttempts >= maxAttempts) {
-                        clearInterval(interval);
-                        window.removeEventListener('viteProjectsReady', handleViteReady);
-                        console.warn('⚠️ MonthlyDocumentCollectionTracker failed to load after', maxAttempts, 'attempts');
-                        return newAttempts;
+                const checkComponent = () => {
+                    if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
+                        console.log('✅ MonthlyDocumentCollectionTracker loaded!');
+                        setTrackerReady(true);
+                        return true;
                     }
+                    return false;
+                };
+
+                if (checkComponent()) return;
+
+                const handleViteReady = () => {
+                    console.log('📢 viteProjectsReady event received');
                     if (checkComponent()) {
-                        clearInterval(interval);
                         window.removeEventListener('viteProjectsReady', handleViteReady);
                     }
-                    return newAttempts;
-                });
-            }, 100);
+                };
+                window.addEventListener('viteProjectsReady', handleViteReady);
 
-            return () => {
-                clearInterval(interval);
-                window.removeEventListener('viteProjectsReady', handleViteReady);
-            };
-        }, [trackerReady]);
+                const interval = setInterval(() => {
+                    setLoadAttempts(prev => {
+                        const newAttempts = prev + 1;
+                        if (newAttempts >= maxAttempts) {
+                            clearInterval(interval);
+                            window.removeEventListener('viteProjectsReady', handleViteReady);
+                            console.warn('⚠️ MonthlyDocumentCollectionTracker failed to load after', maxAttempts, 'attempts');
+                            return newAttempts;
+                        }
+                        if (checkComponent()) {
+                            clearInterval(interval);
+                            window.removeEventListener('viteProjectsReady', handleViteReady);
+                        }
+                        return newAttempts;
+                    });
+                }, 100);
 
-        console.log('  - MonthlyDocumentCollectionTracker:', typeof MonthlyDocumentCollectionTracker);
-        console.log('  - trackerReady:', trackerReady);
-        console.log('  - loadAttempts:', loadAttempts);
+                return () => {
+                    clearInterval(interval);
+                    window.removeEventListener('viteProjectsReady', handleViteReady);
+                };
+            }, [trackerReady]);
 
-        if (!trackerReady || !MonthlyDocumentCollectionTracker) {
-            return (
-                <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-                    <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading Component...</h3>
-                    <p className="text-sm text-gray-600 mb-4">
-                        {loadAttempts < maxAttempts 
-                            ? `The Monthly Document Collection Tracker is loading... (${loadAttempts * 100}ms)`
-                            : 'The component failed to load. Please try reloading the page.'}
-                    </p>
-                    {loadAttempts >= maxAttempts && (
-                        <div className="flex gap-2 justify-center">
-                            <button
-                                onClick={() => window.location.reload()}
-                                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
-                            >
-                                <i className="fas fa-sync-alt mr-2"></i>
-                                Reload Page
-                            </button>
-                            <button
-                                onClick={handleBackToOverview}
-                                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
-                            >
-                                <i className="fas fa-arrow-left mr-2"></i>
-                                Back to Overview
-                            </button>
+            console.log('  - MonthlyDocumentCollectionTracker:', typeof MonthlyDocumentCollectionTracker);
+            console.log('  - trackerReady:', trackerReady);
+            console.log('  - loadAttempts:', loadAttempts);
+
+            if (!trackerReady || !MonthlyDocumentCollectionTracker) {
+                return (
+                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                        <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading Component...</h3>
+                        <p className="text-sm text-gray-600 mb-4">
+                            {loadAttempts < maxAttempts 
+                                ? `The Monthly Document Collection Tracker is loading... (${loadAttempts * 100}ms)`
+                                : 'The component failed to load. Please try reloading the page.'}
+                        </p>
+                        {loadAttempts >= maxAttempts && (
+                            <div className="flex gap-2 justify-center">
+                                <button
+                                    onClick={() => window.location.reload()}
+                                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
+                                >
+                                    <i className="fas fa-sync-alt mr-2"></i>
+                                    Reload Page
+                                </button>
+                                <button
+                                    onClick={handleBackToOverview}
+                                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+                                >
+                                    <i className="fas fa-arrow-left mr-2"></i>
+                                    Back to Overview
+                                </button>
+                            </div>
+                        )}
+                        <div className="mt-4 text-xs text-gray-500">
+                            <p>Debug Info: window.MonthlyDocumentCollectionTracker = {String(typeof MonthlyDocumentCollectionTracker)}</p>
+                            <p>Module Status: {typeof window.ViteProjects !== 'undefined' ? 'Loaded' : 'Not loaded'}</p>
                         </div>
-                    )}
-                    <div className="mt-4 text-xs text-gray-500">
-                        <p>Debug Info: window.MonthlyDocumentCollectionTracker = {String(typeof MonthlyDocumentCollectionTracker)}</p>
-                        <p>Module Status: {typeof window.ViteProjects !== 'undefined' ? 'Loaded' : 'Not loaded'}</p>
                     </div>
-                </div>
-            );
-        }
+                );
+            }
 
-        return (
-            <MonthlyDocumentCollectionTracker
-                key={project?.id || 'default'}
-                project={project}
-                onBack={handleBackToOverview}
-            />
-        );
-    };
+            return (
+                <MonthlyDocumentCollectionTracker
+                    key={project?.id || 'default'}
+                    project={project}
+                    onBack={handleBackToOverview}
+                />
+            );
+        };
+    })();
 
     const parseDocumentSections = (data) => {
         if (!data) return [];

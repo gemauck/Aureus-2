@@ -1,5 +1,5 @@
 // Get dependencies from window
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect, useRef, useCallback } = React;
 const storage = window.storage;
 const ProjectModal = window.ProjectModal;
 const ProjectDetail = window.ProjectDetail;
@@ -28,6 +28,11 @@ const Projects = () => {
     const [showModal, setShowModal] = useState(false);
     const [selectedProject, setSelectedProject] = useState(null);
     const [viewingProject, setViewingProject] = useState(null);
+    
+    // Memoize callbacks to prevent unnecessary re-renders of ProjectDetail
+    const handleBackFromProject = useCallback(() => {
+        setViewingProject(null);
+    }, []);
     const [showProgressTracker, setShowProgressTracker] = useState(false);
     const [trackerFocus, setTrackerFocus] = useState(null);
     const [draggedProject, setDraggedProject] = useState(null);
@@ -462,8 +467,14 @@ const Projects = () => {
                     if (projectIdToOpen) {
                         const project = apiProjects.find(p => p.id === parseInt(projectIdToOpen));
                         if (project) {
-                            // Open the project immediately
-                            setViewingProject(project);
+                            // Only open if we're not already viewing this project (prevent unnecessary re-renders)
+                            setViewingProject(prev => {
+                                if (prev && prev.id === project.id) {
+                                    console.log('⏭️ Already viewing this project, skipping setViewingProject');
+                                    return prev;
+                                }
+                                return project;
+                            });
                             // Clear the flag
                             sessionStorage.removeItem('openProjectId');
                         }
@@ -1990,18 +2001,29 @@ const Projects = () => {
     React.useEffect(() => {
         if (!viewingProject) return;
         
-        const checkInterval = setInterval(() => {
-            if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
-                console.log('✅ ProjectDetail detected in render check, forcing re-render');
+        // Only check if ProjectDetail is not already available (prevent unnecessary checks)
+        if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
+            if (!projectDetailAvailable) {
+                console.log('✅ ProjectDetail detected in render check');
                 setProjectDetailAvailable(true);
                 setWaitingForProjectDetail(false);
-                setForceRender(prev => prev + 1);
+            }
+            return; // Early return - no need to set up interval
+        }
+        
+        const checkInterval = setInterval(() => {
+            if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
+                console.log('✅ ProjectDetail detected in render check');
+                setProjectDetailAvailable(true);
+                setWaitingForProjectDetail(false);
+                // REMOVED: setForceRender to prevent infinite loop
+                // setForceRender(prev => prev + 1);
                 clearInterval(checkInterval);
             }
         }, 100);
         
         return () => clearInterval(checkInterval);
-    }, [viewingProject?.id, forceRender]);
+    }, [viewingProject?.id]); // REMOVED: forceRender dependency to prevent loop
 
     if (viewingProject) {
         try {
@@ -2132,7 +2154,7 @@ const Projects = () => {
             console.log('✅ Rendering ProjectDetail component with project:', viewingProject.id);
             return <ProjectDetailComponent 
                 project={viewingProject} 
-                onBack={() => setViewingProject(null)}
+                onBack={handleBackFromProject}
                 onDelete={handleDeleteProject}
             />;
         } catch (error) {
