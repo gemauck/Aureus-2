@@ -256,6 +256,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [commentInputAvailable, setCommentInputAvailable] = useState(() => 
         typeof window !== 'undefined' && typeof window.CommentInputWithMentions === 'function'
     );
+    const [users, setUsers] = useState([]);
     const previousProjectIdRef = useRef(project?.id);
     const [isSaving, setIsSaving] = useState(false);
     const [saveError, setSaveError] = useState(null);
@@ -281,18 +282,39 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const sectionYearsMap = new Map(); // Track which sections have data for which years
         
         // First, collect all years from existing month keys and map sections to years
+        // CRITICAL: Track template markers separately - they indicate sections belong to ONLY that year
+        const sectionTemplateMarkers = new Map(); // sectionId -> template year (if any)
+        
         flatSections.forEach((section, sectionIdx) => {
             const sectionYears = new Set();
+            const sectionId = section.id || sectionIdx;
+            let templateYear = null;
             
             section.documents?.forEach(doc => {
                 if (doc.collectionStatus) {
                     Object.keys(doc.collectionStatus).forEach(key => {
-                        // Check for year in format "-YYYY" or template marker "_template-YYYY"
-                        const match = key.match(/-(\d{4})$/) || key.match(/_template-(\d{4})$/);
-                        if (match) {
-                            const year = parseInt(match[1]);
-                            allYears.add(year);
-                            sectionYears.add(year);
+                        // Check for template marker first (exclusive to one year)
+                        if (key.startsWith('_template-')) {
+                            const match = key.match(/_template-(\d{4})/);
+                            if (match) {
+                                templateYear = parseInt(match[1]);
+                                allYears.add(templateYear);
+                                // Template marker means section ONLY belongs to this year
+                                sectionTemplateMarkers.set(sectionId, templateYear);
+                                sectionYears.add(templateYear);
+                            }
+                        } else {
+                            // Check for regular year in format "-YYYY"
+                            const match = key.match(/-(\d{4})$/);
+                            if (match) {
+                                const year = parseInt(match[1]);
+                                // Only add if this section doesn't have a template marker
+                                // (template markers are exclusive)
+                                if (!templateYear) {
+                                    allYears.add(year);
+                                    sectionYears.add(year);
+                                }
+                            }
                         }
                     });
                 }
@@ -301,15 +323,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         const match = key.match(/-(\d{4})$/);
                         if (match) {
                             const year = parseInt(match[1]);
-                            allYears.add(year);
-                            sectionYears.add(year);
+                            // Only add if this section doesn't have a template marker
+                            if (!templateYear) {
+                                allYears.add(year);
+                                sectionYears.add(year);
+                            }
                         }
                     });
                 }
             });
             
             // Store which years this section has data for
-            sectionYearsMap.set(section.id || sectionIdx, sectionYears);
+            sectionYearsMap.set(sectionId, sectionYears);
         });
         
         // Always include current year and selected year
@@ -332,28 +357,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     const sectionId = section.id || sectionIdx;
                     const hasDataForYear = sectionYearsMap.get(sectionId)?.has(year) || false;
                     
-                    // Check if this section has a template marker for a specific year
-                    let hasTemplateMarker = false;
-                    let templateMarkerYear = null;
-                    section.documents?.forEach(doc => {
-                        if (doc.collectionStatus) {
-                            Object.keys(doc.collectionStatus).forEach(key => {
-                                if (key.startsWith('_template-')) {
-                                    const match = key.match(/_template-(\d{4})/);
-                                    if (match) {
-                                        hasTemplateMarker = true;
-                                        templateMarkerYear = parseInt(match[1]);
-                                    }
-                                }
-                            });
-                        }
-                    });
+                    // Check if this section has a template marker (from our map)
+                    const templateMarkerYear = sectionTemplateMarkers.get(sectionId);
+                    const hasTemplateMarker = templateMarkerYear !== null && templateMarkerYear !== undefined;
                     
                     // Only include section if it has data for this year
-                    // If it has a template marker, it MUST match this year exactly
+                    // CRITICAL: If it has a template marker, it MUST match this year exactly, otherwise exclude
                     const shouldInclude = hasTemplateMarker
                         ? (templateMarkerYear === year)
                         : hasDataForYear;
+                    
+                    // Debug logging for template sections
+                    if (hasTemplateMarker && templateMarkerYear !== year) {
+                        console.log(`🚫 Excluding section ${sectionId} from year ${year} (template marker: ${templateMarkerYear})`);
+                    }
                     
                     if (shouldInclude) {
                         return {
@@ -438,6 +455,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 if (match) {
                                     hasTemplateMarker = true;
                                     templateMarkerYear = parseInt(match[1]);
+                                    // Break early if we find a template marker
+                                    return;
                                 }
                             }
                         });
@@ -445,9 +464,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 });
                 
                 // Only process this section if it belongs to this year
-                // If it has a template marker, it ONLY belongs to that year
+                // CRITICAL: If it has a template marker, it ONLY belongs to that specific year
+                // If template marker year doesn't match current year, skip entirely
+                if (hasTemplateMarker && templateMarkerYear !== year) {
+                    return; // Skip this section for this year
+                }
+                
                 const belongsToThisYear = hasTemplateMarker 
-                    ? (templateMarkerYear === year)
+                    ? (templateMarkerYear === year) // Should always be true if we got here
                     : (sectionYears.has(year));
                 
                 if (belongsToThisYear) {
@@ -808,6 +832,21 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             clearTimeout(timeout);
         };
     }, [commentInputAvailable]);
+    
+    // Load users for mention functionality
+    useEffect(() => {
+        const loadUsers = async () => {
+            try {
+                if (window.dataService && typeof window.dataService.getUsers === 'function') {
+                    const userData = await window.dataService.getUsers() || [];
+                    setUsers(userData);
+                }
+            } catch (error) {
+                console.error('Failed to load users:', error);
+            }
+        };
+        loadUsers();
+    }, []);
     
     // ✅ LOAD TEMPLATES ONLY WHEN MODALS OPEN
     useEffect(() => {
@@ -1225,8 +1264,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
         console.log('📋 Created new sections:', newSections.length);
         console.log('Total documents:', newSections.reduce((sum, s) => sum + (s.documents?.length || 0), 0));
+        console.log('🎯 Applying template to year:', targetYear);
+        console.log('📌 Template marker added:', `_template-${targetYear}`);
 
         updateSectionsForYear(prev => [...prev, ...newSections], targetYear);
+        
+        console.log('✅ Template sections added to year', targetYear);
 
         if (window.AuditLogger) {
             window.AuditLogger.log('create', 'projects', {
@@ -2355,7 +2398,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     setHoverCommentCell(cellKey);
                                 }
                             }}
-                            className="text-gray-500 hover:text-primary-600 transition-colors relative p-1 rounded hover:bg-gray-50/50"
+                            className="text-gray-500 hover:text-primary-600 transition-colors relative p-1"
                             type="button"
                             title="Add or view comments"
                         >
