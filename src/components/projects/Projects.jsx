@@ -2201,7 +2201,7 @@ const Projects = () => {
     // Get modal component
     const ModalComponent = showModal ? (window.ProjectModal && typeof window.ProjectModal === 'function' ? window.ProjectModal : null) : null;
 
-    return (
+    return ((
         <div className="space-y-3 sm:space-y-4">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0">
                 <div className="flex-1 flex items-center justify-between">
@@ -2609,7 +2609,7 @@ const Projects = () => {
                 </div>
             )}
         </div>
-    );
+    )));
 };
 
 // Make available globally with version identifier for cache-busting
@@ -2617,7 +2617,7 @@ try {
     // Clear any old version first and force replacement
     const oldVersion = window.Projects?._version;
     if (window.Projects) {
-        console.log(`🔄 Replacing existing Projects component (old version: ${oldVersion || 'unknown'}) with new version`);
+        console.log('🔄 Replacing existing Projects component (old version: ' + (oldVersion || 'unknown') + ') with new version');
         // Delete the old version to ensure clean replacement
         delete window.Projects;
     }
