@@ -2399,23 +2399,32 @@ function initializeProjectDetail() {
                         });
                     }
                     
-                    const refreshedProject = await window.DatabaseAPI.getProject(project.id);
-                    const updatedProject = refreshedProject?.data?.project || refreshedProject?.project || refreshedProject?.data;
-                    if (updatedProject) {
-                        // Update the project prop by triggering a re-render with updated data
-                        // This ensures the component has the latest data from the database
-                        console.log('🔄 Reloaded project from database:', {
-                            hasDocumentCollectionProcess: updatedProject.hasDocumentCollectionProcess,
-                            type: typeof updatedProject.hasDocumentCollectionProcess,
-                            isTrue: updatedProject.hasDocumentCollectionProcess === true
-                        });
-                        
-                        // Try to update parent component's viewingProject state if possible
-                        // This ensures the prop is updated immediately
-                        if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                            console.log('🔄 Updating parent viewingProject state');
-                            window.updateViewingProject(updatedProject);
+                    // Only reload and update if we're not in document collection view
+                    // (document collection manages its own state and updates)
+                    const isDocumentCollectionView = activeSection === 'documentCollection';
+                    
+                    if (!isDocumentCollectionView) {
+                        const refreshedProject = await window.DatabaseAPI.getProject(project.id);
+                        const updatedProject = refreshedProject?.data?.project || refreshedProject?.project || refreshedProject?.data;
+                        if (updatedProject) {
+                            // Update the project prop by triggering a re-render with updated data
+                            // This ensures the component has the latest data from the database
+                            console.log('🔄 Reloaded project from database:', {
+                                hasDocumentCollectionProcess: updatedProject.hasDocumentCollectionProcess,
+                                type: typeof updatedProject.hasDocumentCollectionProcess,
+                                isTrue: updatedProject.hasDocumentCollectionProcess === true
+                            });
+                            
+                            // Try to update parent component's viewingProject state if possible
+                            // This ensures the prop is updated immediately
+                            // The updateViewingProject function has smart comparison to prevent unnecessary re-renders
+                            if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                                console.log('🔄 Updating parent viewingProject state');
+                                window.updateViewingProject(updatedProject);
+                            }
                         }
+                    } else {
+                        console.log('⏭️ Skipping project reload: in document collection view (managed by MonthlyDocumentCollectionTracker)');
                     }
                 } catch (reloadError) {
                     console.warn('⚠️ Failed to reload project after save:', reloadError);
