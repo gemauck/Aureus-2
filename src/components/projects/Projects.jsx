@@ -1,5 +1,5 @@
 // Get dependencies from window
-const { useState, useEffect, useRef, useCallback, useMemo } = React;
+const { useState, useEffect, useRef, useCallback } = React;
 const storage = window.storage;
 const ProjectModal = window.ProjectModal;
 const ProjectDetail = window.ProjectDetail;
@@ -2174,24 +2174,13 @@ const Projects = () => {
             
             console.log('✅ Rendering ProjectDetail component with project:', viewingProject.id);
             
-            // Memoize the project prop to prevent unnecessary re-renders when object reference changes but data is the same
-            const memoizedProject = useMemo(() => viewingProject, [
-                viewingProject?.id,
-                viewingProject?.name,
-                viewingProject?.client,
-                viewingProject?.status,
-                viewingProject?.hasDocumentCollectionProcess,
-                // Only include documentSections if it's a string (to avoid deep comparison on every render)
-                typeof viewingProject?.documentSections === 'string' ? viewingProject.documentSections : JSON.stringify(viewingProject?.documentSections || []),
-                JSON.stringify(viewingProject?.tasks || []),
-                JSON.stringify(viewingProject?.taskLists || [])
-            ]);
-            
-            return <ProjectDetailComponent 
-                project={memoizedProject} 
-                onBack={handleBackFromProject}
-                onDelete={handleDeleteProject}
-            />;
+            return (
+                <ProjectDetailComponent 
+                    project={viewingProject} 
+                    onBack={handleBackFromProject}
+                    onDelete={handleDeleteProject}
+                />
+            );
         } catch (error) {
             console.error('Error rendering ProjectDetail:', error);
             return (
