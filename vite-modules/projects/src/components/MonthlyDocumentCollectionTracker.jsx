@@ -420,18 +420,46 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const allSections = {};
         const allYears = Object.keys(sectionsByYearObj).map(y => parseInt(y));
         const sectionYearMap = new Map(); // Track which year each section was added to
+        const sectionTemplateYearMap = new Map(); // Track template marker years for sections
         
-        // First pass: identify which sections belong to which years
+        // First pass: identify which sections belong to which years and check for template markers
         allYears.forEach(year => {
             const yearSections = sectionsByYearObj[year] || [];
             yearSections.forEach((section) => {
                 const sectionKey = section.id;
                 if (sectionKey) {
-                    // Track that this section exists in this year
-                    if (!sectionYearMap.has(sectionKey)) {
-                        sectionYearMap.set(sectionKey, new Set());
+                    // Check for template marker first
+                    let templateYear = null;
+                    section.documents?.forEach(doc => {
+                        if (doc.collectionStatus) {
+                            Object.keys(doc.collectionStatus).forEach(key => {
+                                if (key.startsWith('_template-')) {
+                                    const match = key.match(/_template-(\d{4})/);
+                                    if (match) {
+                                        templateYear = parseInt(match[1]);
+                                    }
+                                }
+                            });
+                        }
+                    });
+                    
+                    // If section has template marker, it ONLY belongs to that year
+                    if (templateYear !== null) {
+                        sectionTemplateYearMap.set(sectionKey, templateYear);
+                        // Only track in the template year
+                        if (templateYear === year) {
+                            if (!sectionYearMap.has(sectionKey)) {
+                                sectionYearMap.set(sectionKey, new Set());
+                            }
+                            sectionYearMap.get(sectionKey).add(year);
+                        }
+                    } else {
+                        // No template marker, track normally
+                        if (!sectionYearMap.has(sectionKey)) {
+                            sectionYearMap.set(sectionKey, new Set());
+                        }
+                        sectionYearMap.get(sectionKey).add(year);
                     }
-                    sectionYearMap.get(sectionKey).add(year);
                 }
             });
         });
@@ -442,34 +470,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             const yearSections = sectionsByYearObj[year] || [];
             yearSections.forEach((section, sectionIdx) => {
                 const sectionKey = section.id || `section-${sectionIdx}`;
-                const sectionYears = sectionYearMap.get(section.id) || new Set([year]);
                 
-                // Check if this section has a template marker for a specific year
-                let hasTemplateMarker = false;
-                let templateMarkerYear = null;
-                section.documents?.forEach(doc => {
-                    if (doc.collectionStatus) {
-                        Object.keys(doc.collectionStatus).forEach(key => {
-                            if (key.startsWith('_template-')) {
-                                const match = key.match(/_template-(\d{4})/);
-                                if (match) {
-                                    hasTemplateMarker = true;
-                                    templateMarkerYear = parseInt(match[1]);
-                                    // Break early if we find a template marker
-                                    return;
-                                }
-                            }
-                        });
-                    }
-                });
+                // Check if this section has a template marker (from our map)
+                const templateMarkerYear = sectionTemplateYearMap.get(section.id);
+                const hasTemplateMarker = templateMarkerYear !== null && templateMarkerYear !== undefined;
                 
-                // Only process this section if it belongs to this year
-                // CRITICAL: If it has a template marker, it ONLY belongs to that specific year
-                // If template marker year doesn't match current year, skip entirely
+                // CRITICAL: If section has template marker, it ONLY belongs to that year
+                // Skip entirely if template marker year doesn't match current year
                 if (hasTemplateMarker && templateMarkerYear !== year) {
+                    console.log(`🚫 Merge: Skipping section ${sectionKey} for year ${year} (template marker: ${templateMarkerYear})`);
                     return; // Skip this section for this year
                 }
                 
+                // For sections without template markers, check if they belong to this year
+                const sectionYears = sectionYearMap.get(section.id) || new Set([year]);
                 const belongsToThisYear = hasTemplateMarker 
                     ? (templateMarkerYear === year) // Should always be true if we got here
                     : (sectionYears.has(year));
@@ -1408,10 +1422,44 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }));
     };
 
-    const handleAddComment = (sectionId, documentId, month, commentText) => {
+    const handleAddComment = async (sectionId, documentId, month, commentText) => {
         if (!commentText.trim()) return;
 
         const currentUser = getCurrentUser();
+        
+        // Parse mentions from comment text (@username format)
+        const mentionRegex = /@([\w]+(?:\s+[\w]+)*)/g;
+        const mentionTexts = [];
+        let match;
+        while ((match = mentionRegex.exec(commentText)) !== null) {
+            const mentionValue = match[1]?.trim();
+            if (mentionValue) {
+                mentionTexts.push(mentionValue);
+            }
+        }
+
+        const mentionedUsers = [];
+        mentionTexts.forEach(mentionText => {
+            const mentionLower = mentionText.toLowerCase();
+            const matchedUser = users.find(user => {
+                const name = (user.name || '').toLowerCase();
+                const email = (user.email || '').toLowerCase();
+                return name === mentionLower ||
+                    email === mentionLower ||
+                    name.startsWith(mentionLower + ' ') ||
+                    name.includes(' ' + mentionLower + ' ') ||
+                    name.endsWith(' ' + mentionLower) ||
+                    name.split(' ').some(part => part === mentionLower);
+            });
+            if (matchedUser && matchedUser.id && !mentionedUsers.some(m => m.id === matchedUser.id)) {
+                mentionedUsers.push({
+                    id: matchedUser.id,
+                    name: matchedUser.name,
+                    email: matchedUser.email
+                });
+            }
+        });
+
         const newComment = {
             id: Date.now(),
             text: commentText,
@@ -1420,8 +1468,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             author: currentUser.name,
             authorEmail: currentUser.email,
             authorId: currentUser.id,
-            authorRole: currentUser.role
+            authorRole: currentUser.role,
+            mentions: mentionedUsers
         };
+
+        const section = sections.find(s => s.id === sectionId);
+        const document = section?.documents.find(d => d.id === documentId);
+        const documentName = document?.name || 'Document';
 
         updateSectionsForYear(prev => prev.map(s => {
             if (s.id === sectionId) {
@@ -1443,6 +1496,75 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }));
         
         setQuickComment('');
+
+        // Process mentions and send notifications
+        const projectLink = project ? `#/projects/${project.id}` : '#/projects';
+        const projectName = project?.name || 'Project';
+        const documentLink = `${projectLink}#document-${documentId}`;
+
+        try {
+            if (window.MentionHelper && mentionedUsers.length > 0) {
+                await window.MentionHelper.processMentions(
+                    commentText,
+                    `Document: ${documentName}`,
+                    documentLink,
+                    currentUser.name,
+                    users,
+                    {
+                        projectId: project?.id,
+                        projectName,
+                        documentId: documentId,
+                        documentName,
+                        sectionId: sectionId,
+                        month: month,
+                        year: selectedYear
+                    }
+                );
+            }
+        } catch (mentionError) {
+            console.error('❌ Failed to process mentions:', mentionError);
+        }
+
+        // Send notifications to mentioned users
+        const sendNotification = async (userId, contextLabel) => {
+            if (!userId || !window.DatabaseAPI || typeof window.DatabaseAPI.makeRequest !== 'function') {
+                return;
+            }
+            await window.DatabaseAPI.makeRequest('/notifications', {
+                method: 'POST',
+                body: JSON.stringify({
+                    userId,
+                    type: 'comment',
+                    title: `New comment on document: ${documentName}`,
+                    message: `${currentUser.name} commented on "${documentName}" in project "${projectName}": "${commentText.substring(0, 100)}${commentText.length > 100 ? '...' : ''}"`,
+                    link: documentLink,
+                    metadata: {
+                        documentId: documentId,
+                        documentName,
+                        sectionId: sectionId,
+                        month: month,
+                        year: selectedYear,
+                        projectId: project?.id,
+                        projectName,
+                        commentAuthor: currentUser.name,
+                        commentText,
+                        context: contextLabel
+                    }
+                })
+            });
+        };
+
+        // Send notifications to mentioned users
+        for (const mentionedUser of mentionedUsers) {
+            if (mentionedUser.id && mentionedUser.id !== currentUser.id) {
+                try {
+                    await sendNotification(mentionedUser.id, 'mentioned');
+                    console.log(`✅ Comment notification sent to mentioned user ${mentionedUser.name}`);
+                } catch (notifError) {
+                    console.error(`❌ Failed to send comment notification to ${mentionedUser.name}:`, notifError);
+                }
+            }
+        }
     };
 
     const handleDeleteComment = (sectionId, documentId, month, commentId) => {
