@@ -1375,7 +1375,28 @@ const Projects = () => {
                         return false;
                     })()
                 };
-                setViewingProject(normalized);
+                
+                // Use smart comparison to prevent unnecessary re-renders
+                setViewingProject(prev => {
+                    if (!prev || prev.id !== normalized.id) {
+                        return normalized;
+                    }
+                    // Compare important fields to see if anything actually changed
+                    const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'tasks', 'taskLists', 'documentSections'];
+                    const hasChanges = importantFields.some(field => {
+                        const prevValue = prev[field];
+                        const newValue = normalized[field];
+                        // Use JSON.stringify for deep comparison of objects/arrays
+                        return JSON.stringify(prevValue) !== JSON.stringify(newValue);
+                    });
+                    
+                    if (!hasChanges) {
+                        console.log('⏭️ Skipping viewingProject update: project data unchanged');
+                        return prev; // Return previous object to prevent re-render
+                    }
+                    console.log('🔄 Updating viewingProject: project data changed');
+                    return normalized;
+                });
             };
             
             // Only set viewingProject if ProjectDetail is available
