@@ -1109,10 +1109,17 @@ const Projects = () => {
             // Expose a function to update viewingProject from child components
             // This allows ProjectDetail to refresh the project data after saving
             window.updateViewingProject = (updatedProject) => {
+                // Skip update if skipDocumentSectionsUpdate flag is set (prevents remounting during auto-save)
+                if (updatedProject.skipDocumentSectionsUpdate) {
+                    console.log('⏭️ Skipping viewingProject update: skipDocumentSectionsUpdate flag set');
+                    return;
+                }
+                
                 console.log('🔄 Updating viewingProject from child component:', {
                     id: updatedProject.id,
                     hasDocumentCollectionProcess: updatedProject.hasDocumentCollectionProcess
                 });
+                
                 // Normalize the project the same way we do in handleViewProject
                 const normalized = {
                     ...updatedProject,
@@ -1124,6 +1131,7 @@ const Projects = () => {
                     comments: typeof updatedProject.comments === 'string' ? JSON.parse(updatedProject.comments || '[]') : (updatedProject.comments || []),
                     activityLog: typeof updatedProject.activityLog === 'string' ? JSON.parse(updatedProject.activityLog || '[]') : (updatedProject.activityLog || []),
                     team: typeof updatedProject.team === 'string' ? JSON.parse(updatedProject.team || '[]') : (updatedProject.team || []),
+                    documentSections: typeof updatedProject.documentSections === 'string' ? JSON.parse(updatedProject.documentSections || '[]') : (updatedProject.documentSections || []),
                     hasDocumentCollectionProcess: (() => {
                         const value = updatedProject.hasDocumentCollectionProcess;
                         if (value === true || value === 'true' || value === 1) return true;
@@ -1131,14 +1139,54 @@ const Projects = () => {
                         return false;
                     })()
                 };
-                setViewingProject(normalized);
+                
+                // Use smart comparison to prevent unnecessary re-renders
+                setViewingProject(prev => {
+                    if (!prev || prev.id !== normalized.id) {
+                        return normalized;
+                    }
+                    // Compare important fields to see if anything actually changed
+                    const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'tasks', 'taskLists', 'customFieldDefinitions', 'documents'];
+                    const hasChanges = importantFields.some(field => {
+                        const prevValue = prev[field];
+                        const newValue = normalized[field];
+                        return JSON.stringify(prevValue) !== JSON.stringify(newValue);
+                    });
+                    
+                    if (!hasChanges) {
+                        console.log('⏭️ Skipping viewingProject update: project data unchanged');
+                        return prev; // Return previous object to prevent re-render
+                    }
+                    console.log('🔄 Updating viewingProject: project data changed');
+                    return normalized;
+                });
             };
             
             // Only set viewingProject if ProjectDetail is available
             if (window.ProjectDetail) {
                 console.log('✅ ProjectDetail is available, setting viewingProject');
-                // Create a new object reference to ensure React detects the change
-                setViewingProject({ ...normalizedProject });
+                // Only update if the project actually changed (prevent unnecessary re-renders)
+                setViewingProject(prev => {
+                    // If it's the same project ID, check if data actually changed
+                    if (prev && prev.id === normalizedProject.id) {
+                        // Compare important fields to see if anything actually changed
+                        const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'tasks', 'taskLists', 'documentSections', 'customFieldDefinitions', 'documents'];
+                        const hasChanges = importantFields.some(field => {
+                            const prevValue = prev[field];
+                            const newValue = normalizedProject[field];
+                            return JSON.stringify(prevValue) !== JSON.stringify(newValue);
+                        });
+                        
+                        if (!hasChanges) {
+                            console.log('⏭️ Skipping viewingProject update: same project, no changes detected');
+                            return prev; // Return previous object to prevent re-render
+                        }
+                        console.log('🔄 Updating viewingProject: project data changed');
+                    } else {
+                        console.log('🔄 Updating viewingProject: new project or no previous project');
+                    }
+                    return { ...normalizedProject };
+                });
             } else {
                 console.error('❌ ProjectDetail still not available after loading attempt');
                 console.error('🔍 Debug info:', {
@@ -1149,7 +1197,13 @@ const Projects = () => {
                     availableComponents: Object.keys(window).filter(key => key.includes('Project') || key.includes('Detail'))
                 });
                 // Still set viewingProject so the loading UI can show
-                setViewingProject(normalizedProject);
+                setViewingProject(prev => {
+                    // Only update if it's a different project
+                    if (prev && prev.id === normalizedProject.id) {
+                        return prev;
+                    }
+                    return normalizedProject;
+                });
                 // The render will show the loading state
             }
         } catch (error) {
