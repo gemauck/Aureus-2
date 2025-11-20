@@ -753,39 +753,48 @@ const parseCommentCellKey = (key) => {
                         const normalizedFresh = normalizeSections(freshParsed);
                         const organizedFresh = organizeSectionsByYear(normalizedFresh);
                         
-                        // ⚠️ CRITICAL: Check if we already have data in state
+                        // ⚠️ CRITICAL: Check if we already have REAL data in state (not just empty arrays)
                         // If we do, don't overwrite it - the user might be editing
-                        const hasExistingData = Object.keys(sectionsByYear).length > 0 && 
-                            Object.values(sectionsByYear).some(yearSections => yearSections.length > 0);
+                        const currentMerged = mergeSectionsByYear(organizedByYear);
+                        const freshMerged = mergeSectionsByYear(organizedFresh);
+                        const hasRealDataInState = currentMerged.length > 0 && 
+                            currentMerged.some(section => section.documents && section.documents.length > 0);
+                        const hasRealDataFromDB = freshMerged.length > 0 && 
+                            freshMerged.some(section => section.documents && section.documents.length > 0);
                         
-                        if (hasExistingData) {
-                            // We already have data loaded, don't overwrite it
-                            console.log('⏸️ Skipping database update: data already loaded in state (preserving user edits)');
-                            // Just update the snapshot to match current state
-                            const currentMerged = mergeSectionsByYear(sectionsByYear);
-                            lastSavedSnapshotRef.current = serializeSections(currentMerged);
-                        } else {
-                            // Only update if different (avoid unnecessary re-renders)
-                            // ⚠️ CRITICAL: Don't overwrite local changes - check if we have unsaved changes first
-                            const currentMerged = mergeSectionsByYear(sectionsByYear);
-                            const freshMerged = mergeSectionsByYear(organizedFresh);
+                        // If we have real data in state, preserve it (user might be editing)
+                        // But if state is empty and DB has data, always update
+                        if (hasRealDataInState && hasRealDataFromDB) {
+                            // Both have data - check for unsaved changes before overwriting
                             const currentSnapshot = serializeSections(currentMerged);
                             const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
                             
-                            if (JSON.stringify(freshMerged) !== JSON.stringify(currentMerged)) {
-                                if (hasUnsavedChanges) {
-                                    // Don't overwrite user's unsaved changes!
-                                    console.log('⏸️ Skipping database update: user has unsaved changes');
-                                } else {
-                                    console.log('🔄 Updating sections from fresh database data');
-                                    setSectionsByYear(organizedFresh);
-                                    persistSectionsToCache(project.id, organizedFresh);
-                                    lastSavedSnapshotRef.current = serializeSections(freshMerged);
-                                }
+                            if (hasUnsavedChanges) {
+                                // Don't overwrite user's unsaved changes!
+                                console.log('⏸️ Skipping database update: user has unsaved changes');
+                            } else if (JSON.stringify(freshMerged) !== JSON.stringify(currentMerged)) {
+                                // Data is different and no unsaved changes - update from DB
+                                console.log('🔄 Updating sections from fresh database data');
+                                setSectionsByYear(organizedFresh);
+                                persistSectionsToCache(project.id, organizedFresh);
+                                lastSavedSnapshotRef.current = serializeSections(freshMerged);
                             } else {
-                                // Data is the same, just update snapshot if needed
+                                // Data is the same, just update snapshot
                                 lastSavedSnapshotRef.current = serializeSections(freshMerged);
                             }
+                        } else if (!hasRealDataInState && hasRealDataFromDB) {
+                            // State is empty but DB has data - always update (template was just applied)
+                            console.log('🔄 Updating from database: state is empty but DB has sections');
+                            setSectionsByYear(organizedFresh);
+                            persistSectionsToCache(project.id, organizedFresh);
+                            lastSavedSnapshotRef.current = serializeSections(freshMerged);
+                        } else if (hasRealDataInState && !hasRealDataFromDB) {
+                            // State has data but DB doesn't - preserve state (might be new edits)
+                            console.log('⏸️ Preserving state: DB is empty but state has data');
+                            lastSavedSnapshotRef.current = serializeSections(currentMerged);
+                        } else {
+                            // Both are empty - just update snapshot
+                            lastSavedSnapshotRef.current = serializeSections(freshMerged);
                         }
                     } else {
                         lastSavedSnapshotRef.current = serializeSections(mergedForSnapshot);
