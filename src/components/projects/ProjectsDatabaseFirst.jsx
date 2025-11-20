@@ -1,6 +1,118 @@
 // Database-First Projects Component - No localStorage dependency
 const { useState, useEffect, useRef, useCallback } = React;
 
+const DEFAULT_TASK_LISTS = [
+    { id: 1, name: 'To Do', color: 'blue' },
+    { id: 2, name: 'In Progress', color: 'yellow' },
+    { id: 3, name: 'Done', color: 'green' }
+];
+
+const cloneDefaultValue = (value) => {
+    if (Array.isArray(value)) {
+        return [...value];
+    }
+    if (value && typeof value === 'object') {
+        return { ...value };
+    }
+    return value;
+};
+
+const parseJSONField = (field, defaultValue = []) => {
+    if (field === null || typeof field === 'undefined' || field === '') {
+        return cloneDefaultValue(defaultValue);
+    }
+
+    if (Array.isArray(field) || (typeof field === 'object' && field !== null)) {
+        return field;
+    }
+
+    if (typeof field === 'string') {
+        const trimmed = field.trim();
+        if (!trimmed) {
+            return cloneDefaultValue(defaultValue);
+        }
+        try {
+            return JSON.parse(trimmed);
+        } catch (error) {
+            console.warn('Failed to parse JSON field:', error);
+            return cloneDefaultValue(defaultValue);
+        }
+    }
+
+    return cloneDefaultValue(defaultValue);
+};
+
+const formatDate = (date) => {
+    if (!date) return '';
+    try {
+        const d = new Date(date);
+        return Number.isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+    } catch {
+        return '';
+    }
+};
+
+const extractProjectFromResponse = (response) => {
+    if (!response) return null;
+    if (response.data?.project) return response.data.project;
+    if (response.project) return response.project;
+    return response;
+};
+
+const normalizeProject = (project) => {
+    if (!project || typeof project !== 'object') {
+        return null;
+    }
+
+    const parsedTaskLists = parseJSONField(project.taskLists, DEFAULT_TASK_LISTS);
+    const parsedTasks = Array.isArray(project.tasks)
+        ? project.tasks
+        : parseJSONField(project.tasksList, []);
+    const parsedCustomFields = parseJSONField(project.customFieldDefinitions, []);
+    const parsedDocuments = parseJSONField(project.documents, []);
+    const parsedComments = parseJSONField(project.comments, []);
+    const parsedActivityLog = parseJSONField(project.activityLog, []);
+    const parsedTeam = parseJSONField(project.team, []);
+    const parsedDocumentSections = parseJSONField(project.documentSections, []);
+    const hasDocProcess = project.hasDocumentCollectionProcess === true ||
+        project.hasDocumentCollectionProcess === 'true' ||
+        project.hasDocumentCollectionProcess === 1;
+
+    return {
+        id: project.id,
+        name: project.name || '',
+        client: project.clientName || project.client || '',
+        clientName: project.clientName || project.client || '',
+        clientId: project.clientId || null,
+        type: project.type || 'Project',
+        status: project.status || 'Active',
+        startDate: formatDate(project.startDate),
+        dueDate: formatDate(project.dueDate),
+        progress: typeof project.progress === 'number' ? project.progress : Number(project.progress) || 0,
+        assignedTo: project.assignedTo || '',
+        description: project.description || '',
+        budget: Number(project.budget) || 0,
+        actualCost: Number(project.actualCost) || 0,
+        priority: project.priority || 'Medium',
+        tasks: parsedTasks,
+        taskLists: parsedTaskLists,
+        customFieldDefinitions: parsedCustomFields,
+        documents: parsedDocuments,
+        comments: parsedComments,
+        activityLog: parsedActivityLog,
+        team: parsedTeam,
+        notes: project.notes || '',
+        hasDocumentCollectionProcess: hasDocProcess,
+        documentSections: parsedDocumentSections,
+        monthlyProgress: typeof project.monthlyProgress === 'string'
+            ? project.monthlyProgress
+            : JSON.stringify(project.monthlyProgress || {}),
+        ownerId: project.ownerId || '',
+        createdAt: project.createdAt || '',
+        updatedAt: project.updatedAt || ''
+    };
+};
+
 const ProjectsDatabaseFirst = () => {
     const [projects, setProjects] = useState([]);
     const [selectedProject, setSelectedProject] = useState(null);
@@ -9,7 +121,6 @@ const ProjectsDatabaseFirst = () => {
     const [filterStatus, setFilterStatus] = useState('All Status');
     const [filterType, setFilterType] = useState('All Types');
     const [isLoading, setIsLoading] = useState(true);
-    const [refreshKey, setRefreshKey] = useState(0);
     const [selectedProjects, setSelectedProjects] = useState([]);
     const [showBulkActions, setShowBulkActions] = useState(false);
     const [showProgressTracker, setShowProgressTracker] = useState(false);
@@ -198,13 +309,12 @@ const ProjectsDatabaseFirst = () => {
             if (!token) {
                 console.log('⚠️ No authentication token - redirecting to login');
                 window.location.hash = '#/login';
-                return;
+                return [];
             }
 
             const response = await window.api.getProjects();
             console.log('📡 Raw API response:', response);
             
-            // Handle different response structures
             let apiProjects = [];
             if (response?.data?.projects) {
                 apiProjects = response.data.projects;
@@ -218,97 +328,31 @@ const ProjectsDatabaseFirst = () => {
             
             console.log('📡 Database returned projects:', apiProjects?.length || 0);
             
-            // Ensure apiProjects is an array before mapping
             if (!Array.isArray(apiProjects)) {
                 console.error('❌ apiProjects is not an array:', apiProjects);
                 apiProjects = [];
             }
             
-            // Helper function to safely parse JSON strings
-            const parseJSONField = (field, defaultValue = []) => {
-                if (!field) return defaultValue;
-                if (Array.isArray(field)) return field;
-                if (typeof field === 'string') {
-                    try {
-                        return JSON.parse(field);
-                    } catch (e) {
-                        console.warn('Failed to parse JSON field:', e);
-                        return defaultValue;
-                    }
-                }
-                return defaultValue;
-            };
-            
-            // Process projects data
-            const processedProjects = apiProjects.map(p => {
-                // Parse JSON string fields from database
-                const taskLists = parseJSONField(p.taskLists, [
-                    { id: 1, name: 'To Do', color: 'blue' },
-                    { id: 2, name: 'In Progress', color: 'yellow' },
-                    { id: 3, name: 'Done', color: 'green' }
-                ]);
-                const tasksList = parseJSONField(p.tasksList, []);
-                const customFieldDefinitions = parseJSONField(p.customFieldDefinitions, []);
-                const documents = parseJSONField(p.documents, []);
-                const comments = parseJSONField(p.comments, []);
-                const activityLog = parseJSONField(p.activityLog, []);
-                const team = parseJSONField(p.team, []);
-                const documentSections = parseJSONField(p.documentSections, []);
-                
-                // Handle date fields
-                const formatDate = (date) => {
-                    if (!date) return '';
-                    try {
-                        const d = new Date(date);
-                        return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
-                    } catch {
-                        return '';
-                    }
-                };
-                
-                return {
-                    id: p.id,
-                    name: p.name || '',
-                    client: p.clientName || p.client || '',
-                    clientId: p.clientId || null,
-                    type: p.type || 'Project',
-                    status: p.status || 'Active',
-                    startDate: formatDate(p.startDate),
-                    dueDate: formatDate(p.dueDate),
-                    progress: p.progress || 0,
-                    assignedTo: p.assignedTo || '',
-                    description: p.description || '',
-                    budget: p.budget || 0,
-                    actualCost: p.actualCost || 0,
-                    priority: p.priority || 'Medium',
-                    tasks: tasksList, // Map tasksList to tasks for frontend
-                    taskLists: taskLists,
-                    customFieldDefinitions: customFieldDefinitions,
-                    documents: documents,
-                    comments: comments,
-                    activityLog: activityLog,
-                    team: team,
-                    notes: p.notes || '',
-                    hasDocumentCollectionProcess: p.hasDocumentCollectionProcess || false,
-                    documentSections: documentSections
-                };
-            });
+            const processedProjects = apiProjects
+                .map(normalizeProject)
+                .filter(Boolean);
             
             setProjects(processedProjects);
             setIsLoading(false);
             console.log('✅ Projects loaded from database');
-            
+            return processedProjects;
         } catch (error) {
             console.error('❌ Failed to load projects from database:', error);
             setIsLoading(false);
-            if (error.message.includes('Unauthorized') || error.message.includes('401')) {
+            if (error?.message?.includes?.('Unauthorized') || error?.message?.includes?.('401')) {
                 console.log('🔑 Authentication expired - redirecting to login');
-                window.storage.removeToken();
-                window.storage.removeUser();
+                window.storage?.removeToken?.();
+                window.storage?.removeUser?.();
                 window.location.hash = '#/login';
             } else {
                 alert('Failed to load projects from database. Please try again.');
             }
+            return [];
         }
     };
 
@@ -347,29 +391,50 @@ const ProjectsDatabaseFirst = () => {
                 activityLog: projectData.activityLog || []
             };
 
+            let apiResponse;
             if (selectedProject) {
-                // Update existing project
-                await window.api.updateProject(comprehensiveProject.id, comprehensiveProject);
+                apiResponse = await window.api.updateProject(comprehensiveProject.id, {
+                    ...comprehensiveProject,
+                    clientName: comprehensiveProject.client
+                });
                 console.log('✅ Project updated in database');
-                
-                // Update local state
-                const updated = projects.map(p => p.id === selectedProject.id ? comprehensiveProject : p);
-                setProjects(updated);
-                setSelectedProject(comprehensiveProject);
             } else {
-                // Create new project
-                const newProject = await window.api.createProject(comprehensiveProject);
+                apiResponse = await window.api.createProject({
+                    ...comprehensiveProject,
+                    clientName: comprehensiveProject.client
+                });
                 console.log('✅ Project created in database');
-                
-                // Add to local state
-                setProjects(prev => [...prev, newProject]);
-                
-                // Close modal and refresh
+            }
+
+            const normalizedFromApi = normalizeProject(extractProjectFromResponse(apiResponse));
+            const fallbackNormalized = normalizeProject({
+                ...selectedProject,
+                ...comprehensiveProject,
+                clientName: comprehensiveProject.client
+            });
+            const nextProject = normalizedFromApi || fallbackNormalized;
+
+            if (nextProject) {
+                if (selectedProject) {
+                    setProjects(prev => prev.map(p => (p.id === nextProject.id ? nextProject : p)));
+                    setSelectedProject(nextProject);
+                } else {
+                    setProjects(prev => [...prev, nextProject].filter(Boolean));
+                    setShowModal(false);
+                    setSelectedProject(null);
+                }
+            } else if (!selectedProject) {
                 setShowModal(false);
                 setSelectedProject(null);
             }
-            
-            setRefreshKey(k => k + 1);
+
+            const refreshedProjects = await loadProjects();
+            if (selectedProject && nextProject?.id) {
+                const refreshedProject = refreshedProjects.find(p => p.id === nextProject.id);
+                if (refreshedProject) {
+                    setSelectedProject(refreshedProject);
+                }
+            }
             
         } catch (error) {
             console.error('❌ Failed to save project to database:', error);
@@ -397,7 +462,7 @@ const ProjectsDatabaseFirst = () => {
             // Update local state
             setProjects(prev => prev.filter(p => p.id !== projectId));
             setSelectedProject(null);
-            setRefreshKey(k => k + 1);
+            await loadProjects();
             
         } catch (error) {
             console.error('❌ Failed to delete project from database:', error);
@@ -437,7 +502,7 @@ const ProjectsDatabaseFirst = () => {
             setProjects(prev => prev.filter(p => !selectedProjects.includes(p.id)));
             setSelectedProjects([]);
             setShowBulkActions(false);
-            setRefreshKey(k => k + 1);
+            await loadProjects();
             
         } catch (error) {
             console.error('❌ Failed to bulk delete projects from database:', error);
@@ -523,13 +588,19 @@ const ProjectsDatabaseFirst = () => {
     };
 
     // Filter and search
-    const filteredProjects = projects
+    const safeProjects = Array.isArray(projects) ? projects.filter(Boolean) : [];
+
+    const filteredProjects = safeProjects
         .filter(project => {
-        const matchesSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            (project.client || '').toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesStatus = filterStatus === 'All Status' || project.status === filterStatus;
-        const matchesType = filterType === 'All Types' || project.type === filterType;
-        return matchesSearch && matchesStatus && matchesType;
+            const projectName = (project?.name || '').toLowerCase();
+            const clientName = (project?.client || '').toLowerCase();
+            const normalizedSearch = (searchTerm || '').toLowerCase();
+            const matchesSearch = normalizedSearch === '' 
+                || projectName.includes(normalizedSearch) 
+                || clientName.includes(normalizedSearch);
+            const matchesStatus = filterStatus === 'All Status' || project.status === filterStatus;
+            const matchesType = filterType === 'All Types' || project.type === filterType;
+            return matchesSearch && matchesStatus && matchesType;
         })
         .sort(sortProjects);
 
@@ -647,6 +718,15 @@ const ProjectsDatabaseFirst = () => {
                         project={selectedProject}
                         onBack={() => setSelectedProject(null)}
                         onDelete={(projectId) => handleDeleteProject(projectId)}
+                        onProjectUpdate={async (updatedProject) => {
+                            const normalizedProject = normalizeProject(updatedProject);
+                            if (!normalizedProject?.id) {
+                                return;
+                            }
+                            setProjects(prev => prev.map(p => (p.id === normalizedProject.id ? normalizedProject : p)));
+                            setSelectedProject(normalizedProject);
+                            await loadProjects();
+                        }}
                     />
                 </div>
             );

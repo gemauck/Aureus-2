@@ -386,7 +386,7 @@ function initializeProjectDetail() {
 
     const serializeDocumentSections = (data) => JSON.stringify(parseDocumentSections(data));
 
-    const ProjectDetail = ({ project, onBack, onDelete }) => {
+    const ProjectDetail = ({ project, onBack, onDelete, onProjectUpdate }) => {
         console.log('ProjectDetail rendering with project:', project);
         const ReactHooks = window.React;
         if (!ReactHooks || typeof ReactHooks.useState !== 'function') {
@@ -3417,13 +3417,36 @@ function initializeProjectDetail() {
                     project={project}
                     onSave={async (projectData) => {
                         try {
+                            const payload = {
+                                ...projectData,
+                                clientName: projectData.client || project.clientName || project.client || '',
+                                client: projectData.client || project.client || ''
+                            };
+
+                            const projectApi = window.DatabaseAPI?.updateProject
+                                ? window.DatabaseAPI
+                                : window.api;
+
+                            const apiResponse = await projectApi.updateProject(project.id, payload);
+                            const updatedProject = apiResponse?.data?.project
+                                || apiResponse?.project
+                                || { ...project, ...payload };
+
+                            if (!updatedProject.client && updatedProject.clientName) {
+                                updatedProject.client = updatedProject.clientName;
+                            }
+
+                            if (typeof onProjectUpdate === 'function') {
+                                onProjectUpdate(updatedProject);
+                            }
+
                             if (window.dataService && typeof window.dataService.getProjects === 'function') {
                                 const savedProjects = await window.dataService.getProjects();
-                                if (savedProjects) {
+                                if (savedProjects && Array.isArray(savedProjects)) {
                                     const updatedProjects = savedProjects.map(p => 
-                                        p.id === project.id ? { ...p, ...projectData } : p
+                                        p.id === project.id ? { ...p, ...updatedProject } : p
                                     );
-                                    if (window.dataService && typeof window.dataService.setProjects === 'function') {
+                                    if (typeof window.dataService.setProjects === 'function') {
                                         try {
                                             await window.dataService.setProjects(updatedProjects);
                                         } catch (saveError) {
@@ -3438,8 +3461,10 @@ function initializeProjectDetail() {
                             }
                         } catch (error) {
                             console.error('Error saving project:', error);
+                            alert('Failed to save project. Please try again.');
+                        } finally {
+                            setShowProjectModal(false);
                         }
-                        setShowProjectModal(false);
                     }}
                     onDelete={async (projectId) => {
                         console.log('🗑️ ProjectDetail: Delete requested for project:', projectId);

@@ -6,3 +6,4 @@ ADD COLUMN IF NOT EXISTS "monthlyProgress" TEXT NOT NULL DEFAULT '{}';
 
 
 
+

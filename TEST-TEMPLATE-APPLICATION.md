@@ -65,3 +65,4 @@ After applying, you should see:
 - **Created**: Just now via script
 - **Status**: Active and ready to use
 
+
