@@ -1,5 +1,5 @@
 // Get dependencies from window
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useRef } = React;
 const storage = window.storage;
 const ProjectModal = window.ProjectModal;
 const ProjectDetail = window.ProjectDetail;
@@ -28,11 +28,6 @@ const Projects = () => {
     const [showModal, setShowModal] = useState(false);
     const [selectedProject, setSelectedProject] = useState(null);
     const [viewingProject, setViewingProject] = useState(null);
-    
-    // Memoize callbacks to prevent unnecessary re-renders of ProjectDetail
-    const handleBackFromProject = useCallback(() => {
-        setViewingProject(null);
-    }, []);
     const [showProgressTracker, setShowProgressTracker] = useState(false);
     const [trackerFocus, setTrackerFocus] = useState(null);
     const [draggedProject, setDraggedProject] = useState(null);
@@ -40,26 +35,13 @@ const Projects = () => {
     const [selectedClient, setSelectedClient] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
-    // Always default to 'grid' view for recent upgrades - ensure consistent loading
-    const [viewMode, setViewMode] = useState(() => {
-        // Check localStorage but default to 'grid' to ensure recent upgrades are shown
-        if (typeof window !== 'undefined' && window.localStorage) {
-            const saved = window.localStorage.getItem('projectsViewMode');
-            // Only use saved value if it's valid, otherwise default to 'grid'
-            return (saved === 'grid' || saved === 'list') ? saved : 'grid';
-        }
-        return 'grid';
-    });
+    const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
     const [waitingForProjectDetail, setWaitingForProjectDetail] = useState(false);
     const [projectDetailAvailable, setProjectDetailAvailable] = useState(!!window.ProjectDetail);
     const [waitingForTracker, setWaitingForTracker] = useState(false);
     const [forceRender, setForceRender] = useState(0); // Force re-render when ProjectDetail loads
-    const [projectModalComponent, setProjectModalComponent] = useState(() => 
-        typeof window.ProjectModal === 'function' ? window.ProjectModal : null
-    );
-    const [isProjectModalLoading, setIsProjectModalLoading] = useState(false);
     
     const openProgressTrackerHash = (params = {}) => {
         try {
@@ -184,26 +166,6 @@ const Projects = () => {
             console.log('✅ Projects: Storage is available');
         }
     }, []);
-
-    // Persist viewMode to localStorage and ensure it defaults to 'grid' for recent upgrades
-    useEffect(() => {
-        if (typeof window !== 'undefined' && window.localStorage) {
-            // Always default to 'grid' to ensure recent upgrades are shown
-            if (!viewMode || (viewMode !== 'grid' && viewMode !== 'list')) {
-                setViewMode('grid');
-                window.localStorage.setItem('projectsViewMode', 'grid');
-            } else {
-                window.localStorage.setItem('projectsViewMode', viewMode);
-            }
-        }
-    }, [viewMode]);
-    
-    // Ensure ProjectModal is loaded
-    useEffect(() => {
-        if (!projectModalComponent && window.ProjectModal && typeof window.ProjectModal === 'function') {
-            setProjectModalComponent(window.ProjectModal);
-        }
-    }, [projectModalComponent]);
     
     // Wait for ProjectProgressTracker component to load when needed
     useEffect(() => {
@@ -253,27 +215,6 @@ const Projects = () => {
             // Use a ref or flag instead of checking projects directly to avoid dependency issues
             setIsLoading(true);
             setLoadError(null);
-            
-            // Check for refresh parameter in URL - clear cache if present
-            const hash = window.location.hash || '';
-            const urlParams = new URLSearchParams(hash.split('?')[1] || '');
-            const shouldRefresh = urlParams.has('refresh') || urlParams.has('forceRefresh');
-            
-            if (shouldRefresh) {
-                console.log('🔄 Projects: Refresh parameter detected, clearing cache...');
-                // Clear projects cache
-                if (window.DatabaseAPI?.clearEndpointCache) {
-                    window.DatabaseAPI.clearEndpointCache('/projects', 'GET');
-                }
-                if (window.DatabaseAPI?._responseCache) {
-                    window.DatabaseAPI._responseCache.delete('GET:/projects');
-                }
-                // Clear ComponentCache for projects
-                if (window.ComponentCache?.clear) {
-                    window.ComponentCache.clear('projects');
-                }
-                console.log('✅ Projects cache cleared');
-            }
             
             try {
                 const token = window.storage?.getToken?.();
@@ -467,14 +408,8 @@ const Projects = () => {
                     if (projectIdToOpen) {
                         const project = apiProjects.find(p => p.id === parseInt(projectIdToOpen));
                         if (project) {
-                            // Only open if we're not already viewing this project (prevent unnecessary re-renders)
-                            setViewingProject(prev => {
-                                if (prev && prev.id === project.id) {
-                                    console.log('⏭️ Already viewing this project, skipping setViewingProject');
-                                    return prev;
-                                }
-                                return project;
-                            });
+                            // Open the project immediately
+                            setViewingProject(project);
                             // Clear the flag
                             sessionStorage.removeItem('openProjectId');
                         }
@@ -801,8 +736,6 @@ const Projects = () => {
     }, [viewingProject]);
     
     // BULLETPROOF: Listen for when ProjectDetail loads globally and force re-render
-    // ⚠️ FIXED: Removed periodic setInterval that was causing constant re-renders
-    // Only check when ProjectDetail becomes available, not continuously
     useEffect(() => {
         const checkProjectDetail = () => {
             if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
@@ -812,16 +745,20 @@ const Projects = () => {
                     setWaitingForProjectDetail(false);
                     setForceRender(prev => prev + 1);
                 }
-                // REMOVED: Periodic re-render that was causing refresh issues
-                // Only update state when ProjectDetail first becomes available
+                // Force a re-render by updating state if we're viewing a project
+                if (viewingProject) {
+                    // Trigger a state update to force re-render
+                    setViewingProject({ ...viewingProject });
+                    setForceRender(prev => prev + 1);
+                }
             }
         };
         
         // Check immediately
         checkProjectDetail();
         
-        // REMOVED: Periodic interval that was causing constant re-renders every 200ms
-        // This was the main cause of the refresh issue
+        // Check periodically even when not viewing a project
+        const interval = setInterval(checkProjectDetail, 200);
         
         // Also check on window load events
         window.addEventListener('load', checkProjectDetail);
@@ -837,10 +774,11 @@ const Projects = () => {
         window.addEventListener('componentLoaded', handleComponentLoaded);
         
         return () => {
+            clearInterval(interval);
             window.removeEventListener('load', checkProjectDetail);
             window.removeEventListener('componentLoaded', handleComponentLoaded);
         };
-    }, [projectDetailAvailable]); // Removed viewingProject from dependencies to prevent re-renders
+    }, [projectDetailAvailable, viewingProject]);
 
     // Helper function to sync existing projects with clients
     // This is a non-critical operation - failures won't crash the component
@@ -915,135 +853,13 @@ const Projects = () => {
         return count;
     };
 
-    const handleAddProject = async () => {
-        // Ensure ProjectModal is loaded before showing modal
-        if (!projectModalComponent && !isProjectModalLoading) {
-            console.log('⏳ ProjectModal not loaded, loading now...');
-            setIsProjectModalLoading(true);
-            
-            // Try to load ProjectModal
-            let loaded = false;
-            for (let i = 0; i < 50; i++) {
-                if (window.ProjectModal && typeof window.ProjectModal === 'function') {
-                    console.log('✅ ProjectModal loaded');
-                    setProjectModalComponent(window.ProjectModal);
-                    loaded = true;
-                    break;
-                }
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
-            
-            if (!loaded) {
-                // Try loading the script directly
-                console.log('🚀 Attempting to load ProjectModal script...');
-                const script = document.createElement('script');
-                script.src = '/dist/src/components/projects/ProjectModal.js';
-                script.async = true;
-                await new Promise((resolve, reject) => {
-                    script.onload = () => {
-                        // Wait for initialization
-                        let attempts = 0;
-                        const checkInit = setInterval(() => {
-                            attempts++;
-                            if (window.ProjectModal && typeof window.ProjectModal === 'function') {
-                                console.log('✅ ProjectModal loaded via script');
-                                setProjectModalComponent(window.ProjectModal);
-                                clearInterval(checkInit);
-                                setIsProjectModalLoading(false);
-                                resolve();
-                            } else if (attempts >= 50) {
-                                console.error('❌ ProjectModal failed to initialize');
-                                clearInterval(checkInit);
-                                setIsProjectModalLoading(false);
-                                alert('Failed to load project editor. Please refresh the page.');
-                                reject(new Error('ProjectModal failed to load'));
-                            }
-                        }, 100);
-                    };
-                    script.onerror = () => {
-                        console.error('❌ Failed to load ProjectModal script');
-                        setIsProjectModalLoading(false);
-                        alert('Failed to load project editor. Please refresh the page.');
-                        reject(new Error('Failed to load ProjectModal script'));
-                    };
-                    document.body.appendChild(script);
-                });
-            } else {
-                setIsProjectModalLoading(false);
-            }
-        }
-        
-        // Only show modal if ProjectModal is loaded
-        if (projectModalComponent || (window.ProjectModal && typeof window.ProjectModal === 'function')) {
-            if (!projectModalComponent) {
-                setProjectModalComponent(window.ProjectModal);
-            }
-            setSelectedProject(null);
-            setShowModal(true);
-        } else {
-            alert('Project editor is still loading. Please wait a moment and try again.');
-        }
+    const handleAddProject = () => {
+        setSelectedProject(null);
+        setShowModal(true);
     };
 
     const handleEditProject = async (project) => {
         try {
-            // Ensure ProjectModal is loaded before showing modal
-            if (!projectModalComponent && !isProjectModalLoading) {
-                console.log('⏳ ProjectModal not loaded for edit, loading now...');
-                setIsProjectModalLoading(true);
-                
-                // Try to load ProjectModal
-                let loaded = false;
-                for (let i = 0; i < 50; i++) {
-                    if (window.ProjectModal && typeof window.ProjectModal === 'function') {
-                        console.log('✅ ProjectModal loaded');
-                        setProjectModalComponent(window.ProjectModal);
-                        loaded = true;
-                        break;
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                }
-                
-                if (!loaded) {
-                    // Try loading the script directly
-                    console.log('🚀 Attempting to load ProjectModal script...');
-                    const script = document.createElement('script');
-                    script.src = '/dist/src/components/projects/ProjectModal.js';
-                    script.async = true;
-                    await new Promise((resolve, reject) => {
-                        script.onload = () => {
-                            // Wait for initialization
-                            let attempts = 0;
-                            const checkInit = setInterval(() => {
-                                attempts++;
-                                if (window.ProjectModal && typeof window.ProjectModal === 'function') {
-                                    console.log('✅ ProjectModal loaded via script');
-                                    setProjectModalComponent(window.ProjectModal);
-                                    clearInterval(checkInit);
-                                    setIsProjectModalLoading(false);
-                                    resolve();
-                                } else if (attempts >= 50) {
-                                    console.error('❌ ProjectModal failed to initialize');
-                                    clearInterval(checkInit);
-                                    setIsProjectModalLoading(false);
-                                    alert('Failed to load project editor. Please refresh the page.');
-                                    reject(new Error('ProjectModal failed to load'));
-                                }
-                            }, 100);
-                        };
-                        script.onerror = () => {
-                            console.error('❌ Failed to load ProjectModal script');
-                            setIsProjectModalLoading(false);
-                            alert('Failed to load project editor. Please refresh the page.');
-                            reject(new Error('Failed to load ProjectModal script'));
-                        };
-                        document.body.appendChild(script);
-                    });
-                } else {
-                    setIsProjectModalLoading(false);
-                }
-            }
-            
             // Fetch full project data for editing
             // Always use safe fallback approach to avoid function errors
             let response;
@@ -1094,16 +910,8 @@ const Projects = () => {
                 client: fullProject.clientName || fullProject.client || ''
             };
             
-            // Only show modal if ProjectModal is loaded
-            if (projectModalComponent || (window.ProjectModal && typeof window.ProjectModal === 'function')) {
-                if (!projectModalComponent) {
-                    setProjectModalComponent(window.ProjectModal);
-                }
-                setSelectedProject(normalizedProject);
-                setShowModal(true);
-            } else {
-                alert('Project editor is still loading. Please wait a moment and try again.');
-            }
+            setSelectedProject(normalizedProject);
+            setShowModal(true);
         } catch (error) {
             console.error('Error loading project for editing:', error);
             alert('Error loading project: ' + error.message);
@@ -1111,12 +919,6 @@ const Projects = () => {
     };
 
     const handleViewProject = async (project) => {
-        // Skip if we're already viewing this exact project (prevent unnecessary re-renders)
-        if (viewingProject && viewingProject.id === project.id) {
-            console.log('⏭️ Already viewing this project, skipping handleViewProject');
-            return;
-        }
-        
         console.log('Viewing project:', project);
         console.log('ProjectDetail component exists:', !!window.ProjectDetail, 'type:', typeof window.ProjectDetail);
         console.log('🔍 ProjectDetail initialization state:', {
@@ -1306,53 +1108,7 @@ const Projects = () => {
             
             // Expose a function to update viewingProject from child components
             // This allows ProjectDetail to refresh the project data after saving
-            // ⚠️ FIXED: Prevent unnecessary re-renders by checking if project actually changed
             window.updateViewingProject = (updatedProject) => {
-                if (!updatedProject || !updatedProject.id) {
-                    console.warn('⚠️ updateViewingProject called with invalid project');
-                    return;
-                }
-
-                if (updatedProject.skipDocumentSectionsUpdate) {
-                    console.log('⏭️ Skipping updateViewingProject: skipDocumentSectionsUpdate flag set');
-                    return;
-                }
-                
-                // Only update if we're actually viewing this project
-                if (!viewingProject || viewingProject.id !== updatedProject.id) {
-                    console.log('⏭️ Skipping updateViewingProject: not viewing this project');
-                    return;
-                }
-                
-                // Check if the project data actually changed (deep comparison for documentSections)
-                const currentDocumentSections = viewingProject.documentSections;
-                const newDocumentSections = updatedProject.documentSections;
-                const documentSectionsChanged = currentDocumentSections !== newDocumentSections;
-                
-                // If only documentSections changed and we're in document collection view, skip update
-                // This prevents reloads when auto-saving document sections
-                if (documentSectionsChanged && !updatedProject.skipDocumentSectionsUpdate) {
-                    const isDocumentCollectionView = window.location.hash.includes('documentCollection') || 
-                                                     (viewingProject.hasDocumentCollectionProcess && 
-                                                      documentSectionsChanged);
-                    if (isDocumentCollectionView) {
-                        console.log('⏭️ Skipping updateViewingProject: documentSections changed during document collection editing');
-                        return;
-                    }
-                }
-                
-                // Check if other important fields changed
-                const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'tasks', 'taskLists'];
-                const hasImportantChanges = importantFields.some(field => {
-                    return JSON.stringify(viewingProject[field]) !== JSON.stringify(updatedProject[field]);
-                });
-                
-                if (!hasImportantChanges && !documentSectionsChanged) {
-                    console.log('⏭️ Skipping updateViewingProject: no important changes detected');
-                    return;
-                }
-                
-                console.log('🔄 updateViewingProject: updating project (important changes detected)');
                 console.log('🔄 Updating viewingProject from child component:', {
                     id: updatedProject.id,
                     hasDocumentCollectionProcess: updatedProject.hasDocumentCollectionProcess
@@ -1375,55 +1131,14 @@ const Projects = () => {
                         return false;
                     })()
                 };
-                
-                // Use smart comparison to prevent unnecessary re-renders
-                setViewingProject(prev => {
-                    if (!prev || prev.id !== normalized.id) {
-                        return normalized;
-                    }
-                    // Compare important fields to see if anything actually changed
-                    const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'tasks', 'taskLists', 'documentSections'];
-                    const hasChanges = importantFields.some(field => {
-                        const prevValue = prev[field];
-                        const newValue = normalized[field];
-                        // Use JSON.stringify for deep comparison of objects/arrays
-                        return JSON.stringify(prevValue) !== JSON.stringify(newValue);
-                    });
-                    
-                    if (!hasChanges) {
-                        console.log('⏭️ Skipping viewingProject update: project data unchanged');
-                        return prev; // Return previous object to prevent re-render
-                    }
-                    console.log('🔄 Updating viewingProject: project data changed');
-                    return normalized;
-                });
+                setViewingProject(normalized);
             };
             
             // Only set viewingProject if ProjectDetail is available
             if (window.ProjectDetail) {
                 console.log('✅ ProjectDetail is available, setting viewingProject');
-                // Only update if the project actually changed (prevent unnecessary re-renders)
-                setViewingProject(prev => {
-                    // If it's the same project ID, check if data actually changed
-                    if (prev && prev.id === normalizedProject.id) {
-                        // Compare important fields to see if anything actually changed
-                        const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'tasks', 'taskLists', 'documentSections'];
-                        const hasChanges = importantFields.some(field => {
-                            const prevValue = prev[field];
-                            const newValue = normalizedProject[field];
-                            // Use JSON.stringify for deep comparison of objects/arrays
-                            return JSON.stringify(prevValue) !== JSON.stringify(newValue);
-                        });
-                        
-                        if (!hasChanges) {
-                            console.log('⏭️ Skipping viewingProject update: project data unchanged');
-                            return prev; // Return previous object to prevent re-render
-                        }
-                        console.log('🔄 Updating viewingProject: project data changed');
-                    }
-                    // Create a new object reference only when data actually changed
-                    return { ...normalizedProject };
-                });
+                // Create a new object reference to ensure React detects the change
+                setViewingProject({ ...normalizedProject });
             } else {
                 console.error('❌ ProjectDetail still not available after loading attempt');
                 console.error('🔍 Debug info:', {
@@ -1950,11 +1665,11 @@ const Projects = () => {
                         console.log('✅ Effect: ProjectDetail loaded successfully');
                         setProjectDetailAvailable(true);
                         setWaitingForProjectDetail(false);
-                        // REMOVED: Force re-render that was causing refresh issues
-                        // React will re-render automatically when projectDetailAvailable changes
+                        // Force re-render
+                        setViewingProject({ ...viewingProject });
                     } else if (retryCount < maxRetries) {
                         retryCount++;
-                        console.log('🔄 Effect: Load failed, retrying in 500ms... (' + retryCount + '/' + maxRetries + ')');
+                        console.log(`🔄 Effect: Load failed, retrying in 500ms... (${retryCount}/${maxRetries})`);
                         setTimeout(attemptLoad, 500);
                     } else {
                         console.error('❌ Effect: All load attempts exhausted');
@@ -1966,9 +1681,31 @@ const Projects = () => {
             attemptLoad();
         }
         
-        // ⚠️ FIXED: Removed continuous polling that was causing constant re-renders
-        // Only check when viewingProject changes, not continuously
-        // The component will be available when needed without constant polling
+        // Continuous polling while viewing project - check every 200ms (more aggressive)
+        const checkInterval = setInterval(() => {
+            if (window.ProjectDetail) {
+                if (!projectDetailAvailable) {
+                    console.log('✅ Effect: ProjectDetail found during polling!');
+                    setProjectDetailAvailable(true);
+                    setWaitingForProjectDetail(false);
+                    setViewingProject({ ...viewingProject });
+                }
+            } else if (!waitingForProjectDetail) {
+                // Component disappeared? Try loading again
+                console.warn('⚠️ Effect: ProjectDetail disappeared, reloading...');
+                setWaitingForProjectDetail(true);
+                loadProjectDetail().then(loaded => {
+                    setWaitingForProjectDetail(false);
+                    if (loaded && window.ProjectDetail) {
+                        setProjectDetailAvailable(true);
+                        setViewingProject({ ...viewingProject });
+                    }
+                });
+            }
+        }, 200); // Check every 200ms (more frequent)
+        
+        return () => clearInterval(checkInterval);
+    }, [viewingProject, waitingForProjectDetail, projectDetailAvailable]);
 
     // BULLETPROOF: Immediate check when viewingProject changes (runs synchronously before paint)
     React.useLayoutEffect(() => {
@@ -2002,8 +1739,7 @@ const Projects = () => {
                         console.log('✅ LayoutEffect: ProjectDetail loaded successfully');
                         setProjectDetailAvailable(true);
                         setWaitingForProjectDetail(false);
-                        // REMOVED: Creating new object reference causes unnecessary re-renders
-                        // setViewingProject(prev => prev ? { ...prev } : null);
+                        setViewingProject(prev => prev ? { ...prev } : null);
                     } else {
                         setWaitingForProjectDetail(false);
                     }
@@ -2022,29 +1758,18 @@ const Projects = () => {
     React.useEffect(() => {
         if (!viewingProject) return;
         
-        // Only check if ProjectDetail is not already available (prevent unnecessary checks)
-        if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
-            if (!projectDetailAvailable) {
-                console.log('✅ ProjectDetail detected in render check');
-                setProjectDetailAvailable(true);
-                setWaitingForProjectDetail(false);
-            }
-            return; // Early return - no need to set up interval
-        }
-        
         const checkInterval = setInterval(() => {
             if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
-                console.log('✅ ProjectDetail detected in render check');
+                console.log('✅ ProjectDetail detected in render check, forcing re-render');
                 setProjectDetailAvailable(true);
                 setWaitingForProjectDetail(false);
-                // REMOVED: setForceRender to prevent infinite loop
-                // setForceRender(prev => prev + 1);
+                setForceRender(prev => prev + 1);
                 clearInterval(checkInterval);
             }
         }, 100);
         
         return () => clearInterval(checkInterval);
-    }, [viewingProject?.id]); // REMOVED: forceRender dependency to prevent loop
+    }, [viewingProject?.id, forceRender]);
 
     if (viewingProject) {
         try {
@@ -2120,14 +1845,14 @@ const Projects = () => {
                                 console.log('🔄 Manual reload button clicked');
                                 window.location.reload();
                             }}
-                            className="bg-blue-600 text-white px-4 py-2.5 sm:py-2 rounded-lg hover:bg-blue-700 text-sm font-medium min-h-[44px] sm:min-h-0"
+                            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium mr-2"
                         >
                             <i className="fas fa-sync-alt mr-2"></i>
                             Reload Page
                         </button>
                         <button 
                             onClick={() => setViewingProject(null)}
-                            className="bg-gray-600 text-white px-4 py-2.5 sm:py-2 rounded-lg hover:bg-gray-700 text-sm font-medium min-h-[44px] sm:min-h-0"
+                            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm font-medium"
                         >
                             <i className="fas fa-arrow-left mr-2"></i>
                             Back to Projects
@@ -2152,17 +1877,17 @@ const Projects = () => {
                         <p className="text-sm text-red-600 mb-4">
                             The ProjectDetail component is not available. Check the browser console for more details.
                         </p>
-                        <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                        <div className="flex gap-2 justify-center">
                             <button 
                                 onClick={() => window.location.reload()}
-                                className="bg-red-600 text-white px-4 py-2.5 sm:py-2 rounded-lg hover:bg-red-700 text-sm font-medium min-h-[44px] sm:min-h-0"
+                                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm font-medium"
                             >
                                 <i className="fas fa-sync-alt mr-2"></i>
                                 Reload Page
                             </button>
                             <button 
                                 onClick={() => setViewingProject(null)}
-                                className="bg-gray-600 text-white px-4 py-2.5 sm:py-2 rounded-lg hover:bg-gray-700 text-sm font-medium min-h-[44px] sm:min-h-0"
+                                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm font-medium"
                             >
                                 <i className="fas fa-arrow-left mr-2"></i>
                                 Back to Projects
@@ -2173,14 +1898,11 @@ const Projects = () => {
             }
             
             console.log('✅ Rendering ProjectDetail component with project:', viewingProject.id);
-            
-            return (
-                <ProjectDetailComponent 
+            return <ProjectDetailComponent 
                 project={viewingProject} 
-                    onBack={handleBackFromProject}
+                onBack={() => setViewingProject(null)}
                 onDelete={handleDeleteProject}
-                />
-            );
+            />;
         } catch (error) {
             console.error('Error rendering ProjectDetail:', error);
             return (
@@ -2198,37 +1920,27 @@ const Projects = () => {
         }
     }
 
-    // Get modal component
-    const ModalComponent = showModal ? (window.ProjectModal && typeof window.ProjectModal === 'function' ? window.ProjectModal : null) : null;
-
     return (
-        <div className="space-y-3 sm:space-y-4">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0">
+        <div className="space-y-4">
+            <div className="flex justify-between items-center">
                 <div className="flex-1 flex items-center justify-between">
-                    <div className="flex-1 min-w-0">
-                        <h1 className="text-base sm:text-lg font-semibold text-gray-900">Projects</h1>
+                    <div>
+                        <h1 className="text-lg font-semibold text-gray-900">Projects</h1>
                         <p className="text-xs text-gray-600">Manage and track all your projects</p>
                     </div>
                     {SectionCommentWidget && (
-                        <div className="hidden sm:block ml-2">
-                            <SectionCommentWidget 
-                                sectionId="projects-main"
-                                sectionName="Projects"
-                            />
-                        </div>
+                        <SectionCommentWidget 
+                            sectionId="projects-main"
+                            sectionName="Projects"
+                        />
                     )}
                 </div>
-                <div className="flex flex-wrap sm:flex-nowrap gap-2">
+                <div className="flex gap-2">
                     {/* View Toggle */}
                     <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden shrink-0">
                         <button
-                            onClick={() => {
-                                setViewMode('grid');
-                                if (typeof window !== 'undefined' && window.localStorage) {
-                                    window.localStorage.setItem('projectsViewMode', 'grid');
-                                }
-                            }}
-                            className={`px-3 py-2 sm:py-2 text-sm font-medium transition-colors shrink-0 min-h-[44px] sm:min-h-0 ${
+                            onClick={() => setViewMode('grid')}
+                            className={`px-3 py-2 text-sm font-medium transition-colors shrink-0 ${
                                 viewMode === 'grid'
                                     ? 'bg-primary-600 text-white'
                                     : 'bg-white text-gray-600 hover:bg-gray-50'
@@ -2238,13 +1950,8 @@ const Projects = () => {
                             <i className="fas fa-th"></i>
                         </button>
                         <button
-                            onClick={() => {
-                                setViewMode('list');
-                                if (typeof window !== 'undefined' && window.localStorage) {
-                                    window.localStorage.setItem('projectsViewMode', 'list');
-                                }
-                            }}
-                            className={`px-3 py-2 sm:py-2 text-sm font-medium transition-colors border-l border-gray-300 shrink-0 min-h-[44px] sm:min-h-0 ${
+                            onClick={() => setViewMode('list')}
+                            className={`px-3 py-2 text-sm font-medium transition-colors border-l border-gray-300 shrink-0 ${
                                 viewMode === 'list'
                                     ? 'bg-primary-600 text-white'
                                     : 'bg-white text-gray-600 hover:bg-gray-50'
@@ -2264,39 +1971,37 @@ const Projects = () => {
                                 console.log('🔍 window.ProjectProgressTracker after setShowProgressTracker:', window.ProjectProgressTracker);
                             }, 100);
                         }}
-                        className="px-3 py-2 sm:py-1.5 border border-primary-600 text-primary-600 rounded-lg hover:bg-primary-50 transition-colors flex items-center text-sm font-medium min-h-[44px] sm:min-h-0 whitespace-nowrap"
+                        className="px-3 py-1.5 border border-primary-600 text-primary-600 rounded-lg hover:bg-primary-50 transition-colors flex items-center text-sm font-medium"
                     >
                         <i className="fas fa-chart-line mr-1.5 text-xs"></i>
-                        <span className="hidden sm:inline">Progress Tracker</span>
-                        <span className="sm:hidden">Tracker</span>
+                        Progress Tracker
                     </button>
                     <button 
                         onClick={handleAddProject}
-                        className="bg-primary-600 text-white px-3 py-2 sm:py-1.5 rounded-lg hover:bg-primary-700 transition-colors flex items-center text-sm font-medium min-h-[44px] sm:min-h-0 whitespace-nowrap"
+                        className="bg-primary-600 text-white px-3 py-1.5 rounded-lg hover:bg-primary-700 transition-colors flex items-center text-sm font-medium"
                     >
                         <i className="fas fa-plus mr-1.5 text-xs"></i>
-                        <span className="hidden sm:inline">New Project</span>
-                        <span className="sm:hidden">New</span>
+                        New Project
                     </button>
                 </div>
             </div>
 
             {/* Search and Filters */}
             <div className="bg-white rounded-lg border border-gray-200 p-3">
-                <div className="flex flex-col sm:flex-row gap-2 sm:gap-2.5">
-                    <div className="flex-1 w-full min-w-0">
+                <div className="flex gap-2.5">
+                    <div className="flex-1">
                         <input
                             type="text"
-                            placeholder="Search projects..."
+                            placeholder="Search projects by name, client, type, or team member..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full px-3 py-2 sm:py-1.5 text-sm sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent min-h-[44px] sm:min-h-0"
+                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                         />
                     </div>
                     <select
                         value={selectedClient}
                         onChange={(e) => setSelectedClient(e.target.value)}
-                        className="px-3 py-2 sm:py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent min-h-[44px] sm:min-h-0 w-full sm:w-auto"
+                        className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     >
                         <option value="all">All Clients ({projects.length})</option>
                         {uniqueClients.map(client => {
@@ -2311,7 +2016,7 @@ const Projects = () => {
                     <select
                         value={filterStatus}
                         onChange={(e) => setFilterStatus(e.target.value)}
-                        className="px-3 py-2 sm:py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent min-h-[44px] sm:min-h-0 w-full sm:w-auto"
+                        className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     >
                         <option value="all">All Statuses</option>
                         <option value="Active">Active</option>
@@ -2381,7 +2086,7 @@ const Projects = () => {
                             )}
                         </div>
                     ) : viewMode === 'grid' ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
                             {filteredProjects.map((project, index) => (
                                 <div 
                                     key={project.id}
@@ -2454,7 +2159,7 @@ const Projects = () => {
                                         handleViewProject(project);
                                         mouseDownRef.current = null;
                                     }}
-                                    className="bg-white rounded-lg border border-gray-200 hover:border-primary-300 hover:shadow-md transition-all p-3 sm:p-4 cursor-pointer"
+                                    className="bg-white rounded-lg border border-gray-200 hover:border-primary-300 hover:shadow-md transition-all p-4 cursor-pointer"
                                 >
                                     <div className="flex justify-between items-start mb-3">
                                         <div className="flex-1">
@@ -2477,34 +2182,20 @@ const Projects = () => {
 
                                     <div className="space-y-2 mb-3">
                                         <div className="flex items-center text-xs text-gray-600">
-                                            {project.type === 'Monthly Review' ? (
-                                                <i className="fas fa-comments mr-2 w-3 text-[10px] text-primary-500"></i>
-                                            ) : project.type === 'Audit' ? (
-                                                <i className="fas fa-clipboard-list mr-2 w-3 text-[10px] text-primary-500"></i>
-                                            ) : (
-                                                <i className="fas fa-tag mr-2 w-3 text-[10px]"></i>
-                                            )}
-                                            {project.type || 'Monthly Review'}
+                                            <i className="fas fa-tag mr-2 w-3 text-[10px]"></i>
+                                            {project.type}
                                         </div>
                                         <div className="flex items-center text-xs text-gray-600">
                                             <i className="fas fa-calendar mr-2 w-3 text-[10px]"></i>
-                                            {project.startDate && project.dueDate 
-                                                ? `${project.startDate} - ${project.dueDate}`
-                                                : project.dueDate 
-                                                    ? project.dueDate
-                                                    : project.startDate 
-                                                        ? project.startDate
-                                                        : project.date || 'No due date'}
+                                            {project.startDate} - {project.dueDate}
                                         </div>
-                                        {project.assignedTo && (
-                                            <div className="flex items-center text-xs text-gray-600">
-                                                <i className="fas fa-user mr-2 w-3 text-[10px]"></i>
-                                                {project.assignedTo}
-                                            </div>
-                                        )}
+                                        <div className="flex items-center text-xs text-gray-600">
+                                            <i className="fas fa-user mr-2 w-3 text-[10px]"></i>
+                                            {project.assignedTo}
+                                        </div>
                                         <div className="flex items-center text-xs text-gray-600">
                                             <i className="fas fa-tasks mr-2 w-3 text-[10px]"></i>
-                                            {project.tasksCount || 0} {project.tasksCount === 1 ? 'task' : 'tasks'}
+                                            {project.tasksCount || 0} tasks
                                         </div>
                                     </div>
                                 </div>
@@ -2512,8 +2203,8 @@ const Projects = () => {
                         </div>
                     ) : (
                         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                            <div className="overflow-x-auto -mx-3 sm:mx-0">
-                                <table className="w-full min-w-[640px] sm:min-w-0">
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
                                     <thead className="bg-gray-50 border-b border-gray-200">
                                         <tr>
                                             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Project</th>
@@ -2578,38 +2269,36 @@ const Projects = () => {
             )}
 
             {/* Add/Edit Modal */}
-            {showModal && ModalComponent && (
-                        <ModalComponent
-                            project={selectedProject}
-                            onSave={handleSaveProject}
-                            onDelete={handleDeleteProject}
-                            onClose={() => {
-                                setShowModal(false);
-                                setSelectedProject(null);
-                            }}
-                        />
-            )}
-            {showModal && !ModalComponent && (
-                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-                            <div className="bg-white rounded-lg p-3 sm:p-4 w-full max-w-md max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
-                                <h2 className="text-lg font-semibold text-gray-900 mb-2">Loading Project Editor</h2>
-                                <p className="text-sm text-gray-600 mb-3">Please wait while the project editor loads...</p>
-                                <div className="flex justify-end">
-                                    <button
-                                        onClick={() => {
-                                            setShowModal(false);
-                                            setSelectedProject(null);
-                                        }}
-                                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                                    >
-                                        Cancel
-                                    </button>
-                                </div>
+            {showModal && (
+                ProjectModal ? (
+                    <ProjectModal
+                        project={selectedProject}
+                        onSave={handleSaveProject}
+                        onDelete={handleDeleteProject}
+                        onClose={() => {
+                            setShowModal(false);
+                            setSelectedProject(null);
+                        }}
+                    />
+                ) : (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                        <div className="bg-white rounded-lg p-4 w-full max-w-md">
+                            <h2 className="text-lg font-semibold text-gray-900 mb-2">Something went wrong</h2>
+                            <p className="text-sm text-gray-600 mb-3">Project editor failed to load. Please wait a moment and try again.</p>
+                            <div className="flex justify-end">
+                                <button
+                                    onClick={() => setShowModal(false)}
+                                    className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                >
+                                    Close
+                                </button>
                             </div>
                         </div>
+                    </div>
+                )
             )}
         </div>
-    ));
+    );
 };
 
 // Make available globally with version identifier for cache-busting
@@ -2617,25 +2306,22 @@ try {
     // Clear any old version first and force replacement
     const oldVersion = window.Projects?._version;
     if (window.Projects) {
-        console.log('🔄 Replacing existing Projects component (old version: ' + (oldVersion || 'unknown') + ') with new version');
+        console.log(`🔄 Replacing existing Projects component (old version: ${oldVersion || 'unknown'}) with new version`);
         // Delete the old version to ensure clean replacement
         delete window.Projects;
     }
     window.Projects = Projects;
-    window.Projects._version = '20251112-upgraded-cards';
+    window.Projects._version = '20251112-list-view';
     window.Projects._hasListView = true;
-    window.Projects._hasUpgradedCards = true;
-    console.log('✅ Projects component registered on window.Projects (version: 20251112-upgraded-cards)');
+    console.log('✅ Projects component registered on window.Projects (version: 20251112-list-view)');
     console.log('✅ Projects component includes list view toggle buttons');
-    console.log('✅ Projects component includes upgraded project cards with review type icons');
     console.log('✅ Projects component version:', window.Projects._version);
     console.log('✅ Projects component has list view:', window.Projects._hasListView);
-    console.log('✅ Projects component has upgraded cards:', window.Projects._hasUpgradedCards);
     
     // Dispatch event to notify that Projects component is ready
     if (typeof window.dispatchEvent === 'function') {
         window.dispatchEvent(new CustomEvent('projectsComponentReady', { 
-            detail: { version: '20251112-upgraded-cards', hasListView: true, hasUpgradedCards: true } 
+            detail: { version: '20251112-list-view', hasListView: true } 
         }));
     }
 } catch (error) {
