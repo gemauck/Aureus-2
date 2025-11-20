@@ -135,6 +135,15 @@ const getAPI = () => {
     return window.DocumentCollectionAPI;
 };
 
+const snapshotDocumentSections = (sections) => {
+    if (typeof sections === 'string') return sections;
+    try {
+        return JSON.stringify(sections || []);
+    } catch {
+        return '[]';
+    }
+};
+
 const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth(); // 0-11
@@ -154,6 +163,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         'January', 'February', 'March', 'April', 'May', 'June',
         'July', 'August', 'September', 'October', 'November', 'December'
     ];
+
+const createCommentCellKey = (sectionId, documentId, month) => JSON.stringify([sectionId, documentId, month]);
+const parseCommentCellKey = (key) => {
+    if (!key) return null;
+    try {
+        const [sectionId, documentId, month] = JSON.parse(key);
+        return { sectionId, documentId, month };
+    } catch (error) {
+        console.warn('Failed to parse comment cell key:', error);
+        return null;
+    }
+};
 
     const getSectionsCacheKey = (projectId) => projectId ? `docCollectionSectionsCache_${projectId}` : null;
 
@@ -292,7 +313,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const saveTimeoutRef = useRef(null);
     const pendingSaveRef = useRef(null);
     const lastSavedSnapshotRef = useRef(null);
-    const lastProjectDocumentSectionsRef = useRef(null); // Track last documentSections to prevent unnecessary reloads
+    const lastProjectDocumentSectionsRef = useRef(snapshotDocumentSections(project?.documentSections)); // Track last documentSections to prevent unnecessary reloads
     const isRestoringFromCacheRef = useRef(false); // Track when restoring from cache to skip auto-save
     
     // Refs to track modal/form state for auto-save (always have latest values)
@@ -560,6 +581,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         // Check if this is a new project (project ID actually changed)
         const isNewProject = previousProjectIdRef.current !== project.id;
+        const currentDocumentSections = snapshotDocumentSections(project.documentSections);
         
         // Reset initial load flag when project ID changes
         if (isNewProject) {
@@ -573,10 +595,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     sessionStorage.removeItem(oldKey);
                 } catch {}
             }
-            // Update documentSections ref for tracking, but don't use it to trigger reloads
-            const currentDocumentSections = typeof project.documentSections === 'string' 
-                ? project.documentSections 
-                : JSON.stringify(project.documentSections || []);
+            // Track latest documentSections snapshot for the new project
             lastProjectDocumentSectionsRef.current = currentDocumentSections;
         }
         
@@ -590,6 +609,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         // Also check if we already have data in state (sectionsByYear has data)
         const hasDataInState = Object.keys(sectionsByYear).length > 0 && 
             Object.values(sectionsByYear).some(yearSections => yearSections.length > 0);
+        const documentSectionsChanged = currentDocumentSections !== lastProjectDocumentSectionsRef.current;
         
         // ⚠️ CRITICAL: If we don't have data in state but think we've loaded, we need to reload
         // This can happen if the component remounts and state is reset but sessionStorage persists
@@ -623,7 +643,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         // 2. We have data in state (actual data exists)
         // ❌ REMOVED: documentSections change detection - this was causing constant reloads
         // The component should only reload when navigating to a different project or on initial mount
-        if (!isNewProject && hasDataInState) {
+        if (!isNewProject && hasDataInState && !documentSectionsChanged) {
             // Already have data in state, don't reload
             console.log('⏭️ Skipping reload: data already in state', {
                 refLoaded: hasLoadedInitialDataRef.current,
@@ -639,6 +659,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 } catch {}
             }
             return;
+        }
+        
+        // Document sections changed for the same project, make sure we record the new snapshot
+        if (!isNewProject && documentSectionsChanged) {
+            console.log('🔄 Project documentSections changed, refreshing tracker data...', {
+                projectId: project.id
+            });
+            lastProjectDocumentSectionsRef.current = currentDocumentSections;
         }
         
         // If we need to reload (state is empty but we think we've loaded), log it
@@ -1159,10 +1187,30 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
 
     const statusOptions = [
-        { value: 'not-collected', label: 'Not Collected', color: 'bg-red-400 text-white font-semibold', cellColor: 'bg-red-100 border-l-4 border-red-300 shadow-sm' },
-        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-yellow-400 text-white font-semibold', cellColor: 'bg-yellow-100 border-l-4 border-yellow-300 shadow-sm' },
-        { value: 'collected', label: 'Collected', color: 'bg-green-500 text-white font-semibold', cellColor: 'bg-green-100 border-l-4 border-green-300 shadow-sm' },
-        { value: 'unavailable', label: 'Unavailable', color: 'bg-gray-400 text-white font-semibold', cellColor: 'bg-gray-100 border-l-4 border-gray-300 shadow-sm' }
+        { 
+            value: 'not-collected', 
+            label: 'Not Collected', 
+            color: 'bg-red-400 text-white font-semibold', 
+            cellColor: 'bg-red-100 border-l-4 border-red-300 shadow-sm dark:bg-red-950/40 dark:border-red-500/70 dark:shadow-red-900/40' 
+        },
+        { 
+            value: 'ongoing', 
+            label: 'Collection Ongoing', 
+            color: 'bg-yellow-400 text-white font-semibold', 
+            cellColor: 'bg-yellow-100 border-l-4 border-yellow-300 shadow-sm dark:bg-yellow-900/40 dark:border-yellow-500/70 dark:shadow-yellow-900/30' 
+        },
+        { 
+            value: 'collected', 
+            label: 'Collected', 
+            color: 'bg-green-500 text-white font-semibold', 
+            cellColor: 'bg-green-100 border-l-4 border-green-300 shadow-sm dark:bg-green-900/30 dark:border-green-500/70 dark:shadow-green-900/30' 
+        },
+        { 
+            value: 'unavailable', 
+            label: 'Unavailable', 
+            color: 'bg-gray-400 text-white font-semibold', 
+            cellColor: 'bg-gray-100 border-l-4 border-gray-300 shadow-sm dark:bg-gray-800/50 dark:border-gray-500/70 dark:shadow-gray-900/40' 
+        }
     ];
 
     const getStatusConfig = (status) => {
@@ -2604,13 +2652,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const statusConfig = status ? getStatusConfig(status) : null;
         const comments = getDocumentComments(document, month);
         const hasComments = comments.length > 0;
-        const cellKey = `${section.id}-${document.id}-${month}`;
+        const cellKey = createCommentCellKey(section.id, document.id, month);
         const isPopupOpen = hoverCommentCell === cellKey;
         
         const isWorkingMonth = workingMonths.includes(months.indexOf(month)) && selectedYear === currentYear;
         const cellBackgroundClass = statusConfig 
             ? statusConfig.cellColor 
-            : (isWorkingMonth ? 'bg-primary-50' : '');
+            : (isWorkingMonth ? 'bg-primary-50 dark:bg-primary-900/30' : '');
         
         const textColorClass = statusConfig && statusConfig.color 
             ? statusConfig.color.split(' ').find(cls => cls.startsWith('text-')) || 'text-gray-900'
@@ -2618,13 +2666,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
         return (
             <td 
-                className={`px-2 py-1 text-xs border-l border-gray-100 ${cellBackgroundClass} relative z-0`}
+                className={`px-2 py-1 text-xs border-l border-gray-100 dark:border-slate-700 ${cellBackgroundClass} relative z-0`}
             >
                 <div className="min-w-[160px] relative flex items-center gap-1">
                     <select
                         value={status || ''}
                         onChange={(e) => handleUpdateStatus(section.id, document.id, month, e.target.value)}
-                        className={`flex-1 px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80 relative z-0`}
+                        className={`flex-1 px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent dark:bg-transparent dark:text-slate-100 ${textColorClass} hover:opacity-80 relative z-0`}
                     >
                         <option value="">Select Status</option>
                         {statusOptions.map(option => (
@@ -2653,7 +2701,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     setHoverCommentCell(cellKey);
                                 }
                             }}
-                            className="text-gray-500 hover:text-primary-600 transition-colors relative p-1"
+                            className="text-gray-500 dark:text-primary-200 hover:text-primary-600 transition-colors relative p-1"
                             type="button"
                             title="Add or view comments"
                         >
@@ -2673,10 +2721,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     return (
         <div className="space-y-3">
             {hoverCommentCell && (() => {
-                const [sectionId, documentId, month] = hoverCommentCell.split('-');
-                const section = sections.find(s => s.id === parseInt(sectionId));
-                const document = section?.documents.find(d => d.id === parseInt(documentId));
+                const context = parseCommentCellKey(hoverCommentCell);
+                if (!context) return null;
+                const { sectionId, documentId, month } = context;
+                const section = sections.find(s => String(s.id) === String(sectionId));
+                const document = section?.documents.find(d => String(d.id) === String(documentId));
                 const comments = document ? getDocumentComments(document, month) : [];
+                if (!section || !document) return null;
+                const normalizedSectionId = section.id;
+                const normalizedDocumentId = document.id;
                 
                 return (
                     <div 
@@ -2719,7 +2772,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                 </div>
                                                 {canDelete && (
                                                     <button
-                                                        onClick={() => handleDeleteComment(parseInt(sectionId), parseInt(documentId), month, comment.id || idx)}
+                                                        onClick={() => handleDeleteComment(normalizedSectionId, normalizedDocumentId, month, comment.id || idx)}
                                                         className="absolute top-1 right-1 text-gray-400 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
                                                         type="button"
                                                     >
@@ -2739,7 +2792,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 <window.CommentInputWithMentions
                                     onSubmit={(commentText) => {
                                         if (commentText && commentText.trim()) {
-                                            handleAddComment(parseInt(sectionId), parseInt(documentId), month, commentText);
+                                            handleAddComment(normalizedSectionId, normalizedDocumentId, month, commentText);
                                         }
                                     }}
                                     placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
@@ -2756,7 +2809,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                                                 e.preventDefault();
                                                 if (quickComment.trim()) {
-                                                    handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
+                                                    handleAddComment(normalizedSectionId, normalizedDocumentId, month, quickComment);
                                                 }
                                             }
                                         }}
@@ -2768,7 +2821,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     <button
                                         onClick={() => {
                                             if (quickComment.trim()) {
-                                                handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
+                                                handleAddComment(normalizedSectionId, normalizedDocumentId, month, quickComment);
                                             }
                                         }}
                                         disabled={!quickComment.trim()}
@@ -2861,10 +2914,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-lg border border-gray-200 p-2.5">
+            <div className="bg-white rounded-lg border border-gray-200 p-2.5 dark:bg-slate-900 dark:border-slate-800">
                 <div className="space-y-1.5">
                     <div className="flex items-center gap-2 pb-1.5 border-b border-gray-100">
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 text-[10px] font-medium">
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 text-[10px] font-medium dark:bg-primary-900/40 dark:text-primary-100">
                             <i className="fas fa-calendar-check mr-1 text-[10px]"></i>
                             Working Months
                         </span>
@@ -2895,13 +2948,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 rounded-lg border border-gray-200 bg-gray-50/60 dark:border-slate-700 dark:bg-slate-800/60">
+                <div className="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                    Document Collection List
+                </div>
+                <div className="flex items-center gap-2 text-xs font-semibold text-primary-700 dark:text-primary-100">
+                    <span className="uppercase tracking-wide text-[10px] text-gray-500 dark:text-gray-300">Year</span>
+                    <span className="px-2 py-0.5 rounded-full bg-primary-100 text-primary-800 dark:bg-primary-900/60 dark:text-primary-100">
+                        {selectedYear}
+                    </span>
+                </div>
+            </div>
+
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden dark:bg-slate-900 dark:border-slate-800">
                 <div className="relative overflow-x-auto" ref={tableRef}>
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50/30">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-800">
+                        <thead className="bg-gray-50/30 dark:bg-slate-800/60">
                             <tr>
                                 <th 
-                                    className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wide sticky left-0 bg-gray-50/30 z-50 border-r border-gray-200"
+                                    className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wide sticky left-0 bg-gray-50/30 z-50 border-r border-gray-200 dark:bg-slate-800/70 dark:text-gray-100 dark:border-slate-700"
                                     style={{ boxShadow: STICKY_COLUMN_SHADOW }}
                                 >
                                     Document / Data
@@ -2910,16 +2975,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     <th 
                                         key={month}
                                         ref={el => monthRefs.current[month] = el}
-                                        className={`px-1.5 py-1.5 text-center text-[10px] font-semibold uppercase tracking-wide border-l border-gray-200 ${
+                                        className={`px-1.5 py-1.5 text-center text-[10px] font-semibold uppercase tracking-wide border-l border-gray-200 dark:border-slate-700 ${
                                             workingMonths.includes(idx) && selectedYear === currentYear
-                                                ? 'bg-primary-50 text-primary-700'
-                                                : 'text-gray-600'
+                                                ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/40 dark:text-primary-100'
+                                                : 'text-gray-600 dark:text-gray-200'
                                         }`}
                                         >
                                         <div className="flex flex-col items-center gap-0.5">
                                             <span>{month.slice(0, 3)} '{String(selectedYear).slice(-2)}</span>
                                             {workingMonths.includes(idx) && selectedYear === currentYear && (
-                                                <span className="inline-flex items-center px-1 py-0.5 rounded text-[9px] font-semibold bg-primary-100 text-primary-700">
+                                                <span className="inline-flex items-center px-1 py-0.5 rounded text-[9px] font-semibold bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-100">
                                                     <i className="fas fa-calendar-check mr-0.5"></i>
                                                     Working
                                                 </span>
@@ -2927,12 +2992,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         </div>
                                     </th>
                                 ))}
-                                <th className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wide border-l border-gray-200">
+                                <th className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wide border-l border-gray-200 dark:text-gray-100 dark:border-slate-700">
                                     Actions
                                 </th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-100">
+                        <tbody className="bg-white divide-y divide-gray-100 dark:bg-slate-900 dark:divide-slate-800">
                             {sections.length === 0 ? (
                                 <tr>
                                     <td colSpan={14} className="px-6 py-8 text-center text-gray-400">
@@ -2958,12 +3023,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                             onDragEnter={(e) => handleDragEnter(e, sectionIndex)}
                                             onDragLeave={handleDragLeave}
                                             onDrop={(e) => handleDrop(e, sectionIndex)}
-                                            className={`bg-gray-50/50 cursor-grab active:cursor-grabbing ${
+                                            className={`bg-gray-50/50 dark:bg-slate-800/40 cursor-grab active:cursor-grabbing ${
                                                 dragOverIndex === sectionIndex ? 'border-t-2 border-primary-500' : ''
                                             }`}
                                         >
                                                     <td 
-                                                        className="px-2.5 py-2 sticky left-0 bg-gray-50/50 z-50 border-r border-gray-200"
+                                                    className="px-2.5 py-2 sticky left-0 bg-gray-50/50 dark:bg-slate-800/40 z-50 border-r border-gray-200 dark:border-slate-700"
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW }}
                                                     >
                                                 <div className="flex items-center gap-2">
@@ -2985,7 +3050,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                             </td>
                                             <td colSpan={12} className="px-2 py-2">
                                             </td>
-                                            <td className="px-2.5 py-2 border-l border-gray-200">
+                                            <td className="px-2.5 py-2 border-l border-gray-200 dark:border-slate-700">
                                                 <div className="flex items-center gap-1">
                                                     <button
                                                         onClick={() => handleEditSection(section)}
@@ -3030,13 +3095,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                     onDragEnter={(e) => handleDocumentDragEnter(e, section.id, documentIndex)}
                                                     onDragLeave={handleDocumentDragLeave}
                                                     onDrop={(e) => handleDocumentDrop(e, section.id, documentIndex)}
-                                                    className={`hover:bg-gray-50/30 cursor-grab active:cursor-grabbing ${
+                                                    className={`hover:bg-gray-50/30 dark:hover:bg-slate-800/50 cursor-grab active:cursor-grabbing ${
                                                         dragOverDocumentIndex?.sectionId === section.id && dragOverDocumentIndex?.documentIndex === documentIndex 
                                                             ? 'border-t-2 border-primary-500' : ''
                                                     }`}
                                                 >
                                                     <td 
-                                                        className="px-4 py-1.5 sticky left-0 bg-white z-50 border-r border-gray-200"
+                                                        className="px-4 py-1.5 sticky left-0 bg-white dark:bg-slate-900 z-50 border-r border-gray-200 dark:border-slate-700"
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW }}
                                                     >
                                                         <div className="min-w-[200px] flex items-center gap-2">
@@ -3054,7 +3119,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                             {renderStatusCell(section, document, month)}
                                                         </React.Fragment>
                                                     ))}
-                                                    <td className="px-2.5 py-1.5 border-l border-gray-200">
+                                                    <td className="px-2.5 py-1.5 border-l border-gray-200 dark:border-slate-700">
                                                         <div className="flex items-center gap-1">
                                                             <button
                                                                 onClick={() => handleEditDocument(section, document)}
