@@ -358,7 +358,8 @@ const parseCommentCellKey = (key) => {
                         // Check for template marker first (exclusive to one year)
                         if (key.startsWith('_template-')) {
                             const match = key.match(/_template-(\d{4})/);
-                            if (match) {
+                            if (match && templateYear === null) {
+                                // Only set and log once per section (first document with marker)
                                 templateYear = parseInt(match[1]);
                                 console.log(`🔍 Found template marker for section ${sectionId}: _template-${templateYear}`);
                                 allYears.add(templateYear);
@@ -436,11 +437,10 @@ const parseCommentCellKey = (key) => {
                     // If it doesn't match, exclude it completely (don't even check hasDataForYear)
                     if (hasTemplateMarker) {
                         if (templateMarkerYear !== year) {
-                            console.log(`🚫 Organize: Excluding section ${sectionId} from year ${year} (template marker: ${templateMarkerYear})`);
+                            // Section excluded from this year (expected behavior, no need to log)
                             return null; // Exclude this section for this year
-                        } else {
-                            console.log(`✅ Organize: Including section ${sectionId} in year ${year} (template marker matches)`);
                         }
+                        // Section included in this year (expected behavior, no need to log)
                     }
                     
                     // For sections without template markers, check if they have data for this year
