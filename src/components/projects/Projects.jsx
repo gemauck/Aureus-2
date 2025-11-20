@@ -1954,7 +1954,7 @@ const Projects = () => {
                         // React will re-render automatically when projectDetailAvailable changes
                     } else if (retryCount < maxRetries) {
                         retryCount++;
-                        console.log(`🔄 Effect: Load failed, retrying in 500ms... (${retryCount}/${maxRetries})`);
+                        console.log('🔄 Effect: Load failed, retrying in 500ms... (' + retryCount + '/' + maxRetries + ')');
                         setTimeout(attemptLoad, 500);
                     } else {
                         console.error('❌ Effect: All load attempts exhausted');
@@ -2201,7 +2201,7 @@ const Projects = () => {
     // Get modal component
     const ModalComponent = showModal ? (window.ProjectModal && typeof window.ProjectModal === 'function' ? window.ProjectModal : null) : null;
 
-    return (
+    return ((
         <div className="space-y-3 sm:space-y-4">
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-0">
                 <div className="flex-1 flex items-center justify-between">
@@ -2609,7 +2609,7 @@ const Projects = () => {
                 </div>
             )}
         </div>
-    ));
+    )));
 };
 
 // Make available globally with version identifier for cache-busting
