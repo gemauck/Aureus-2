@@ -2176,9 +2176,9 @@ const Projects = () => {
             
             return (
                 <ProjectDetailComponent 
-                    project={viewingProject} 
+                project={viewingProject} 
                     onBack={handleBackFromProject}
-                    onDelete={handleDeleteProject}
+                onDelete={handleDeleteProject}
                 />
             );
         } catch (error) {
@@ -2579,34 +2579,34 @@ const Projects = () => {
 
             {/* Add/Edit Modal */}
             {showModal && ModalComponent && (
-                <ModalComponent
-                    project={selectedProject}
-                    onSave={handleSaveProject}
-                    onDelete={handleDeleteProject}
-                    onClose={() => {
-                        setShowModal(false);
-                        setSelectedProject(null);
-                    }}
-                />
+                        <ModalComponent
+                            project={selectedProject}
+                            onSave={handleSaveProject}
+                            onDelete={handleDeleteProject}
+                            onClose={() => {
+                                setShowModal(false);
+                                setSelectedProject(null);
+                            }}
+                        />
             )}
             {showModal && !ModalComponent && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-                    <div className="bg-white rounded-lg p-3 sm:p-4 w-full max-w-md max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
-                        <h2 className="text-lg font-semibold text-gray-900 mb-2">Loading Project Editor</h2>
-                        <p className="text-sm text-gray-600 mb-3">Please wait while the project editor loads...</p>
-                        <div className="flex justify-end">
-                            <button
-                                onClick={() => {
-                                    setShowModal(false);
-                                    setSelectedProject(null);
-                                }}
-                                className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                            >
-                                Cancel
-                            </button>
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+                            <div className="bg-white rounded-lg p-3 sm:p-4 w-full max-w-md max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+                                <h2 className="text-lg font-semibold text-gray-900 mb-2">Loading Project Editor</h2>
+                                <p className="text-sm text-gray-600 mb-3">Please wait while the project editor loads...</p>
+                                <div className="flex justify-end">
+                                    <button
+                                        onClick={() => {
+                                            setShowModal(false);
+                                            setSelectedProject(null);
+                                        }}
+                                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
             )}
         </div>
     ));
