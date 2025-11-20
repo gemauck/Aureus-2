@@ -315,6 +315,7 @@ const parseCommentCellKey = (key) => {
     const lastSavedSnapshotRef = useRef(null);
     const lastProjectDocumentSectionsRef = useRef(snapshotDocumentSections(project?.documentSections)); // Track last documentSections to prevent unnecessary reloads
     const isRestoringFromCacheRef = useRef(false); // Track when restoring from cache to skip auto-save
+    const templateJustAppliedRef = useRef(false); // Track when template was just applied to force refresh after save
     
     // Refs to track modal/form state for auto-save (always have latest values)
     const modalsOpenRef = useRef(false);
@@ -923,12 +924,45 @@ const parseCommentCellKey = (key) => {
                     console.log('✅ Sections saved successfully');
                     lastSavedSnapshotRef.current = pendingSaveRef.current.snapshot;
                     pendingSaveRef.current = null;
+                    
+                    // If template was just applied, refresh from database to ensure we have latest data
+                    if (templateJustAppliedRef.current) {
+                        console.log('🔄 Template was just applied, refreshing from database...');
+                        templateJustAppliedRef.current = false;
+                        try {
+                            const freshProject = await api.fetchProject(project.id);
+                            if (freshProject?.documentSections) {
+                                let freshParsed = [];
+                                try {
+                                    if (typeof freshProject.documentSections === 'string') {
+                                        freshParsed = JSON.parse(freshProject.documentSections);
+                                    } else if (Array.isArray(freshProject.documentSections)) {
+                                        freshParsed = freshProject.documentSections;
+                                    }
+                                } catch (e) {
+                                    console.warn('Failed to parse fresh documentSections after template:', e);
+                                }
+                                
+                                const normalizedFresh = normalizeSections(freshParsed);
+                                const organizedFresh = organizeSectionsByYear(normalizedFresh);
+                                console.log('🔄 Refreshing sections from database after template application');
+                                setSectionsByYear(organizedFresh);
+                                persistSectionsToCache(project.id, organizedFresh);
+                                const freshMerged = mergeSectionsByYear(organizedFresh);
+                                lastSavedSnapshotRef.current = serializeSections(freshMerged);
+                            }
+                        } catch (refreshError) {
+                            console.warn('⚠️ Could not refresh after template application:', refreshError);
+                        }
+                    }
                 } catch (error) {
                     console.error('❌ Error saving sections:', error);
                     setSaveError(error.message || 'Failed to save sections');
                     if (window.showNotification) {
                         window.showNotification('Failed to save document sections. Please try again.', 'error');
                     }
+                    // Reset flag on error
+                    templateJustAppliedRef.current = false;
                 } finally {
                     setIsSaving(false);
                 }
@@ -1471,6 +1505,9 @@ const parseCommentCellKey = (key) => {
         updateSectionsForYear(prev => [...prev, ...newSections], targetYear);
         
         console.log('✅ Template sections added to year', targetYear);
+        
+        // Mark that template was just applied - will trigger refresh after save
+        templateJustAppliedRef.current = true;
 
         if (window.AuditLogger) {
             window.AuditLogger.log('create', 'projects', {
