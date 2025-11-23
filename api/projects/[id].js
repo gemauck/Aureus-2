@@ -27,19 +27,30 @@ async function handler(req, res) {
     // Get Single Project (GET /api/projects/[id])
     if (req.method === 'GET') {
       try {
-        const project = await prisma.project.findUnique({ where: { id } })
-        if (!project) return notFound(res)
+        console.log('📥 API: FETCHING project from database:', {
+          projectId: id,
+          user: req.user?.email || req.user?.sub || 'unknown',
+          timestamp: new Date().toISOString()
+        });
         
-        console.log('🔍 Retrieved project from database:', {
+        const project = await prisma.project.findUnique({ where: { id } })
+        if (!project) {
+          console.log('❌ API: Project not found:', id);
+          return notFound(res);
+        }
+        
+        console.log('📥 API: Retrieved project from database:', {
           id: project.id,
+          user: req.user?.email || req.user?.sub || 'unknown',
           hasDocumentCollectionProcess: project.hasDocumentCollectionProcess,
-          type: typeof project.hasDocumentCollectionProcess,
-          rawValue: project.hasDocumentCollectionProcess,
-          isTrue: project.hasDocumentCollectionProcess === true,
-          isStringTrue: project.hasDocumentCollectionProcess === 'true',
-          isNull: project.hasDocumentCollectionProcess === null,
-          isUndefined: project.hasDocumentCollectionProcess === undefined
-        })
+          hasDocumentSections: !!project.documentSections,
+          documentSectionsType: typeof project.documentSections,
+          documentSectionsLength: typeof project.documentSections === 'string' ? 
+            project.documentSections.length : 'not string',
+          documentSectionsPreview: typeof project.documentSections === 'string' ? 
+            project.documentSections.substring(0, 200) : 'not string',
+          timestamp: new Date().toISOString()
+        });
         // Also log the raw Prisma result to see what's actually in the database
         console.log('🔍 Raw Prisma project object (hasDocumentCollectionProcess field):', {
           fieldExists: 'hasDocumentCollectionProcess' in project,
@@ -159,6 +170,16 @@ async function handler(req, res) {
       // Handle documentSections separately if provided - ensure it's properly saved
       if (body.documentSections !== undefined && body.documentSections !== null) {
         try {
+          console.log('💾 API: RECEIVED documentSections for saving:', {
+            projectId: id,
+            user: req.user?.email || req.user?.sub || 'unknown',
+            type: typeof body.documentSections,
+            isString: typeof body.documentSections === 'string',
+            length: typeof body.documentSections === 'string' ? body.documentSections.length : 'N/A',
+            preview: typeof body.documentSections === 'string' ? body.documentSections.substring(0, 200) : 'N/A',
+            timestamp: new Date().toISOString()
+          });
+          
           if (typeof body.documentSections === 'string') {
             // Already a string, validate it's valid JSON
             const trimmed = body.documentSections.trim();
@@ -171,6 +192,7 @@ async function handler(req, res) {
                 const parsed = JSON.parse(trimmed);
                 // If it parsed successfully, use it as-is (it's already a stringified JSON)
                 updateData.documentSections = trimmed;
+                console.log('✅ API: documentSections validated (string), sections count:', Array.isArray(parsed) ? parsed.length : 'not array');
               } catch (parseError) {
                 console.error('❌ Invalid documentSections JSON string:', parseError);
                 // If string is invalid JSON, stringify it (might be double-encoded or corrupted)
@@ -180,25 +202,29 @@ async function handler(req, res) {
           } else if (Array.isArray(body.documentSections)) {
             // It's an array, stringify it
             updateData.documentSections = JSON.stringify(body.documentSections);
+            console.log('✅ API: documentSections is array, stringified, sections count:', body.documentSections.length);
           } else if (typeof body.documentSections === 'object') {
             // It's an object, stringify it
             updateData.documentSections = JSON.stringify(body.documentSections);
+            console.log('✅ API: documentSections is object, stringified');
           } else {
             // It's something else (number, boolean, etc.), stringify it
             updateData.documentSections = JSON.stringify(body.documentSections);
+            console.log('✅ API: documentSections is other type, stringified');
           }
-          console.log('✅ documentSections will be saved:', {
-            type: typeof body.documentSections,
-            isString: typeof body.documentSections === 'string',
-            length: typeof body.documentSections === 'string' ? body.documentSections.length : 'N/A',
-            preview: typeof body.documentSections === 'string' ? body.documentSections.substring(0, 100) : 'N/A'
+          console.log('✅ API: documentSections will be saved to database:', {
+            projectId: id,
+            user: req.user?.email || req.user?.sub || 'unknown',
+            finalLength: updateData.documentSections.length,
+            finalPreview: updateData.documentSections.substring(0, 200),
+            timestamp: new Date().toISOString()
           });
         } catch (error) {
           console.error('❌ Error processing documentSections:', error);
           // Don't fail the entire update, but log the error
         }
       } else {
-        console.log('⚠️ documentSections not provided in update - will not be updated');
+        console.log('⚠️ API: documentSections not provided in update - will not be updated');
       }
       
       // Handle monthlyProgress separately if provided - with validation for safety
@@ -258,13 +284,31 @@ async function handler(req, res) {
         }
       })
       
-      console.log('🔍 Updating project with data:', updateData)
+      console.log('🔍 API: Updating project with data:', {
+        projectId: id,
+        user: req.user?.email || req.user?.sub || 'unknown',
+        hasDocumentSections: !!updateData.documentSections,
+        documentSectionsLength: updateData.documentSections?.length || 0,
+        timestamp: new Date().toISOString()
+      });
+      
       try {
         const project = await prisma.project.update({ 
           where: { id }, 
           data: updateData 
-        })
-        console.log('✅ Project updated successfully:', project.id)
+        });
+        
+        console.log('✅ API: Project updated successfully in database:', {
+          projectId: project.id,
+          user: req.user?.email || req.user?.sub || 'unknown',
+          hasDocumentSections: !!project.documentSections,
+          documentSectionsLength: typeof project.documentSections === 'string' ? 
+            project.documentSections.length : 'not string',
+          documentSectionsPreview: typeof project.documentSections === 'string' ? 
+            project.documentSections.substring(0, 200) : 'not string',
+          timestamp: new Date().toISOString()
+        });
+        
         return ok(res, { project })
       } catch (dbError) {
         console.error('❌ Database error updating project:', dbError)

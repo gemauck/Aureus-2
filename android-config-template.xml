@@ -1,0 +1,36 @@
+<!-- 
+Android Configuration Template
+These settings will be applied when you run: npm run android:init
+
+After initialization, you can customize these in:
+- android/app/src/main/AndroidManifest.xml
+- android/app/build.gradle
+-->
+
+<!-- Example AndroidManifest.xml additions -->
+<!-- Add these permissions in android/app/src/main/AndroidManifest.xml if needed -->
+
+<!-- Internet permission (usually added automatically) -->
+<!-- <uses-permission android:name="android.permission.INTERNET" /> -->
+
+<!-- Network state permission -->
+<!-- <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" /> -->
+
+<!-- Camera permission (if your app uses camera) -->
+<!-- <uses-permission android:name="android.permission.CAMERA" /> -->
+
+<!-- Location permissions (if your app uses location) -->
+<!-- <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" /> -->
+<!-- <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" /> -->
+
+<!-- File access permissions (if your app accesses files) -->
+<!-- <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" /> -->
+<!-- <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" /> -->
+
+<!-- Example build.gradle customizations -->
+<!-- Edit android/app/build.gradle to customize: -->
+<!-- - minSdkVersion (default: 22) -->
+<!-- - targetSdkVersion (default: 33) -->
+<!-- - compileSdkVersion (default: 33) -->
+<!-- - versionCode and versionName -->
+

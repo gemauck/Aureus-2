@@ -13,9 +13,41 @@ const getAPI = () => {
         window.DocumentCollectionAPI = {
             updateToken: () => {},
             saveDocumentSections: async (projectId, sections, skipParentUpdate = false) => {
-                const result = await window.DatabaseAPI.updateProject(projectId, {
-                    documentSections: JSON.stringify(sections)
+                console.log('💾 SAVING TO DATABASE:', {
+                    projectId,
+                    sectionsCount: sections?.length || 0,
+                    sectionsPreview: sections?.slice(0, 2).map(s => ({
+                        id: s.id,
+                        name: s.name,
+                        documentsCount: s.documents?.length || 0
+                    })),
+                    timestamp: new Date().toISOString()
                 });
+                
+                const sectionsJson = JSON.stringify(sections);
+                console.log('💾 Saving documentSections to database:', {
+                    projectId,
+                    jsonLength: sectionsJson.length,
+                    jsonPreview: sectionsJson.substring(0, 200)
+                });
+                
+                const result = await window.DatabaseAPI.updateProject(projectId, {
+                    documentSections: sectionsJson
+                });
+                
+                console.log('✅ SAVE RESPONSE FROM DATABASE:', {
+                    projectId,
+                    hasResult: !!result,
+                    hasData: !!result?.data,
+                    hasProject: !!result?.data?.project,
+                    savedDocumentSections: result?.data?.project?.documentSections ? 
+                        (typeof result.data.project.documentSections === 'string' ? 
+                            result.data.project.documentSections.substring(0, 200) : 
+                            'not string') : 
+                        'not found',
+                    timestamp: new Date().toISOString()
+                });
+                
                 // Update parent component's project prop if available and not skipping
                 // Skip parent update for auto-saves to prevent refresh issues
                 if (!skipParentUpdate && window.updateViewingProject && typeof window.updateViewingProject === 'function') {
@@ -23,34 +55,105 @@ const getAPI = () => {
                     if (updatedProject) {
                         window.updateViewingProject({
                             ...updatedProject,
-                            documentSections: JSON.stringify(sections),
+                            documentSections: sectionsJson,
                             skipDocumentSectionsUpdate: true
                         });
                     }
                 }
                 return result;
             },
-            fetchProject: async (projectId) => {
-                const result = await window.DatabaseAPI.getProject(projectId);
-                return result?.data?.project || result?.project || result?.data || result;
+            fetchProject: async (projectId, forceRefresh = false) => {
+                console.log('📥 FETCHING FROM DATABASE:', {
+                    projectId,
+                    forceRefresh,
+                    timestamp: new Date().toISOString()
+                });
+                
+                // Clear cache before fetching to ensure fresh data (important for multi-user scenarios)
+                if (window.DatabaseAPI) {
+                    // Clear specific project cache
+                    if (window.DatabaseAPI._responseCache) {
+                        window.DatabaseAPI._responseCache.delete(`GET:/projects/${projectId}`);
+                        console.log('🔄 Cleared cache for project:', projectId);
+                    }
+                    // Also clear projects list cache
+                    if (window.DatabaseAPI._responseCache) {
+                        window.DatabaseAPI._responseCache.delete('GET:/projects');
+                        console.log('🔄 Cleared projects list cache');
+                    }
+                }
+                
+                // Fetch with cache-busting query parameter to ensure fresh data
+                const cacheBuster = `?t=${Date.now()}`;
+                const result = await window.DatabaseAPI.makeRequest(`/projects/${projectId}${cacheBuster}`);
+                const project = result?.data?.project || result?.project || result?.data || result;
+                
+                console.log('📥 FETCHED FROM DATABASE:', {
+                    projectId,
+                    hasProject: !!project,
+                    hasDocumentSections: !!project?.documentSections,
+                    documentSectionsType: typeof project?.documentSections,
+                    documentSectionsLength: typeof project?.documentSections === 'string' ? 
+                        project.documentSections.length : 'not string',
+                    documentSectionsPreview: typeof project?.documentSections === 'string' ? 
+                        project.documentSections.substring(0, 200) : 
+                        'not string',
+                    timestamp: new Date().toISOString()
+                });
+                
+                return project;
+            },
+            clearProjectCache: (projectId) => {
+                console.log(`🧹 Clearing DatabaseAPI cache for project: ${projectId}`);
+                if (window.DatabaseAPI?._responseCache) {
+                    window.DatabaseAPI._responseCache.delete('GET:/projects');
+                    if (projectId) {
+                        window.DatabaseAPI._responseCache.delete(`GET:/projects/${projectId}`);
+                    }
+                }
             },
             getTemplates: async () => {
                 try {
+                    console.log('🌐 getTemplates() API call starting...');
                     const token = window.storage?.getToken?.();
                     if (!token) {
                         console.warn('⚠️ No auth token available for fetching templates');
                         return [];
                     }
-                    const response = await fetch('/api/document-collection-templates', {
+                    // Add timestamp to prevent browser caching - ensures fresh templates for all users
+                    const cacheBuster = `?t=${Date.now()}`;
+                    const apiUrl = `/api/document-collection-templates${cacheBuster}`;
+                    console.log('📡 Fetching templates from:', apiUrl);
+                    const response = await fetch(apiUrl, {
                         headers: {
                             'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        }
+                            'Content-Type': 'application/json',
+                            'Cache-Control': 'no-cache, no-store, must-revalidate',
+                            'Pragma': 'no-cache',
+                            'Expires': '0'
+                        },
+                        cache: 'no-store' // Prevent browser caching
                     });
+                    console.log('📥 API response status:', response.status, response.statusText);
                     if (response.ok) {
                         const data = await response.json();
+                        console.log('📦 API response data structure:', {
+                            hasData: !!data.data,
+                            hasTemplates: !!data.templates,
+                            dataKeys: Object.keys(data),
+                            fullResponse: JSON.stringify(data).substring(0, 500)
+                        });
                         const templates = data?.data?.templates || data?.templates || [];
                         console.log('📋 API returned templates:', templates.length);
+                        if (templates.length > 0) {
+                            console.log('📋 Template details:', templates.map(t => ({
+                                id: t.id,
+                                name: t.name,
+                                ownerId: t.ownerId,
+                                createdBy: t.createdBy,
+                                isDefault: t.isDefault
+                            })));
+                        }
                         if (templates.length > 0) {
                             console.log('First template structure:', {
                                 id: templates[0].id,
@@ -76,6 +179,12 @@ const getAPI = () => {
                 try {
                     const token = window.storage?.getToken?.();
                     if (!token) throw new Error('No auth token');
+                    
+                    console.log('💾 Creating template in database:', {
+                        name: templateData.name,
+                        sectionsCount: templateData.sections?.length || 0
+                    });
+                    
                     const response = await fetch('/api/document-collection-templates', {
                         method: 'POST',
                         headers: {
@@ -84,9 +193,29 @@ const getAPI = () => {
                         },
                         body: JSON.stringify(templateData)
                     });
-                    if (!response.ok) throw new Error(`API returned ${response.status}`);
+                    
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error('❌ API error response:', response.status, errorText);
+                        throw new Error(`API returned ${response.status}: ${errorText}`);
+                    }
+                    
                     const data = await response.json();
-                    return data?.data?.template || data?.template;
+                    const template = data?.data?.template || data?.template;
+                    
+                    if (!template || !template.id) {
+                        console.error('❌ Template creation failed: No template ID returned', data);
+                        throw new Error('Template creation failed: No template ID returned');
+                    }
+                    
+                    console.log('✅ Template created successfully in database:', {
+                        id: template.id,
+                        name: template.name,
+                        ownerId: template.ownerId,
+                        createdBy: template.createdBy
+                    });
+                    
+                    return template;
                 } catch (error) {
                     console.error('❌ Error creating template:', error);
                     throw error;
@@ -578,7 +707,16 @@ const parseCommentCellKey = (key) => {
     // ✅ LOAD DATA FROM DATABASE ON MOUNT - Fetch fresh data
     // ⚠️ IMPORTANT: Only load on initial mount or when project ID actually changes (not on every prop update)
     useEffect(() => {
-        if (!project?.id) return;
+        if (!project?.id) {
+            console.log('⏸️ Skipping load: No project ID');
+            return;
+        }
+        
+        console.log('🔄 useEffect triggered for project:', project.id, {
+            previousProjectId: previousProjectIdRef.current,
+            isNewProject: previousProjectIdRef.current !== project.id,
+            hasLoadedInitialData: hasLoadedInitialDataRef.current
+        });
         
         // Check if this is a new project (project ID actually changed)
         const isNewProject = previousProjectIdRef.current !== project.id;
@@ -608,58 +746,78 @@ const parseCommentCellKey = (key) => {
         } catch {}
         
         // Also check if we already have data in state (sectionsByYear has data)
-        const hasDataInState = Object.keys(sectionsByYear).length > 0 && 
+        // ⚠️ IMPORTANT: Check BEFORE cache restore, so we know if data was already in state
+        const hadDataInStateBeforeCache = Object.keys(sectionsByYear).length > 0 && 
             Object.values(sectionsByYear).some(yearSections => yearSections.length > 0);
         const documentSectionsChanged = currentDocumentSections !== lastProjectDocumentSectionsRef.current;
         
         // ⚠️ CRITICAL: If we don't have data in state but think we've loaded, we need to reload
         // This can happen if the component remounts and state is reset but sessionStorage persists
-        let needsReload = !hasDataInState && (hasLoadedInitialDataRef.current || hasLoadedInSession);
+        let needsReload = !hadDataInStateBeforeCache && (hasLoadedInitialDataRef.current || hasLoadedInSession);
+        let cacheWasRestored = false;
         
         if (needsReload) {
             const cachedSections = loadSectionsFromCache(project.id);
             if (cachedSections) {
                 console.log('♻️ Restoring document collection data from cache', {
                     projectId: project.id,
-                    years: Object.keys(cachedSections)
+                    years: Object.keys(cachedSections),
+                    has2018: !!cachedSections[2018] && cachedSections[2018].length > 0,
+                    sections2018: cachedSections[2018]?.length || 0
                 });
-                // Set flag to skip auto-save when restoring from cache
+                // ⚠️ CRITICAL: When switching profiles, cache might be stale
+                // Always mark cache as restored so we force a fresh DB fetch
                 isRestoringFromCacheRef.current = true;
+                cacheWasRestored = true;
                 setSectionsByYear(cachedSections);
-                hasLoadedInitialDataRef.current = true;
+                // Don't set hasLoadedInitialDataRef yet - we still want to fetch from DB
                 lastSavedSnapshotRef.current = serializeSections(mergeSectionsByYear(cachedSections));
-                try {
-                    sessionStorage.setItem(sessionLoadedKey, 'true');
-                } catch {}
                 // Clear the flag after a short delay to allow state to update
                 setTimeout(() => {
                     isRestoringFromCacheRef.current = false;
                 }, 100);
-                return;
+                // ⚠️ DON'T RETURN - continue to fetch fresh data from database
+                // This ensures we get the latest data even if cache exists
+                console.log('🔄 Cache restored - will force fresh database fetch');
+            } else {
+                console.log('📭 No cache found for project:', project.id);
             }
         }
         
-        // ✅ ONLY skip loading if:
-        // 1. This is NOT a new project AND
-        // 2. We have data in state (actual data exists)
-        // ❌ REMOVED: documentSections change detection - this was causing constant reloads
-        // The component should only reload when navigating to a different project or on initial mount
-        if (!isNewProject && hasDataInState && !documentSectionsChanged) {
-            // Already have data in state, don't reload
-            console.log('⏭️ Skipping reload: data already in state', {
-                refLoaded: hasLoadedInitialDataRef.current,
-                sessionLoaded: hasLoadedInSession,
-                hasDataInState: hasDataInState,
-                projectId: project.id
-            });
-            // Sync ref with sessionStorage
-            if (!hasLoadedInitialDataRef.current) {
-                hasLoadedInitialDataRef.current = true;
-                try {
-                    sessionStorage.setItem(sessionLoadedKey, 'true');
-                } catch {}
+        // Re-check hasDataInState AFTER cache restore (if it happened)
+        // ⚠️ NOTE: This might be stale if cache was just restored (setState is async)
+        // So we'll use cacheWasRestored flag instead
+        const hasDataInState = Object.keys(sectionsByYear).length > 0 && 
+            Object.values(sectionsByYear).some(yearSections => yearSections.length > 0);
+        
+        // ⚠️ CRITICAL: If cache was restored, we MUST fetch fresh data from database
+        // Cache might be stale, especially when switching profiles
+        // FORCE fetch even if modals are open or there are "unsaved changes" (cache might be stale)
+        if (cacheWasRestored) {
+            console.log('🔄 Cache was restored, forcing fresh database fetch to ensure latest data');
+            console.log('🔄 This ensures data is fresh when switching profiles');
+            console.log('🔄 Bypassing all checks to force fresh load');
+            // Clear hasLoadedInitialDataRef to force load
+            hasLoadedInitialDataRef.current = false;
+            // ⚠️ DON'T RETURN - continue to loadData() to fetch fresh data
+        } else {
+            // ✅ ONLY skip loading if:
+            // 1. This is NOT a new project AND
+            // 2. We have data in state (actual data exists) AND
+            // 3. We already loaded from DB in this session (don't reload unnecessarily)
+            // ❌ REMOVED: documentSections change detection - this was causing constant reloads
+            // The component should only reload when navigating to a different project or on initial mount
+            if (!isNewProject && hasDataInState && !documentSectionsChanged && hasLoadedInitialDataRef.current) {
+                // Already have data in state and we've loaded from DB, don't reload
+                console.log('⏭️ Skipping reload: data already in state and loaded from DB', {
+                    refLoaded: hasLoadedInitialDataRef.current,
+                    sessionLoaded: hasLoadedInSession,
+                    hasDataInState: hasDataInState,
+                    cacheWasRestored: cacheWasRestored,
+                    projectId: project.id
+                });
+                return;
             }
-            return;
         }
         
         // Document sections changed for the same project, make sure we record the new snapshot
@@ -691,7 +849,14 @@ const parseCommentCellKey = (key) => {
         // 1. Any modal/form is open (prevents form from closing)
         // 2. User has unsaved changes (prevents overwriting comments/text in progress)
         // But allow initial load if we haven't loaded data yet
-        if (hasLoadedInitialDataRef.current) {
+        // ⚠️ EXCEPTION: If cache was restored, ALWAYS fetch fresh data (cache might be stale)
+        // ⚠️ CRITICAL: When cache is restored, we MUST fetch fresh data even if modals are open
+        // because the cache might be stale from a different user profile
+        if (cacheWasRestored) {
+            console.log('🔄 Cache was restored - BYPASSING modal/unsaved changes checks to force fresh DB fetch');
+            // Force hasLoadedInitialDataRef to false to ensure loadData() runs
+            hasLoadedInitialDataRef.current = false;
+        } else if (hasLoadedInitialDataRef.current) {
             if (modalsOpenRef.current) {
                 console.log('⏸️ Data reload skipped: modal/form is open');
                 return;
@@ -709,7 +874,13 @@ const parseCommentCellKey = (key) => {
         }
         
         const loadData = async () => {
-            console.log('📋 MonthlyDocumentCollectionTracker: Loading data from database');
+            console.log('📋 MonthlyDocumentCollectionTracker: Loading data from database', {
+                projectId: project.id,
+                isNewProject,
+                cacheWasRestored,
+                hasLoadedInitialDataRef: hasLoadedInitialDataRef.current,
+                hasDataInState: Object.keys(sectionsByYear).length > 0
+            });
             setIsLoading(true);
             try {
                 // First, try to load from prop (fast initial render)
@@ -729,6 +900,18 @@ const parseCommentCellKey = (key) => {
                 // Set initial state from prop (even if empty) and sync snapshot baseline
                 const initialSections = normalizeSections(parsed);
                 const organizedByYear = organizeSectionsByYear(initialSections);
+                
+                console.log('📊 LOADING: Initial sections organized by year:', {
+                    totalSections: initialSections.length,
+                    yearsFound: Object.keys(organizedByYear),
+                    sectionsPerYear: Object.keys(organizedByYear).reduce((acc, year) => {
+                        acc[year] = organizedByYear[year]?.length || 0;
+                        return acc;
+                    }, {}),
+                    selectedYear,
+                    hasSelectedYearData: organizedByYear[selectedYear]?.length > 0
+                });
+                
                 setSectionsByYear(organizedByYear);
                 persistSectionsToCache(project.id, organizedByYear);
                 // Create snapshot from merged data for comparison
@@ -737,8 +920,19 @@ const parseCommentCellKey = (key) => {
                 
                 // Then fetch fresh data from database to ensure we have latest
                 // Only on initial load or when project changes
+                console.log('🔄 LOADING: Fetching fresh data from database for project:', project.id);
+                console.log('🔄 LOADING: Clearing DatabaseAPI cache before fetch');
+                api.clearProjectCache(project.id); // Clear DatabaseAPI cache before fetching
                 try {
-                    const freshProject = await api.fetchProject(project.id);
+                    const freshProject = await api.fetchProject(project.id, true); // Force refresh
+                    console.log('🔄 LOADING: Fresh project data received:', {
+                        projectId: project.id,
+                        hasDocumentSections: !!freshProject?.documentSections,
+                        documentSectionsType: typeof freshProject?.documentSections,
+                        documentSectionsLength: typeof freshProject?.documentSections === 'string' ? 
+                            freshProject.documentSections.length : 'not string'
+                    });
+                    
                     if (freshProject?.documentSections) {
                         let freshParsed = [];
                         try {
@@ -754,6 +948,23 @@ const parseCommentCellKey = (key) => {
                         const normalizedFresh = normalizeSections(freshParsed);
                         const organizedFresh = organizeSectionsByYear(normalizedFresh);
                         
+                        console.log('📊 LOADING: Fresh sections from database organized by year:', {
+                            totalSections: normalizedFresh.length,
+                            yearsFound: Object.keys(organizedFresh),
+                            sectionsPerYear: Object.keys(organizedFresh).reduce((acc, year) => {
+                                acc[year] = organizedFresh[year]?.length || 0;
+                                return acc;
+                            }, {}),
+                            selectedYear,
+                            hasSelectedYearData: organizedFresh[selectedYear]?.length > 0,
+                            has2018Data: organizedFresh[2018]?.length > 0,
+                            sections2018: organizedFresh[2018]?.map(s => ({
+                                id: s.id,
+                                name: s.name,
+                                documentsCount: s.documents?.length || 0
+                            })) || []
+                        });
+                        
                         // ⚠️ CRITICAL: Check if we already have REAL data in state (not just empty arrays)
                         // If we do, don't overwrite it - the user might be editing
                         const currentMerged = mergeSectionsByYear(organizedByYear);
@@ -763,19 +974,28 @@ const parseCommentCellKey = (key) => {
                         const hasRealDataFromDB = freshMerged.length > 0 && 
                             freshMerged.some(section => section.documents && section.documents.length > 0);
                         
+                        // ⚠️ CRITICAL: If we just restored from cache, always update with fresh DB data
+                        // Cache might be stale, especially when switching profiles
+                        const wasRestoredFromCache = isRestoringFromCacheRef.current;
+                        
                         // If we have real data in state, preserve it (user might be editing)
                         // But if state is empty and DB has data, always update
+                        // OR if we restored from cache, always update (cache might be stale)
                         if (hasRealDataInState && hasRealDataFromDB) {
                             // Both have data - check for unsaved changes before overwriting
                             const currentSnapshot = serializeSections(currentMerged);
                             const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
                             
-                            if (hasUnsavedChanges) {
-                                // Don't overwrite user's unsaved changes!
+                            if (hasUnsavedChanges && !wasRestoredFromCache) {
+                                // Don't overwrite user's unsaved changes! (unless we restored from cache)
                                 console.log('⏸️ Skipping database update: user has unsaved changes');
-                            } else if (JSON.stringify(freshMerged) !== JSON.stringify(currentMerged)) {
-                                // Data is different and no unsaved changes - update from DB
-                                console.log('🔄 Updating sections from fresh database data');
+                            } else if (JSON.stringify(freshMerged) !== JSON.stringify(currentMerged) || wasRestoredFromCache) {
+                                // Data is different OR we restored from cache - update from DB
+                                console.log('🔄 Updating sections from fresh database data', wasRestoredFromCache ? '(cache was restored, forcing fresh update)' : '');
+                                console.log('🔄 FORCING UPDATE: Data differs or cache restored, updating from DB');
+                                console.log('🔄 Fresh data includes years:', Object.keys(organizedFresh));
+                                console.log('🔄 Fresh data for selectedYear (' + selectedYear + '):', organizedFresh[selectedYear]?.length || 0, 'sections');
+                                console.log('🔄 Fresh data for 2018:', organizedFresh[2018]?.length || 0, 'sections');
                                 setSectionsByYear(organizedFresh);
                                 persistSectionsToCache(project.id, organizedFresh);
                                 lastSavedSnapshotRef.current = serializeSections(freshMerged);
@@ -786,6 +1006,9 @@ const parseCommentCellKey = (key) => {
                         } else if (!hasRealDataInState && hasRealDataFromDB) {
                             // State is empty but DB has data - always update (template was just applied)
                             console.log('🔄 Updating from database: state is empty but DB has sections');
+                            console.log('🔄 FORCING UPDATE: Setting sectionsByYear with fresh data from DB');
+                            console.log('🔄 Fresh data includes years:', Object.keys(organizedFresh));
+                            console.log('🔄 Fresh data for selectedYear (' + selectedYear + '):', organizedFresh[selectedYear]?.length || 0, 'sections');
                             setSectionsByYear(organizedFresh);
                             persistSectionsToCache(project.id, organizedFresh);
                             lastSavedSnapshotRef.current = serializeSections(freshMerged);
@@ -816,7 +1039,22 @@ const parseCommentCellKey = (key) => {
             }
         };
         
-        loadData();
+        // ⚠️ CRITICAL: Always call loadData() if cache was restored, regardless of any other conditions
+        if (cacheWasRestored) {
+            console.log('🚀 FORCING loadData() because cache was restored - project:', project.id);
+            console.log('🚀 This ensures fresh data when switching profiles');
+            hasLoadedInitialDataRef.current = false; // Ensure it runs
+        }
+        
+        console.log('🚀 About to call loadData() for project:', project.id, {
+            cacheWasRestored,
+            hasLoadedInitialDataRef: hasLoadedInitialDataRef.current,
+            isNewProject,
+            hasDataInState: Object.keys(sectionsByYear).length > 0
+        });
+        loadData().catch(error => {
+            console.error('❌ Error in loadData():', error);
+        });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [project?.id]); // ⚠️ FIXED: Only depend on project ID to prevent unnecessary reloads
     // Removed normalizeSections, serializeSections, api, organizeSectionsByYear, mergeSectionsByYear from dependencies
@@ -1049,26 +1287,74 @@ const parseCommentCellKey = (key) => {
         loadUsers();
     }, []);
     
-    // ✅ LOAD TEMPLATES ONLY WHEN MODALS OPEN
+    // ✅ LOAD TEMPLATES ONLY WHEN MODALS OPEN (with cache-busting for fresh data)
     useEffect(() => {
-        if (!showTemplateModal && !showApplyTemplateModal) return;
+        if (!showTemplateModal && !showApplyTemplateModal) {
+            console.log('⏭️ Template modals closed, skipping template load');
+            return;
+        }
         
-        console.log('📂 Loading templates...');
+        console.log('📂 Template modal opened - loading templates (fresh from database, no cache)...', {
+            showTemplateModal,
+            showApplyTemplateModal
+        });
         loadTemplates();
     }, [showTemplateModal, showApplyTemplateModal]);
 
     const loadTemplates = async () => {
         try {
-            // Fetch templates from database only
+            console.log('🔄 loadTemplates() called - fetching from API...');
+            console.log('🔄 Current templates state before load:', templates.length);
+            // Fetch templates from database only - always fresh (no cache)
             const apiTemplates = await api.getTemplates();
             console.log('✅ Loaded templates from database:', apiTemplates.length);
-            console.log('📋 Templates:', apiTemplates.map(t => ({ 
+            if (apiTemplates.length === 0) {
+                console.warn('⚠️ WARNING: No templates returned from API!');
+                console.warn('⚠️ This could mean:');
+                console.warn('   1. No templates exist in database');
+                console.warn('   2. API is filtering templates incorrectly');
+                console.warn('   3. Database query is failing');
+            }
+            console.log('📋 All available templates (shared across all users):', apiTemplates.map(t => ({ 
                 id: t.id, 
-                name: t.name, 
+                name: t.name,
+                ownerId: t.ownerId,
+                createdBy: t.createdBy,
+                isDefault: t.isDefault,
                 sectionsCount: t.sections?.length || 0,
                 hasSections: !!t.sections,
                 sectionsType: typeof t.sections
             })));
+            
+            // Verify we're getting all templates (not filtered by user)
+            if (apiTemplates.length > 0) {
+                const currentUser = getCurrentUser();
+                console.log('👤 Current user:', {
+                    id: currentUser?.id,
+                    email: currentUser?.email,
+                    name: currentUser?.name
+                });
+                
+                const userTemplates = apiTemplates.filter(t => t.ownerId === currentUser?.id || t.createdBy === currentUser?.email);
+                const otherUserTemplates = apiTemplates.filter(t => !(t.ownerId === currentUser?.id || t.createdBy === currentUser?.email));
+                console.log(`   - Templates created by current user: ${userTemplates.length}`);
+                if (userTemplates.length > 0) {
+                    console.log('   - Current user templates:', userTemplates.map(t => t.name));
+                }
+                console.log(`   - Templates created by other users: ${otherUserTemplates.length} (these should be visible to all users)`);
+                if (otherUserTemplates.length > 0) {
+                    console.log('   - Other user templates:', otherUserTemplates.map(t => `${t.name} (by ${t.createdBy})`));
+                }
+                
+                // Check for templates with "2015" in the name
+                const templatesWith2015 = apiTemplates.filter(t => t.name.toLowerCase().includes('2015') || t.name.toLowerCase().includes('barberton'));
+                if (templatesWith2015.length > 0) {
+                    console.log(`   ✅ Found ${templatesWith2015.length} template(s) related to 2015/Barberton:`, templatesWith2015.map(t => t.name));
+                } else {
+                    console.warn('   ⚠️ No templates found with "2015" or "Barberton" in the name');
+                }
+            }
+            
             setTemplates(apiTemplates);
         } catch (error) {
             console.error('❌ Error loading templates from database:', error);
@@ -1402,8 +1688,20 @@ const parseCommentCellKey = (key) => {
     };
 
     const handleCreateTemplate = () => {
+        console.log('🔵 Templates button clicked - opening template modal');
+        console.log('🔵 Current state:', {
+            showTemplateModal,
+            showApplyTemplateModal,
+            templatesCount: templates.length
+        });
         setEditingTemplate(null);
         setShowTemplateModal(true);
+        // Force immediate template load when opening modal
+        console.log('📂 Force loading templates immediately...');
+        // Use setTimeout to ensure state update happens first
+        setTimeout(() => {
+            loadTemplates();
+        }, 100);
     };
 
     const handleEditTemplate = (template) => {
@@ -1440,30 +1738,78 @@ const parseCommentCellKey = (key) => {
         const currentUser = getCurrentUser();
         
         try {
+            let savedTemplate;
+            
             if (editingTemplate) {
                 // Update existing template in database
-                await api.updateTemplate(editingTemplate.id, {
+                console.log('🔄 Updating template in database:', editingTemplate.id);
+                savedTemplate = await api.updateTemplate(editingTemplate.id, {
                     ...templateData,
                     updatedBy: currentUser.name || currentUser.email
                 });
-                console.log('✅ Template updated in database');
+                console.log('✅ Template updated in database:', savedTemplate?.id);
             } else {
                 // Create new template in database
-                await api.createTemplate({
+                console.log('➕ Creating new template in database:', {
+                    name: templateData.name,
+                    sectionsCount: templateData.sections?.length || 0,
+                    user: currentUser.email || currentUser.name
+                });
+                
+                savedTemplate = await api.createTemplate({
                     ...templateData,
                     createdBy: currentUser.name || currentUser.email,
                     updatedBy: currentUser.name || currentUser.email
                 });
-                console.log('✅ Template created in database');
+                
+                if (!savedTemplate || !savedTemplate.id) {
+                    throw new Error('Template creation failed: No template returned from API');
+                }
+                
+                console.log('✅ Template created successfully:', {
+                    id: savedTemplate.id,
+                    name: savedTemplate.name,
+                    isShared: true // All templates are shared
+                });
             }
             
-            // Reload templates from database to get fresh data
+            // Wait a moment to ensure database write is complete
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // Reload templates from database to get fresh data (including the new template)
+            console.log('🔄 Reloading templates from database to verify save...');
             await loadTemplates();
+            
+            // Verify the template is in the list
+            const updatedTemplates = await api.getTemplates();
+            const foundTemplate = updatedTemplates.find(t => 
+                t.id === savedTemplate.id || 
+                (t.name === savedTemplate.name && t.createdBy === savedTemplate.createdBy)
+            );
+            
+            if (foundTemplate) {
+                console.log('✅ Template verified in database - available to all users:', foundTemplate.name);
+                console.log(`✅ SUCCESS: Template "${foundTemplate.name}" is now saved and visible to ALL users!`);
+                alert(`Template "${foundTemplate.name}" saved successfully! It is now available to all users.`);
+            } else {
+                console.warn('⚠️ Template not found in reloaded list - may need to refresh');
+                console.warn('⚠️ This could indicate a problem with template retrieval');
+            }
             
             setEditingTemplate(null);
             setShowTemplateList(true);
+            setShowTemplateModal(false); // Close modal after successful save
         } catch (error) {
             console.error('❌ Error saving template:', error);
+            console.error('Error details:', {
+                message: error.message,
+                stack: error.stack,
+                templateData: {
+                    name: templateData.name,
+                    hasSections: !!templateData.sections,
+                    sectionsCount: templateData.sections?.length || 0
+                }
+            });
             alert('Failed to save template: ' + error.message);
         }
     };
@@ -1505,9 +1851,55 @@ const parseCommentCellKey = (key) => {
         updateSectionsForYear(prev => [...prev, ...newSections], targetYear);
         
         console.log('✅ Template sections added to year', targetYear);
+        console.log('📋 VERIFY: New sections to be saved:', {
+            targetYear,
+            sectionsCount: newSections.length,
+            totalDocuments: newSections.reduce((sum, s) => sum + (s.documents?.length || 0), 0),
+            firstSection: newSections[0] ? {
+                id: newSections[0].id,
+                name: newSections[0].name,
+                documentsCount: newSections[0].documents?.length || 0,
+                firstDocStatus: newSections[0].documents?.[0]?.collectionStatus
+            } : null
+        });
         
         // Mark that template was just applied - will trigger refresh after save
         templateJustAppliedRef.current = true;
+        
+        // Force immediate save to ensure data is persisted
+        // Use a callback to get the latest state
+        console.log('💾 FORCING IMMEDIATE SAVE after template application...');
+        setTimeout(() => {
+            setSectionsByYear(prev => {
+                const updated = {
+                    ...prev,
+                    [targetYear]: [...(prev[targetYear] || []), ...newSections]
+                };
+                
+                // Save immediately with the updated state
+                const merged = mergeSectionsByYear(updated);
+                
+                console.log('💾 IMMEDIATE SAVE: Merged sections count:', merged.length);
+                console.log('💾 IMMEDIATE SAVE: Checking for target year data in merged sections...');
+                const hasTargetYear = merged.some(section => {
+                    return section.documents?.some(doc => {
+                        return doc.collectionStatus && Object.keys(doc.collectionStatus).some(key => 
+                            key.includes(targetYear.toString()) || key === `_template-${targetYear}`
+                        );
+                    });
+                });
+                console.log(`💾 IMMEDIATE SAVE: Has ${targetYear} data:`, hasTargetYear);
+                
+                // Save asynchronously
+                api.saveDocumentSections(project.id, merged, true).then(() => {
+                    console.log(`✅ IMMEDIATE SAVE: Template data for ${targetYear} saved to database`);
+                }).catch(error => {
+                    console.error('❌ IMMEDIATE SAVE: Failed to save template data:', error);
+                });
+                
+                return updated;
+            });
+        }, 500);
 
         if (window.AuditLogger) {
             window.AuditLogger.log('create', 'projects', {
@@ -1773,6 +2165,7 @@ const parseCommentCellKey = (key) => {
                         year: selectedYear,
                         projectId: project?.id,
                         projectName,
+                        commentId: newComment.id, // Include comment ID for direct navigation
                         commentAuthor: currentUser.name,
                         commentText,
                         context: contextLabel
@@ -2310,6 +2703,13 @@ const parseCommentCellKey = (key) => {
 
         const handleSubmit = (e) => {
             e.preventDefault();
+            console.log('📝 Template form submitted:', {
+                name: templateFormData.name,
+                sectionsCount: templateFormData.sections?.length || 0,
+                isEditing: !!editingTemplate,
+                editingTemplateId: editingTemplate?.id
+            });
+            
             if (!templateFormData.name.trim()) {
                 alert('Please enter a template name');
                 return;
@@ -2318,6 +2718,8 @@ const parseCommentCellKey = (key) => {
                 alert('Please add at least one section to the template');
                 return;
             }
+            
+            console.log('✅ Form validation passed, calling handleSaveTemplate...');
             handleSaveTemplate(templateFormData);
         };
 
@@ -2360,7 +2762,15 @@ const parseCommentCellKey = (key) => {
                         {showTemplateList ? (
                             <div className="space-y-3">
                                 <div className="flex justify-between items-center mb-4">
-                                    <p className="text-xs text-gray-600">Manage your document collection templates</p>
+                                    <div>
+                                        <p className="text-xs text-gray-600">Manage your document collection templates</p>
+                                        {templates.length === 1 && templates[0]?.isDefault && (
+                                            <p className="text-xs text-blue-600 mt-1">
+                                                <i className="fas fa-info-circle mr-1"></i>
+                                                Only the default template exists. Create a custom template to share with all users.
+                                            </p>
+                                        )}
+                                    </div>
                                     <button
                                         onClick={() => {
                                             setShowTemplateList(false);
@@ -2935,7 +3345,12 @@ const parseCommentCellKey = (key) => {
                         Add Section
                     </button>
                     <button
-                        onClick={() => setShowApplyTemplateModal(true)}
+                        onClick={() => {
+                            console.log('🔵 Apply Template button clicked');
+                            setShowApplyTemplateModal(true);
+                            // Force immediate template load
+                            loadTemplates();
+                        }}
                         className="px-3 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-[10px] font-medium"
                     >
                         <i className="fas fa-magic mr-1"></i>

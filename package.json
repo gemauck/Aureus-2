@@ -33,7 +33,12 @@
     "old:start": "node server.js",
     "dev:vite-projects": "cd vite-modules/projects && vite",
     "build:vite-projects": "cd vite-modules/projects && vite build",
-    "preview:vite-projects": "cd vite-modules/projects && vite preview"
+    "preview:vite-projects": "cd vite-modules/projects && vite preview",
+    "android:init": "npx cap add android",
+    "android:sync": "npx cap sync android",
+    "android:open": "npx cap open android",
+    "android:build": "npm run build && npm run android:sync",
+    "android:run": "npm run android:build && npx cap run android"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",
@@ -62,6 +67,9 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/cli": "^6.1.2",
+    "@capacitor/core": "^6.1.2",
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.2.1",

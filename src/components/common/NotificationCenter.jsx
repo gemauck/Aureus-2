@@ -255,7 +255,13 @@ const NotificationCenter = () => {
         }
     };
     
-    const handleNotificationClick = (notification) => {
+    const handleNotificationClick = (notification, event) => {
+        // Prevent any event bubbling issues
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        
         // Mark as read
         if (!notification.read) {
             markAsRead([notification.id]);
@@ -264,7 +270,7 @@ const NotificationCenter = () => {
         // Close dropdown
         setIsOpen(false);
         
-        // Navigate to link if available
+        // Navigate to link if available - ALWAYS navigate even if no link
         if (notification.link) {
             // Parse metadata if available for more specific navigation
             let metadata = null;
@@ -278,7 +284,7 @@ const NotificationCenter = () => {
                 }
             }
             
-            // Navigate to the link
+            // Navigate to the link FIRST
             window.location.hash = notification.link;
             
             // Helper function to highlight an element
@@ -299,13 +305,18 @@ const NotificationCenter = () => {
             };
             
             // Helper function to find and scroll to element with retries
-            const findAndScrollToElement = (selectors, maxRetries = 5, delay = 500) => {
+            const findAndScrollToElement = (selectors, maxRetries = 10, delay = 300) => {
                 let retries = 0;
                 const tryFind = () => {
                     for (const selector of selectors) {
-                        const element = typeof selector === 'string' 
-                            ? document.querySelector(selector)
-                            : selector();
+                        let element = null;
+                        try {
+                            element = typeof selector === 'string' 
+                                ? document.querySelector(selector)
+                                : selector();
+                        } catch (e) {
+                            console.warn('Error in selector:', e);
+                        }
                         if (element) {
                             highlightElement(element);
                             return true;
@@ -321,15 +332,64 @@ const NotificationCenter = () => {
                     retries++;
                     if (retries < maxRetries) {
                         setTimeout(attempt, delay);
+                    } else {
+                        console.warn('Could not find element after', maxRetries, 'attempts');
                     }
                 };
                 
-                // Start trying after initial delay
+                // Start trying after initial delay (give page time to load)
                 setTimeout(attempt, delay);
             };
             
             // After navigation, try to scroll to specific elements if metadata provides them
             if (metadata) {
+                // Handle MonthlyDocumentCollectionTracker comment cell navigation
+                // This is for comments on documents in the monthly tracker
+                if (metadata.sectionId && metadata.documentId && metadata.month !== undefined) {
+                    const sectionId = String(metadata.sectionId);
+                    const documentId = String(metadata.documentId);
+                    const month = String(metadata.month);
+                    
+                    // Create the comment cell key (same format as createCommentCellKey)
+                    const commentCellKey = JSON.stringify([sectionId, documentId, month]);
+                    
+                    findAndScrollToElement([
+                        `[data-comment-cell="${commentCellKey}"]`,
+                        // Also try with escaped quotes
+                        `[data-comment-cell='${commentCellKey}']`,
+                        // Try finding by section and document
+                        () => {
+                            // Find all comment cells and match by parsing their keys
+                            const allCommentCells = document.querySelectorAll('[data-comment-cell]');
+                            for (const cell of allCommentCells) {
+                                const cellKey = cell.getAttribute('data-comment-cell');
+                                try {
+                                    const parsed = JSON.parse(cellKey);
+                                    if (parsed && parsed.length >= 3 && 
+                                        String(parsed[0]) === sectionId && 
+                                        String(parsed[1]) === documentId && 
+                                        String(parsed[2]) === month) {
+                                        return cell;
+                                    }
+                                } catch (e) {
+                                    // Ignore parse errors
+                                }
+                            }
+                            return null;
+                        }
+                    ], 15, 400); // More retries and longer delay for comment cells
+                }
+                
+                // Handle document navigation (for MonthlyDocumentCollectionTracker)
+                if (metadata.documentId) {
+                    const documentId = String(metadata.documentId);
+                    findAndScrollToElement([
+                        `#document-${documentId}`,
+                        `[data-document-id="${documentId}"]`,
+                        `[id*="document"][id*="${documentId}"]`
+                    ]);
+                }
+                
                 // Handle proposal stage navigation
                 if (metadata.stageId || metadata.stageIndex !== undefined) {
                     const stageId = metadata.stageId;
@@ -372,7 +432,7 @@ const NotificationCenter = () => {
                     ]);
                 }
                 
-                // Handle comment navigation
+                // Handle comment navigation (generic)
                 if (metadata.commentId) {
                     const commentId = metadata.commentId;
                     findAndScrollToElement([
@@ -403,6 +463,24 @@ const NotificationCenter = () => {
                     `[name="${anchorId}"]`,
                     `[id*="${anchorId}"]`
                 ]);
+            }
+        } else {
+            // Even if no link, try to navigate based on metadata
+            let metadata = null;
+            if (notification.metadata) {
+                try {
+                    metadata = typeof notification.metadata === 'string' 
+                        ? JSON.parse(notification.metadata) 
+                        : notification.metadata;
+                } catch (e) {
+                    console.warn('Failed to parse notification metadata:', e);
+                }
+            }
+            
+            // Try to construct a link from metadata
+            if (metadata && metadata.projectId) {
+                const projectLink = `#/projects/${metadata.projectId}`;
+                window.location.hash = projectLink;
             }
         }
     };
@@ -482,14 +560,29 @@ const NotificationCenter = () => {
                                 {notifications.map((notification) => (
                                     <div
                                         key={notification.id}
-                                        onClick={() => handleNotificationClick(notification)}
+                                        onClick={(e) => handleNotificationClick(notification, e)}
+                                        onMouseDown={(e) => {
+                                            // Ensure clicks work even on child elements
+                                            if (e.target.closest('button[data-delete-notification]')) {
+                                                return; // Let delete button handle its own click
+                                            }
+                                        }}
                                         className={`border-b ${isDark ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-100 hover:bg-gray-50'} cursor-pointer transition-colors ${
                                             !notification.read && (isDark ? 'bg-gray-750' : 'bg-blue-50')
                                         }`}
+                                        style={{ userSelect: 'none' }}
+                                        role="button"
+                                        tabIndex={0}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                e.preventDefault();
+                                                handleNotificationClick(notification, e);
+                                            }
+                                        }}
                                     >
                                         <div className="px-4 py-3">
                                             <div className="flex items-start gap-3">
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
                                                     <i className={`fas ${getNotificationIcon(notification.type)} ${getNotificationColor(notification.type)} text-sm`}></i>
                                                 </div>
                                                 <div className="flex-1 min-w-0">
@@ -509,11 +602,17 @@ const NotificationCenter = () => {
                                                             {formatTimeAgo(notification.createdAt)}
                                                         </span>
                                                         <button
+                                                            data-delete-notification="true"
                                                             onClick={(e) => {
+                                                                e.preventDefault();
                                                                 e.stopPropagation();
                                                                 deleteNotification([notification.id]);
                                                             }}
-                                                            className={`text-xs ${isDark ? 'text-gray-500 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
+                                                            onMouseDown={(e) => {
+                                                                e.stopPropagation();
+                                                            }}
+                                                            className={`text-xs ${isDark ? 'text-gray-500 hover:text-red-400' : 'text-gray-400 hover:text-red-600'} p-1`}
+                                                            title="Delete notification"
                                                         >
                                                             <i className="fas fa-times"></i>
                                                         </button>

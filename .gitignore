@@ -79,3 +79,16 @@ prisma/migrations/
 *.tempdatabase-backups/
 *.sql.gz
 *.db.backup
+
+# Android / Capacitor
+android/.gradle/
+android/.idea/
+android/local.properties
+android/app/build/
+android/build/
+android/.cxx/
+*.apk
+*.aab
+*.jks
+*.keystore
+!android/app/src/main/assets/public/.gitkeep
