@@ -261,6 +261,18 @@ const getAPI = () => {
             },
         };
     }
+    // Ensure clearProjectCache is always available, even if DocumentCollectionAPI exists
+    if (window.DocumentCollectionAPI && !window.DocumentCollectionAPI.clearProjectCache) {
+        window.DocumentCollectionAPI.clearProjectCache = (projectId) => {
+            console.log(`🧹 Clearing DatabaseAPI cache for project: ${projectId}`);
+            if (window.DatabaseAPI?._responseCache) {
+                window.DatabaseAPI._responseCache.delete('GET:/projects');
+                if (projectId) {
+                    window.DatabaseAPI._responseCache.delete(`GET:/projects/${projectId}`);
+                }
+            }
+        };
+    }
     return window.DocumentCollectionAPI;
 };
 
@@ -553,7 +565,14 @@ const parseCommentCellKey = (key) => {
         // For each year, only include sections that have data for that year
         // Sections without any year data are excluded (they're new and haven't been saved yet)
         // CRITICAL: Sections with template markers should ONLY appear in the year they're marked for
+        console.log('🔍 organizeSectionsByYear: Processing years:', Array.from(allYears).sort());
+        console.log('🔍 organizeSectionsByYear: Template markers found:', Array.from(sectionTemplateMarkers.entries()).map(([id, year]) => ({ id, year })));
+        
         allYears.forEach(year => {
+            if (year === 2018) {
+                console.log(`🔍 Processing year 2018: Found ${flatSections.length} total sections`);
+            }
+            
             organized[year] = flatSections
                 .map((section, sectionIdx) => {
                     const sectionId = section.id || `section-${sectionIdx}`;
@@ -562,14 +581,22 @@ const parseCommentCellKey = (key) => {
                     const templateMarkerYear = sectionTemplateMarkers.get(sectionId);
                     const hasTemplateMarker = templateMarkerYear !== null && templateMarkerYear !== undefined;
                     
+                    if (year === 2018 && hasTemplateMarker) {
+                        console.log(`🔍 Year 2018: Section ${sectionId} has template marker for year ${templateMarkerYear}`);
+                    }
+                    
                     // CRITICAL: If section has template marker, it MUST match this year exactly
                     // If it doesn't match, exclude it completely (don't even check hasDataForYear)
                     if (hasTemplateMarker) {
                         if (templateMarkerYear !== year) {
-                            // Section excluded from this year (expected behavior, no need to log)
+                            if (year === 2018) {
+                                console.log(`⏭️ Year 2018: Excluding section ${sectionId} (template marker is for year ${templateMarkerYear})`);
+                            }
                             return null; // Exclude this section for this year
                         }
-                        // Section included in this year (expected behavior, no need to log)
+                        if (year === 2018) {
+                            console.log(`✅ Year 2018: Including section ${sectionId} (template marker matches)`);
+                        }
                     }
                     
                     // For sections without template markers, check if they have data for this year
@@ -577,6 +604,10 @@ const parseCommentCellKey = (key) => {
                     const shouldInclude = hasTemplateMarker
                         ? (templateMarkerYear === year) // Should always be true if we got here
                         : hasDataForYear;
+                    
+                    if (year === 2018 && !hasTemplateMarker) {
+                        console.log(`🔍 Year 2018: Section ${sectionId} (no template marker) - hasDataForYear: ${hasDataForYear}, shouldInclude: ${shouldInclude}`);
+                    }
                     
                     if (shouldInclude) {
                         return {
@@ -616,6 +647,25 @@ const parseCommentCellKey = (key) => {
                     return null; // Exclude section for this year if it has no data
                 })
                 .filter(section => section !== null); // Remove null entries
+            
+            if (year === 2018) {
+                console.log(`✅ Year 2018: Final organized sections count: ${organized[year].length}`);
+                if (organized[year].length > 0) {
+                    console.log(`✅ Year 2018: Section names:`, organized[year].map(s => s.name || s.id));
+                } else {
+                    console.warn(`⚠️ Year 2018: NO SECTIONS FOUND! This is the problem.`);
+                    console.warn(`⚠️ Year 2018: Total sections processed: ${flatSections.length}`);
+                    console.warn(`⚠️ Year 2018: Template markers:`, Array.from(sectionTemplateMarkers.entries()).filter(([_, y]) => y === 2018).map(([id, _]) => id));
+                }
+            }
+        });
+        
+        console.log('🔍 organizeSectionsByYear: Final organized structure:', {
+            years: Object.keys(organized),
+            sectionsPerYear: Object.keys(organized).reduce((acc, year) => {
+                acc[year] = organized[year]?.length || 0;
+                return acc;
+            }, {})
         });
         
         return organized;
@@ -707,6 +757,12 @@ const parseCommentCellKey = (key) => {
     // ✅ LOAD DATA FROM DATABASE ON MOUNT - Fetch fresh data
     // ⚠️ IMPORTANT: Only load on initial mount or when project ID actually changes (not on every prop update)
     useEffect(() => {
+        console.log('🔄🔄🔄 useEffect STARTING for MonthlyDocumentCollectionTracker', {
+            hasProject: !!project,
+            projectId: project?.id,
+            timestamp: new Date().toISOString()
+        });
+        
         if (!project?.id) {
             console.log('⏸️ Skipping load: No project ID');
             return;
@@ -779,10 +835,17 @@ const parseCommentCellKey = (key) => {
                 // ⚠️ DON'T RETURN - continue to fetch fresh data from database
                 // This ensures we get the latest data even if cache exists
                 console.log('🔄 Cache restored - will force fresh database fetch');
+                console.log('🔄 cacheWasRestored set to:', cacheWasRestored);
             } else {
                 console.log('📭 No cache found for project:', project.id);
             }
         }
+        
+        console.log('🔄 After cache restoration check:', {
+            cacheWasRestored,
+            needsReload,
+            hasLoadedInitialDataRef: hasLoadedInitialDataRef.current
+        });
         
         // Re-check hasDataInState AFTER cache restore (if it happened)
         // ⚠️ NOTE: This might be stale if cache was just restored (setState is async)
@@ -922,7 +985,22 @@ const parseCommentCellKey = (key) => {
                 // Only on initial load or when project changes
                 console.log('🔄 LOADING: Fetching fresh data from database for project:', project.id);
                 console.log('🔄 LOADING: Clearing DatabaseAPI cache before fetch');
-                api.clearProjectCache(project.id); // Clear DatabaseAPI cache before fetching
+                // Clear cache if method exists (defensive - don't fail if it doesn't)
+                try {
+                    if (api.clearProjectCache && typeof api.clearProjectCache === 'function') {
+                        api.clearProjectCache(project.id);
+                    } else {
+                        // Fallback: clear cache directly
+                        if (window.DatabaseAPI?._responseCache) {
+                            window.DatabaseAPI._responseCache.delete('GET:/projects');
+                            window.DatabaseAPI._responseCache.delete(`GET:/projects/${project.id}`);
+                            console.log('🔄 Cleared cache via fallback method');
+                        }
+                    }
+                } catch (cacheError) {
+                    console.warn('⚠️ Failed to clear cache (non-critical):', cacheError);
+                    // Continue anyway - cache clearing is not critical
+                }
                 try {
                     const freshProject = await api.fetchProject(project.id, true); // Force refresh
                     console.log('🔄 LOADING: Fresh project data received:', {
