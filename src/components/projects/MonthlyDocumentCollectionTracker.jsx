@@ -168,7 +168,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // ============================================================
     // SIMPLE AUTO-SAVE - Debounced, saves entire state
     // ============================================================
-    
+    //
+    // NOTE:
+    // This is intentionally wired to a hoisted function declaration (`saveToDatabase`)
+    // instead of a `const saveToDatabase = async () => {}` binding.
+    // In production builds, some bundlers/minifiers can reorder or rename such
+    // bindings (e.g. to `const Fe = ...`) in a way that results in
+    // "Cannot access 'Fe' before initialization" when the function is referenced
+    // from hooks declared earlier in the component.
+    //
+    // Using a function declaration avoids that temporal‑dead‑zone issue while
+    // remaining safe because mutable state lives in refs and React state.
     useEffect(() => {
         // Don't save while loading initial data
         if (isLoading) return;
@@ -193,7 +203,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         };
     }, [sections, isLoading]);
     
-    const saveToDatabase = async () => {
+    async function saveToDatabase() {
         if (isSavingRef.current) {
             console.log('⏭️ Save already in progress, skipping');
             return;

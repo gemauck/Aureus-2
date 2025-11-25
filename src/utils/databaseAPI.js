@@ -557,6 +557,9 @@ const DatabaseAPI = {
         return (
             message.includes('invalid manufacturing endpoint') ||
             message.includes('invalid method or purchase order action') ||
+            // New explicit hint from /api/manufacturing/purchase-orders telling the client to use /api/purchase-orders
+            message.includes('purchase orders are handled at /api/purchase-orders') ||
+            message.includes('not /api/manufacturing/purchase-orders') ||
             message.includes('not found') ||
             message.includes('404')
         );

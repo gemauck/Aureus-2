@@ -219,49 +219,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         refreshFromDatabase();
     }, [project?.id, project?.documentSections, loadFromProjectProp, refreshFromDatabase]);
     
-    // ============================================================
-    // SIMPLE AUTO-SAVE - Debounced, saves entire state
-    // ============================================================
-    
-    useEffect(() => {
-        if (isLoading || !project?.id) return;
-        
-        // Clear any pending save
-        if (saveTimeoutRef.current) {
-            clearTimeout(saveTimeoutRef.current);
-        }
-        
-        // Debounce save by 1 second
-        saveTimeoutRef.current = setTimeout(() => {
-            saveToDatabase();
-        }, 1000);
-        
-        return () => {
-            if (saveTimeoutRef.current) {
-                clearTimeout(saveTimeoutRef.current);
-            }
-        };
-    }, [sections, isLoading, project?.id, saveToDatabase]);
-    
-    useEffect(() => {
-        if (!project?.id) return;
-        
-        const handleBeforeUnload = (event) => {
-            const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
-            if (hasUnsavedChanges && !isSavingRef.current) {
-                saveToDatabase({ skipParentUpdate: true });
-                event.preventDefault();
-                event.returnValue = '';
-            }
-        };
-        
-        window.addEventListener('beforeunload', handleBeforeUnload);
-        return () => {
-            window.removeEventListener('beforeunload', handleBeforeUnload);
-        };
-    }, [project?.id, saveToDatabase]);
-    
-    const saveToDatabase = useCallback(async (options = {}) => {
+    /**
+     * NOTE:
+     * This is intentionally defined as a plain async function (not wrapped in useCallback).
+     * In production builds, the previous useCallback-based implementation minified to a
+     * `const Fe = ...` binding and the bundle sometimes threw
+     * "Cannot access 'Fe' before initialization" in some browsers due to
+     * an interaction between minification and hook ordering.
+     *
+     * Using a hoisted function declaration here avoids that temporal-dead-zone issue
+     * while still being perfectly safe because we rely on refs for mutable state.
+     */
+    async function saveToDatabase(options = {}) {
         if (isSavingRef.current) {
             console.log('⏭️ Save already in progress, skipping');
             return;
@@ -292,7 +261,49 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         } finally {
             isSavingRef.current = false;
         }
-    }, [project?.id, isLoading]);
+    }
+    
+    // ============================================================
+    // SIMPLE AUTO-SAVE - Debounced, saves entire state
+    // ============================================================
+    
+    useEffect(() => {
+        if (isLoading || !project?.id) return;
+        
+        // Clear any pending save
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+        }
+        
+        // Debounce save by 1 second
+        saveTimeoutRef.current = setTimeout(() => {
+            saveToDatabase();
+        }, 1000);
+        
+        return () => {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+            }
+        };
+    }, [sections, isLoading, project?.id]);
+    
+    useEffect(() => {
+        if (!project?.id) return;
+        
+        const handleBeforeUnload = (event) => {
+            const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
+            if (hasUnsavedChanges && !isSavingRef.current) {
+                saveToDatabase({ skipParentUpdate: true });
+                event.preventDefault();
+                event.returnValue = '';
+            }
+        };
+        
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
+    }, [project?.id]);
     
     // ============================================================
     // TEMPLATE MANAGEMENT - Database storage only
