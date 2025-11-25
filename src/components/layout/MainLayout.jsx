@@ -4,6 +4,9 @@ if (window.debug && !window.debug.performanceMode) {
 }
 const { useState } = React;
 
+const VALID_PAGES = ['dashboard', 'clients', 'projects', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking', 'my-tasks'];
+const PUBLIC_ROUTES = ['/job-card', '/jobcard', '/accept-invitation', '/reset-password'];
+
 const MainLayout = () => {
     // Load company name from settings
     const [companyName, setCompanyName] = React.useState('Abcotronics');
@@ -50,42 +53,47 @@ const MainLayout = () => {
         };
     }, []);
     
-    // Initialize currentPage from URL or default to dashboard
-    const getPageFromURL = () => {
-        const pathname = (window.location.pathname || '').toLowerCase();
-        if (pathname === '/' || pathname === '') {
-            return 'dashboard';
+    const getInitialPage = () => {
+        if (window.RouteState) {
+            const route = window.RouteState.getRoute();
+            if (route?.page && VALID_PAGES.includes(route.page)) {
+                return route.page;
+            }
         }
-        // Extract page from URL (e.g., /leave-platform -> leave-platform)
-        const page = pathname.replace(/^\//, '').split('/')[0];
-        const validPages = ['dashboard', 'clients', 'projects', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking', 'my-tasks'];
-        if (validPages.includes(page)) {
-            return page;
+        const pathname = (window.location.pathname || '').toLowerCase();
+        if (pathname && pathname !== '/' && !PUBLIC_ROUTES.some(route => pathname.startsWith(route))) {
+            const pageFromPath = pathname.replace(/^\//, '').split('/')[0];
+            if (VALID_PAGES.includes(pageFromPath)) {
+                return pageFromPath;
+            }
         }
         return 'dashboard';
     };
 
-    const [currentPage, setCurrentPage] = useState(getPageFromURL());
+    const [currentPage, setCurrentPage] = useState(getInitialPage());
     
-    // Sync currentPage with URL on mount (but don't redirect)
     React.useEffect(() => {
-        const pathname = (window.location.pathname || '').toLowerCase();
-        const publicRoutes = ['/job-card', '/jobcard', '/accept-invitation', '/reset-password'];
-        const isPublicRoute = publicRoutes.some(route => {
-            const lowerRoute = route.toLowerCase();
-            return pathname === lowerRoute || pathname.startsWith(lowerRoute + '/');
-        });
-        
-        // Only redirect to dashboard if it's not a valid app route and not a public route
-        const page = getPageFromURL();
-        if (page === 'dashboard' && pathname !== '/' && !isPublicRoute) {
-            // This is an unknown route, redirect to dashboard
-            window.history.replaceState({ page: 'dashboard' }, '', '/');
-        } else if (page !== 'dashboard' && pathname.startsWith(`/${page}`)) {
-            // Valid route, set the page state
-            setCurrentPage(page);
-            window.history.replaceState({ page }, '', `/${page}`);
+        const routeState = window.RouteState;
+        if (!routeState) {
+            return;
         }
+
+        const handleRouteChange = (route) => {
+            const nextPage = route?.page || 'dashboard';
+            if (!VALID_PAGES.includes(nextPage)) {
+                const pathname = (window.location.pathname || '').toLowerCase();
+                const isPublicRoute = PUBLIC_ROUTES.some(routePath => pathname.startsWith(routePath));
+                if (!isPublicRoute) {
+                    routeState.setPageSubpath('dashboard', [], { replace: true, preserveSearch: false, preserveHash: false });
+                    setCurrentPage('dashboard');
+                }
+                return;
+            }
+            setCurrentPage(nextPage);
+        };
+
+        handleRouteChange(routeState.getRoute());
+        return routeState.subscribe(handleRouteChange);
     }, []);
     
     const [sidebarOpen, setSidebarOpen] = useState(false); // Start closed on mobile
@@ -147,26 +155,23 @@ const MainLayout = () => {
     }, [user]);
 
     // Update URL when page changes
-    const navigateToPage = (page) => {
+    const navigateToPage = React.useCallback((page, options = {}) => {
+        if (!page) {
+            return;
+        }
+        const subpath = Array.isArray(options.subpath) ? options.subpath : [];
+        if (window.RouteState) {
+            window.RouteState.setPageSubpath(page, subpath, {
+                replace: options.replace ?? false,
+                preserveSearch: options.preserveSearch ?? false,
+                preserveHash: options.preserveHash ?? false
+            });
+        } else {
+            const pathSegments = [page, ...subpath].filter(Boolean).join('/');
+            const fallbackPath = page === 'dashboard' && subpath.length === 0 ? '/' : `/${pathSegments}`;
+            window.history.pushState({ page }, '', fallbackPath);
+        }
         setCurrentPage(page);
-        const newUrl = page === 'dashboard' ? '/' : `/${page}`;
-        window.history.pushState({ page }, '', newUrl);
-    };
-
-    // Handle browser back/forward buttons
-    React.useEffect(() => {
-        const handlePopState = (event) => {
-            console.log('🔄 MainLayout: Browser navigation:', event.state);
-            if (event.state && event.state.page) {
-                setCurrentPage(event.state.page);
-            } else {
-                const page = getPageFromURL();
-                setCurrentPage(page);
-            }
-        };
-
-        window.addEventListener('popstate', handlePopState);
-        return () => window.removeEventListener('popstate', handlePopState);
     }, []);
 
     // Setup password change modal trigger
@@ -861,8 +866,8 @@ const MainLayout = () => {
                     return <ErrorBoundary key="users"><Users /></ErrorBoundary>;
                 case 'account': 
                     return <ErrorBoundary key="account"><Account /></ErrorBoundary>;
-                case 'time': 
-                    return <ErrorBoundary key="time"><TimeTracking /></ErrorBoundary>;
+                case 'time-tracking': 
+                    return <ErrorBoundary key="time-tracking"><TimeTracking /></ErrorBoundary>;
                 case 'leave-platform': 
                     console.log('🔄 MainLayout: Rendering leave-platform, component type:', typeof LeavePlatform);
                     console.log('🔄 MainLayout: window.LeavePlatform exists:', typeof window.LeavePlatform);

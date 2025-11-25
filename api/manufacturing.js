@@ -5,9 +5,312 @@ import { ensureBOMMigration } from './_lib/ensureBOMMigration.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 
+const INVENTORY_TEMPLATE_FIELDS = {
+  sku: true,
+  name: true,
+  thumbnail: true,
+  category: true,
+  type: true,
+  unit: true,
+  reorderPoint: true,
+  reorderQty: true,
+  unitCost: true,
+  supplier: true,
+  supplierPartNumbers: true,
+  manufacturingPartNumber: true,
+  legacyPartNumber: true,
+  ownerId: true
+}
+
+const GLOBAL_LOCATION_SYNC_INTERVAL_MS = 1000 * 60 * 10 // 10 minutes
+let lastGlobalLocationSync = 0
+let globalSyncPromise = null
+
+const getStatusFromQuantity = (quantity = 0, reorderPoint = 0) => {
+  if (quantity > (reorderPoint || 0)) return 'in_stock'
+  if (quantity > 0) return 'low_stock'
+  return 'out_of_stock'
+}
+
+const buildInventoryClone = (baseItem, location, overrides = {}) => ({
+  sku: baseItem.sku,
+  name: baseItem.name,
+  thumbnail: baseItem.thumbnail || '',
+  category: baseItem.category || 'components',
+  type: baseItem.type || 'component',
+  quantity: overrides.quantity ?? 0,
+  allocatedQuantity: overrides.allocatedQuantity ?? 0,
+  inProductionQuantity: overrides.inProductionQuantity ?? 0,
+  completedQuantity: overrides.completedQuantity ?? 0,
+  unit: baseItem.unit || 'pcs',
+  reorderPoint: baseItem.reorderPoint ?? 0,
+  reorderQty: baseItem.reorderQty ?? 0,
+  location: overrides.locationLabel ?? location.name || '',
+  locationId: location.id,
+  unitCost: baseItem.unitCost ?? 0,
+  totalValue: overrides.totalValue ?? 0,
+  supplier: baseItem.supplier || '',
+  supplierPartNumbers: baseItem.supplierPartNumbers || '[]',
+  manufacturingPartNumber: baseItem.manufacturingPartNumber || '',
+  legacyPartNumber: baseItem.legacyPartNumber || '',
+  status: overrides.status || 'out_of_stock',
+  ownerId: baseItem.ownerId || null,
+  lastRestocked: overrides.lastRestocked ?? null
+})
+
+async function getInventoryTemplates() {
+  const items = await prisma.inventoryItem.findMany({
+    orderBy: { updatedAt: 'desc' },
+    select: INVENTORY_TEMPLATE_FIELDS
+  })
+
+  const templates = []
+  const seen = new Set()
+
+  for (const item of items) {
+    if (seen.has(item.sku)) continue
+    seen.add(item.sku)
+    templates.push(item)
+  }
+
+  return templates
+}
+
+async function ensureLocationInventoryPlaceholder(locationId, item) {
+  try {
+    await prisma.locationInventory.create({
+      data: {
+        locationId,
+        sku: item.sku,
+        itemName: item.name,
+        quantity: 0,
+        unitCost: item.unitCost || 0,
+        reorderPoint: item.reorderPoint || 0,
+        status: 'out_of_stock'
+      }
+    })
+  } catch (error) {
+    if (error?.code !== 'P2002') {
+      throw error
+    }
+  }
+}
+
+async function upsertLocationInventoryQuantity(locationId, item, quantity) {
+  const status = getStatusFromQuantity(quantity, item.reorderPoint)
+
+  await prisma.locationInventory.upsert({
+    where: { locationId_sku: { locationId, sku: item.sku } },
+    update: {
+      itemName: item.name,
+      quantity,
+      unitCost: item.unitCost || 0,
+      reorderPoint: item.reorderPoint || 0,
+      status,
+      lastRestocked: item.lastRestocked || new Date()
+    },
+    create: {
+      locationId,
+      sku: item.sku,
+      itemName: item.name,
+      quantity,
+      unitCost: item.unitCost || 0,
+      reorderPoint: item.reorderPoint || 0,
+      status
+    }
+  })
+}
+
+async function ensureLocationHasAllInventory(location) {
+  const templates = await getInventoryTemplates()
+  if (!templates.length) {
+    return { created: 0, total: 0 }
+  }
+
+  const existingItems = await prisma.inventoryItem.findMany({
+    where: { locationId: location.id },
+    select: { sku: true }
+  })
+  const existingSkus = new Set(existingItems.map(item => item.sku))
+
+  let createdCount = 0
+
+  for (const template of templates) {
+    if (!existingSkus.has(template.sku)) {
+      await prisma.inventoryItem.create({
+        data: buildInventoryClone(template, location)
+      })
+      createdCount++
+    }
+
+    await ensureLocationInventoryPlaceholder(location.id, template)
+  }
+
+  return { created: createdCount, total: templates.length }
+}
+
+async function ensureItemExistsInAllLocations(item) {
+  if (!item?.sku) return
+
+  const locations = await prisma.stockLocation.findMany({
+    select: { id: true, name: true }
+  })
+
+  if (!locations.length) return
+
+  const existingItemLocations = await prisma.inventoryItem.findMany({
+    where: { sku: item.sku },
+    select: { locationId: true }
+  })
+  const existingLocationSet = new Set(existingItemLocations.map(entry => entry.locationId))
+
+  for (const location of locations) {
+    if (!location.id) continue
+
+    if (location.id === item.locationId) {
+      await upsertLocationInventoryQuantity(location.id, item, item.quantity || 0)
+      continue
+    }
+
+    if (!existingLocationSet.has(location.id)) {
+      await prisma.inventoryItem.create({
+        data: buildInventoryClone(item, location, { quantity: 0, totalValue: 0, status: 'out_of_stock' })
+      })
+      existingLocationSet.add(location.id)
+    }
+
+    await ensureLocationInventoryPlaceholder(location.id, item)
+  }
+}
+
+async function buildLocationInventoryResponse(locationId) {
+  if (!locationId || locationId === 'all' || locationId === '') {
+    return []
+  }
+
+  const location = await prisma.stockLocation.findUnique({ where: { id: locationId } })
+  if (!location) {
+    return []
+  }
+
+  let locationInventoryRecords = await prisma.locationInventory.findMany({
+    where: { locationId },
+    orderBy: { itemName: 'asc' }
+  })
+
+  if (!locationInventoryRecords.length) {
+    await ensureLocationHasAllInventory(location)
+    locationInventoryRecords = await prisma.locationInventory.findMany({
+      where: { locationId },
+      orderBy: { itemName: 'asc' }
+    })
+  }
+
+  if (!locationInventoryRecords.length) {
+    return []
+  }
+
+  const skuSet = new Set(locationInventoryRecords.map(record => record.sku).filter(Boolean))
+  const skuList = Array.from(skuSet)
+
+  const metadataItems = skuList.length
+    ? await prisma.inventoryItem.findMany({
+        where: { sku: { in: skuList } },
+        orderBy: { updatedAt: 'desc' }
+      })
+    : []
+
+  const metadataBySku = new Map()
+  for (const meta of metadataItems) {
+    if (!metadataBySku.has(meta.sku)) {
+      metadataBySku.set(meta.sku, meta)
+    }
+  }
+
+  return locationInventoryRecords.map(record => {
+    const template = metadataBySku.get(record.sku) || {}
+    const quantity = record.quantity ?? 0
+    const reorderPoint = record.reorderPoint ?? template.reorderPoint ?? 0
+    const unitCost = record.unitCost ?? template.unitCost ?? 0
+    const baseStatus = record.status || template.status
+    const status = baseStatus || getStatusFromQuantity(quantity, reorderPoint)
+
+    return {
+      ...template,
+      id: `${record.id}-${locationId}`,
+      sku: record.sku,
+      name: record.itemName || template.name || record.sku,
+      quantity,
+      allocatedQuantity: template.allocatedQuantity || 0,
+      inProductionQuantity: template.inProductionQuantity || 0,
+      completedQuantity: template.completedQuantity || 0,
+      unit: template.unit || 'pcs',
+      reorderPoint,
+      reorderQty: template.reorderQty || 0,
+      location: template.location || location.name || '',
+      locationId,
+      unitCost,
+      totalValue: unitCost * quantity,
+      supplier: template.supplier || '',
+      supplierPartNumbers: template.supplierPartNumbers || '[]',
+      manufacturingPartNumber: template.manufacturingPartNumber || '',
+      legacyPartNumber: template.legacyPartNumber || '',
+      status,
+      lastRestocked: record.lastRestocked || template.lastRestocked,
+      ownerId: template.ownerId || null
+    }
+  })
+}
+
+async function syncInventoryAcrossAllLocations(force = false) {
+  const now = Date.now()
+  if (!force && lastGlobalLocationSync && (now - lastGlobalLocationSync) < GLOBAL_LOCATION_SYNC_INTERVAL_MS) {
+    return { skipped: true }
+  }
+
+  if (globalSyncPromise) {
+    return globalSyncPromise
+  }
+
+  globalSyncPromise = (async () => {
+    try {
+      const locations = await prisma.stockLocation.findMany({
+        select: { id: true, code: true, name: true }
+      })
+
+      if (!locations.length) {
+        lastGlobalLocationSync = Date.now()
+        return { syncedLocations: 0, totalCreated: 0 }
+      }
+
+      let totalCreated = 0
+      for (const location of locations) {
+        try {
+          const stats = await ensureLocationHasAllInventory(location)
+          totalCreated += stats.created
+        } catch (error) {
+          console.warn(`⚠️ Failed to sync inventory for location ${location.code || location.id}:`, error.message)
+        }
+      }
+
+      lastGlobalLocationSync = Date.now()
+      console.log(`✅ Completed global inventory sync across ${locations.length} locations (created ${totalCreated} placeholder items)`)
+      return { syncedLocations: locations.length, totalCreated }
+    } finally {
+      globalSyncPromise = null
+    }
+  })()
+
+  return globalSyncPromise
+}
+
 async function handler(req, res) {
   // Ensure BOM migration is applied (non-blocking, safe)
   await ensureBOMMigration().catch(() => {}) // Ignore errors
+
+  await syncInventoryAcrossAllLocations().catch((error) => {
+    console.warn('⚠️ Global inventory sync skipped:', error.message)
+  })
   // Strip query parameters and hash from URL path before parsing
   const urlPath = req.url.split('?')[0].split('#')[0].replace(/^\/api\//, '/')
   const pathSegments = urlPath.split('/').filter(Boolean)
@@ -97,50 +400,12 @@ async function handler(req, res) {
         
         console.log('✅ Location created successfully:', JSON.stringify(location, null, 2));
         
-        // Create inventory items for the new location based on main warehouse inventory
+        // Ensure every existing inventory item has a placeholder entry for the new location
         try {
-          const mainWarehouse = await prisma.stockLocation.findFirst({ 
-            where: { code: 'LOC001' } // Main warehouse code
-          })
-          
-          if (mainWarehouse) {
-            // Get all inventory items from main warehouse
-            const mainWarehouseInventory = await prisma.inventoryItem.findMany({
-              where: { locationId: mainWarehouse.id }
-            })
-            
-            // Create duplicate inventory items for the new location
-            for (const item of mainWarehouseInventory) {
-              await prisma.inventoryItem.create({
-                data: {
-                  sku: item.sku,
-                  name: item.name,
-                  thumbnail: item.thumbnail,
-                  category: item.category,
-                  type: item.type,
-                  quantity: 0, // New location starts with 0 quantity
-                  allocatedQuantity: 0,
-                  inProductionQuantity: 0,
-                  completedQuantity: 0,
-                  unit: item.unit,
-                  reorderPoint: item.reorderPoint,
-                  reorderQty: item.reorderQty,
-                  location: item.location,
-                  locationId: location.id, // Link to new location
-                  unitCost: item.unitCost,
-                  totalValue: 0,
-                  supplier: item.supplier,
-                  supplierPartNumbers: item.supplierPartNumbers,
-                  legacyPartNumber: item.legacyPartNumber,
-                  status: 'out_of_stock', // New location starts empty
-                  ownerId: item.ownerId
-                }
-              })
-            }
-            console.log(`✅ Created ${mainWarehouseInventory.length} inventory items for new location ${location.code}`)
-          }
+          const syncStats = await ensureLocationHasAllInventory(location)
+          console.log(`✅ Synced inventory templates for ${location.code}: ${syncStats.created} new entries`)
         } catch (invError) {
-          console.warn('⚠️ Could not create inventory for new location:', invError.message)
+          console.warn('⚠️ Could not sync inventory for new location:', invError.message)
           // Don't fail location creation if inventory creation fails
         }
         
@@ -404,16 +669,16 @@ async function handler(req, res) {
         const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
         const locationId = req.query?.locationId || req.query?.location || urlObj.searchParams.get('locationId') || urlObj.searchParams.get('location')
         
-        // Build query with optional location filter
-        const whereClause = {}
-        if (locationId && locationId !== 'all' && locationId !== '') {
-          whereClause.locationId = locationId
+        const locationFilterActive = locationId && locationId !== 'all' && locationId !== ''
+        let items = []
+
+        if (locationFilterActive) {
+          items = await buildLocationInventoryResponse(locationId)
+        } else {
+          items = await prisma.inventoryItem.findMany({
+            orderBy: { createdAt: 'desc' }
+          })
         }
-        
-        const items = await prisma.inventoryItem.findMany({
-          where: whereClause,
-          orderBy: { createdAt: 'desc' }
-        })
         console.log('🧪 Manufacturing List inventory', { owner, locationId, count: items.length })
         
         // Deduplicate by SKU and locationId - merge duplicates intelligently
@@ -667,6 +932,7 @@ async function handler(req, res) {
               }
             }
 
+            await ensureItemExistsInAllLocations(inventoryItem)
             created.push({ sku: inventoryItem.sku, name: inventoryItem.name })
           } catch (error) {
             errors.push({ 
@@ -792,6 +1058,7 @@ async function handler(req, res) {
           }
         }
         
+        await ensureItemExistsInAllLocations(item)
         console.log('✅ Created inventory item:', item.id)
         return created(res, { 
           item: {

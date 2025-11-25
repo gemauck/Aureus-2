@@ -6,6 +6,12 @@ console.log('🏭 useAuth available:', typeof window.useAuth !== 'undefined');
 const { useState, useEffect, useCallback, useMemo, useRef } = React;
 const { useAuth } = window;
 
+const MANUFACTURING_TABS = ['dashboard', 'inventory', 'bom', 'production', 'sales', 'purchase', 'movements', 'suppliers', 'locations'];
+const normalizeManufacturingTab = (value = 'dashboard') => {
+  const normalized = (value || 'dashboard').toLowerCase();
+  return MANUFACTURING_TABS.includes(normalized) ? normalized : 'dashboard';
+};
+
 const Manufacturing = () => {
   // Safety check for useAuth
   if (!window.useAuth) {
@@ -23,7 +29,32 @@ const Manufacturing = () => {
     }
     return await window.DatabaseAPI[methodName](...args);
   };
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const getInitialTabFromURL = () => {
+    try {
+      if (window.RouteState) {
+        const route = window.RouteState.getRoute();
+        if (route.page === 'manufacturing') {
+          return normalizeManufacturingTab(route.segments[0]);
+        }
+      }
+      const pathnameSegments = (window.location.pathname || '')
+        .replace(/^\//, '')
+        .split('/')
+        .filter(Boolean);
+      if ((pathnameSegments[0] || '').toLowerCase() === 'manufacturing' && pathnameSegments[1]) {
+        return normalizeManufacturingTab(pathnameSegments[1]);
+      }
+      const hashValue = (window.location.hash || '').replace('#', '').toLowerCase();
+      if (hashValue && MANUFACTURING_TABS.includes(hashValue)) {
+        return hashValue;
+      }
+    } catch (error) {
+      console.warn('Manufacturing: Failed to derive initial tab from URL', error);
+    }
+    return 'dashboard';
+  };
+
+  const [activeTab, setActiveTab] = useState(getInitialTabFromURL);
   const [inventory, setInventory] = useState([]);
   const [boms, setBoms] = useState([]);
   const [productionOrders, setProductionOrders] = useState([]);
@@ -56,6 +87,49 @@ const Manufacturing = () => {
   const [selectedLocationId, setSelectedLocationId] = useState('all'); // Location filter for inventory
   const [columnFilters, setColumnFilters] = useState({}); // Column-specific filters
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' }); // Sorting state
+  const syncTabToRoute = useCallback((tab, options = {}) => {
+    const normalizedTab = normalizeManufacturingTab(tab);
+    const segments = normalizedTab === 'dashboard' ? [] : [normalizedTab];
+
+    if (window.RouteState) {
+      const currentRoute = window.RouteState.getRoute();
+      const currentTab = currentRoute.page === 'manufacturing' ? normalizeManufacturingTab(currentRoute.segments[0]) : null;
+      const hasExtraSegments = currentRoute.page === 'manufacturing' ? currentRoute.segments.slice(1).length > 0 : false;
+      if (currentRoute.page === 'manufacturing' && currentTab === normalizedTab && !hasExtraSegments) {
+        return;
+      }
+      window.RouteState.setPageSubpath('manufacturing', segments, {
+        replace: options.replace ?? false,
+        preserveSearch: true,
+        preserveHash: false
+      });
+    } else {
+      const path = segments.length === 0 ? '/manufacturing' : `/manufacturing/${segments.join('/')}`;
+      const method = options.replace ? 'replaceState' : 'pushState';
+      window.history[method]({ page: 'manufacturing', tab: normalizedTab }, '', path);
+    }
+  }, []);
+
+  const changeTab = useCallback((tab, options = {}) => {
+    const normalizedTab = normalizeManufacturingTab(tab);
+    setActiveTab(normalizedTab);
+    if (!options.skipUrlSync) {
+      syncTabToRoute(normalizedTab, { replace: options.replace });
+    }
+  }, [syncTabToRoute]);
+
+  useEffect(() => {
+    if (!window.RouteState) {
+      return;
+    }
+    const unsubscribe = window.RouteState.subscribe((route) => {
+      if (route.page !== 'manufacturing') {
+        return;
+      }
+      changeTab(route.segments[0], { skipUrlSync: true });
+    });
+    return unsubscribe;
+  }, [changeTab]);
   
   // Track user input state to prevent data sync from interrupting typing
   const isUserTypingRef = useRef(false);
@@ -3600,6 +3674,7 @@ const Manufacturing = () => {
   };
 
   const openAddSupplierModal = () => {
+    setSelectedItem(null);
     setFormData({
       name: '',
       code: '',
@@ -3625,6 +3700,7 @@ const Manufacturing = () => {
 
   const handleSaveSupplier = async () => {
     try {
+      const isEditingSupplier = modalType === 'edit_supplier' && selectedItem;
       const supplierData = {
         code: formData.code || '',
         name: formData.name,
@@ -3639,7 +3715,7 @@ const Manufacturing = () => {
       };
 
       let savedSupplier;
-      if (selectedItem && window.DatabaseAPI && window.DatabaseAPI.updateSupplier) {
+      if (isEditingSupplier && window.DatabaseAPI && window.DatabaseAPI.updateSupplier) {
         // Update existing supplier
         const response = await window.DatabaseAPI.updateSupplier(selectedItem.id, supplierData);
         savedSupplier = response?.data?.supplier;
@@ -3672,16 +3748,40 @@ const Manufacturing = () => {
         return;
       }
 
-      // Refresh suppliers list from database
+      // Ensure UI updates immediately with the saved supplier
+      if (savedSupplier) {
+        const normalizedSupplier = {
+          ...savedSupplier,
+          id: savedSupplier.id || savedSupplier._id || savedSupplier.code || `SUP${String(Date.now()).slice(-5)}`,
+          createdAt: savedSupplier.createdAt || new Date().toISOString().split('T')[0],
+          updatedAt: savedSupplier.updatedAt || new Date().toISOString().split('T')[0]
+        };
+
+        setSuppliers(prev => {
+          const updatedSuppliers = isEditingSupplier
+            ? prev.map(supplier => (supplier.id === normalizedSupplier.id ? normalizedSupplier : supplier))
+            : [...prev, normalizedSupplier];
+          localStorage.setItem('manufacturing_suppliers', JSON.stringify(updatedSuppliers));
+          return updatedSuppliers;
+        });
+      }
+
+      // Refresh suppliers list from database for authoritative sync
       if (window.DatabaseAPI && window.DatabaseAPI.getSuppliers) {
-        const suppliersResponse = await window.DatabaseAPI.getSuppliers();
-        const suppliersData = suppliersResponse?.data?.suppliers || [];
-        setSuppliers(suppliersData.map(supplier => ({
-          ...supplier,
-          id: supplier.id,
-          createdAt: supplier.createdAt || new Date().toISOString().split('T')[0],
-          updatedAt: supplier.updatedAt || new Date().toISOString().split('T')[0]
-        })));
+        try {
+          const suppliersResponse = await window.DatabaseAPI.getSuppliers();
+          const suppliersData = suppliersResponse?.data?.suppliers || [];
+          const processedSuppliers = suppliersData.map(supplier => ({
+            ...supplier,
+            id: supplier.id,
+            createdAt: supplier.createdAt || new Date().toISOString().split('T')[0],
+            updatedAt: supplier.updatedAt || new Date().toISOString().split('T')[0]
+          }));
+          setSuppliers(processedSuppliers);
+          localStorage.setItem('manufacturing_suppliers', JSON.stringify(processedSuppliers));
+        } catch (refreshError) {
+          console.warn('⚠️ Failed to refresh suppliers after save, using local optimistic data:', refreshError);
+        }
       }
 
       setShowModal(false);
@@ -4369,7 +4469,7 @@ const Manufacturing = () => {
                       type="button"
                       onClick={() => {
                         setShowModal(false);
-                        setActiveTab('suppliers');
+                        changeTab('suppliers');
                         setTimeout(() => openAddSupplierModal(), 100);
                       }}
                       className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 border border-gray-300"
@@ -4488,7 +4588,7 @@ const Manufacturing = () => {
                       type="button"
                       onClick={() => {
                         setShowModal(false);
-                        setActiveTab('inventory');
+                        changeTab('inventory');
                         setTimeout(() => openAddItemModal(), 100);
                       }}
                       className="text-sm text-yellow-900 underline hover:no-underline"
@@ -8586,7 +8686,7 @@ const Manufacturing = () => {
               ].map(tab => (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => changeTab(tab.id)}
                   className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
                     activeTab === tab.id
                       ? 'border-blue-600 text-blue-600'

@@ -1,288 +1,69 @@
-// Get React hooks from window
-const { useState, useEffect, useRef, useCallback } = React;
-const storage = window.storage;
+import React, { useState, useEffect, useRef, useCallback } from '../react-window.js';
+import DocumentCollectionAPIClass from '../services/documentCollectionAPI.js';
+
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
 
-// Initialize API service
-// Note: The API service is imported in ProjectsModule.jsx to ensure it's bundled
-// If it's not available, we use the fallback implementation below
-const getAPI = () => {
-    if (!window.DocumentCollectionAPI) {
-        console.warn('⚠️ DocumentCollectionAPI not loaded, initializing fallback...');
-        // Fallback: create minimal API wrapper that matches the service interface
-        window.DocumentCollectionAPI = {
-            updateToken: () => {},
-            saveDocumentSections: async (projectId, sections, skipParentUpdate = false) => {
-                console.log('💾 SAVING TO DATABASE:', {
-                    projectId,
-                    sectionsCount: sections?.length || 0,
-                    sectionsPreview: sections?.slice(0, 2).map(s => ({
-                        id: s.id,
-                        name: s.name,
-                        documentsCount: s.documents?.length || 0
-                    })),
-                    timestamp: new Date().toISOString()
-                });
-                
-                const sectionsJson = JSON.stringify(sections);
-                console.log('💾 Saving documentSections to database:', {
-                    projectId,
-                    jsonLength: sectionsJson.length,
-                    jsonPreview: sectionsJson.substring(0, 200)
-                });
-                
-                const result = await window.DatabaseAPI.updateProject(projectId, {
-                    documentSections: sectionsJson
-                });
-                
-                console.log('✅ SAVE RESPONSE FROM DATABASE:', {
-                    projectId,
-                    hasResult: !!result,
-                    hasData: !!result?.data,
-                    hasProject: !!result?.data?.project,
-                    savedDocumentSections: result?.data?.project?.documentSections ? 
-                        (typeof result.data.project.documentSections === 'string' ? 
-                            result.data.project.documentSections.substring(0, 200) : 
-                            'not string') : 
-                        'not found',
-                    timestamp: new Date().toISOString()
-                });
-                
-                // Update parent component's project prop if available and not skipping
-                // Skip parent update for auto-saves to prevent refresh issues
-                if (!skipParentUpdate && window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                    const updatedProject = result?.data?.project || result?.project || result?.data;
-                    if (updatedProject) {
-                        window.updateViewingProject({
-                            ...updatedProject,
-                            documentSections: sectionsJson,
-                            skipDocumentSectionsUpdate: true
-                        });
-                    }
-                }
-                return result;
-            },
-            // CRITICAL: fetchProject loads documentSections which is SHARED across all users
-            // No user-based filtering - all users see the same checklist data
-            fetchProject: async (projectId, forceRefresh = false) => {
-                console.log('📥 FETCHING FROM DATABASE:', {
-                    projectId,
-                    forceRefresh,
-                    timestamp: new Date().toISOString()
-                });
-                
-                // Clear cache before fetching to ensure fresh data (important for multi-user scenarios)
-                if (window.DatabaseAPI) {
-                    // Clear specific project cache
-                    if (window.DatabaseAPI._responseCache) {
-                        window.DatabaseAPI._responseCache.delete(`GET:/projects/${projectId}`);
-                        console.log('🔄 Cleared cache for project:', projectId);
-                    }
-                    // Also clear projects list cache
-                    if (window.DatabaseAPI._responseCache) {
-                        window.DatabaseAPI._responseCache.delete('GET:/projects');
-                        console.log('🔄 Cleared projects list cache');
-                    }
-                }
-                
-                // Fetch with cache-busting query parameter to ensure fresh data
-                const cacheBuster = `?t=${Date.now()}`;
-                const result = await window.DatabaseAPI.makeRequest(`/projects/${projectId}${cacheBuster}`);
-                const project = result?.data?.project || result?.project || result?.data || result;
-                
-                console.log('📥 FETCHED FROM DATABASE:', {
-                    projectId,
-                    hasProject: !!project,
-                    hasDocumentSections: !!project?.documentSections,
-                    documentSectionsType: typeof project?.documentSections,
-                    documentSectionsLength: typeof project?.documentSections === 'string' ? 
-                        project.documentSections.length : 'not string',
-                    documentSectionsPreview: typeof project?.documentSections === 'string' ? 
-                        project.documentSections.substring(0, 200) : 
-                        'not string',
-                    timestamp: new Date().toISOString()
-                });
-                
-                return project;
-            },
-            clearProjectCache: (projectId) => {
-                console.log(`🧹 Clearing DatabaseAPI cache for project: ${projectId}`);
-                if (window.DatabaseAPI?._responseCache) {
-                    window.DatabaseAPI._responseCache.delete('GET:/projects');
-                    if (projectId) {
-                        window.DatabaseAPI._responseCache.delete(`GET:/projects/${projectId}`);
-                    }
-                }
-            },
-            getTemplates: async () => {
-                try {
-                    console.log('🌐 getTemplates() API call starting...');
-                    const token = window.storage?.getToken?.();
-                    if (!token) {
-                        console.warn('⚠️ No auth token available for fetching templates');
-                        return [];
-                    }
-                    // Add timestamp to prevent browser caching - ensures fresh templates for all users
-                    const cacheBuster = `?t=${Date.now()}`;
-                    const apiUrl = `/api/document-collection-templates${cacheBuster}`;
-                    console.log('📡 Fetching templates from:', apiUrl);
-                    const response = await fetch(apiUrl, {
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json',
-                            'Cache-Control': 'no-cache, no-store, must-revalidate',
-                            'Pragma': 'no-cache',
-                            'Expires': '0'
-                        },
-                        cache: 'no-store' // Prevent browser caching
-                    });
-                    console.log('📥 API response status:', response.status, response.statusText);
-                    if (response.ok) {
-                        const data = await response.json();
-                        console.log('📦 API response data structure:', {
-                            hasData: !!data.data,
-                            hasTemplates: !!data.templates,
-                            dataKeys: Object.keys(data),
-                            fullResponse: JSON.stringify(data).substring(0, 500)
-                        });
-                        const templates = data?.data?.templates || data?.templates || [];
-                        console.log('📋 API returned templates:', templates.length);
-                        if (templates.length > 0) {
-                            console.log('📋 Template details:', templates.map(t => ({
-                                id: t.id,
-                                name: t.name,
-                                ownerId: t.ownerId,
-                                createdBy: t.createdBy,
-                                isDefault: t.isDefault
-                            })));
-                        }
-                        if (templates.length > 0) {
-                            console.log('First template structure:', {
-                                id: templates[0].id,
-                                name: templates[0].name,
-                                hasSections: !!templates[0].sections,
-                                sectionsType: typeof templates[0].sections,
-                                sectionsLength: Array.isArray(templates[0].sections) ? templates[0].sections.length : 'not array'
-                            });
-                        }
-                        return templates;
-                    } else {
-                        const errorText = await response.text();
-                        console.error('❌ API error response:', response.status, errorText);
-                        return [];
-                    }
-                } catch (error) {
-                    console.error('❌ Error fetching templates:', error);
-                    return [];
-                }
-            },
-            getTemplate: async () => null,
-            createTemplate: async (templateData) => {
-                try {
-                    const token = window.storage?.getToken?.();
-                    if (!token) throw new Error('No auth token');
-                    
-                    console.log('💾 Creating template in database:', {
-                        name: templateData.name,
-                        sectionsCount: templateData.sections?.length || 0
-                    });
-                    
-                    const response = await fetch('/api/document-collection-templates', {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(templateData)
-                    });
-                    
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        console.error('❌ API error response:', response.status, errorText);
-                        throw new Error(`API returned ${response.status}: ${errorText}`);
-                    }
-                    
-                    const data = await response.json();
-                    const template = data?.data?.template || data?.template;
-                    
-                    if (!template || !template.id) {
-                        console.error('❌ Template creation failed: No template ID returned', data);
-                        throw new Error('Template creation failed: No template ID returned');
-                    }
-                    
-                    console.log('✅ Template created successfully in database:', {
-                        id: template.id,
-                        name: template.name,
-                        ownerId: template.ownerId,
-                        createdBy: template.createdBy
-                    });
-                    
-                    return template;
-                } catch (error) {
-                    console.error('❌ Error creating template:', error);
-                    throw error;
-                }
-            },
-            updateTemplate: async (templateId, templateData) => {
-                try {
-                    const token = window.storage?.getToken?.();
-                    if (!token) throw new Error('No auth token');
-                    const response = await fetch(`/api/document-collection-templates/${encodeURIComponent(templateId)}`, {
-                        method: 'PUT',
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(templateData)
-                    });
-                    if (!response.ok) throw new Error(`API returned ${response.status}`);
-                    const data = await response.json();
-                    return data?.data?.template || data?.template;
-                } catch (error) {
-                    console.error('❌ Error updating template:', error);
-                    throw error;
-                }
-            },
-            deleteTemplate: async (templateId) => {
-                try {
-                    const token = window.storage?.getToken?.();
-                    if (!token) throw new Error('No auth token');
-                    const response = await fetch(`/api/document-collection-templates/${encodeURIComponent(templateId)}`, {
-                        method: 'DELETE',
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    if (!response.ok) throw new Error(`API returned ${response.status}`);
-                    return true;
-                } catch (error) {
-                    console.error('❌ Error deleting template:', error);
-                    throw error;
-                }
-            },
-        };
+const getDocumentCollectionAPI = () => {
+    if (typeof window === 'undefined') {
+        throw new Error('DocumentCollectionAPI requires a browser environment');
     }
-    // Ensure clearProjectCache is always available, even if DocumentCollectionAPI exists
-    if (window.DocumentCollectionAPI && !window.DocumentCollectionAPI.clearProjectCache) {
-        window.DocumentCollectionAPI.clearProjectCache = (projectId) => {
-            console.log(`🧹 Clearing DatabaseAPI cache for project: ${projectId}`);
-            if (window.DatabaseAPI?._responseCache) {
-                window.DatabaseAPI._responseCache.delete('GET:/projects');
-                if (projectId) {
-                    window.DatabaseAPI._responseCache.delete(`GET:/projects/${projectId}`);
-                }
-            }
-        };
+    if (window.DocumentCollectionAPI) {
+        return window.DocumentCollectionAPI;
     }
-    return window.DocumentCollectionAPI;
+    if (typeof DocumentCollectionAPIClass === 'function') {
+        const instance = new DocumentCollectionAPIClass();
+        window.DocumentCollectionAPI = instance;
+        return instance;
+    }
+    throw new Error('DocumentCollectionAPI is not available');
 };
 
-const snapshotDocumentSections = (sections) => {
-    if (typeof sections === 'string') return sections;
+const parseSections = (data) => {
+    if (!data) return [];
+    if (Array.isArray(data)) return data;
+
     try {
-        return JSON.stringify(sections || []);
-    } catch {
+        if (typeof data === 'string') {
+            let cleaned = data.trim();
+            if (!cleaned) return [];
+
+            let attempts = 0;
+            while (attempts < 10) {
+                try {
+                    const parsed = JSON.parse(cleaned);
+                    if (Array.isArray(parsed)) return parsed;
+                    if (typeof parsed === 'string') {
+                        cleaned = parsed;
+                        attempts++;
+                        continue;
+                    }
+                    return [];
+                } catch (parseError) {
+                    if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+                        cleaned = cleaned.slice(1, -1);
+                    }
+                    cleaned = cleaned.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+                    attempts++;
+                    if (attempts >= 10) {
+                        console.warn('Failed to parse documentSections after', attempts, 'attempts');
+                        return [];
+                    }
+                }
+            }
+            return [];
+        }
+    } catch (e) {
+        console.warn('Failed to parse documentSections:', e);
+        return [];
+    }
+    return [];
+};
+
+const serializeSections = (data) => {
+    try {
+        return JSON.stringify(Array.isArray(data) ? data : []);
+    } catch (error) {
+        console.warn('Failed to serialize documentSections:', error);
         return '[]';
     }
 };
@@ -299,54 +80,33 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
     
     const workingMonths = getWorkingMonths();
+    
+    const apiRef = useRef(null);
+    if (!apiRef.current) {
+        try {
+            apiRef.current = getDocumentCollectionAPI();
+        } catch (error) {
+            console.error('❌ Failed to initialize DocumentCollectionAPI:', error);
+        }
+    }
+
+    const lastSavedSnapshotRef = useRef('[]');
+    const sectionsRef = useRef([]);
     const tableRef = useRef(null);
     const monthRefs = useRef({});
+    const hasInitialScrolled = useRef(false);
+    const saveTimeoutRef = useRef(null);
+    const isSavingRef = useRef(false);
+    const previousProjectIdRef = useRef(project?.id);
+    const hasLoadedInitialDataRef = useRef(false);
 
     const months = [
         'January', 'February', 'March', 'April', 'May', 'June',
         'July', 'August', 'September', 'October', 'November', 'December'
     ];
+    const commentInputAvailable = typeof window !== 'undefined' && typeof window.CommentInputWithMentions === 'function';
 
-const createCommentCellKey = (sectionId, documentId, month) => JSON.stringify([sectionId, documentId, month]);
-const parseCommentCellKey = (key) => {
-    if (!key) return null;
-    try {
-        const [sectionId, documentId, month] = JSON.parse(key);
-        return { sectionId, documentId, month };
-    } catch (error) {
-        console.warn('Failed to parse comment cell key:', error);
-        return null;
-    }
-};
-
-    const getSectionsCacheKey = (projectId) => projectId ? `docCollectionSectionsCache_${projectId}` : null;
-
-    const loadSectionsFromCache = (projectId) => {
-        const cacheKey = getSectionsCacheKey(projectId);
-        if (!cacheKey) return null;
-        try {
-            const cached = sessionStorage.getItem(cacheKey);
-            if (!cached) return null;
-            const parsed = JSON.parse(cached);
-            if (parsed && typeof parsed === 'object') {
-                return parsed;
-            }
-        } catch (error) {
-            console.warn('Failed to read document collection cache:', error);
-        }
-        return null;
-    };
-
-    const persistSectionsToCache = (projectId, sections) => {
-        const cacheKey = getSectionsCacheKey(projectId);
-        if (!cacheKey) return;
-        try {
-            sessionStorage.setItem(cacheKey, JSON.stringify(sections));
-        } catch (error) {
-            console.warn('Failed to persist document collection cache:', error);
-        }
-    };
-
+    // Year selection with persistence
     const YEAR_STORAGE_PREFIX = 'documentCollectionSelectedYear_';
     const getInitialSelectedYear = () => {
         if (typeof window !== 'undefined' && project?.id) {
@@ -358,86 +118,35 @@ const parseCommentCellKey = (key) => {
         }
         return currentYear;
     };
+    
     const [selectedYear, setSelectedYear] = useState(getInitialSelectedYear);
     
-    // ✅ NEW SIMPLE ARCHITECTURE: Database as single source of truth
-    // CRITICAL: documentSections is SHARED across all users - no user-based filtering
-    // All users see and can update the same checklist data
-    // Store sections organized by year: { [year]: sections[] }
-    const [sectionsByYear, setSectionsByYear] = useState({});
-    // Current year's sections (derived from sectionsByYear[selectedYear])
-    const sections = sectionsByYear[selectedYear] || [];
+    // ============================================================
+    // SIMPLIFIED STATE MANAGEMENT - Single source of truth
+    // ============================================================
     
-    // Modal state storage key (persists across remounts) - use ref to avoid dependency issues
-    const modalStateKeyRef = useRef(`docCollectionModalState_${project?.id || 'default'}`);
-    
-    // Update modal state key when project ID changes
+    // Main data state - loaded from database
+    const [sections, setSections] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
     useEffect(() => {
-        if (previousProjectIdRef.current !== project?.id) {
-            // Clear old project's modal state
-            if (previousProjectIdRef.current) {
-                try {
-                    sessionStorage.removeItem(`docCollectionModalState_${previousProjectIdRef.current}`);
-                } catch (e) {
-                    console.warn('Failed to clear old modal state:', e);
-                }
-            }
-            previousProjectIdRef.current = project?.id;
-            modalStateKeyRef.current = `docCollectionModalState_${project?.id || 'default'}`;
-        }
-    }, [project?.id]);
+        sectionsRef.current = sections;
+    }, [sections]);
     
-    // Restore modal state from sessionStorage on mount (persists across remounts)
-    const getStoredModalState = (projectId) => {
-        const key = `docCollectionModalState_${projectId || 'default'}`;
-        try {
-            const stored = sessionStorage.getItem(key);
-            if (stored) {
-                const parsed = JSON.parse(stored);
-                return {
-                    showSectionModal: parsed.showSectionModal || false,
-                    showDocumentModal: parsed.showDocumentModal || false,
-                    showTemplateModal: parsed.showTemplateModal || false,
-                    showApplyTemplateModal: parsed.showApplyTemplateModal || false
-                };
-            }
-        } catch (e) {
-            console.warn('Failed to parse stored modal state:', e);
-        }
-        return {
-            showSectionModal: false,
-            showDocumentModal: false,
-            showTemplateModal: false,
-            showApplyTemplateModal: false
-        };
-    };
-    
-    const initialModalState = getStoredModalState(project?.id);
-    const [showSectionModal, setShowSectionModal] = useState(initialModalState.showSectionModal);
-    const [showDocumentModal, setShowDocumentModal] = useState(initialModalState.showDocumentModal);
-    const [showTemplateModal, setShowTemplateModal] = useState(initialModalState.showTemplateModal);
-    const [showApplyTemplateModal, setShowApplyTemplateModal] = useState(initialModalState.showApplyTemplateModal);
-    
-    // Persist modal state to sessionStorage whenever it changes
-    useEffect(() => {
-        try {
-            sessionStorage.setItem(modalStateKeyRef.current, JSON.stringify({
-                showSectionModal,
-                showDocumentModal,
-                showTemplateModal,
-                showApplyTemplateModal
-            }));
-        } catch (e) {
-            console.warn('Failed to store modal state:', e);
-        }
-    }, [showSectionModal, showDocumentModal, showTemplateModal, showApplyTemplateModal]);
-    const [editingTemplate, setEditingTemplate] = useState(null);
+    // Templates state
     const [templates, setTemplates] = useState([]);
+    const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+    
+    // UI state
+    const [showSectionModal, setShowSectionModal] = useState(false);
+    const [showDocumentModal, setShowDocumentModal] = useState(false);
+    const [showTemplateModal, setShowTemplateModal] = useState(false);
+    const [showApplyTemplateModal, setShowApplyTemplateModal] = useState(false);
     const [showTemplateList, setShowTemplateList] = useState(true);
+    const [prefilledTemplate, setPrefilledTemplate] = useState(null);
     const [editingSection, setEditingSection] = useState(null);
     const [editingDocument, setEditingDocument] = useState(null);
     const [editingSectionId, setEditingSectionId] = useState(null);
-    const editingSectionIdRef = useRef(null);
+    const [editingTemplate, setEditingTemplate] = useState(null);
     const [draggedSection, setDraggedSection] = useState(null);
     const [dragOverIndex, setDragOverIndex] = useState(null);
     const [draggedDocument, setDraggedDocument] = useState(null);
@@ -447,1115 +156,343 @@ const parseCommentCellKey = (key) => {
     const [quickComment, setQuickComment] = useState('');
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
-    const [commentInputAvailable, setCommentInputAvailable] = useState(() => 
-        typeof window !== 'undefined' && typeof window.CommentInputWithMentions === 'function'
-    );
-    const [users, setUsers] = useState([]);
-    const previousProjectIdRef = useRef(project?.id);
-    const [isSaving, setIsSaving] = useState(false);
-    const [saveError, setSaveError] = useState(null);
-    const [isLoading, setIsLoading] = useState(false);
-    const saveTimeoutRef = useRef(null);
-    const pendingSaveRef = useRef(null);
-    const lastSavedSnapshotRef = useRef(null);
-    const lastProjectDocumentSectionsRef = useRef(snapshotDocumentSections(project?.documentSections)); // Track last documentSections to prevent unnecessary reloads
-    const isRestoringFromCacheRef = useRef(false); // Track when restoring from cache to skip auto-save
-    const templateJustAppliedRef = useRef(false); // Track when template was just applied to force refresh after save
     
-    // Refs to track modal/form state for auto-save (always have latest values)
-    const modalsOpenRef = useRef(false);
-    // Use sessionStorage to persist loaded state across remounts (same session, same project)
-    const getLoadedStateKey = (projectId) => `docTracker_loaded_${projectId || 'default'}`;
-    const hasLoadedInitialDataRef = useRef((() => {
-        if (!project?.id) return false;
-        try {
-            const stored = sessionStorage.getItem(getLoadedStateKey(project.id));
-            return stored === 'true';
-        } catch {
-            return false;
-        }
-    })());
-
-    // Get API service instance
-    const api = getAPI();
-    const normalizeSections = useCallback((value) => (Array.isArray(value) ? value : []), []);
-    const serializeSections = useCallback((value) => JSON.stringify(normalizeSections(value)), [normalizeSections]);
-    
-    // Helper to organize sections by year from flat array
-    const organizeSectionsByYear = useCallback((flatSections) => {
-        const organized = {};
-        const allYears = new Set();
-        const sectionYearsMap = new Map(); // Track which sections have data for which years
-        
-        // First, collect all years from existing month keys and map sections to years
-        // CRITICAL: Track template markers separately - they indicate sections belong to ONLY that year
-        const sectionTemplateMarkers = new Map(); // sectionId -> template year (if any)
-        
-        flatSections.forEach((section, sectionIdx) => {
-            const sectionYears = new Set();
-            const sectionId = section.id || `section-${sectionIdx}`;
-            let templateYear = null;
-            
-            // First pass: check for template markers (highest priority)
-            section.documents?.forEach(doc => {
-                if (doc.collectionStatus) {
-                    Object.keys(doc.collectionStatus).forEach(key => {
-                        // Check for template marker first (exclusive to one year)
-                        if (key.startsWith('_template-')) {
-                            const match = key.match(/_template-(\d{4})/);
-                            if (match && templateYear === null) {
-                                // Only set and log once per section (first document with marker)
-                                templateYear = parseInt(match[1]);
-                                console.log(`🔍 Found template marker for section ${sectionId}: _template-${templateYear}`);
-                                allYears.add(templateYear);
-                                // Template marker means section ONLY belongs to this year
-                                sectionTemplateMarkers.set(sectionId, templateYear);
-                                sectionYears.add(templateYear);
-                            }
-                        }
-                    });
-                }
-            });
-            
-            // Second pass: only check regular year data if no template marker found
-            if (templateYear === null) {
-                section.documents?.forEach(doc => {
-                    if (doc.collectionStatus) {
-                        Object.keys(doc.collectionStatus).forEach(key => {
-                            // Skip template markers (already processed)
-                            if (!key.startsWith('_template-')) {
-                                // Check for regular year in format "-YYYY"
-                                const match = key.match(/-(\d{4})$/);
-                                if (match) {
-                                    const year = parseInt(match[1]);
-                                    allYears.add(year);
-                                    sectionYears.add(year);
-                                }
-                            }
-                        });
-                    }
-                    if (doc.comments) {
-                        Object.keys(doc.comments).forEach(key => {
-                            const match = key.match(/-(\d{4})$/);
-                            if (match) {
-                                const year = parseInt(match[1]);
-                                allYears.add(year);
-                                sectionYears.add(year);
-                            }
-                        });
-                    }
-                });
-            }
-            
-            // Store which years this section has data for
-            sectionYearsMap.set(sectionId, sectionYears);
-            
-            if (templateYear !== null) {
-                console.log(`✅ Section ${sectionId} marked for year ${templateYear} only`);
-            }
-        });
-        
-        // Always include current year and selected year
-        allYears.add(currentYear);
-        if (selectedYear !== currentYear) {
-            allYears.add(selectedYear);
-        }
-        
-        // If no year data found, at least have current year
-        if (allYears.size === 0) {
-            allYears.add(currentYear);
-        }
-        
-        // For each year, only include sections that have data for that year
-        // Sections without any year data are excluded (they're new and haven't been saved yet)
-        // CRITICAL: Sections with template markers should ONLY appear in the year they're marked for
-        console.log('🔍 organizeSectionsByYear: Processing years:', Array.from(allYears).sort());
-        console.log('🔍 organizeSectionsByYear: Template markers found:', Array.from(sectionTemplateMarkers.entries()).map(([id, year]) => ({ id, year })));
-        
-        allYears.forEach(year => {
-            if (year === 2018) {
-                console.log(`🔍 Processing year 2018: Found ${flatSections.length} total sections`);
-            }
-            
-            organized[year] = flatSections
-                .map((section, sectionIdx) => {
-                    const sectionId = section.id || `section-${sectionIdx}`;
-                    
-                    // Check if this section has a template marker (from our map)
-                    const templateMarkerYear = sectionTemplateMarkers.get(sectionId);
-                    const hasTemplateMarker = templateMarkerYear !== null && templateMarkerYear !== undefined;
-                    
-                    if (year === 2018 && hasTemplateMarker) {
-                        console.log(`🔍 Year 2018: Section ${sectionId} has template marker for year ${templateMarkerYear}`);
-                    }
-                    
-                    // CRITICAL: If section has template marker, it MUST match this year exactly
-                    // If it doesn't match, exclude it completely (don't even check hasDataForYear)
-                    if (hasTemplateMarker) {
-                        if (templateMarkerYear !== year) {
-                            if (year === 2018) {
-                                console.log(`⏭️ Year 2018: Excluding section ${sectionId} (template marker is for year ${templateMarkerYear})`);
-                            }
-                            return null; // Exclude this section for this year
-                        }
-                        if (year === 2018) {
-                            console.log(`✅ Year 2018: Including section ${sectionId} (template marker matches)`);
-                        }
-                    }
-                    
-                    // For sections without template markers, check if they have data for this year
-                    const hasDataForYear = sectionYearsMap.get(sectionId)?.has(year) || false;
-                    const shouldInclude = hasTemplateMarker
-                        ? (templateMarkerYear === year) // Should always be true if we got here
-                        : hasDataForYear;
-                    
-                    if (year === 2018 && !hasTemplateMarker) {
-                        console.log(`🔍 Year 2018: Section ${sectionId} (no template marker) - hasDataForYear: ${hasDataForYear}, shouldInclude: ${shouldInclude}`);
-                    }
-                    
-                    if (shouldInclude) {
-                        return {
-                            ...section,
-                            documents: section.documents?.map(doc => {
-                                const yearCollectionStatus = {};
-                                const yearComments = {};
-                                
-                                // Filter collectionStatus for this year
-                                // Include both regular year keys (e.g., "January-2025") and template markers (e.g., "_template-2025")
-                                // Keep template markers so we can track which sections belong to which years
-                                if (doc.collectionStatus) {
-                                    Object.keys(doc.collectionStatus).forEach(key => {
-                                        if (key.endsWith(`-${year}`) || key === `_template-${year}`) {
-                                            yearCollectionStatus[key] = doc.collectionStatus[key];
-                                        }
-                                    });
-                                }
-                                
-                                // Filter comments for this year
-                                if (doc.comments) {
-                                    Object.keys(doc.comments).forEach(key => {
-                                        if (key.endsWith(`-${year}`)) {
-                                            yearComments[key] = doc.comments[key];
-                                        }
-                                    });
-                                }
-                                
-                                return {
-                                    ...doc,
-                                    collectionStatus: yearCollectionStatus,
-                                    comments: yearComments
-                                };
-                            }) || []
-                        };
-                    }
-                    return null; // Exclude section for this year if it has no data
-                })
-                .filter(section => section !== null); // Remove null entries
-            
-            if (year === 2018) {
-                console.log(`✅ Year 2018: Final organized sections count: ${organized[year].length}`);
-                if (organized[year].length > 0) {
-                    console.log(`✅ Year 2018: Section names:`, organized[year].map(s => s.name || s.id));
-                } else {
-                    console.warn(`⚠️ Year 2018: NO SECTIONS FOUND! This is the problem.`);
-                    console.warn(`⚠️ Year 2018: Total sections processed: ${flatSections.length}`);
-                    console.warn(`⚠️ Year 2018: Template markers:`, Array.from(sectionTemplateMarkers.entries()).filter(([_, y]) => y === 2018).map(([id, _]) => id));
-                }
-            }
-        });
-        
-        console.log('🔍 organizeSectionsByYear: Final organized structure:', {
-            years: Object.keys(organized),
-            sectionsPerYear: Object.keys(organized).reduce((acc, year) => {
-                acc[year] = organized[year]?.length || 0;
-                return acc;
-            }, {})
-        });
-        
-        return organized;
-    }, [currentYear, selectedYear]);
-    
-    // Helper to merge sectionsByYear back into flat array for saving
-    // CRITICAL: Each year's sections are completely independent
-    // Use year-specific keys to prevent sections from different years from being merged
-    const mergeSectionsByYear = useCallback((sectionsByYearObj) => {
-        const allSections = [];
-        const allYears = Object.keys(sectionsByYearObj).map(y => parseInt(y));
-        
-        // Process each year completely independently
-        allYears.forEach(year => {
-            const yearSections = sectionsByYearObj[year] || [];
-            
-            yearSections.forEach((section, sectionIdx) => {
-                // Check if this section has a template marker
-                let hasTemplateMarker = false;
-                let templateMarkerYear = null;
-                
-                section.documents?.forEach(doc => {
-                    if (doc.collectionStatus) {
-                        Object.keys(doc.collectionStatus).forEach(key => {
-                            if (key.startsWith('_template-')) {
-                                const match = key.match(/_template-(\d{4})/);
-                                if (match) {
-                                    hasTemplateMarker = true;
-                                    templateMarkerYear = parseInt(match[1]);
-                                }
-                            }
-                        });
-                    }
-                });
-                
-                // CRITICAL: If section has template marker, it ONLY belongs to that year
-                // Skip entirely if template marker year doesn't match current year
-                if (hasTemplateMarker && templateMarkerYear !== year) {
-                    console.log(`🚫 Merge: Skipping section ${section.id} for year ${year} (template marker: ${templateMarkerYear})`);
-                    return; // Skip this section for this year
-                }
-                
-                // Create a year-specific copy of the section
-                // This ensures complete independence - same section ID in different years = separate entries
-                const yearSpecificSection = {
-                    ...section,
-                    // Add year identifier to section ID to ensure uniqueness across years
-                    // This prevents sections from being merged across years
-                    _year: year, // Internal marker for year (won't be saved)
-                    documents: section.documents?.map(doc => {
-                        const yearCollectionStatus = {};
-                        const yearComments = {};
-                        
-                        // Only include data for this specific year
-                        if (doc.collectionStatus) {
-                            Object.keys(doc.collectionStatus).forEach(key => {
-                                if (key.endsWith(`-${year}`) || key === `_template-${year}`) {
-                                    yearCollectionStatus[key] = doc.collectionStatus[key];
-                                }
-                            });
-                        }
-                        
-                        if (doc.comments) {
-                            Object.keys(doc.comments).forEach(key => {
-                                if (key.endsWith(`-${year}`)) {
-                                    yearComments[key] = doc.comments[key];
-                                }
-                            });
-                        }
-                        
-                        return {
-                            ...doc,
-                            collectionStatus: yearCollectionStatus,
-                            comments: yearComments
-                        };
-                    }) || []
-                };
-                
-                // Remove the internal _year marker before saving
-                delete yearSpecificSection._year;
-                
-                allSections.push(yearSpecificSection);
-            });
-        });
-        
-        return allSections;
-    }, []);
-
-    // ✅ LOAD DATA FROM DATABASE ON MOUNT - Fetch fresh data
+    // ============================================================
+    // LOAD DATA FROM DATABASE ON MOUNT
+    // ============================================================
     // ⚠️ IMPORTANT: Only load on initial mount or when project ID actually changes (not on every prop update)
-    useEffect(() => {
-        console.log('🔄🔄🔄 useEffect STARTING for MonthlyDocumentCollectionTracker', {
-            hasProject: !!project,
-            projectId: project?.id,
-            timestamp: new Date().toISOString()
-        });
-        
-        if (!project?.id) {
-            console.log('⏸️ Skipping load: No project ID');
-            return;
-        }
-        
-        console.log('🔄 useEffect triggered for project:', project.id, {
-            previousProjectId: previousProjectIdRef.current,
-            isNewProject: previousProjectIdRef.current !== project.id,
-            hasLoadedInitialData: hasLoadedInitialDataRef.current
-        });
-        
-        // Check if this is a new project (project ID actually changed)
-        const isNewProject = previousProjectIdRef.current !== project.id;
-        const currentDocumentSections = snapshotDocumentSections(project.documentSections);
-        
-        // Reset initial load flag when project ID changes
-        if (isNewProject) {
-            const oldProjectId = previousProjectIdRef.current;
-            hasLoadedInitialDataRef.current = false;
-            previousProjectIdRef.current = project.id;
-            // Clear sessionStorage for old project
-            if (oldProjectId) {
-                try {
-                    const oldKey = getLoadedStateKey(oldProjectId);
-                    sessionStorage.removeItem(oldKey);
-                } catch {}
-            }
-            // Track latest documentSections snapshot for the new project
-            lastProjectDocumentSectionsRef.current = currentDocumentSections;
-        }
-        
-        // Check sessionStorage to see if we've already loaded for this project in this session
-        const sessionLoadedKey = getLoadedStateKey(project.id);
-        let hasLoadedInSession = false;
+    
+    const loadFromProjectProp = useCallback(() => {
+        if (!project?.id) return;
+        setIsLoading(true);
         try {
-            hasLoadedInSession = sessionStorage.getItem(sessionLoadedKey) === 'true';
-        } catch {}
-        
-        // Also check if we already have data in state (sectionsByYear has data)
-        // ⚠️ IMPORTANT: Check BEFORE cache restore, so we know if data was already in state
-        const hadDataInStateBeforeCache = Object.keys(sectionsByYear).length > 0 && 
-            Object.values(sectionsByYear).some(yearSections => yearSections.length > 0);
-        const documentSectionsChanged = currentDocumentSections !== lastProjectDocumentSectionsRef.current;
-        
-        // ⚠️ CRITICAL: If we don't have data in state but think we've loaded, we need to reload
-        // This can happen if the component remounts and state is reset but sessionStorage persists
-        let needsReload = !hadDataInStateBeforeCache && (hasLoadedInitialDataRef.current || hasLoadedInSession);
-        let cacheWasRestored = false;
-        
-        if (needsReload) {
-            const cachedSections = loadSectionsFromCache(project.id);
-            if (cachedSections) {
-                console.log('♻️ Restoring document collection data from cache', {
-                    projectId: project.id,
-                    years: Object.keys(cachedSections),
-                    has2018: !!cachedSections[2018] && cachedSections[2018].length > 0,
-                    sections2018: cachedSections[2018]?.length || 0
-                });
-                // ⚠️ CRITICAL: When switching profiles, cache might be stale
-                // Always mark cache as restored so we force a fresh DB fetch
-                isRestoringFromCacheRef.current = true;
-                cacheWasRestored = true;
-                setSectionsByYear(cachedSections);
-                // Don't set hasLoadedInitialDataRef yet - we still want to fetch from DB
-                lastSavedSnapshotRef.current = serializeSections(mergeSectionsByYear(cachedSections));
-                // Clear the flag after a short delay to allow state to update
-                setTimeout(() => {
-                    isRestoringFromCacheRef.current = false;
-                }, 100);
-                // ⚠️ DON'T RETURN - continue to fetch fresh data from database
-                // This ensures we get the latest data even if cache exists
-                console.log('🔄 Cache restored - will force fresh database fetch');
-                console.log('🔄 cacheWasRestored set to:', cacheWasRestored);
-            } else {
-                console.log('📭 No cache found for project:', project.id);
-            }
+            const parsed = parseSections(project.documentSections);
+            console.log('✅ Loaded sections from project prop:', parsed.length);
+            setSections(parsed);
+            lastSavedSnapshotRef.current = serializeSections(parsed);
+        } catch (error) {
+            console.error('❌ Error loading sections from prop:', error);
+            setSections([]);
+            lastSavedSnapshotRef.current = '[]';
+        } finally {
+            hasLoadedInitialDataRef.current = true;
+            setIsLoading(false);
         }
-        
-        console.log('🔄 After cache restoration check:', {
-            cacheWasRestored,
-            needsReload,
-            hasLoadedInitialDataRef: hasLoadedInitialDataRef.current
-        });
-        
-        // Re-check hasDataInState AFTER cache restore (if it happened)
-        // ⚠️ NOTE: This might be stale if cache was just restored (setState is async)
-        // So we'll use cacheWasRestored flag instead
-        const hasDataInState = Object.keys(sectionsByYear).length > 0 && 
-            Object.values(sectionsByYear).some(yearSections => yearSections.length > 0);
-        
-        // ⚠️ CRITICAL: If cache was restored, we MUST fetch fresh data from database
-        // Cache might be stale, especially when switching profiles
-        // FORCE fetch even if modals are open or there are "unsaved changes" (cache might be stale)
-        if (cacheWasRestored) {
-            console.log('🔄 Cache was restored, forcing fresh database fetch to ensure latest data');
-            console.log('🔄 This ensures data is fresh when switching profiles');
-            console.log('🔄 Bypassing all checks to force fresh load');
-            // Clear hasLoadedInitialDataRef to force load
-            hasLoadedInitialDataRef.current = false;
-            // ⚠️ DON'T RETURN - continue to loadData() to fetch fresh data
-        } else {
-            // ✅ ONLY skip loading if:
-            // 1. This is NOT a new project AND
-            // 2. We have data in state (actual data exists) AND
-            // 3. We already loaded from DB in this session (don't reload unnecessarily)
-            // ❌ REMOVED: documentSections change detection - this was causing constant reloads
-            // The component should only reload when navigating to a different project or on initial mount
-            if (!isNewProject && hasDataInState && !documentSectionsChanged && hasLoadedInitialDataRef.current) {
-                // Already have data in state and we've loaded from DB, don't reload
-                console.log('⏭️ Skipping reload: data already in state and loaded from DB', {
-                    refLoaded: hasLoadedInitialDataRef.current,
-                    sessionLoaded: hasLoadedInSession,
-                    hasDataInState: hasDataInState,
-                    cacheWasRestored: cacheWasRestored,
-                    projectId: project.id
-                });
-                return;
-            }
-        }
-        
-        // Document sections changed for the same project, make sure we record the new snapshot
-        if (!isNewProject && documentSectionsChanged) {
-            console.log('🔄 Project documentSections changed, refreshing tracker data...', {
-                projectId: project.id
-            });
-            lastProjectDocumentSectionsRef.current = currentDocumentSections;
-        }
-        
-        // If we need to reload (state is empty but we think we've loaded), log it
-        if (needsReload) {
-            console.log('🔄 Reloading: state is empty but sessionStorage says loaded (component remounted)', {
-                refLoaded: hasLoadedInitialDataRef.current,
-                sessionLoaded: hasLoadedInSession,
-                hasDataInState: hasDataInState,
-                projectId: project.id
-            });
-        }
-        
-        // Update ref with current modal state before checking
-        const isAnyModalOpen = showSectionModal || showDocumentModal || showTemplateModal || showApplyTemplateModal;
-        const isCommentPopupOpen = hoverCommentCell !== null;
-        const isCurrentlyExporting = isExporting;
-        const isCurrentlyEditing = editingSection !== null || editingDocument !== null || editingTemplate !== null;
-        modalsOpenRef.current = isAnyModalOpen || isCommentPopupOpen || isCurrentlyExporting || isCurrentlyEditing;
-        
-        // Don't reload data if:
-        // 1. Any modal/form is open (prevents form from closing)
-        // 2. User has unsaved changes (prevents overwriting comments/text in progress)
-        // But allow initial load if we haven't loaded data yet
-        // ⚠️ EXCEPTION: If cache was restored, ALWAYS fetch fresh data (cache might be stale)
-        // ⚠️ CRITICAL: When cache is restored, we MUST fetch fresh data even if modals are open
-        // because the cache might be stale from a different user profile
-        if (cacheWasRestored) {
-            console.log('🔄 Cache was restored - BYPASSING modal/unsaved changes checks to force fresh DB fetch');
-            // Force hasLoadedInitialDataRef to false to ensure loadData() runs
-            hasLoadedInitialDataRef.current = false;
-        } else if (hasLoadedInitialDataRef.current) {
-            if (modalsOpenRef.current) {
-                console.log('⏸️ Data reload skipped: modal/form is open');
-                return;
-            }
-            // ⚠️ CRITICAL: Only check for unsaved changes if we've already loaded data
-            // On initial load, lastSavedSnapshotRef.current will be null, so we need to skip this check
-            if (lastSavedSnapshotRef.current !== null) {
-                const currentSectionsSnapshot = serializeSections(mergeSectionsByYear(sectionsByYear));
-                const hasUnsavedChanges = currentSectionsSnapshot !== lastSavedSnapshotRef.current;
-                if (hasUnsavedChanges) {
-                    console.log('⏸️ Data reload skipped: user has unsaved changes (prevents overwriting comments)');
-                    return;
-                }
-            }
-        }
-        
-        const loadData = async () => {
-            console.log('📋 MonthlyDocumentCollectionTracker: Loading data from database', {
-                projectId: project.id,
-                isNewProject,
-                cacheWasRestored,
-                hasLoadedInitialDataRef: hasLoadedInitialDataRef.current,
-                hasDataInState: Object.keys(sectionsByYear).length > 0
-            });
-            setIsLoading(true);
-            try {
-                // First, try to load from prop (fast initial render)
-                let parsed = [];
-                if (project?.documentSections) {
-                    try {
-                        if (typeof project.documentSections === 'string') {
-                            parsed = JSON.parse(project.documentSections);
-                        } else if (Array.isArray(project.documentSections)) {
-                            parsed = project.documentSections;
-                        }
-                    } catch (e) {
-                        console.warn('Failed to parse documentSections from prop:', e);
-                    }
-                }
-                
-                // Set initial state from prop (even if empty) and sync snapshot baseline
-                const initialSections = normalizeSections(parsed);
-                const organizedByYear = organizeSectionsByYear(initialSections);
-                
-                console.log('📊 LOADING: Initial sections organized by year:', {
-                    totalSections: initialSections.length,
-                    yearsFound: Object.keys(organizedByYear),
-                    sectionsPerYear: Object.keys(organizedByYear).reduce((acc, year) => {
-                        acc[year] = organizedByYear[year]?.length || 0;
-                        return acc;
-                    }, {}),
-                    selectedYear,
-                    hasSelectedYearData: organizedByYear[selectedYear]?.length > 0
-                });
-                
-                setSectionsByYear(organizedByYear);
-                persistSectionsToCache(project.id, organizedByYear);
-                // Create snapshot from merged data for comparison
-                const mergedForSnapshot = mergeSectionsByYear(organizedByYear);
-                lastSavedSnapshotRef.current = serializeSections(mergedForSnapshot);
-                
-                // Then fetch fresh data from database to ensure we have latest
-                // Only on initial load or when project changes
-                console.log('🔄 LOADING: Fetching fresh data from database for project:', project.id);
-                console.log('🔄 LOADING: Clearing DatabaseAPI cache before fetch');
-                // Clear cache if method exists (defensive - don't fail if it doesn't)
-                try {
-                    if (api.clearProjectCache && typeof api.clearProjectCache === 'function') {
-                        api.clearProjectCache(project.id);
-                    } else {
-                        // Fallback: clear cache directly
-                        if (window.DatabaseAPI?._responseCache) {
-                            window.DatabaseAPI._responseCache.delete('GET:/projects');
-                            window.DatabaseAPI._responseCache.delete(`GET:/projects/${project.id}`);
-                            console.log('🔄 Cleared cache via fallback method');
-                        }
-                    }
-                } catch (cacheError) {
-                    console.warn('⚠️ Failed to clear cache (non-critical):', cacheError);
-                    // Continue anyway - cache clearing is not critical
-                }
-                try {
-                    const freshProject = await api.fetchProject(project.id, true); // Force refresh
-                    console.log('🔄 LOADING: Fresh project data received:', {
-                        projectId: project.id,
-                        hasDocumentSections: !!freshProject?.documentSections,
-                        documentSectionsType: typeof freshProject?.documentSections,
-                        documentSectionsLength: typeof freshProject?.documentSections === 'string' ? 
-                            freshProject.documentSections.length : 'not string'
-                    });
-                    
-                    if (freshProject?.documentSections) {
-                        let freshParsed = [];
-                        try {
-                            if (typeof freshProject.documentSections === 'string') {
-                                freshParsed = JSON.parse(freshProject.documentSections);
-                            } else if (Array.isArray(freshProject.documentSections)) {
-                                freshParsed = freshProject.documentSections;
-                            }
-                        } catch (e) {
-                            console.warn('Failed to parse fresh documentSections:', e);
-                        }
-                        
-                        const normalizedFresh = normalizeSections(freshParsed);
-                        const organizedFresh = organizeSectionsByYear(normalizedFresh);
-                        
-                        console.log('📊 LOADING: Fresh sections from database organized by year:', {
-                            totalSections: normalizedFresh.length,
-                            yearsFound: Object.keys(organizedFresh),
-                            sectionsPerYear: Object.keys(organizedFresh).reduce((acc, year) => {
-                                acc[year] = organizedFresh[year]?.length || 0;
-                                return acc;
-                            }, {}),
-                            selectedYear,
-                            hasSelectedYearData: organizedFresh[selectedYear]?.length > 0,
-                            has2018Data: organizedFresh[2018]?.length > 0,
-                            sections2018: organizedFresh[2018]?.map(s => ({
-                                id: s.id,
-                                name: s.name,
-                                documentsCount: s.documents?.length || 0
-                            })) || []
-                        });
-                        
-                        // ⚠️ CRITICAL: Check if we already have REAL data in state (not just empty arrays)
-                        // If we do, don't overwrite it - the user might be editing
-                        const currentMerged = mergeSectionsByYear(organizedByYear);
-                        const freshMerged = mergeSectionsByYear(organizedFresh);
-                        const hasRealDataInState = currentMerged.length > 0 && 
-                            currentMerged.some(section => section.documents && section.documents.length > 0);
-                        const hasRealDataFromDB = freshMerged.length > 0 && 
-                            freshMerged.some(section => section.documents && section.documents.length > 0);
-                        
-                        // ⚠️ CRITICAL: If we just restored from cache, always update with fresh DB data
-                        // Cache might be stale, especially when switching profiles
-                        const wasRestoredFromCache = isRestoringFromCacheRef.current;
-                        
-                        // If we have real data in state, preserve it (user might be editing)
-                        // But if state is empty and DB has data, always update
-                        // OR if we restored from cache, always update (cache might be stale)
-                        if (hasRealDataInState && hasRealDataFromDB) {
-                            // Both have data - check for unsaved changes before overwriting
-                            const currentSnapshot = serializeSections(currentMerged);
-                            const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
-                            
-                            if (hasUnsavedChanges && !wasRestoredFromCache) {
-                                // Don't overwrite user's unsaved changes! (unless we restored from cache)
-                                console.log('⏸️ Skipping database update: user has unsaved changes');
-                            } else if (JSON.stringify(freshMerged) !== JSON.stringify(currentMerged) || wasRestoredFromCache) {
-                                // Data is different OR we restored from cache - update from DB
-                                console.log('🔄 Updating sections from fresh database data', wasRestoredFromCache ? '(cache was restored, forcing fresh update)' : '');
-                                console.log('🔄 FORCING UPDATE: Data differs or cache restored, updating from DB');
-                                console.log('🔄 Fresh data includes years:', Object.keys(organizedFresh));
-                                console.log('🔄 Fresh data for selectedYear (' + selectedYear + '):', organizedFresh[selectedYear]?.length || 0, 'sections');
-                                console.log('🔄 Fresh data for 2018:', organizedFresh[2018]?.length || 0, 'sections');
-                                setSectionsByYear(organizedFresh);
-                                persistSectionsToCache(project.id, organizedFresh);
-                                lastSavedSnapshotRef.current = serializeSections(freshMerged);
-                            } else {
-                                // Data is the same, just update snapshot
-                                lastSavedSnapshotRef.current = serializeSections(freshMerged);
-                            }
-                        } else if (!hasRealDataInState && hasRealDataFromDB) {
-                            // State is empty but DB has data - always update (template was just applied)
-                            console.log('🔄 Updating from database: state is empty but DB has sections');
-                            console.log('🔄 FORCING UPDATE: Setting sectionsByYear with fresh data from DB');
-                            console.log('🔄 Fresh data includes years:', Object.keys(organizedFresh));
-                            console.log('🔄 Fresh data for selectedYear (' + selectedYear + '):', organizedFresh[selectedYear]?.length || 0, 'sections');
-                            setSectionsByYear(organizedFresh);
-                            persistSectionsToCache(project.id, organizedFresh);
-                            lastSavedSnapshotRef.current = serializeSections(freshMerged);
-                        } else if (hasRealDataInState && !hasRealDataFromDB) {
-                            // State has data but DB doesn't - preserve state (might be new edits)
-                            console.log('⏸️ Preserving state: DB is empty but state has data');
-                            lastSavedSnapshotRef.current = serializeSections(currentMerged);
-                        } else {
-                            // Both are empty - just update snapshot
-                            lastSavedSnapshotRef.current = serializeSections(freshMerged);
-                        }
-                    } else {
-                        lastSavedSnapshotRef.current = serializeSections(mergedForSnapshot);
-                    }
-                } catch (error) {
-                    console.warn('⚠️ Could not fetch fresh project data, using prop data:', error);
-                    // Continue with prop data if fetch fails
-                }
-            } finally {
-                setIsLoading(false);
-                hasLoadedInitialDataRef.current = true;
-                // Persist loaded state to sessionStorage to survive remounts
-                try {
-                    sessionStorage.setItem(getLoadedStateKey(project.id), 'true');
-                } catch (e) {
-                    console.warn('Failed to persist loaded state to sessionStorage:', e);
-                }
-            }
-        };
-        
-        // ⚠️ CRITICAL: Always call loadData() if cache was restored, regardless of any other conditions
-        if (cacheWasRestored) {
-            console.log('🚀 FORCING loadData() because cache was restored - project:', project.id);
-            console.log('🚀 This ensures fresh data when switching profiles');
-            hasLoadedInitialDataRef.current = false; // Ensure it runs
-        }
-        
-        console.log('🚀 About to call loadData() for project:', project.id, {
-            cacheWasRestored,
-            hasLoadedInitialDataRef: hasLoadedInitialDataRef.current,
-            isNewProject,
-            hasDataInState: Object.keys(sectionsByYear).length > 0
-        });
-        loadData().catch(error => {
-            console.error('❌ Error in loadData():', error);
-        });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [project?.id]); // ⚠️ FIXED: Only depend on project ID to prevent unnecessary reloads
-    // Removed normalizeSections, serializeSections, api, organizeSectionsByYear, mergeSectionsByYear from dependencies
-    // These are stable callbacks and don't need to trigger reloads. Using them inside the effect is safe.
+    }, [project?.documentSections, project?.id]);
 
+    const refreshFromDatabase = useCallback(async () => {
+        if (!project?.id || !apiRef.current) return;
+
+        try {
+            const freshProject = await apiRef.current.fetchProject(project.id);
+            const parsed = parseSections(freshProject?.documentSections);
+            const currentSnapshot = serializeSections(sectionsRef.current);
+            const freshSnapshot = serializeSections(parsed);
+
+            if (freshSnapshot !== currentSnapshot) {
+                console.log('🔄 Updating sections from fresh database data');
+                setSections(parsed);
+                lastSavedSnapshotRef.current = freshSnapshot;
+            }
+        } catch (error) {
+            console.error('❌ Error fetching fresh project data:', error);
+        }
+    }, [project?.id]);
+    
     useEffect(() => {
         if (!project?.id) return;
-        if (!hasLoadedInitialDataRef.current) return;
-        persistSectionsToCache(project.id, sectionsByYear);
-    }, [project?.id, sectionsByYear]);
 
-    // Keep the modal/interaction state ref up to date without re-running auto-save
-    useEffect(() => {
-        const isAnyModalOpen = showSectionModal || showDocumentModal || showTemplateModal || showApplyTemplateModal;
-        const isCommentPopupOpen = hoverCommentCell !== null;
-        const isCurrentlyExporting = isExporting;
-        const isCurrentlyEditing = editingSection !== null || editingDocument !== null || editingTemplate !== null;
-        modalsOpenRef.current = isAnyModalOpen || isCommentPopupOpen || isCurrentlyExporting || isCurrentlyEditing;
-    }, [
-        showSectionModal,
-        showDocumentModal,
-        showTemplateModal,
-        showApplyTemplateModal,
-        hoverCommentCell,
-        isExporting,
-        editingSection,
-        editingDocument,
-        editingTemplate
-    ]);
+        const isNewProject = previousProjectIdRef.current !== project.id;
+        if (isNewProject) {
+            previousProjectIdRef.current = project.id;
+            hasLoadedInitialDataRef.current = false;
+        }
+
+        const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
+        if (isNewProject || !hasUnsavedChanges) {
+            console.log('📋 Loading document sections from prop for project:', project.id);
+            loadFromProjectProp();
+        } else {
+            console.log('⏸️ Skipping prop load due to unsaved changes');
+        }
+
+        refreshFromDatabase();
+    }, [project?.id, project?.documentSections, loadFromProjectProp, refreshFromDatabase]);
     
-    // ✅ AUTO-SAVE TO DATABASE AFTER 1 SECOND OF INACTIVITY
-    // ⚠️ IMPORTANT: Don't auto-save while modals, forms, or popups are open to prevent them from closing
+    // ============================================================
+    // SIMPLE AUTO-SAVE - Debounced, saves entire state
+    // ============================================================
+    
     useEffect(() => {
-        if (!project?.id || !hasLoadedInitialDataRef.current) return;
+        if (isLoading || !project?.id) return;
         
-        // Skip auto-save if we're restoring from cache (prevents unnecessary save attempts)
-        if (isRestoringFromCacheRef.current) {
-            return;
+        // Clear any pending save
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
         }
         
-        // Merge all years' data for snapshot comparison
-        const mergedSections = mergeSectionsByYear(sectionsByYear);
-        const currentSnapshot = serializeSections(mergedSections);
-        if (currentSnapshot === lastSavedSnapshotRef.current) {
-            // Nothing new to save; clear pending state if any
-            if (pendingSaveRef.current) {
-                console.log('⏭️ Skipping auto-save: data unchanged (snapshot matches)');
-                pendingSaveRef.current = null;
-            }
-            if (saveTimeoutRef.current) {
-                clearTimeout(saveTimeoutRef.current);
-                saveTimeoutRef.current = null;
-            }
-            return;
-        }
-        
-        // Only schedule save if snapshot actually changed
-        const previousSnapshot = pendingSaveRef.current?.snapshot;
-        if (previousSnapshot === currentSnapshot) {
-            // Already have this snapshot scheduled, don't reschedule
-            return;
-        }
-        
-        console.log('📝 Data changed, scheduling auto-save...');
-        pendingSaveRef.current = {
-            sections: normalizeSections(mergedSections),
-            snapshot: currentSnapshot
-        };
-        
-        const scheduleSave = () => {
-            if (saveTimeoutRef.current) {
-                clearTimeout(saveTimeoutRef.current);
-            }
-            
-            saveTimeoutRef.current = setTimeout(async () => {
-                if (!pendingSaveRef.current) return;
-                
-                // Double-check snapshot hasn't changed while waiting
-                const latestMerged = mergeSectionsByYear(sectionsByYear);
-                const latestSnapshot = serializeSections(latestMerged);
-                if (latestSnapshot !== pendingSaveRef.current.snapshot) {
-                    console.log('⏭️ Skipping auto-save: data changed during debounce, rescheduling...');
-                    pendingSaveRef.current = {
-                        sections: normalizeSections(latestMerged),
-                        snapshot: latestSnapshot
-                    };
-                    scheduleSave();
-                    return;
-                }
-                
-                if (modalsOpenRef.current) {
-                    console.log('⏸️ Auto-save deferred: modal/form is open');
-                    scheduleSave();
-                    return;
-                }
-                
-                setIsSaving(true);
-                setSaveError(null);
-                
-                try {
-                    console.log('💾 Saving sections to database:', pendingSaveRef.current.sections.length, 'sections');
-                    // ⚠️ FIXED: Pass true to skipParentUpdate for auto-saves to prevent refresh issues
-                    // Auto-saves should not update the parent project prop to avoid interrupting user input
-                    await api.saveDocumentSections(project.id, pendingSaveRef.current.sections, true);
-                    console.log('✅ Sections saved successfully');
-                    lastSavedSnapshotRef.current = pendingSaveRef.current.snapshot;
-                    pendingSaveRef.current = null;
-                    
-                    // If template was just applied, refresh from database to ensure we have latest data
-                    if (templateJustAppliedRef.current) {
-                        console.log('🔄 Template was just applied, refreshing from database...');
-                        templateJustAppliedRef.current = false;
-                        try {
-                            const freshProject = await api.fetchProject(project.id);
-                            if (freshProject?.documentSections) {
-                                let freshParsed = [];
-                                try {
-                                    if (typeof freshProject.documentSections === 'string') {
-                                        freshParsed = JSON.parse(freshProject.documentSections);
-                                    } else if (Array.isArray(freshProject.documentSections)) {
-                                        freshParsed = freshProject.documentSections;
-                                    }
-                                } catch (e) {
-                                    console.warn('Failed to parse fresh documentSections after template:', e);
-                                }
-                                
-                                const normalizedFresh = normalizeSections(freshParsed);
-                                const organizedFresh = organizeSectionsByYear(normalizedFresh);
-                                console.log('🔄 Refreshing sections from database after template application');
-                                setSectionsByYear(organizedFresh);
-                                persistSectionsToCache(project.id, organizedFresh);
-                                const freshMerged = mergeSectionsByYear(organizedFresh);
-                                lastSavedSnapshotRef.current = serializeSections(freshMerged);
-                            }
-                        } catch (refreshError) {
-                            console.warn('⚠️ Could not refresh after template application:', refreshError);
-                        }
-                    }
-                } catch (error) {
-                    console.error('❌ Error saving sections:', error);
-                    setSaveError(error.message || 'Failed to save sections');
-                    if (window.showNotification) {
-                        window.showNotification('Failed to save document sections. Please try again.', 'error');
-                    }
-                    // Reset flag on error
-                    templateJustAppliedRef.current = false;
-                } finally {
-                    setIsSaving(false);
-                }
-            }, 1000);
-        };
-        
-        scheduleSave();
+        // Debounce save by 1 second
+        saveTimeoutRef.current = setTimeout(() => {
+            saveToDatabase();
+        }, 1000);
         
         return () => {
             if (saveTimeoutRef.current) {
                 clearTimeout(saveTimeoutRef.current);
-                saveTimeoutRef.current = null;
             }
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [project?.id, sectionsByYear]); // ⚠️ FIXED: Only depend on project ID and sectionsByYear
-    // Removed api, normalizeSections, serializeSections, mergeSectionsByYear - these are stable callbacks
+    }, [sections, isLoading, project?.id, saveToDatabase]);
     
-    // ✅ SAVE ON PAGE UNLOAD (prevent data loss)
     useEffect(() => {
-        const handleBeforeUnload = async (e) => {
-            if (!project?.id) return;
-            
-            // Merge all years' data and save
-            const mergedSections = mergeSectionsByYear(sectionsByYear);
-            const mergedSnapshot = serializeSections(mergedSections);
-            
-            // Only save if there are pending changes
-            if (mergedSnapshot !== lastSavedSnapshotRef.current) {
-                try {
-                    await api.saveDocumentSections(project.id, normalizeSections(mergedSections));
-                    lastSavedSnapshotRef.current = mergedSnapshot;
-                    console.log('✅ Saved pending changes on navigation');
-                } catch (error) {
-                    console.error('❌ Error saving on navigation:', error);
-                }
+        if (!project?.id) return;
+        
+        const handleBeforeUnload = (event) => {
+            const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
+            if (hasUnsavedChanges && !isSavingRef.current) {
+                saveToDatabase({ skipParentUpdate: true });
+                event.preventDefault();
+                event.returnValue = '';
             }
         };
         
         window.addEventListener('beforeunload', handleBeforeUnload);
-        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [project?.id, sectionsByYear]); // ⚠️ FIXED: Only depend on project ID and sectionsByYear
-    // Removed mergeSectionsByYear, normalizeSections, serializeSections, api - these are stable callbacks
-
-    // ✅ CHECK FOR CommentInputWithMentions AVAILABILITY
-    useEffect(() => {
-        // Check immediately
-        if (typeof window.CommentInputWithMentions === 'function' && !commentInputAvailable) {
-            setCommentInputAvailable(true);
-        }
-        
-        // Also listen for when it becomes available
-        const checkInterval = setInterval(() => {
-            if (typeof window.CommentInputWithMentions === 'function') {
-                setCommentInputAvailable(true);
-                clearInterval(checkInterval);
-            }
-        }, 500);
-        
-        // Stop checking after 10 seconds
-        const timeout = setTimeout(() => {
-            clearInterval(checkInterval);
-        }, 10000);
-        
         return () => {
-            clearInterval(checkInterval);
-            clearTimeout(timeout);
+            window.removeEventListener('beforeunload', handleBeforeUnload);
         };
-    }, [commentInputAvailable]);
+    }, [project?.id, saveToDatabase]);
     
-    // Load users for mention functionality
-    useEffect(() => {
-        const loadUsers = async () => {
-            try {
-                if (window.dataService && typeof window.dataService.getUsers === 'function') {
-                    const userData = await window.dataService.getUsers() || [];
-                    setUsers(userData);
-                }
-            } catch (error) {
-                console.error('Failed to load users:', error);
-            }
-        };
-        loadUsers();
+    const saveToDatabase = useCallback(async (options = {}) => {
+        if (isSavingRef.current) {
+            console.log('⏭️ Save already in progress, skipping');
+            return;
+        }
+        if (!project?.id) {
+            console.warn('⚠️ Cannot save: No project ID');
+            return;
+        }
+        if (isLoading) {
+            console.log('⏭️ Still loading data, skipping save');
+            return;
+        }
+        if (!apiRef.current) {
+            console.warn('⚠️ DocumentCollectionAPI not available, skipping save');
+            return;
+        }
+
+        isSavingRef.current = true;
+        const payload = Array.isArray(sectionsRef.current) ? sectionsRef.current : [];
+
+        try {
+            console.log('💾 Saving sections to database:', payload.length);
+            await apiRef.current.saveDocumentSections(project.id, payload, options.skipParentUpdate);
+            lastSavedSnapshotRef.current = serializeSections(payload);
+            console.log('✅ Save successful');
+        } catch (error) {
+            console.error('❌ Error saving to database:', error);
+        } finally {
+            isSavingRef.current = false;
+        }
+    }, [project?.id, isLoading]);
+    
+    // ============================================================
+    // TEMPLATE MANAGEMENT - Database storage only
+    // ============================================================
+    
+    const loadTemplates = useCallback(async () => {
+        if (!apiRef.current) return;
+        console.log('📂 Loading templates from API...');
+        setIsLoadingTemplates(true);
+        
+        try {
+            const apiTemplates = await apiRef.current.getTemplates();
+            const parsedTemplates = (apiTemplates || []).map(t => ({
+                ...t,
+                sections: parseSections(t.sections)
+            }));
+            console.log('✅ Loaded', parsedTemplates.length, 'templates from API');
+            setTemplates(parsedTemplates);
+        } catch (error) {
+            console.error('❌ Error loading templates:', error);
+            alert('Failed to load templates: ' + error.message);
+            setTemplates([]);
+        } finally {
+            setIsLoadingTemplates(false);
+        }
     }, []);
     
-    // ✅ LOAD TEMPLATES ONLY WHEN MODALS OPEN (with cache-busting for fresh data)
+    // Load templates when modal opens
     useEffect(() => {
-        if (!showTemplateModal && !showApplyTemplateModal) {
-            console.log('⏭️ Template modals closed, skipping template load');
+        if (showTemplateModal || showApplyTemplateModal) {
+            loadTemplates();
+        }
+    }, [showTemplateModal, showApplyTemplateModal, loadTemplates]);
+    
+    const saveTemplate = useCallback(async (templateData) => {
+        if (!apiRef.current) {
+            alert('DocumentCollectionAPI is not available');
             return;
         }
         
-        console.log('📂 Template modal opened - loading templates (fresh from database, no cache)...', {
-            showTemplateModal,
-            showApplyTemplateModal
-        });
-        loadTemplates();
-    }, [showTemplateModal, showApplyTemplateModal]);
-
-    const loadTemplates = async () => {
         try {
-            console.log('🔄 loadTemplates() called - fetching from API...');
-            console.log('🔄 Current templates state before load:', templates.length);
-            // Fetch templates from database only - always fresh (no cache)
-            const apiTemplates = await api.getTemplates();
-            console.log('✅ Loaded templates from database:', apiTemplates.length);
-            if (apiTemplates.length === 0) {
-                console.warn('⚠️ WARNING: No templates returned from API!');
-                console.warn('⚠️ This could mean:');
-                console.warn('   1. No templates exist in database');
-                console.warn('   2. API is filtering templates incorrectly');
-                console.warn('   3. Database query is failing');
-            }
-            console.log('📋 All available templates (shared across all users):', apiTemplates.map(t => ({ 
-                id: t.id, 
-                name: t.name,
-                ownerId: t.ownerId,
-                createdBy: t.createdBy,
-                isDefault: t.isDefault,
-                sectionsCount: t.sections?.length || 0,
-                hasSections: !!t.sections,
-                sectionsType: typeof t.sections
-            })));
+            const payload = {
+                ...templateData,
+                sections: templateData.sections || []
+            };
             
-            // Verify we're getting all templates (not filtered by user)
-            if (apiTemplates.length > 0) {
-                const currentUser = getCurrentUser();
-                console.log('👤 Current user:', {
-                    id: currentUser?.id,
-                    email: currentUser?.email,
-                    name: currentUser?.name
-                });
-                
-                const userTemplates = apiTemplates.filter(t => t.ownerId === currentUser?.id || t.createdBy === currentUser?.email);
-                const otherUserTemplates = apiTemplates.filter(t => !(t.ownerId === currentUser?.id || t.createdBy === currentUser?.email));
-                console.log(`   - Templates created by current user: ${userTemplates.length}`);
-                if (userTemplates.length > 0) {
-                    console.log('   - Current user templates:', userTemplates.map(t => t.name));
-                }
-                console.log(`   - Templates created by other users: ${otherUserTemplates.length} (these should be visible to all users)`);
-                if (otherUserTemplates.length > 0) {
-                    console.log('   - Other user templates:', otherUserTemplates.map(t => `${t.name} (by ${t.createdBy})`));
-                }
-                
-                // Check for templates with "2015" in the name
-                const templatesWith2015 = apiTemplates.filter(t => t.name.toLowerCase().includes('2015') || t.name.toLowerCase().includes('barberton'));
-                if (templatesWith2015.length > 0) {
-                    console.log(`   ✅ Found ${templatesWith2015.length} template(s) related to 2015/Barberton:`, templatesWith2015.map(t => t.name));
-                } else {
-                    console.warn('   ⚠️ No templates found with "2015" or "Barberton" in the name');
-                }
+            if (editingTemplate) {
+                await apiRef.current.updateTemplate(editingTemplate.id, payload);
+                console.log('✅ Template updated via API');
+            } else {
+                await apiRef.current.createTemplate(payload);
+                console.log('✅ Template created via API');
             }
             
-            setTemplates(apiTemplates);
+            await loadTemplates();
+            setEditingTemplate(null);
+            setShowTemplateList(true);
+            setPrefilledTemplate(null);
         } catch (error) {
-            console.error('❌ Error loading templates from database:', error);
-            alert('Failed to load templates: ' + error.message);
-            setTemplates([]);
+            console.error('❌ Error saving template:', error);
+            alert('Failed to save template: ' + error.message);
         }
+    }, [editingTemplate, loadTemplates]);
+    
+    const deleteTemplate = useCallback(async (templateId) => {
+        if (!confirm('Delete this template? This action cannot be undone.')) {
+            return;
+        }
+        
+        try {
+            if (!apiRef.current) {
+                throw new Error('DocumentCollectionAPI is not available');
+            }
+            
+            const template = templates.find(t => String(t.id) === String(templateId));
+            if (!template) {
+                throw new Error(`Template not found. ID: ${templateId}`);
+            }
+            
+            await apiRef.current.deleteTemplate(templateId);
+            console.log('✅ Template deleted via API');
+            await loadTemplates();
+        } catch (error) {
+            console.error('❌ Error deleting template:', error);
+            alert('Failed to delete template: ' + error.message);
+        }
+    }, [templates, loadTemplates]);
+
+    const buildTemplateSectionsFromCurrent = () => {
+        return sections.map(section => ({
+            name: section.name,
+            description: section.description || '',
+            documents: (section.documents || []).map(doc => ({
+                name: doc.name,
+                description: doc.description || ''
+            }))
+        }));
     };
 
-
-    // Initialize year when project ID changes
-    useEffect(() => {
-        if (!project?.id || typeof window === 'undefined') return;
-        
-        const projectIdChanged = previousProjectIdRef.current !== project.id;
-        if (!projectIdChanged && previousProjectIdRef.current !== null) return;
-        
-        previousProjectIdRef.current = project.id;
-        
-        const storageKey = `${YEAR_STORAGE_PREFIX}${project.id}`;
-        const storedYear = localStorage.getItem(storageKey);
-        const parsedYear = storedYear ? parseInt(storedYear, 10) : NaN;
-        if (!Number.isNaN(parsedYear)) {
-            if (parsedYear !== selectedYear) {
-                setSelectedYear(parsedYear);
-            }
+    const handleCreateTemplateFromCurrent = () => {
+        if (sections.length === 0) {
+            alert('Add sections before saving as a template.');
+            return;
         }
-    }, [project?.id]);
 
-    const handleYearChange = (year) => {
+        const sanitizedSections = buildTemplateSectionsFromCurrent();
+        setPrefilledTemplate({
+            name: `${project?.name || 'Project'} - ${selectedYear}`,
+            description: `Template generated from ${project?.name || 'project'} (${selectedYear})`,
+            sections: sanitizedSections
+        });
+        setEditingTemplate(null);
+        setShowTemplateList(false);
+        setShowTemplateModal(true);
+    };
+    
+    const applyTemplate = async (template, targetYear) => {
+        if (!template || !Array.isArray(template.sections) || template.sections.length === 0) {
+            alert('Template is empty or invalid');
+            return;
+        }
+        
+        console.log('🎨 Applying template:', template.name);
+        
+        // Create new sections from template
+        const newSections = template.sections.map(section => ({
+            id: Date.now() + Math.random(),
+            name: section.name,
+            description: section.description || '',
+            documents: Array.isArray(section.documents) ? section.documents.map(doc => ({
+                id: Date.now() + Math.random(),
+                name: doc.name,
+                description: doc.description || '',
+                collectionStatus: {},
+                comments: {}
+            })) : []
+        }));
+        
+        // Merge with existing sections
+        setSections(prev => [...prev, ...newSections]);
+        
+        console.log('✅ Template applied:', newSections.length, 'sections added');
+        setShowApplyTemplateModal(false);
+        
+        // Save will happen automatically via useEffect
+    };
+    
+    // ============================================================
+    // USER INFO HELPER
+    // ============================================================
+    
+    const getCurrentUser = () => {
+        const defaultUser = { name: 'System', email: 'system', id: 'system', role: 'System' };
+        
+        try {
+            const userData = localStorage.getItem('abcotronics_user');
+            if (userData && userData !== 'null' && userData !== 'undefined') {
+                const parsed = JSON.parse(userData);
+                const user = parsed.user || parsed;
+                
+                if (user && (user.name || user.email)) {
+                    return {
+                        name: user.name || user.email || 'System',
+                        email: user.email || 'system',
+                        id: user.id || user._id || user.email || 'system',
+                        role: user.role || 'System'
+                    };
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to get user:', error);
+        }
+        
+        return defaultUser;
+    };
+    
+    // ============================================================
+    // YEAR SELECTION
+    // ============================================================
+    
+    const handleYearChange = useCallback((year) => {
+        if (!year || isNaN(year)) {
+            console.warn('Invalid year provided:', year);
+            return;
+        }
+        
+        console.log(`📅 Year changed to: ${year}`);
         setSelectedYear(year);
         if (project?.id && typeof window !== 'undefined') {
             localStorage.setItem(`${YEAR_STORAGE_PREFIX}${project.id}`, String(year));
         }
-        // Ensure the selected year has sections initialized (copy from current year if needed)
-        setSectionsByYear(prev => {
-            if (!prev[year] || prev[year].length === 0) {
-                // If year doesn't have data, initialize with empty array or copy structure from another year
-                const existingYear = Object.keys(prev).find(y => prev[y] && prev[y].length > 0);
-                if (existingYear) {
-                    // Copy structure but clear year-specific data (status/comments)
-                    // CRITICAL: Filter out sections with template markers for other years
-                    return {
-                        ...prev,
-                        [year]: prev[existingYear]
-                            .filter(section => {
-                                // Check if section has a template marker for a specific year
-                                let hasTemplateMarker = false;
-                                let templateMarkerYear = null;
-                                
-                                section.documents?.forEach(doc => {
-                                    if (doc.collectionStatus) {
-                                        Object.keys(doc.collectionStatus).forEach(key => {
-                                            if (key.startsWith('_template-')) {
-                                                const match = key.match(/_template-(\d{4})/);
-                                                if (match) {
-                                                    hasTemplateMarker = true;
-                                                    templateMarkerYear = parseInt(match[1]);
-                                                }
-                                            }
-                                        });
-                                    }
-                                });
-                                
-                                // Only include section if it doesn't have a template marker, or if template marker matches target year
-                                if (hasTemplateMarker) {
-                                    if (templateMarkerYear === year) {
-                                        console.log(`✅ Year change: Including section ${section.id} in year ${year} (template marker matches)`);
-                                        return true;
-                                    } else {
-                                        console.log(`🚫 Year change: Excluding section ${section.id} from year ${year} (template marker: ${templateMarkerYear})`);
-                                        return false;
-                                    }
-                                }
-                                // No template marker, include it
-                                return true;
-                            })
-                            .map(section => ({
-                                ...section,
-                                documents: section.documents?.map(doc => ({
-                                    ...doc,
-                                    collectionStatus: {},
-                                    comments: {}
-                                })) || []
-                            }))
-                    };
-                } else {
-                    // No existing data, just ensure year exists
-                    return {
-                        ...prev,
-                        [year]: []
-                    };
-                }
-            }
-            return prev;
-        });
-    };
+    }, [project?.id]);
     
-    // Helper to update sections for the selected year
-    const updateSectionsForYear = useCallback((updater, year = selectedYear) => {
-        setSectionsByYear(prev => {
-            const currentYearSections = prev[year] || [];
-            const updated = typeof updater === 'function' ? updater(currentYearSections) : updater;
-            return {
-                ...prev,
-                [year]: updated
-            };
-        });
-    }, [selectedYear]);
-
-    // REMOVED: Auto-navigate to working months on load
-    // The scrollToWorkingMonths function and useEffect have been removed
-
-    const yearOptions = [];
     const MIN_YEAR = 2015;
     const FUTURE_YEAR_BUFFER = 5;
+    const yearOptions = [];
     for (let i = MIN_YEAR; i <= currentYear + FUTURE_YEAR_BUFFER; i++) {
         yearOptions.push(i);
     }
-
+    
     // ============================================================
     // YEAR-BASED DATA HELPERS - Ensure independent lists per year
     // ============================================================
@@ -1596,633 +533,194 @@ const parseCommentCellKey = (key) => {
             [monthKey]: newComments
         };
     };
-
+    
+    // ============================================================
+    // STATUS OPTIONS
+    // ============================================================
+    
     const statusOptions = [
-        { 
-            value: 'not-collected', 
-            label: 'Not Collected', 
-            color: 'bg-red-400 text-white font-semibold', 
-            cellColor: 'bg-red-100 border-l-4 border-red-300 shadow-sm dark:bg-red-950/40 dark:border-red-500/70 dark:shadow-red-900/40' 
-        },
-        { 
-            value: 'ongoing', 
-            label: 'Collection Ongoing', 
-            color: 'bg-yellow-400 text-white font-semibold', 
-            cellColor: 'bg-yellow-100 border-l-4 border-yellow-300 shadow-sm dark:bg-yellow-900/40 dark:border-yellow-500/70 dark:shadow-yellow-900/30' 
-        },
-        { 
-            value: 'collected', 
-            label: 'Collected', 
-            color: 'bg-green-500 text-white font-semibold', 
-            cellColor: 'bg-green-100 border-l-4 border-green-300 shadow-sm dark:bg-green-900/30 dark:border-green-500/70 dark:shadow-green-900/30' 
-        },
-        { 
-            value: 'unavailable', 
-            label: 'Unavailable', 
-            color: 'bg-gray-400 text-white font-semibold', 
-            cellColor: 'bg-gray-100 border-l-4 border-gray-300 shadow-sm dark:bg-gray-800/50 dark:border-gray-500/70 dark:shadow-gray-900/40' 
-        }
+        { value: 'not-collected', label: 'Not Collected', color: 'bg-red-400 text-white font-semibold', cellColor: 'bg-red-400 border-l-4 border-red-700 shadow-sm' },
+        { value: 'ongoing', label: 'Collection Ongoing', color: 'bg-yellow-400 text-white font-semibold', cellColor: 'bg-yellow-400 border-l-4 border-yellow-700 shadow-sm' },
+        { value: 'collected', label: 'Collected', color: 'bg-green-500 text-white font-semibold', cellColor: 'bg-green-500 border-l-4 border-green-700 shadow-sm' },
+        { value: 'unavailable', label: 'Unavailable', color: 'bg-gray-400 text-white font-semibold', cellColor: 'bg-gray-400 border-l-4 border-gray-700 shadow-sm' }
     ];
-
+    
     const getStatusConfig = (status) => {
         return statusOptions.find(opt => opt.value === status) || statusOptions[0];
     };
-
-    const getCurrentUser = () => {
-        const defaultUser = { name: 'System', email: 'system', id: 'system', role: 'System' };
-        
-        try {
-            const extractUser = (data) => {
-                if (!data) return null;
-                if (data.user && typeof data.user === 'object') return data.user;
-                if (data.name || data.email) return data;
-                return null;
-            };
-            
-            try {
-                const userData = localStorage.getItem('abcotronics_user');
-                if (userData && userData !== 'null' && userData !== 'undefined') {
-                    const parsed = JSON.parse(userData);
-                    const user = extractUser(parsed);
-                    
-                    if (user && (user.name || user.email)) {
-                        const result = {
-                            name: user.name || user.email || 'System',
-                            email: user.email || 'system',
-                            id: user.id || user._id || user.email || 'system',
-                            role: user.role || 'System'
-                        };
-                        
-                        if (result.name !== 'System' && result.email !== 'system') {
-                            return result;
-                        }
-                    }
-                }
-            } catch (error) {
-                console.warn('Failed to parse user from localStorage:', error);
-            }
-            
-            if (window.storage && typeof window.storage.getUserInfo === 'function') {
-                try {
-                    const userInfo = window.storage.getUserInfo();
-                    if (userInfo && ((userInfo.name && userInfo.name !== 'System') || (userInfo.email && userInfo.email !== 'system'))) {
-                        return userInfo;
-                    }
-                } catch (error) {}
-            }
-            
-            if (window.storage && typeof window.storage.getUser === 'function') {
-                try {
-                    const userRaw = window.storage.getUser();
-                    const user = extractUser(userRaw);
-                    
-                    if (user && (user.name || user.email)) {
-                        const result = {
-                            name: user.name || user.email || 'System',
-                            email: user.email || 'system',
-                            id: user.id || user._id || user.email || 'system',
-                            role: user.role || 'System'
-                        };
-                        
-                        if (result.name !== 'System' && result.email !== 'system') {
-                            return result;
-                        }
-                    }
-                } catch (error) {}
-            }
-        } catch (error) {
-            console.warn('Unexpected error in getCurrentUser:', error);
-        }
-        
-        return defaultUser;
-    };
-
+    
+    // ============================================================
+    // SECTION CRUD
+    // ============================================================
+    
     const handleAddSection = () => {
         setEditingSection(null);
         setShowSectionModal(true);
     };
-
+    
     const handleEditSection = (section) => {
         setEditingSection(section);
         setShowSectionModal(true);
     };
-
+    
     const handleSaveSection = (sectionData) => {
-        const currentUser = getCurrentUser();
-
         if (editingSection) {
-            updateSectionsForYear(prev => prev.map(s => 
+            setSections(prev => prev.map(s => 
                 s.id === editingSection.id ? { ...s, ...sectionData } : s
             ));
-            
-            if (window.AuditLogger) {
-                window.AuditLogger.log('update', 'projects', {
-                    action: 'Section Updated',
-                    projectId: project.id,
-                    projectName: project.name,
-                    sectionName: sectionData.name,
-                    oldSectionName: editingSection.name
-                }, currentUser);
-            }
+            console.log('📝 Updated section:', sectionData.name);
         } else {
-            // Create unique section ID with timestamp, year, and random to ensure year independence
-            // CRITICAL: Include year in ID to ensure sections are completely independent per year
             const newSection = {
-                id: `section-${selectedYear}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                id: Date.now(),
                 ...sectionData,
                 documents: []
             };
-            updateSectionsForYear(prev => [...prev, newSection]);
-            
-            if (window.AuditLogger) {
-                window.AuditLogger.log('create', 'projects', {
-                    action: 'Section Created',
-                    projectId: project.id,
-                    projectName: project.name,
-                    sectionName: sectionData.name
-                }, currentUser);
-            }
+            setSections(prev => [...prev, newSection]);
+            console.log('➕ Added section:', sectionData.name);
         }
         
         setShowSectionModal(false);
         setEditingSection(null);
     };
-
+    
     const handleDeleteSection = (sectionId) => {
-        const currentUser = getCurrentUser();
-        // Get current state to find section name for confirmation
-        const currentSections = sectionsByYear[selectedYear] || [];
-        const section = currentSections.find(s => s.id === sectionId);
+        const section = sections.find(s => s.id === sectionId);
+        if (!section) return;
         
-        if (!section) {
-            console.warn('Section not found for deletion:', { sectionId });
-            alert('Section not found. It may have already been deleted.');
+        if (!confirm(`Delete section "${section.name}" and all its documents?`)) {
             return;
         }
         
-        if (!confirm(`Delete section "${section.name}" and all its documents? This action cannot be undone.`)) {
-            return;
-        }
-        
-        // CRITICAL: Only delete from the selected year - other years remain unaffected
-        // Each year's sections are completely independent
-        updateSectionsForYear(prev => prev.filter(s => s.id !== sectionId));
-        
-        console.log('🗑️ Section deleted:', { sectionId, sectionName: section.name });
-        
-        if (window.AuditLogger) {
-            window.AuditLogger.log('delete', 'projects', {
-                action: 'Section Deleted',
-                projectId: project.id,
-                projectName: project.name,
-                sectionName: section.name,
-                documentsCount: section.documents?.length || 0
-            }, currentUser);
-        }
+        setSections(prev => prev.filter(s => s.id !== sectionId));
+        console.log('🗑️ Deleted section:', section.name);
     };
-
-    const handleCreateTemplate = () => {
-        console.log('🔵 Templates button clicked - opening template modal');
-        console.log('🔵 Current state:', {
-            showTemplateModal,
-            showApplyTemplateModal,
-            templatesCount: templates.length
-        });
-        setEditingTemplate(null);
-        setShowTemplateModal(true);
-        // Force immediate template load when opening modal
-        console.log('📂 Force loading templates immediately...');
-        // Use setTimeout to ensure state update happens first
-        setTimeout(() => {
-            loadTemplates();
-        }, 100);
-    };
-
-    const handleEditTemplate = (template) => {
-        setEditingTemplate(template);
-        setShowTemplateModal(true);
-    };
-
-    const handleDeleteTemplate = async (templateId) => {
-        if (!confirm('Delete this template? This action cannot be undone.')) {
-            return;
-        }
-        
-        try {
-            const template = templates.find(t => String(t.id) === String(templateId));
-            if (!template) {
-                throw new Error(`Template not found. ID: ${templateId}`);
-            }
-            
-            // Delete from database
-            await api.deleteTemplate(templateId);
-            console.log('✅ Template deleted from database');
-            
-            // Reload templates from database
-            await loadTemplates();
-            
-            console.log('✅ Template deleted successfully');
-        } catch (error) {
-            console.error('❌ Error deleting template:', error);
-            alert('Failed to delete template: ' + error.message);
-        }
-    };
-
-    const handleSaveTemplate = async (templateData) => {
-        const currentUser = getCurrentUser();
-        
-        try {
-            let savedTemplate;
-            
-            if (editingTemplate) {
-                // Update existing template in database
-                console.log('🔄 Updating template in database:', editingTemplate.id);
-                savedTemplate = await api.updateTemplate(editingTemplate.id, {
-                    ...templateData,
-                    updatedBy: currentUser.name || currentUser.email
-                });
-                console.log('✅ Template updated in database:', savedTemplate?.id);
-            } else {
-                // Create new template in database
-                console.log('➕ Creating new template in database:', {
-                    name: templateData.name,
-                    sectionsCount: templateData.sections?.length || 0,
-                    user: currentUser.email || currentUser.name
-                });
-                
-                savedTemplate = await api.createTemplate({
-                    ...templateData,
-                    createdBy: currentUser.name || currentUser.email,
-                    updatedBy: currentUser.name || currentUser.email
-                });
-                
-                if (!savedTemplate || !savedTemplate.id) {
-                    throw new Error('Template creation failed: No template returned from API');
-                }
-                
-                console.log('✅ Template created successfully:', {
-                    id: savedTemplate.id,
-                    name: savedTemplate.name,
-                    isShared: true // All templates are shared
-                });
-            }
-            
-            // Wait a moment to ensure database write is complete
-            await new Promise(resolve => setTimeout(resolve, 100));
-            
-            // Reload templates from database to get fresh data (including the new template)
-            console.log('🔄 Reloading templates from database to verify save...');
-            await loadTemplates();
-            
-            // Verify the template is in the list
-            const updatedTemplates = await api.getTemplates();
-            const foundTemplate = updatedTemplates.find(t => 
-                t.id === savedTemplate.id || 
-                (t.name === savedTemplate.name && t.createdBy === savedTemplate.createdBy)
-            );
-            
-            if (foundTemplate) {
-                console.log('✅ Template verified in database - available to all users:', foundTemplate.name);
-                console.log(`✅ SUCCESS: Template "${foundTemplate.name}" is now saved and visible to ALL users!`);
-                alert(`Template "${foundTemplate.name}" saved successfully! It is now available to all users.`);
-            } else {
-                console.warn('⚠️ Template not found in reloaded list - may need to refresh');
-                console.warn('⚠️ This could indicate a problem with template retrieval');
-            }
-            
-            setEditingTemplate(null);
-            setShowTemplateList(true);
-            setShowTemplateModal(false); // Close modal after successful save
-        } catch (error) {
-            console.error('❌ Error saving template:', error);
-            console.error('Error details:', {
-                message: error.message,
-                stack: error.stack,
-                templateData: {
-                    name: templateData.name,
-                    hasSections: !!templateData.sections,
-                    sectionsCount: templateData.sections?.length || 0
-                }
-            });
-            alert('Failed to save template: ' + error.message);
-        }
-    };
-
-    const handleApplyTemplate = (template, targetYear) => {
-        if (!template || !template.sections || template.sections.length === 0) {
-            alert('Template is empty or invalid');
-            console.error('Template validation failed:', { template, hasSections: template?.sections?.length });
-            return;
-        }
-
-        console.log('📋 Applying template:', template.name, 'to year:', targetYear);
-        console.log('Template sections:', template.sections.length);
-
-        const currentUser = getCurrentUser();
-        
-        const newSections = template.sections.map((section, sectionIdx) => ({
-            id: `section-${Date.now()}-${sectionIdx}-${Math.random()}`,
-            name: section.name,
-            description: section.description || '',
-            documents: (section.documents || []).map((doc, docIdx) => ({
-                id: `doc-${Date.now()}-${sectionIdx}-${docIdx}-${Math.random()}`,
-                name: doc.name,
-                description: doc.description || '',
-                // Add a placeholder status to mark this document as belonging to targetYear
-                // This ensures the section is only included in the target year when organizing
-                collectionStatus: {
-                    [`_template-${targetYear}`]: 'template-applied' // Placeholder marker
-                },
-                comments: {}
-            }))
-        }));
-
-        console.log('📋 Created new sections:', newSections.length);
-        console.log('Total documents:', newSections.reduce((sum, s) => sum + (s.documents?.length || 0), 0));
-        console.log('🎯 Applying template to year:', targetYear);
-        console.log('📌 Template marker added:', `_template-${targetYear}`);
-
-        updateSectionsForYear(prev => [...prev, ...newSections], targetYear);
-        
-        console.log('✅ Template sections added to year', targetYear);
-        console.log('📋 VERIFY: New sections to be saved:', {
-            targetYear,
-            sectionsCount: newSections.length,
-            totalDocuments: newSections.reduce((sum, s) => sum + (s.documents?.length || 0), 0),
-            firstSection: newSections[0] ? {
-                id: newSections[0].id,
-                name: newSections[0].name,
-                documentsCount: newSections[0].documents?.length || 0,
-                firstDocStatus: newSections[0].documents?.[0]?.collectionStatus
-            } : null
-        });
-        
-        // Mark that template was just applied - will trigger refresh after save
-        templateJustAppliedRef.current = true;
-        
-        // Force immediate save to ensure data is persisted
-        // Use a callback to get the latest state
-        console.log('💾 FORCING IMMEDIATE SAVE after template application...');
-        setTimeout(() => {
-            setSectionsByYear(prev => {
-                const updated = {
-                    ...prev,
-                    [targetYear]: [...(prev[targetYear] || []), ...newSections]
-                };
-                
-                // Save immediately with the updated state
-                const merged = mergeSectionsByYear(updated);
-                
-                console.log('💾 IMMEDIATE SAVE: Merged sections count:', merged.length);
-                console.log('💾 IMMEDIATE SAVE: Checking for target year data in merged sections...');
-                const hasTargetYear = merged.some(section => {
-                    return section.documents?.some(doc => {
-                        return doc.collectionStatus && Object.keys(doc.collectionStatus).some(key => 
-                            key.includes(targetYear.toString()) || key === `_template-${targetYear}`
-                        );
-                    });
-                });
-                console.log(`💾 IMMEDIATE SAVE: Has ${targetYear} data:`, hasTargetYear);
-                
-                // Save asynchronously
-                api.saveDocumentSections(project.id, merged, true).then(() => {
-                    console.log(`✅ IMMEDIATE SAVE: Template data for ${targetYear} saved to database`);
-                }).catch(error => {
-                    console.error('❌ IMMEDIATE SAVE: Failed to save template data:', error);
-                });
-                
-                return updated;
-            });
-        }, 500);
-
-        if (window.AuditLogger) {
-            window.AuditLogger.log('create', 'projects', {
-                action: 'Template Applied',
-                projectId: project.id,
-                projectName: project.name,
-                templateName: template.name,
-                templateId: template.id,
-                targetYear: targetYear,
-                sectionsAdded: newSections.length
-            }, currentUser);
-        }
-
-        setShowApplyTemplateModal(false);
-    };
-
-    const handleCreateTemplateFromCurrent = () => {
-        if (sections.length === 0) {
-            alert('No sections to create template from. Please add sections first.');
-            return;
-        }
-        
-        const templateData = {
-            name: `${project.name} - ${selectedYear}`,
-            description: `Template created from ${project.name} for year ${selectedYear}`,
-            sections: sections.map(section => ({
-                name: section.name,
-                description: section.description || '',
-                documents: (section.documents || []).map(doc => ({
-                    name: doc.name,
-                    description: doc.description || ''
-                }))
-            }))
-        };
-        
-        setEditingTemplate(null);
-        setShowTemplateModal(true);
-        setTimeout(() => {
-            if (window.tempTemplateData) {
-                window.tempTemplateData = templateData;
-            }
-        }, 100);
-    };
-
+    
+    // ============================================================
+    // DOCUMENT CRUD
+    // ============================================================
+    
     const handleAddDocument = (sectionId) => {
-        editingSectionIdRef.current = sectionId;
+        if (!sectionId) {
+            alert('Error: Cannot add document. Section ID is missing.');
+            return;
+        }
         setEditingSectionId(sectionId);
         setEditingDocument(null);
         setShowDocumentModal(true);
     };
-
+    
     const handleEditDocument = (section, document) => {
-        if (!section || !document) {
-            console.warn('Cannot edit: section or document is missing', { section, document });
-            return;
-        }
-        console.log('✏️ Editing document:', { sectionId: section.id, documentId: document.id, documentName: document.name });
-        // Ensure we have the latest document data from current state
-        const currentSections = sectionsByYear[selectedYear] || [];
-        const currentSection = currentSections.find(s => s.id === section.id);
-        const currentDocument = currentSection?.documents?.find(d => d.id === document.id);
-        
-        if (!currentDocument) {
-            console.warn('Document not found in current state, using provided document');
-        }
-        
-        const documentToEdit = currentDocument || document;
-        editingSectionIdRef.current = section.id;
         setEditingSectionId(section.id);
-        setEditingDocument(documentToEdit);
+        setEditingDocument(document);
         setShowDocumentModal(true);
     };
-
+    
     const handleSaveDocument = (documentData) => {
-        const currentSectionId = editingSectionIdRef.current || editingSectionId;
-        
-        if (!currentSectionId) {
-            alert('Error: No section selected. Please try again.');
+        if (!editingSectionId) {
+            alert('Error: No section selected.');
             return;
         }
         
-        const currentUser = getCurrentUser();
-        
-        updateSectionsForYear(prev => prev.map(s => {
-            if (s.id === currentSectionId) {
+        setSections(prev => prev.map(section => {
+            if (section.id === editingSectionId) {
                 if (editingDocument) {
+                    // Update existing document
                     return {
-                        ...s,
-                        documents: s.documents.map(doc => 
-                            doc.id === editingDocument.id ? { ...doc, ...documentData } : doc
+                        ...section,
+                        documents: section.documents.map(doc => 
+                            doc.id === editingDocument.id 
+                                ? { ...doc, ...documentData }
+                                : doc
                         )
                     };
-                    } else {
-                        // Create unique document ID with year to ensure year independence
-                        // CRITICAL: Include year in ID to ensure documents are completely independent per year
-                        const newDocument = {
-                        id: `doc-${selectedYear}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                } else {
+                    // Add new document
+                    const newDocument = {
+                        id: Date.now(),
                         ...documentData,
-                        collectionStatus: {},
-                        comments: {}
+                        collectionStatus: documentData.collectionStatus || {},
+                        comments: documentData.comments || {}
                     };
                     return {
-                        ...s,
-                        documents: [...s.documents, newDocument]
+                        ...section,
+                        documents: [...section.documents, newDocument]
                     };
                 }
             }
-            return s;
+            return section;
         }));
         
         setShowDocumentModal(false);
         setEditingDocument(null);
         setEditingSectionId(null);
-        editingSectionIdRef.current = null;
     };
-
+    
     const handleDeleteDocument = (sectionId, documentId) => {
-        // Get current state to find document name for confirmation
-        const currentSections = sectionsByYear[selectedYear] || [];
-        const section = currentSections.find(s => s.id === sectionId);
-        const document = section?.documents?.find(d => d.id === documentId);
-        
-        if (!section || !document) {
-            console.warn('Document not found for deletion:', { sectionId, documentId });
-            alert('Document not found. It may have already been deleted.');
+        if (!confirm('Delete this document/data item?')) {
             return;
         }
         
-        if (!confirm(`Delete "${document.name}"? This action cannot be undone.`)) {
-            return;
-        }
-        
-        // Use updateSectionsForYear's prev parameter to get current state (avoids stale closure)
-        updateSectionsForYear(prev => {
-            // CRITICAL: Only delete from the selected year - other years remain unaffected
-            // Each year's documents are completely independent
-            return prev.map(s => {
-                if (s.id === sectionId) {
-                    return {
-                        ...s,
-                        documents: s.documents.filter(doc => doc.id !== documentId)
-                    };
-                }
-                return s;
-            });
-        });
-        
-        console.log('🗑️ Document deleted:', { sectionId, documentId, documentName: document.name });
-    };
-
-    const handleUpdateStatus = (sectionId, documentId, month, status) => {
-        updateSectionsForYear(prev => prev.map(s => {
-            if (s.id === sectionId) {
+        setSections(prev => prev.map(section => {
+            if (section.id === sectionId) {
                 return {
-                    ...s,
-                    documents: s.documents.map(doc => {
-                        if (doc.id === documentId) {
-                            return {
-                                ...doc,
-                                collectionStatus: setStatusForYear(doc.collectionStatus || {}, month, status, selectedYear)
-                            };
-                        }
-                        return doc;
-                    })
+                    ...section,
+                    documents: section.documents.filter(doc => doc.id !== documentId)
                 };
             }
-            return s;
+            return section;
         }));
     };
-
-    const handleAddComment = async (sectionId, documentId, month, commentText) => {
-        if (!commentText.trim()) return;
-
-        const currentUser = getCurrentUser();
-        
-        // Parse mentions from comment text (@username format)
-        const mentionRegex = /@([\w]+(?:\s+[\w]+)*)/g;
-        const mentionTexts = [];
-        let match;
-        while ((match = mentionRegex.exec(commentText)) !== null) {
-            const mentionValue = match[1]?.trim();
-            if (mentionValue) {
-                mentionTexts.push(mentionValue);
-            }
-        }
-
-        const mentionedUsers = [];
-        mentionTexts.forEach(mentionText => {
-            const mentionLower = mentionText.toLowerCase();
-            const matchedUser = users.find(user => {
-                const name = (user.name || '').toLowerCase();
-                const email = (user.email || '').toLowerCase();
-                return name === mentionLower ||
-                    email === mentionLower ||
-                    name.startsWith(mentionLower + ' ') ||
-                    name.includes(' ' + mentionLower + ' ') ||
-                    name.endsWith(' ' + mentionLower) ||
-                    name.split(' ').some(part => part === mentionLower);
+    
+    // ============================================================
+    // STATUS AND COMMENTS
+    // ============================================================
+    
+    const handleUpdateStatus = useCallback((sectionId, documentId, month, status) => {
+        setSections(prev => {
+            // Use functional update to ensure we're working with latest state
+            const updated = prev.map(section => {
+                if (section.id === sectionId) {
+                    return {
+                        ...section,
+                        documents: section.documents.map(doc => {
+                            if (doc.id === documentId) {
+                                return {
+                                    ...doc,
+                                    collectionStatus: setStatusForYear(doc.collectionStatus || {}, month, status, selectedYear)
+                                };
+                            }
+                            return doc;
+                        })
+                    };
+                }
+                return section;
             });
-            if (matchedUser && matchedUser.id && !mentionedUsers.some(m => m.id === matchedUser.id)) {
-                mentionedUsers.push({
-                    id: matchedUser.id,
-                    name: matchedUser.name,
-                    email: matchedUser.email
-                });
-            }
+            
+            // Log status change for debugging
+            console.log(`📝 Status updated: ${documentId} - ${month} ${selectedYear} = ${status}`);
+            
+            return updated;
         });
-
+    }, [selectedYear]);
+    
+    const handleAddComment = (sectionId, documentId, month, commentText) => {
+        if (!commentText.trim()) return;
+        
+        const currentUser = getCurrentUser();
         const newComment = {
             id: Date.now(),
             text: commentText,
             date: new Date().toISOString(),
-            timestamp: new Date().toISOString(),
             author: currentUser.name,
             authorEmail: currentUser.email,
-            authorId: currentUser.id,
-            authorRole: currentUser.role,
-            mentions: mentionedUsers
+            authorId: currentUser.id
         };
-
-        const section = sections.find(s => s.id === sectionId);
-        const document = section?.documents.find(d => d.id === documentId);
-        const documentName = document?.name || 'Document';
-
-        updateSectionsForYear(prev => prev.map(s => {
-            if (s.id === sectionId) {
+        
+        setSections(prev => prev.map(section => {
+            if (section.id === sectionId) {
                 return {
-                    ...s,
-                    documents: s.documents.map(doc => {
+                    ...section,
+                    documents: section.documents.map(doc => {
                         if (doc.id === documentId) {
                             const existingComments = getCommentsForYear(doc.comments, month, selectedYear);
                             return {
@@ -2234,82 +732,12 @@ const parseCommentCellKey = (key) => {
                     })
                 };
             }
-            return s;
+            return section;
         }));
         
         setQuickComment('');
-
-        // Process mentions and send notifications
-        const projectLink = project ? `#/projects/${project.id}` : '#/projects';
-        const projectName = project?.name || 'Project';
-        const documentLink = `${projectLink}#document-${documentId}`;
-
-        try {
-            if (window.MentionHelper && mentionedUsers.length > 0) {
-                await window.MentionHelper.processMentions(
-                    commentText,
-                    `Document: ${documentName}`,
-                    documentLink,
-                    currentUser.name,
-                    users,
-                    {
-                        projectId: project?.id,
-                        projectName,
-                        documentId: documentId,
-                        documentName,
-                        sectionId: sectionId,
-                        month: month,
-                        year: selectedYear
-                    }
-                );
-            }
-        } catch (mentionError) {
-            console.error('❌ Failed to process mentions:', mentionError);
-        }
-
-        // Send notifications to mentioned users
-        const sendNotification = async (userId, contextLabel) => {
-            if (!userId || !window.DatabaseAPI || typeof window.DatabaseAPI.makeRequest !== 'function') {
-                return;
-            }
-            await window.DatabaseAPI.makeRequest('/notifications', {
-                method: 'POST',
-                body: JSON.stringify({
-                    userId,
-                    type: 'comment',
-                    title: `New comment on document: ${documentName}`,
-                    message: `${currentUser.name} commented on "${documentName}" in project "${projectName}": "${commentText.substring(0, 100)}${commentText.length > 100 ? '...' : ''}"`,
-                    link: documentLink,
-                    metadata: {
-                        documentId: documentId,
-                        documentName,
-                        sectionId: sectionId,
-                        month: month,
-                        year: selectedYear,
-                        projectId: project?.id,
-                        projectName,
-                        commentId: newComment.id, // Include comment ID for direct navigation
-                        commentAuthor: currentUser.name,
-                        commentText,
-                        context: contextLabel
-                    }
-                })
-            });
-        };
-
-        // Send notifications to mentioned users
-        for (const mentionedUser of mentionedUsers) {
-            if (mentionedUser.id && mentionedUser.id !== currentUser.id) {
-                try {
-                    await sendNotification(mentionedUser.id, 'mentioned');
-                    console.log(`✅ Comment notification sent to mentioned user ${mentionedUser.name}`);
-                } catch (notifError) {
-                    console.error(`❌ Failed to send comment notification to ${mentionedUser.name}:`, notifError);
-                }
-            }
-        }
     };
-
+    
     const handleDeleteComment = (sectionId, documentId, month, commentId) => {
         const currentUser = getCurrentUser();
         const section = sections.find(s => s.id === sectionId);
@@ -2319,21 +747,20 @@ const parseCommentCellKey = (key) => {
         
         const canDelete = comment?.authorId === currentUser.id || 
                          currentUser.role === 'Admin' || 
-                         currentUser.role === 'Administrator' ||
-                         currentUser.role === 'admin';
+                         currentUser.role === 'Administrator';
         
         if (!canDelete) {
-            alert('You can only delete your own comments or you need admin privileges.');
+            alert('You can only delete your own comments or need admin privileges.');
             return;
         }
         
         if (!confirm('Delete this comment?')) return;
         
-        updateSectionsForYear(prev => prev.map(s => {
-            if (s.id === sectionId) {
+        setSections(prev => prev.map(section => {
+            if (section.id === sectionId) {
                 return {
-                    ...s,
-                    documents: s.documents.map(doc => {
+                    ...section,
+                    documents: section.documents.map(doc => {
                         if (doc.id === documentId) {
                             const updatedComments = existingComments.filter(c => c.id !== commentId);
                             return {
@@ -2345,36 +772,70 @@ const parseCommentCellKey = (key) => {
                     })
                 };
             }
-            return s;
+            return section;
         }));
     };
-
+    
     const getDocumentStatus = (document, month) => {
         return getStatusForYear(document.collectionStatus, month, selectedYear);
     };
-
+    
     const getDocumentComments = (document, month) => {
         return getCommentsForYear(document.comments, month, selectedYear);
     };
-
+    
+    // ============================================================
+    // DRAG AND DROP
+    // ============================================================
+    
+    const handleSectionDragStart = (e, section, index) => {
+        setDraggedSection({ section, index });
+        e.dataTransfer.effectAllowed = 'move';
+        setTimeout(() => e.currentTarget.style.opacity = '0.5', 0);
+    };
+    
+    const handleSectionDragEnd = (e) => {
+        e.currentTarget.style.opacity = '1';
+        setDraggedSection(null);
+        setDragOverIndex(null);
+    };
+    
+    const handleSectionDrop = (e, dropIndex) => {
+        e.preventDefault();
+        if (draggedSection && draggedSection.index !== dropIndex) {
+            setSections(prev => {
+                const reordered = [...prev];
+                const [removed] = reordered.splice(draggedSection.index, 1);
+                reordered.splice(dropIndex, 0, removed);
+                return reordered;
+            });
+        }
+        setDragOverIndex(null);
+    };
+    
+    // ============================================================
+    // EXCEL EXPORT
+    // ============================================================
+    
     const handleExportToExcel = async () => {
         setIsExporting(true);
         try {
             let XLSX = window.XLSX;
             
+            // Wait for XLSX to load
             if (!XLSX || !XLSX.utils) {
-                for (let waitAttempt = 0; waitAttempt < 30 && (!XLSX || !XLSX.utils); waitAttempt++) {
+                for (let i = 0; i < 30 && (!XLSX || !XLSX.utils); i++) {
                     await new Promise(resolve => setTimeout(resolve, 100));
                     XLSX = window.XLSX;
                 }
             }
             
             if (!XLSX || !XLSX.utils) {
-                throw new Error('XLSX library failed to load. Please refresh and try again.');
+                throw new Error('XLSX library not available. Please refresh the page.');
             }
-        
-            const excelData = [];
             
+            // Prepare data
+            const excelData = [];
             const headerRow1 = ['Section / Document'];
             const headerRow2 = [''];
             
@@ -2384,14 +845,11 @@ const parseCommentCellKey = (key) => {
                 headerRow2.push('Status', 'Comments');
             });
             
-            excelData.push(headerRow1);
-            excelData.push(headerRow2);
+            excelData.push(headerRow1, headerRow2);
             
             sections.forEach(section => {
                 const sectionRow = [section.name];
-                for (let i = 0; i < 12 * 2; i++) {
-                    sectionRow.push('');
-                }
+                for (let i = 0; i < 24; i++) sectionRow.push('');
                 excelData.push(sectionRow);
                 
                 section.documents.forEach(document => {
@@ -2403,20 +861,12 @@ const parseCommentCellKey = (key) => {
                         row.push(statusLabel || '');
                         
                         const comments = getCommentsForYear(document.comments, month, selectedYear);
-                        const commentsText = comments.map((comment, idx) => {
-                            const date = new Date(comment.date || comment.timestamp || comment.createdAt).toLocaleString('en-ZA', {
-                                year: 'numeric',
-                                month: 'short',
-                                day: '2-digit',
-                                hour: '2-digit',
-                                minute: '2-digit'
+                        const commentsText = comments.map(c => {
+                            const date = new Date(c.date).toLocaleString('en-ZA', {
+                                year: 'numeric', month: 'short', day: '2-digit',
+                                hour: '2-digit', minute: '2-digit'
                             });
-                            const authorName = comment.author || comment.createdBy || 'User';
-                            const authorEmail = comment.authorEmail || comment.createdByEmail;
-                            const authorInfo = authorEmail 
-                                ? `${authorName} (${authorEmail})`
-                                : authorName;
-                            return `[${date}] ${authorInfo}: ${comment.text}`;
+                            return `[${date}] ${c.author}: ${c.text}`;
                         }).join('\n\n');
                         row.push(commentsText);
                     });
@@ -2434,122 +884,49 @@ const parseCommentCellKey = (key) => {
             }
             ws['!cols'] = colWidths;
             
-            const merges = [];
-            for (let i = 0; i < 12; i++) {
-                const startCol = 1 + (i * 2);
-                merges.push({
-                    s: { r: 0, c: startCol },
-                    e: { r: 0, c: startCol + 1 }
-                });
-            }
-            ws['!merges'] = merges;
-            
             XLSX.utils.book_append_sheet(wb, ws, `Doc Collection ${selectedYear}`);
             
             const filename = `${project.name}_Document_Collection_${selectedYear}_${new Date().toISOString().split('T')[0]}.xlsx`;
             XLSX.writeFile(wb, filename);
             
         } catch (error) {
-            console.error('Error exporting to Excel:', error);
-            alert(`Failed to export to Excel: ${error.message}`);
+            console.error('Error exporting:', error);
+            alert('Failed to export: ' + error.message);
         } finally {
             setIsExporting(false);
         }
     };
-
-    const handleDragStart = (e, section, index) => {
-        setDraggedSection({ section, index });
-        e.dataTransfer.effectAllowed = 'move';
-        setTimeout(() => {
-            e.currentTarget.style.opacity = '0.5';
-        }, 0);
-    };
-
-    const handleDragEnd = (e) => {
-        e.currentTarget.style.opacity = '1';
-        setDraggedSection(null);
-        setDragOverIndex(null);
-    };
-
-    const handleDragOver = (e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-    };
-
-    const handleDragEnter = (e, index) => {
-        e.preventDefault();
-        if (draggedSection && draggedSection.index !== index) {
-            setDragOverIndex(index);
-        }
-    };
-
-    const handleDragLeave = (e) => {
-        if (!e.currentTarget.contains(e.relatedTarget)) {
-            setDragOverIndex(null);
-        }
-    };
-
-    const handleDrop = (e, dropIndex) => {
-        e.preventDefault();
-        if (draggedSection && draggedSection.index !== dropIndex) {
-            updateSectionsForYear(prev => {
-                const reordered = [...prev];
-                const [removed] = reordered.splice(draggedSection.index, 1);
-                reordered.splice(dropIndex, 0, removed);
-                return reordered;
-            });
-        }
-        setDragOverIndex(null);
-    };
-
-    const handleDocumentDragStart = (e, document, sectionId, documentIndex) => {
-        setDraggedDocument({ document, sectionId, documentIndex });
-        e.dataTransfer.effectAllowed = 'move';
-        setTimeout(() => {
-            e.currentTarget.style.opacity = '0.5';
-        }, 0);
-    };
-
-    const handleDocumentDragEnd = (e) => {
-        e.currentTarget.style.opacity = '1';
-        setDraggedDocument(null);
-        setDragOverDocumentIndex(null);
-    };
-
-    const handleDocumentDragOver = (e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-    };
-
-    const handleDocumentDragEnter = (e, sectionId, documentIndex) => {
-        e.preventDefault();
-        if (draggedDocument && draggedDocument.sectionId === sectionId && draggedDocument.documentIndex !== documentIndex) {
-            setDragOverDocumentIndex({ sectionId, documentIndex });
-        }
-    };
-
-    const handleDocumentDragLeave = (e) => {
-        if (!e.currentTarget.contains(e.relatedTarget)) {
-            setDragOverDocumentIndex(null);
-        }
-    };
-
-    const handleDocumentDrop = (e, sectionId, dropIndex) => {
-        e.preventDefault();
-        if (draggedDocument && draggedDocument.sectionId === sectionId && draggedDocument.documentIndex !== dropIndex) {
-            updateSectionsForYear(prev => prev.map(section => {
-                if (section.id === sectionId) {
-                    const reordered = [...section.documents];
-                    const [removed] = reordered.splice(draggedDocument.documentIndex, 1);
-                    reordered.splice(dropIndex, 0, removed);
-                    return { ...section, documents: reordered };
+    
+    // ============================================================
+    // SCROLL TO WORKING MONTHS
+    // ============================================================
+    
+    useEffect(() => {
+        if (!hasInitialScrolled.current && sections.length > 0 && tableRef.current && selectedYear === currentYear) {
+            setTimeout(() => {
+                const firstWorkingMonthName = months[workingMonths[0]];
+                const firstMonthElement = monthRefs.current[firstWorkingMonthName];
+                
+                if (firstMonthElement && tableRef.current) {
+                    const container = tableRef.current;
+                    const elementLeft = firstMonthElement.offsetLeft;
+                    const documentColumnWidth = 250;
+                    const scrollPosition = elementLeft - documentColumnWidth - 100;
+                    
+                    container.scrollTo({
+                        left: Math.max(0, scrollPosition),
+                        behavior: 'smooth'
+                    });
                 }
-                return section;
-            }));
+                hasInitialScrolled.current = true;
+            }, 100);
         }
-        setDragOverDocumentIndex(null);
-    };
-
+    }, [sections, selectedYear]);
+    
+    // ============================================================
+    // COMMENT POPUP MANAGEMENT
+    // ============================================================
+    
     useEffect(() => {
         if (hoverCommentCell && commentPopupContainerRef.current) {
             setTimeout(() => {
@@ -2559,7 +936,7 @@ const parseCommentCellKey = (key) => {
             }, 100);
         }
     }, [hoverCommentCell, sections]);
-
+    
     useEffect(() => {
         const handleClickOutside = (event) => {
             const isCommentButton = event.target.closest('[data-comment-cell]');
@@ -2570,688 +947,58 @@ const parseCommentCellKey = (key) => {
                 setQuickComment('');
             }
         };
-
+        
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [hoverCommentCell]);
-
-    const SectionModal = () => {
-        const [sectionFormData, setSectionFormData] = useState({
-            name: editingSection?.name || '',
-            description: editingSection?.description || ''
-        });
-
-        const handleSubmit = (e) => {
-            e.preventDefault();
-            if (!sectionFormData.name.trim()) {
-                alert('Please enter a section name');
-                return;
-            }
-            handleSaveSection(sectionFormData);
-        };
-
-        return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
-                        <h2 className="text-base font-semibold text-gray-900">
-                            {editingSection ? 'Edit Section' : 'Add New Section'}
-                        </h2>
-                        <button 
-                            onClick={() => setShowSectionModal(false)} 
-                            className="text-gray-400 hover:text-gray-600 p-1"
-                        >
-                            <i className="fas fa-times text-sm"></i>
-                        </button>
-                    </div>
-
-                    <form onSubmit={handleSubmit} className="p-4 space-y-3">
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                                Section Name *
-                            </label>
-                            <input
-                                type="text"
-                                value={sectionFormData.name}
-                                onChange={(e) => setSectionFormData({...sectionFormData, name: e.target.value})}
-                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                placeholder="e.g., Financial Documents, Client Data, etc."
-                                required
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                                Description (Optional)
-                            </label>
-                            <textarea
-                                value={sectionFormData.description}
-                                onChange={(e) => setSectionFormData({...sectionFormData, description: e.target.value})}
-                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                rows="2"
-                                placeholder="Brief description of this section..."
-                            ></textarea>
-                        </div>
-
-                        <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
-                            <button
-                                type="button"
-                                onClick={() => setShowSectionModal(false)}
-                                className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50/50 transition-colors font-medium"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
-                            >
-                                {editingSection ? 'Update Section' : 'Add Section'}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        );
-    };
-
-    const handleCloseDocumentModal = () => {
-        setShowDocumentModal(false);
-        setEditingDocument(null);
-        setEditingSectionId(null);
-        editingSectionIdRef.current = null;
-    };
-
-    const DocumentModal = () => {
-        const [documentFormData, setDocumentFormData] = useState({
-            name: editingDocument?.name || '',
-            description: editingDocument?.description || '',
-            attachments: editingDocument?.attachments || []
-        });
-
-        useEffect(() => {
-            setDocumentFormData({
-                name: editingDocument?.name || '',
-                description: editingDocument?.description || '',
-                attachments: editingDocument?.attachments || []
-            });
-        }, [editingDocument]);
-
-        const handleSubmit = (e) => {
-            e.preventDefault();
-            if (!documentFormData.name.trim()) {
-                alert('Please enter a document/data name');
-                return;
-            }
-            handleSaveDocument(documentFormData);
-        };
-
-        return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
-                        <h2 className="text-base font-semibold text-gray-900">
-                            {editingDocument ? 'Edit Document/Data' : 'Add Document/Data'}
-                        </h2>
-                        <button 
-                            onClick={handleCloseDocumentModal} 
-                            className="text-gray-400 hover:text-gray-600 p-1"
-                        >
-                            <i className="fas fa-times text-sm"></i>
-                        </button>
-                    </div>
-
-                    <form onSubmit={handleSubmit} className="p-4 space-y-3">
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                                Document/Data Name *
-                            </label>
-                            <input
-                                type="text"
-                                value={documentFormData.name}
-                                onChange={(e) => setDocumentFormData({...documentFormData, name: e.target.value})}
-                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                placeholder="e.g., Bank Statements, Sales Report, etc."
-                                required
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                                Description (Optional)
-                            </label>
-                            <textarea
-                                value={documentFormData.description}
-                                onChange={(e) => setDocumentFormData({...documentFormData, description: e.target.value})}
-                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                rows="2"
-                                placeholder="Additional details..."
-                            ></textarea>
-                        </div>
-
-                        <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
-                            <button
-                                type="button"
-                                onClick={handleCloseDocumentModal}
-                                className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50/50 transition-colors font-medium"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
-                            >
-                                {editingDocument ? 'Update' : 'Add'}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        );
-    };
-
-    const TemplateModal = ({ showTemplateList = true, setShowTemplateList }) => {
-        if (!setShowTemplateList) return null;
-        
-        useEffect(() => {
-            if (editingTemplate) {
-                setShowTemplateList(false);
-            } else {
-                setShowTemplateList(true);
-            }
-        }, [editingTemplate, setShowTemplateList]);
-        
-        useEffect(() => {
-            if (!showTemplateModal) {
-                setShowTemplateList(true);
-            }
-        }, [showTemplateModal, setShowTemplateList]);
-        
-        const [templateFormData, setTemplateFormData] = useState(() => {
-            const prefill = window.tempTemplateData;
-            if (prefill) {
-                window.tempTemplateData = null;
-                return {
-                    name: prefill.name || '',
-                    description: prefill.description || '',
-                    sections: prefill.sections || []
-                };
-            }
-            return {
-                name: editingTemplate?.name || '',
-                description: editingTemplate?.description || '',
-                sections: editingTemplate?.sections || []
-            };
-        });
-
-        const handleAddSectionToTemplate = () => {
-            setTemplateFormData({
-                ...templateFormData,
-                sections: [...templateFormData.sections, { name: '', description: '', documents: [] }]
-            });
-        };
-
-        const handleRemoveSectionFromTemplate = (index) => {
-            setTemplateFormData({
-                ...templateFormData,
-                sections: templateFormData.sections.filter((_, i) => i !== index)
-            });
-        };
-
-        const handleUpdateSectionInTemplate = (index, sectionData) => {
-            const updatedSections = [...templateFormData.sections];
-            updatedSections[index] = { ...updatedSections[index], ...sectionData };
-            setTemplateFormData({ ...templateFormData, sections: updatedSections });
-        };
-
-        const handleAddDocumentToTemplateSection = (sectionIndex) => {
-            const updatedSections = [...templateFormData.sections];
-            if (!updatedSections[sectionIndex].documents) {
-                updatedSections[sectionIndex].documents = [];
-            }
-            updatedSections[sectionIndex].documents.push({ name: '', description: '' });
-            setTemplateFormData({ ...templateFormData, sections: updatedSections });
-        };
-
-        const handleRemoveDocumentFromTemplate = (sectionIndex, docIndex) => {
-            const updatedSections = [...templateFormData.sections];
-            updatedSections[sectionIndex].documents = updatedSections[sectionIndex].documents.filter((_, i) => i !== docIndex);
-            setTemplateFormData({ ...templateFormData, sections: updatedSections });
-        };
-
-        const handleUpdateDocumentInTemplate = (sectionIndex, docIndex, docData) => {
-            const updatedSections = [...templateFormData.sections];
-            updatedSections[sectionIndex].documents[docIndex] = { ...updatedSections[sectionIndex].documents[docIndex], ...docData };
-            setTemplateFormData({ ...templateFormData, sections: updatedSections });
-        };
-
-        const handleSubmit = (e) => {
-            e.preventDefault();
-            console.log('📝 Template form submitted:', {
-                name: templateFormData.name,
-                sectionsCount: templateFormData.sections?.length || 0,
-                isEditing: !!editingTemplate,
-                editingTemplateId: editingTemplate?.id
-            });
-            
-            if (!templateFormData.name.trim()) {
-                alert('Please enter a template name');
-                return;
-            }
-            if (templateFormData.sections.length === 0) {
-                alert('Please add at least one section to the template');
-                return;
-            }
-            
-            console.log('✅ Form validation passed, calling handleSaveTemplate...');
-            handleSaveTemplate(templateFormData);
-        };
-
-        return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
-                        <h2 className="text-base font-semibold text-gray-900">
-                            {showTemplateList ? 'Template Management' : (editingTemplate ? 'Edit Template' : 'Create Template')}
-                        </h2>
-                        <div className="flex items-center gap-2">
-                            {!showTemplateList && (
-                                <button
-                                    onClick={() => {
-                                        setShowTemplateList(true);
-                                        setEditingTemplate(null);
-                                        window.tempTemplateData = null;
-                                    }}
-                                    className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800"
-                                >
-                                    <i className="fas fa-arrow-left mr-1"></i>
-                                    Back
-                                </button>
-                            )}
-                            <button 
-                                onClick={() => {
-                                    setShowTemplateModal(false);
-                                    setEditingTemplate(null);
-                                    setShowTemplateList(true);
-                                    window.tempTemplateData = null;
-                                }} 
-                                className="text-gray-400 hover:text-gray-600 p-1"
-                            >
-                                <i className="fas fa-times text-sm"></i>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto p-4">
-                        {showTemplateList ? (
-                            <div className="space-y-3">
-                                <div className="flex justify-between items-center mb-4">
-                                    <div>
-                                        <p className="text-xs text-gray-600">Manage your document collection templates</p>
-                                        {templates.length === 1 && templates[0]?.isDefault && (
-                                            <p className="text-xs text-blue-600 mt-1">
-                                                <i className="fas fa-info-circle mr-1"></i>
-                                                Only the default template exists. Create a custom template to share with all users.
-                                            </p>
-                                        )}
-                                    </div>
-                                    <button
-                                        onClick={() => {
-                                            setShowTemplateList(false);
-                                            setEditingTemplate(null);
-                                            setTemplateFormData({ name: '', description: '', sections: [] });
-                                        }}
-                                        className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
-                                    >
-                                        <i className="fas fa-plus mr-1"></i>
-                                        Create New Template
-                                    </button>
-                                </div>
-                                
-                                {templates.length === 0 ? (
-                                    <div className="text-center py-8 text-gray-400">
-                                        <i className="fas fa-layer-group text-3xl mb-2 opacity-50"></i>
-                                        <p className="text-sm">No templates yet</p>
-                                        <p className="text-xs mt-1">Create your first template to get started</p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-2">
-                                        {templates.map(template => {
-                                        const totalDocs = template.sections?.reduce((sum, s) => sum + (s.documents?.length || 0), 0) || 0;
-                                        return (
-                                            <div key={template.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50/30 hover:bg-gray-50/50 transition-colors">
-                                                <div className="flex justify-between items-start">
-                                                    <div className="flex-1">
-                                                        <h3 className="text-sm font-semibold text-gray-900 mb-1">{template.name}</h3>
-                                                        {template.description && (
-                                                            <p className="text-xs text-gray-600 mb-2">{template.description}</p>
-                                                        )}
-                                                        <div className="flex items-center gap-4 text-[10px] text-gray-500">
-                                                            <span><i className="fas fa-folder mr-1"></i>{template.sections?.length || 0} sections</span>
-                                                            <span><i className="fas fa-file mr-1"></i>{totalDocs} documents</span>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-1 ml-3">
-                                                        <button
-                                                            onClick={() => {
-                                                                setEditingTemplate(template);
-                                                                setShowTemplateList(false);
-                                                                setTemplateFormData({
-                                                                    name: template.name,
-                                                                    description: template.description || '',
-                                                                    sections: template.sections || []
-                                                                });
-                                                            }}
-                                                            className="px-2 py-1 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
-                                                            title={template.isDefault ? "Default templates cannot be edited" : "Edit template"}
-                                                            disabled={template.isDefault}
-                                                        >
-                                                            <i className="fas fa-edit"></i>
-                                                        </button>
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.preventDefault();
-                                                                e.stopPropagation();
-                                                                console.log('🗑️ Delete button clicked for template:', template.id);
-                                                                handleDeleteTemplate(template.id);
-                                                            }}
-                                                            className="px-2 py-1 text-xs text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
-                                                            title={template.isDefault ? "Hide default template (cannot be deleted from database)" : "Delete template"}
-                                                        >
-                                                            <i className="fas fa-trash"></i>
-                                                        </button>
-                                                        {template.isDefault && (
-                                                            <span className="px-2 py-1 text-xs text-gray-400" title="Default template">
-                                                                <i className="fas fa-lock"></i>
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <form onSubmit={handleSubmit} className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                                    Template Name *
-                                </label>
-                                <input
-                                    type="text"
-                                    value={templateFormData.name}
-                                    onChange={(e) => setTemplateFormData({...templateFormData, name: e.target.value})}
-                                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                    placeholder="e.g., Standard Monthly Checklist"
-                                    required
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                                    Description (Optional)
-                                </label>
-                                <textarea
-                                    value={templateFormData.description}
-                                    onChange={(e) => setTemplateFormData({...templateFormData, description: e.target.value})}
-                                    className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                    rows="2"
-                                    placeholder="Brief description..."
-                                ></textarea>
-                            </div>
-
-                            <div>
-                                <div className="flex justify-between items-center mb-2">
-                                    <label className="block text-xs font-medium text-gray-700">
-                                        Sections *
-                                    </label>
-                                    <button
-                                        type="button"
-                                        onClick={handleAddSectionToTemplate}
-                                        className="px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700"
-                                    >
-                                        <i className="fas fa-plus mr-1"></i>
-                                        Add Section
-                                    </button>
-                                </div>
-                                
-                                <div className="space-y-3">
-                                    {templateFormData.sections.map((section, sectionIndex) => (
-                                        <div key={sectionIndex} className="border border-gray-200 rounded-lg p-3 bg-gray-50/30">
-                                            <div className="flex items-start justify-between mb-2">
-                                                <div className="flex-1 space-y-2">
-                                                    <input
-                                                        type="text"
-                                                        value={section.name}
-                                                        onChange={(e) => handleUpdateSectionInTemplate(sectionIndex, { name: e.target.value })}
-                                                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
-                                                        placeholder="Section name *"
-                                                        required
-                                                    />
-                                                    <textarea
-                                                        value={section.description || ''}
-                                                        onChange={(e) => handleUpdateSectionInTemplate(sectionIndex, { description: e.target.value })}
-                                                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
-                                                        rows="1"
-                                                        placeholder="Section description (optional)"
-                                                    ></textarea>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleRemoveSectionFromTemplate(sectionIndex)}
-                                                    className="ml-2 text-red-600 hover:text-red-800 p-1"
-                                                >
-                                                    <i className="fas fa-trash text-xs"></i>
-                                                </button>
-                                            </div>
-                                            
-                                            <div className="mt-2">
-                                                <div className="flex justify-between items-center mb-1">
-                                                    <label className="text-[10px] font-medium text-gray-600">Documents:</label>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleAddDocumentToTemplateSection(sectionIndex)}
-                                                        className="px-1.5 py-0.5 bg-gray-600 text-white rounded text-[9px] font-medium hover:bg-gray-700"
-                                                    >
-                                                        <i className="fas fa-plus mr-0.5"></i>
-                                                        Add
-                                                    </button>
-                                                </div>
-                                                <div className="space-y-1">
-                                                    {(section.documents || []).map((doc, docIndex) => (
-                                                        <div key={docIndex} className="flex items-center gap-1 bg-white p-1.5 rounded border border-gray-200">
-                                                            <input
-                                                                type="text"
-                                                                value={doc.name}
-                                                                onChange={(e) => handleUpdateDocumentInTemplate(sectionIndex, docIndex, { name: e.target.value })}
-                                                                className="flex-1 px-1.5 py-0.5 text-[10px] border border-gray-300 rounded focus:ring-1 focus:ring-primary-500"
-                                                                placeholder="Document name *"
-                                                                required
-                                                            />
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleRemoveDocumentFromTemplate(sectionIndex, docIndex)}
-                                                                className="text-red-600 hover:text-red-800 p-0.5"
-                                                            >
-                                                                <i className="fas fa-times text-[9px]"></i>
-                                                            </button>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setShowTemplateModal(false);
-                                        setEditingTemplate(null);
-                                        setShowTemplateList(true);
-                                        window.tempTemplateData = null;
-                                    }}
-                                    className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50/50 transition-colors font-medium"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
-                                >
-                                    {editingTemplate ? 'Update Template' : 'Create Template'}
-                                </button>
-                            </div>
-                        </form>
-                        )}
-                    </div>
-                </div>
-            </div>
-        );
-    };
-
-    const ApplyTemplateModal = () => {
-        const [selectedTemplateId, setSelectedTemplateId] = useState(null);
-        const [targetYear, setTargetYear] = useState(selectedYear);
-
-        const handleApply = () => {
-            if (!selectedTemplateId) {
-                alert('Please select a template');
-                return;
-            }
-            console.log('🔍 Looking for template with ID:', selectedTemplateId);
-            console.log('Available templates:', templates.map(t => ({ id: t.id, name: t.name })));
-            const template = templates.find(t => String(t.id) === String(selectedTemplateId));
-            if (!template) {
-                console.error('❌ Template not found. Selected ID:', selectedTemplateId);
-                console.error('Available template IDs:', templates.map(t => t.id));
-                alert('Template not found. Please check the console for details.');
-                return;
-            }
-            console.log('✅ Found template:', template.name);
-            handleApplyTemplate(template, targetYear);
-        };
-
-        return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
-                        <h2 className="text-base font-semibold text-gray-900">
-                            Apply Template
-                        </h2>
-                        <button 
-                            onClick={() => setShowApplyTemplateModal(false)} 
-                            className="text-gray-400 hover:text-gray-600 p-1"
-                        >
-                            <i className="fas fa-times text-sm"></i>
-                        </button>
-                    </div>
-
-                    <div className="p-4 space-y-4">
-                        {templates.length === 0 ? (
-                            <div className="text-center py-4">
-                                <p className="text-sm text-gray-600 mb-3">No templates available</p>
-                                <button
-                                    onClick={() => {
-                                        setShowApplyTemplateModal(false);
-                                        handleCreateTemplate();
-                                    }}
-                                    className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
-                                >
-                                    Create Template
-                                </button>
-                            </div>
-                        ) : (
-                            <>
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                                        Select Template *
-                                    </label>
-                                    <select
-                                        value={selectedTemplateId || ''}
-                                        onChange={(e) => setSelectedTemplateId(e.target.value || null)}
-                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                    >
-                                        <option value="">-- Select a template --</option>
-                                        {templates.map(template => (
-                                            <option key={template.id} value={template.id}>
-                                                {template.name} ({template.sections?.length || 0} sections)
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                                        Target Year
-                                    </label>
-                                    <select
-                                        value={targetYear}
-                                        onChange={(e) => setTargetYear(parseInt(e.target.value))}
-                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                    >
-                                        {yearOptions.map(year => (
-                                            <option key={year} value={year}>
-                                                {year}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowApplyTemplateModal(false)}
-                                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50/50 transition-colors font-medium"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={handleApply}
-                                        disabled={!selectedTemplateId}
-                                        className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        Apply Template
-                                    </button>
-                                </div>
-                            </>
-                        )}
-                    </div>
-                </div>
-            </div>
-        );
-    };
-
+    
+    // ============================================================
+    // RENDER STATUS CELL
+    // ============================================================
+    
     const renderStatusCell = (section, document, month) => {
         const status = getDocumentStatus(document, month);
         const statusConfig = status ? getStatusConfig(status) : null;
         const comments = getDocumentComments(document, month);
         const hasComments = comments.length > 0;
-        const cellKey = createCommentCellKey(section.id, document.id, month);
+        const cellKey = `${section.id}-${document.id}-${month}`;
         const isPopupOpen = hoverCommentCell === cellKey;
         
         const isWorkingMonth = workingMonths.includes(months.indexOf(month)) && selectedYear === currentYear;
         const cellBackgroundClass = statusConfig 
             ? statusConfig.cellColor 
-            : (isWorkingMonth ? 'bg-primary-50 dark:bg-primary-900/30' : '');
+            : (isWorkingMonth ? 'bg-primary-50' : '');
         
         const textColorClass = statusConfig && statusConfig.color 
             ? statusConfig.color.split(' ').find(cls => cls.startsWith('text-')) || 'text-gray-900'
             : 'text-gray-400';
-
+        
         return (
-            <td 
-                className={`px-2 py-1 text-xs border-l border-gray-100 dark:border-slate-700 ${cellBackgroundClass} relative z-0`}
-            >
-                <div className="min-w-[160px] relative flex items-center gap-1">
+            <td className={`px-2 py-1 text-xs border-l border-gray-100 ${cellBackgroundClass} relative`}>
+                <div className="min-w-[160px] relative">
                     <select
                         value={status || ''}
-                        onChange={(e) => handleUpdateStatus(section.id, document.id, month, e.target.value)}
-                        className={`flex-1 px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent dark:bg-transparent dark:text-slate-100 ${textColorClass} hover:opacity-80 relative z-0`}
+                        onChange={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const newStatus = e.target.value;
+                            handleUpdateStatus(section.id, document.id, month, newStatus);
+                        }}
+                        onBlur={(e) => {
+                            // Ensure state is saved on blur
+                            const newStatus = e.target.value;
+                            if (newStatus !== status) {
+                                handleUpdateStatus(section.id, document.id, month, newStatus);
+                            }
+                        }}
+                        aria-label={`Status for ${document.name || 'document'} in ${month} ${selectedYear}`}
+                        role="combobox"
+                        aria-haspopup="listbox"
+                        data-section-id={section.id}
+                        data-document-id={document.id}
+                        data-month={month}
+                        data-year={selectedYear}
+                        className={`w-full px-1.5 py-0.5 text-[10px] rounded font-medium border-0 cursor-pointer appearance-none bg-transparent ${textColorClass} hover:opacity-80`}
                     >
                         <option value="">Select Status</option>
                         {statusOptions.map(option => (
@@ -3261,7 +1008,7 @@ const parseCommentCellKey = (key) => {
                         ))}
                     </select>
                     
-                    <div className="flex-shrink-0 z-10">
+                    <div className="absolute top-1/2 right-0.5 -translate-y-1/2 z-10">
                         <button
                             data-comment-cell={cellKey}
                             onClick={(e) => {
@@ -3272,17 +1019,16 @@ const parseCommentCellKey = (key) => {
                                     setHoverCommentCell(null);
                                 } else {
                                     const rect = e.currentTarget.getBoundingClientRect();
-                                    const position = {
+                                    setCommentPopupPosition({
                                         top: rect.bottom + 5,
                                         left: rect.right - 288
-                                    };
-                                    setCommentPopupPosition(position);
+                                    });
                                     setHoverCommentCell(cellKey);
                                 }
                             }}
-                            className="text-gray-500 dark:text-primary-200 hover:text-primary-600 transition-colors relative p-1"
+                            className="text-gray-500 hover:text-gray-700 transition-colors relative p-1"
+                            title={hasComments ? `${comments.length} comment(s)` : 'Add comment'}
                             type="button"
-                            title="Add or view comments"
                         >
                             <i className="fas fa-comment text-base"></i>
                             {hasComments && (
@@ -3296,82 +1042,667 @@ const parseCommentCellKey = (key) => {
             </td>
         );
     };
-
+    
+    // ============================================================
+    // MODALS
+    // ============================================================
+    
+    const SectionModal = () => {
+        const [formData, setFormData] = useState({
+            name: editingSection?.name || '',
+            description: editingSection?.description || ''
+        });
+        
+        const handleSubmit = (e) => {
+            e.preventDefault();
+            if (!formData.name.trim()) {
+                alert('Please enter a section name');
+                return;
+            }
+            handleSaveSection(formData);
+        };
+        
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
+                        <h2 className="text-base font-semibold text-gray-900">
+                            {editingSection ? 'Edit Section' : 'Add New Section'}
+                        </h2>
+                        <button onClick={() => setShowSectionModal(false)} className="text-gray-400 hover:text-gray-600 p-1">
+                            <i className="fas fa-times text-sm"></i>
+                        </button>
+                    </div>
+                    
+                    <form onSubmit={handleSubmit} className="p-4 space-y-3">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Section Name *</label>
+                            <input
+                                type="text"
+                                value={formData.name}
+                                onChange={(e) => setFormData({...formData, name: e.target.value})}
+                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                placeholder="e.g., Financial Documents"
+                                required
+                            />
+                        </div>
+                        
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Description (Optional)</label>
+                            <textarea
+                                value={formData.description}
+                                onChange={(e) => setFormData({...formData, description: e.target.value})}
+                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                rows="2"
+                                placeholder="Brief description..."
+                            ></textarea>
+                        </div>
+                        
+                        <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
+                            <button
+                                type="button"
+                                onClick={() => setShowSectionModal(false)}
+                                className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                            >
+                                {editingSection ? 'Update' : 'Add'} Section
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        );
+    };
+    
+    const DocumentModal = () => {
+        const [formData, setFormData] = useState({
+            name: editingDocument?.name || '',
+            description: editingDocument?.description || '',
+            attachments: editingDocument?.attachments || []
+        });
+        
+        useEffect(() => {
+            setFormData({
+                name: editingDocument?.name || '',
+                description: editingDocument?.description || '',
+                attachments: editingDocument?.attachments || []
+            });
+        }, [editingDocument]);
+        
+        const handleSubmit = (e) => {
+            e.preventDefault();
+            if (!formData.name.trim()) {
+                alert('Please enter a document name');
+                return;
+            }
+            handleSaveDocument(formData);
+        };
+        
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
+                        <h2 className="text-base font-semibold text-gray-900">
+                            {editingDocument ? 'Edit Document' : 'Add Document'}
+                        </h2>
+                        <button onClick={() => setShowDocumentModal(false)} className="text-gray-400 hover:text-gray-600 p-1">
+                            <i className="fas fa-times text-sm"></i>
+                        </button>
+                    </div>
+                    
+                    <form onSubmit={handleSubmit} className="p-4 space-y-3">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Document Name *</label>
+                            <input
+                                type="text"
+                                value={formData.name}
+                                onChange={(e) => setFormData({...formData, name: e.target.value})}
+                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                placeholder="e.g., Bank Statements"
+                                required
+                            />
+                        </div>
+                        
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Description (Optional)</label>
+                            <textarea
+                                value={formData.description}
+                                onChange={(e) => setFormData({...formData, description: e.target.value})}
+                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                rows="2"
+                                placeholder="Additional details..."
+                            ></textarea>
+                        </div>
+                        
+                        <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
+                            <button
+                                type="button"
+                                onClick={() => setShowDocumentModal(false)}
+                                className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                            >
+                                {editingDocument ? 'Update' : 'Add'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        );
+    };
+    
+    const TemplateModal = () => {
+        const [formData, setFormData] = useState(() => {
+            if (editingTemplate) {
+                return {
+                    name: editingTemplate.name || '',
+                    description: editingTemplate.description || '',
+                    sections: parseSections(editingTemplate.sections)
+                };
+            }
+            if (prefilledTemplate) {
+                return {
+                    name: prefilledTemplate.name || '',
+                    description: prefilledTemplate.description || '',
+                    sections: parseSections(prefilledTemplate.sections)
+                };
+            }
+            return { name: '', description: '', sections: [] };
+        });
+        
+        useEffect(() => {
+            if (editingTemplate) {
+                setFormData({
+                    name: editingTemplate.name || '',
+                    description: editingTemplate.description || '',
+                    sections: parseSections(editingTemplate.sections)
+                });
+            } else if (prefilledTemplate) {
+                setFormData({
+                    name: prefilledTemplate.name || '',
+                    description: prefilledTemplate.description || '',
+                    sections: parseSections(prefilledTemplate.sections)
+                });
+            } else {
+                setFormData({ name: '', description: '', sections: [] });
+            }
+        }, [editingTemplate, prefilledTemplate]);
+        
+        const handleSubmit = (e) => {
+            e.preventDefault();
+            if (!formData.name.trim()) {
+                alert('Please enter a template name');
+                return;
+            }
+            if (formData.sections.length === 0) {
+                alert('Please add at least one section');
+                return;
+            }
+            saveTemplate(formData);
+        };
+        
+        if (showTemplateList) {
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
+                            <h2 className="text-base font-semibold text-gray-900">Template Management</h2>
+                            <button
+                                onClick={() => {
+                                    setPrefilledTemplate(null);
+                                    setShowTemplateModal(false);
+                                }}
+                                className="text-gray-400 hover:text-gray-600 p-1"
+                            >
+                                <i className="fas fa-times text-sm"></i>
+                            </button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto p-4">
+                            <div className="flex justify-between items-center mb-4">
+                                <p className="text-xs text-gray-600">Manage your document collection templates</p>
+                                <button
+                                    onClick={() => {
+                                        setEditingTemplate(null);
+                                        setPrefilledTemplate(null);
+                                        setShowTemplateList(false);
+                                    }}
+                                    className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
+                                >
+                                    <i className="fas fa-plus mr-1"></i>
+                                    Create New Template
+                                </button>
+                            </div>
+                            
+                            {isLoadingTemplates ? (
+                                <div className="text-center py-8">
+                                    <i className="fas fa-spinner fa-spin text-2xl text-gray-400"></i>
+                                    <p className="text-sm text-gray-600 mt-2">Loading templates...</p>
+                                </div>
+                            ) : templates.length === 0 ? (
+                                <div className="text-center py-8 text-gray-400">
+                                    <i className="fas fa-layer-group text-3xl mb-2 opacity-50"></i>
+                                    <p className="text-sm">No templates yet</p>
+                                    <p className="text-xs mt-1">Create your first template to get started</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {templates.map(template => (
+                                        <div key={template.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100">
+                                            <div className="flex justify-between items-start">
+                                                <div className="flex-1">
+                                                    <h3 className="text-sm font-semibold text-gray-900 mb-1">{template.name}</h3>
+                                                    {template.description && (
+                                                        <p className="text-xs text-gray-600 mb-2">{template.description}</p>
+                                                    )}
+                                                    <div className="flex items-center gap-4 text-[10px] text-gray-500">
+                                                        <span><i className="fas fa-folder mr-1"></i>{Array.isArray(template.sections) ? template.sections.length : 0} sections</span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-1 ml-3">
+                                                    <button
+                                                        onClick={() => {
+                                                            setEditingTemplate(template);
+                                                            setPrefilledTemplate(null);
+                                                            setShowTemplateList(false);
+                                                        }}
+                                                        className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded"
+                                                    >
+                                                        <i className="fas fa-edit"></i>
+                                                    </button>
+                                                    {!template.isDefault && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                console.log('🗑️ Delete button clicked for template:', template.id);
+                                                                deleteTemplate(template.id);
+                                                            }}
+                                                            className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded"
+                                                            title="Delete template"
+                                                        >
+                                                            <i className="fas fa-trash"></i>
+                                                        </button>
+                                                    )}
+                                                    {template.isDefault && (
+                                                        <span className="px-2 py-1 text-xs text-gray-400" title="Default template">
+                                                            <i className="fas fa-lock"></i>
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
+                        <h2 className="text-base font-semibold text-gray-900">
+                            {editingTemplate ? 'Edit Template' : 'Create Template'}
+                        </h2>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => {
+                                    setEditingTemplate(null);
+                                    setPrefilledTemplate(null);
+                                    setShowTemplateList(true);
+                                }}
+                                className="px-2 py-1 text-xs text-gray-600 hover:text-gray-800"
+                            >
+                                <i className="fas fa-arrow-left mr-1"></i>
+                                Back
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setPrefilledTemplate(null);
+                                    setShowTemplateModal(false);
+                                }}
+                                className="text-gray-400 hover:text-gray-600 p-1"
+                            >
+                                <i className="fas fa-times text-sm"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 space-y-4">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Template Name *</label>
+                            <input
+                                type="text"
+                                value={formData.name}
+                                onChange={(e) => setFormData({...formData, name: e.target.value})}
+                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                placeholder="e.g., Standard Monthly Checklist"
+                                required
+                            />
+                        </div>
+                        
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Description (Optional)</label>
+                            <textarea
+                                value={formData.description}
+                                onChange={(e) => setFormData({...formData, description: e.target.value})}
+                                className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                rows="2"
+                                placeholder="Brief description..."
+                            ></textarea>
+                        </div>
+                        
+                        <div>
+                            <div className="flex justify-between items-center mb-2">
+                                <label className="block text-xs font-medium text-gray-700">Sections *</label>
+                                <button
+                                    type="button"
+                                    onClick={() => setFormData({
+                                        ...formData,
+                                        sections: [...formData.sections, { name: '', description: '', documents: [] }]
+                                    })}
+                                    className="px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium"
+                                >
+                                    <i className="fas fa-plus mr-1"></i>
+                                    Add Section
+                                </button>
+                            </div>
+                            
+                            <div className="space-y-3">
+                                {formData.sections.map((section, idx) => (
+                                    <div key={idx} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                                        <div className="flex items-start justify-between mb-2">
+                                            <input
+                                                type="text"
+                                                value={section.name}
+                                                onChange={(e) => {
+                                                    const newSections = [...formData.sections];
+                                                    newSections[idx].name = e.target.value;
+                                                    setFormData({...formData, sections: newSections});
+                                                }}
+                                                className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded"
+                                                placeholder="Section name *"
+                                                required
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const newSections = formData.sections.filter((_, i) => i !== idx);
+                                                    setFormData({...formData, sections: newSections});
+                                                }}
+                                                className="ml-2 text-red-600 hover:text-red-800 p-1"
+                                            >
+                                                <i className="fas fa-trash text-xs"></i>
+                                            </button>
+                                        </div>
+                                        
+                                        <div className="flex justify-between items-center mt-2">
+                                            <label className="text-[10px] font-medium text-gray-600">Documents:</label>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const newSections = [...formData.sections];
+                                                    if (!newSections[idx].documents) newSections[idx].documents = [];
+                                                    newSections[idx].documents.push({ name: '', description: '' });
+                                                    setFormData({...formData, sections: newSections});
+                                                }}
+                                                className="px-1.5 py-0.5 bg-gray-600 text-white rounded text-[9px] font-medium"
+                                            >
+                                                <i className="fas fa-plus mr-0.5"></i>
+                                                Add
+                                            </button>
+                                        </div>
+                                        
+                                        <div className="space-y-1 mt-1">
+                                            {(section.documents || []).map((doc, docIdx) => (
+                                                <div key={docIdx} className="flex items-center gap-1 bg-white p-1.5 rounded border border-gray-200">
+                                                    <input
+                                                        type="text"
+                                                        value={doc.name}
+                                                        onChange={(e) => {
+                                                            const newSections = [...formData.sections];
+                                                            newSections[idx].documents[docIdx].name = e.target.value;
+                                                            setFormData({...formData, sections: newSections});
+                                                        }}
+                                                        className="flex-1 px-1.5 py-0.5 text-[10px] border border-gray-300 rounded"
+                                                        placeholder="Document name *"
+                                                        required
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const newSections = [...formData.sections];
+                                                            newSections[idx].documents = newSections[idx].documents.filter((_, i) => i !== docIdx);
+                                                            setFormData({...formData, sections: newSections});
+                                                        }}
+                                                        className="text-red-600 hover:text-red-800 p-0.5"
+                                                    >
+                                                        <i className="fas fa-times text-[9px]"></i>
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        
+                        <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setPrefilledTemplate(null);
+                                    setShowTemplateModal(false);
+                                }}
+                                className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                            >
+                                {editingTemplate ? 'Update' : 'Create'} Template
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        );
+    };
+    
+    const ApplyTemplateModal = () => {
+        const [selectedTemplateId, setSelectedTemplateId] = useState(null);
+        const [targetYear, setTargetYear] = useState(selectedYear);
+        
+        const handleApply = () => {
+            if (!selectedTemplateId) {
+                alert('Please select a template');
+                return;
+            }
+            const template = templates.find(t => String(t.id) === String(selectedTemplateId));
+            if (!template) {
+                alert('Template not found');
+                return;
+            }
+            applyTemplate(template, targetYear);
+        };
+        
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+                    <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
+                        <h2 className="text-base font-semibold text-gray-900">Apply Template</h2>
+                        <button onClick={() => setShowApplyTemplateModal(false)} className="text-gray-400 hover:text-gray-600 p-1">
+                            <i className="fas fa-times text-sm"></i>
+                        </button>
+                    </div>
+                    
+                    <div className="p-4 space-y-4">
+                        {isLoadingTemplates ? (
+                            <div className="text-center py-4">
+                                <i className="fas fa-spinner fa-spin text-2xl text-gray-400"></i>
+                                <p className="text-sm text-gray-600 mt-2">Loading templates...</p>
+                            </div>
+                        ) : templates.length === 0 ? (
+                            <div className="text-center py-4">
+                                <p className="text-sm text-gray-600 mb-3">No templates available</p>
+                                <button
+                                    onClick={() => {
+                                        setShowApplyTemplateModal(false);
+                                        setShowTemplateModal(true);
+                                    }}
+                                    className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
+                                >
+                                    Create Template
+                                </button>
+                            </div>
+                        ) : (
+                            <>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1.5">Select Template *</label>
+                                    <select
+                                        value={selectedTemplateId || ''}
+                                        onChange={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            setSelectedTemplateId(e.target.value);
+                                        }}
+                                        onBlur={(e) => {
+                                            // Ensure selection is saved on blur
+                                            const newValue = e.target.value;
+                                            if (newValue !== selectedTemplateId) {
+                                                setSelectedTemplateId(newValue);
+                                            }
+                                        }}
+                                        aria-label="Select template to apply"
+                                        role="combobox"
+                                        aria-haspopup="listbox"
+                                        data-testid="template-selector"
+                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                    >
+                                        <option value="">-- Select a template --</option>
+                                        {templates.map(template => (
+                                            <option key={template.id} value={template.id}>
+                                                {template.name} ({Array.isArray(template.sections) ? template.sections.length : 0} sections)
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1.5">Target Year</label>
+                                    <select
+                                        value={targetYear}
+                                        onChange={(e) => setTargetYear(parseInt(e.target.value))}
+                                        className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                    >
+                                        {yearOptions.map(year => (
+                                            <option key={year} value={year}>{year}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                
+                                <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowApplyTemplateModal(false)}
+                                        className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleApply}
+                                        disabled={!selectedTemplateId}
+                                        className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                                    >
+                                        Apply Template
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+    
+    // ============================================================
+    // MAIN RENDER
+    // ============================================================
+    
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                    <i className="fas fa-spinner fa-spin text-3xl text-primary-600 mb-3"></i>
+                    <p className="text-sm text-gray-600">Loading document collection tracker...</p>
+                </div>
+            </div>
+        );
+    }
+    
     return (
         <div className="space-y-3">
+            {/* Comment Popup */}
             {hoverCommentCell && (() => {
-                const context = parseCommentCellKey(hoverCommentCell);
-                if (!context) return null;
-                const { sectionId, documentId, month } = context;
-                const section = sections.find(s => String(s.id) === String(sectionId));
-                const document = section?.documents.find(d => String(d.id) === String(documentId));
+                const [sectionId, documentId, month] = hoverCommentCell.split('-');
+                const section = sections.find(s => s.id === parseInt(sectionId));
+                const document = section?.documents.find(d => d.id === parseInt(documentId));
                 const comments = document ? getDocumentComments(document, month) : [];
-                if (!section || !document) return null;
-                const normalizedSectionId = section.id;
-                const normalizedDocumentId = document.id;
                 
                 return (
                     <div 
                         className="comment-popup fixed w-72 bg-white border border-gray-300 rounded-lg shadow-xl p-3 z-[999]"
-                        style={{
-                            top: `${commentPopupPosition.top}px`,
-                            left: `${commentPopupPosition.left}px`
-                        }}
-                        onClick={(e) => e.stopPropagation()}
+                        style={{ top: `${commentPopupPosition.top}px`, left: `${commentPopupPosition.left}px` }}
                     >
                         {comments.length > 0 && (
                             <div className="mb-3">
                                 <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
                                 <div ref={commentPopupContainerRef} className="max-h-32 overflow-y-auto space-y-2 mb-2">
-                                    {comments.map((comment, idx) => {
-                                        const currentUser = getCurrentUser();
-                                        const canDelete = comment?.authorId === currentUser.id || 
-                                                         comment?.author === currentUser.name ||
-                                                         currentUser.role === 'Admin' || 
-                                                         currentUser.role === 'Administrator' ||
-                                                         currentUser.role === 'admin';
-                                        const authorName = comment.author || comment.createdBy || 'User';
-                                        const authorEmail = comment.authorEmail || comment.createdByEmail;
-                                        
-                                        return (
-                                            <div key={comment.id || idx} className="pb-2 border-b last:border-b-0 bg-gray-50/30 rounded p-1.5 relative group">
-                                                <p className="text-xs text-gray-700 whitespace-pre-wrap pr-6">{comment.text}</p>
-                                                <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
-                                                    <span className="font-medium">
-                                                        {authorName}
-                                                        {authorEmail ? ` (${authorEmail})` : ''}
-                                                    </span>
-                                                    <span>{new Date(comment.date || comment.timestamp || comment.createdAt).toLocaleString('en-ZA', { 
-                                                        month: 'short', 
-                                                        day: '2-digit',
-                                                        hour: '2-digit',
-                                                        minute: '2-digit',
-                                                        year: 'numeric'
-                                                    })}</span>
-                                                </div>
-                                                {canDelete && (
-                                                    <button
-                                                        onClick={() => handleDeleteComment(normalizedSectionId, normalizedDocumentId, month, comment.id || idx)}
-                                                        className="absolute top-1 right-1 text-gray-400 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
-                                                        type="button"
-                                                    >
-                                                        <i className="fas fa-trash text-[10px]"></i>
-                                                    </button>
-                                                )}
+                                    {comments.map((comment, idx) => (
+                                        <div key={comment.id || idx} className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5 relative group">
+                                            <p className="text-xs text-gray-700 whitespace-pre-wrap pr-6">{comment.text}</p>
+                                            <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
+                                                <span className="font-medium">{comment.author}</span>
+                                                <span>{new Date(comment.date).toLocaleString('en-ZA', { 
+                                                    month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit'
+                                                })}</span>
                                             </div>
-                                        );
-                                    })}
+                                            <button
+                                                onClick={() => handleDeleteComment(parseInt(sectionId), parseInt(documentId), month, comment.id)}
+                                                className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
+                                                type="button"
+                                            >
+                                                <i className="fas fa-trash text-[10px]"></i>
+                                            </button>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         )}
                         
                         <div>
                             <div className="text-[10px] font-semibold text-gray-600 mb-1">Add Comment</div>
-                            {commentInputAvailable && typeof window.CommentInputWithMentions === 'function' ? (
+                            {commentInputAvailable ? (
                                 <window.CommentInputWithMentions
                                     onSubmit={(commentText) => {
                                         if (commentText && commentText.trim()) {
-                                            handleAddComment(normalizedSectionId, normalizedDocumentId, month, commentText);
+                                            handleAddComment(parseInt(sectionId), parseInt(documentId), month, commentText);
                                         }
                                     }}
                                     placeholder="Type comment... (@mention users, Shift+Enter for new line, Enter to send)"
@@ -3385,26 +1716,19 @@ const parseCommentCellKey = (key) => {
                                         value={quickComment}
                                         onChange={(e) => setQuickComment(e.target.value)}
                                         onKeyDown={(e) => {
-                                            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                                                e.preventDefault();
-                                                if (quickComment.trim()) {
-                                                    handleAddComment(normalizedSectionId, normalizedDocumentId, month, quickComment);
-                                                }
+                                            if (e.key === 'Enter' && e.ctrlKey) {
+                                                handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
                                             }
                                         }}
-                                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
                                         rows="2"
-                                        placeholder="Type comment... (Ctrl/Cmd+Enter to submit)"
+                                        placeholder="Type comment... (Ctrl+Enter to submit)"
                                         autoFocus
                                     />
                                     <button
-                                        onClick={() => {
-                                            if (quickComment.trim()) {
-                                                handleAddComment(normalizedSectionId, normalizedDocumentId, month, quickComment);
-                                            }
-                                        }}
+                                        onClick={() => handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment)}
                                         disabled={!quickComment.trim()}
-                                        className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 disabled:opacity-50"
                                     >
                                         Add Comment
                                     </button>
@@ -3414,13 +1738,11 @@ const parseCommentCellKey = (key) => {
                     </div>
                 );
             })()}
-
+            
+            {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <button 
-                        onClick={onBack} 
-                        className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-50/50 rounded-lg transition-colors"
-                    >
+                    <button onClick={onBack} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
                         <i className="fas fa-arrow-left"></i>
                     </button>
                     <div>
@@ -3433,125 +1755,108 @@ const parseCommentCellKey = (key) => {
                     <label className="text-[10px] font-medium text-gray-600">Year:</label>
                     <select
                         value={selectedYear}
-                        onChange={(e) => handleYearChange(parseInt(e.target.value))}
-                        className="px-2.5 py-1 text-xs border border-gray-300 rounded-lg bg-white text-gray-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        onChange={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const newYear = parseInt(e.target.value, 10);
+                            if (!isNaN(newYear)) {
+                                handleYearChange(newYear);
+                            }
+                        }}
+                        onBlur={(e) => {
+                            const newYear = parseInt(e.target.value, 10);
+                            if (!isNaN(newYear) && newYear !== selectedYear) {
+                                handleYearChange(newYear);
+                            }
+                        }}
+                        aria-label="Select year for document collection tracker"
+                        role="combobox"
+                        aria-haspopup="listbox"
+                        data-testid="year-selector"
+                        className="px-2.5 py-1 text-xs border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500"
                     >
                         {yearOptions.map(year => (
-                            <option key={year} value={year}>
-                                {year}
-                                {year === currentYear && ' (Current)'}
-                            </option>
+                            <option key={year} value={year}>{year}{year === currentYear && ' (Current)'}</option>
                         ))}
                     </select>
+                    
                     <button
                         onClick={handleExportToExcel}
                         disabled={isExporting || sections.length === 0}
-                        className="px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-[10px] font-medium flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 text-[10px] font-medium disabled:opacity-50"
                     >
                         {isExporting ? (
-                            <>
-                                <i className="fas fa-spinner fa-spin"></i>
-                                Exporting...
-                            </>
+                            <><i className="fas fa-spinner fa-spin mr-1"></i>Exporting...</>
                         ) : (
-                            <>
-                                <i className="fas fa-file-excel"></i>
-                                Export
-                            </>
+                            <><i className="fas fa-file-excel mr-1"></i>Export</>
                         )}
                     </button>
+                    
                     <button
                         onClick={handleAddSection}
-                        className="px-3 py-1 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-[10px] font-medium"
+                        className="px-3 py-1 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-[10px] font-medium"
                     >
-                        <i className="fas fa-plus mr-1"></i>
-                        Add Section
+                        <i className="fas fa-plus mr-1"></i>Add Section
                     </button>
-                    <button
-                        onClick={() => {
-                            console.log('🔵 Apply Template button clicked');
-                            setShowApplyTemplateModal(true);
-                            // Force immediate template load
-                            loadTemplates();
-                        }}
-                        className="px-3 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-[10px] font-medium"
-                    >
-                        <i className="fas fa-magic mr-1"></i>
-                        Apply Template
-                    </button>
-                    <button
-                        onClick={handleCreateTemplate}
-                        className="px-3 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-[10px] font-medium"
-                    >
-                        <i className="fas fa-layer-group mr-1"></i>
-                        Templates
-                    </button>
-                    {sections.length > 0 && (
-                        <button
-                            onClick={handleCreateTemplateFromCurrent}
-                            className="px-3 py-1 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-[10px] font-medium"
-                        >
-                            <i className="fas fa-save mr-1"></i>
-                            Save as Template
-                        </button>
-                    )}
-                </div>
-            </div>
-
-            <div className="bg-white rounded-lg border border-gray-200 p-2.5 dark:bg-slate-900 dark:border-slate-800">
-                <div className="space-y-1.5">
-                    <div className="flex items-center gap-2 pb-1.5 border-b border-gray-100">
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 text-[10px] font-medium dark:bg-primary-900/40 dark:text-primary-100">
-                            <i className="fas fa-calendar-check mr-1 text-[10px]"></i>
-                            Working Months
-                        </span>
-                        <span className="text-[10px] text-gray-500">
-                            Highlighted columns show current focus months (2 months in arrears)
-                        </span>
-                    </div>
                     
-                    <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-medium text-gray-600">Status Progression:</span>
-                        {statusOptions.slice(0, 3).map((option, idx) => (
-                            <React.Fragment key={option.value}>
-                                <div className="flex items-center gap-1">
-                                    <div className={`w-3 h-3 rounded ${option.cellColor} border border-gray-300`}></div>
-                                    <span className="text-[10px] text-gray-600">{option.label}</span>
-                                </div>
-                                {idx < 2 && (
-                                    <i className="fas fa-arrow-right text-[8px] text-gray-400"></i>
-                                )}
-                            </React.Fragment>
-                        ))}
-                        <span className="text-gray-300 mx-1">|</span>
-                        <div className="flex items-center gap-1">
-                            <div className={`w-3 h-3 rounded ${statusOptions[3].cellColor} border border-gray-300`}></div>
-                            <span className="text-[10px] text-gray-600">{statusOptions[3].label}</span>
-                        </div>
+                    <div className="flex items-center gap-1 border-l border-gray-300 pl-2 ml-2">
+                        <button
+                            onClick={() => setShowApplyTemplateModal(true)}
+                            className="px-3 py-1 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-[10px] font-medium"
+                        >
+                            <i className="fas fa-magic mr-1"></i>Apply Template
+                        </button>
+                        <button
+                            onClick={() => {
+                                setPrefilledTemplate(null);
+                                setShowTemplateList(true);
+                                setShowTemplateModal(true);
+                            }}
+                            className="px-3 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-[10px] font-medium"
+                        >
+                            <i className="fas fa-layer-group mr-1"></i>Templates
+                        </button>
+                        {sections.length > 0 && (
+                            <button
+                                onClick={handleCreateTemplateFromCurrent}
+                                className="px-3 py-1 bg-teal-600 text-white rounded-lg hover:bg-teal-700 text-[10px] font-medium"
+                            >
+                                <i className="fas fa-save mr-1"></i>Save as Template
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
-
-            <div className="flex items-center justify-between px-3 py-2 rounded-lg border border-gray-200 bg-gray-50/60 dark:border-slate-700 dark:bg-slate-800/60">
-                <div className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-                    Document Collection List
-                </div>
-                <div className="flex items-center gap-2 text-xs font-semibold text-primary-700 dark:text-primary-100">
-                    <span className="uppercase tracking-wide text-[10px] text-gray-500 dark:text-gray-300">Year</span>
-                    <span className="px-2 py-0.5 rounded-full bg-primary-100 text-primary-800 dark:bg-primary-900/60 dark:text-primary-100">
-                        {selectedYear}
-                    </span>
+            
+            {/* Legend */}
+            <div className="bg-white rounded-lg border border-gray-200 p-2.5">
+                <div className="flex items-center gap-3">
+                    <span className="text-[10px] font-medium text-gray-600">Status:</span>
+                    {statusOptions.slice(0, 3).map((option, idx) => (
+                        <React.Fragment key={option.value}>
+                            <div className="flex items-center gap-1">
+                                <div className={`w-3 h-3 rounded ${option.cellColor}`}></div>
+                                <span className="text-[10px] text-gray-600">{option.label}</span>
+                            </div>
+                            {idx < 2 && <i className="fas fa-arrow-right text-[8px] text-gray-400"></i>}
+                        </React.Fragment>
+                    ))}
+                    <span className="text-gray-300 mx-1">|</span>
+                    <div className="flex items-center gap-1">
+                        <div className={`w-3 h-3 rounded ${statusOptions[3].cellColor}`}></div>
+                        <span className="text-[10px] text-gray-600">{statusOptions[3].label}</span>
+                    </div>
                 </div>
             </div>
-
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden dark:bg-slate-900 dark:border-slate-800">
-                <div className="relative overflow-x-auto overflow-y-visible" ref={tableRef} style={{ maxWidth: '100%', WebkitOverflowScrolling: 'touch', overflowX: 'auto', overflowY: 'visible' }}>
-                    <div style={{ overflowX: 'auto', width: '100%' }}>
-                        <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-800" style={{ minWidth: '1200px' }}>
-                        <thead className="bg-gray-50/30 dark:bg-slate-800/60">
+            
+            {/* Table */}
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <div className="relative overflow-x-auto" ref={tableRef}>
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
                             <tr>
                                 <th 
-                                    className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wide sticky left-0 bg-gray-50/30 z-50 border-r border-gray-200 dark:bg-slate-800/70 dark:text-gray-100 dark:border-slate-700"
+                                    className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase sticky left-0 bg-gray-50 z-50 border-r border-gray-200"
                                     style={{ boxShadow: STICKY_COLUMN_SHADOW }}
                                 >
                                     Document / Data
@@ -3560,29 +1865,21 @@ const parseCommentCellKey = (key) => {
                                     <th 
                                         key={month}
                                         ref={el => monthRefs.current[month] = el}
-                                        className={`px-1.5 py-1.5 text-center text-[10px] font-semibold uppercase tracking-wide border-l border-gray-200 dark:border-slate-700 ${
+                                        className={`px-1.5 py-1.5 text-center text-[10px] font-semibold uppercase border-l border-gray-200 ${
                                             workingMonths.includes(idx) && selectedYear === currentYear
-                                                ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/40 dark:text-primary-100'
-                                                : 'text-gray-600 dark:text-gray-200'
+                                                ? 'bg-primary-50 text-primary-700'
+                                                : 'text-gray-600'
                                         }`}
-                                        >
-                                        <div className="flex flex-col items-center gap-0.5">
-                                            <span>{month.slice(0, 3)} '{String(selectedYear).slice(-2)}</span>
-                                            {workingMonths.includes(idx) && selectedYear === currentYear && (
-                                                <span className="inline-flex items-center px-1 py-0.5 rounded text-[9px] font-semibold bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-100">
-                                                    <i className="fas fa-calendar-check mr-0.5"></i>
-                                                    Working
-                                                </span>
-                                            )}
-                                        </div>
+                                    >
+                                        {month.slice(0, 3)} '{String(selectedYear).slice(-2)}
                                     </th>
                                 ))}
-                                <th className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wide border-l border-gray-200 dark:text-gray-100 dark:border-slate-700">
+                                <th className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase border-l border-gray-200">
                                     Actions
                                 </th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-100 dark:bg-slate-900 dark:divide-slate-800">
+                        <tbody className="bg-white divide-y divide-gray-100">
                             {sections.length === 0 ? (
                                 <tr>
                                     <td colSpan={14} className="px-6 py-8 text-center text-gray-400">
@@ -3592,8 +1889,7 @@ const parseCommentCellKey = (key) => {
                                             onClick={handleAddSection}
                                             className="mt-3 px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
                                         >
-                                            <i className="fas fa-plus mr-1"></i>
-                                            Add First Section
+                                            <i className="fas fa-plus mr-1"></i>Add First Section
                                         </button>
                                     </td>
                                 </tr>
@@ -3602,20 +1898,16 @@ const parseCommentCellKey = (key) => {
                                     <React.Fragment key={section.id}>
                                         <tr 
                                             draggable="true"
-                                            onDragStart={(e) => handleDragStart(e, section, sectionIndex)}
-                                            onDragEnd={handleDragEnd}
-                                            onDragOver={handleDragOver}
-                                            onDragEnter={(e) => handleDragEnter(e, sectionIndex)}
-                                            onDragLeave={handleDragLeave}
-                                            onDrop={(e) => handleDrop(e, sectionIndex)}
-                                            className={`bg-gray-50/50 dark:bg-slate-800/40 cursor-grab active:cursor-grabbing ${
-                                                dragOverIndex === sectionIndex ? 'border-t-2 border-primary-500' : ''
-                                            }`}
+                                            onDragStart={(e) => handleSectionDragStart(e, section, sectionIndex)}
+                                            onDragEnd={handleSectionDragEnd}
+                                            onDragOver={(e) => e.preventDefault()}
+                                            onDrop={(e) => handleSectionDrop(e, sectionIndex)}
+                                            className="bg-gray-100 cursor-grab active:cursor-grabbing"
                                         >
-                                                    <td 
-                                                    className="px-2.5 py-2 sticky left-0 bg-gray-50/50 dark:bg-slate-800/40 z-50 border-r border-gray-200 dark:border-slate-700"
-                                                        style={{ boxShadow: STICKY_COLUMN_SHADOW }}
-                                                    >
+                                            <td 
+                                                className="px-2.5 py-2 sticky left-0 bg-gray-100 z-50 border-r border-gray-200"
+                                                style={{ boxShadow: STICKY_COLUMN_SHADOW }}
+                                            >
                                                 <div className="flex items-center gap-2">
                                                     <i className="fas fa-grip-vertical text-gray-400 text-xs"></i>
                                                     <div className="flex-1">
@@ -3625,17 +1917,15 @@ const parseCommentCellKey = (key) => {
                                                         )}
                                                         <button
                                                             onClick={() => handleAddDocument(section.id)}
-                                                            className="mt-2 px-2 py-0.5 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 transition-colors"
+                                                            className="mt-2 px-2 py-0.5 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700"
                                                         >
-                                                            <i className="fas fa-plus mr-1"></i>
-                                                            Add Document/Data
+                                                            <i className="fas fa-plus mr-1"></i>Add Document
                                                         </button>
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td colSpan={12} className="px-2 py-2">
-                                            </td>
-                                            <td className="px-2.5 py-2 border-l border-gray-200 dark:border-slate-700">
+                                            <td colSpan={12} className="px-2 py-2"></td>
+                                            <td className="px-2.5 py-2 border-l border-gray-200">
                                                 <div className="flex items-center gap-1">
                                                     <button
                                                         onClick={() => handleEditSection(section)}
@@ -3652,51 +1942,31 @@ const parseCommentCellKey = (key) => {
                                                 </div>
                                             </td>
                                         </tr>
-
+                                        
                                         {section.documents.length === 0 ? (
                                             <tr>
                                                 <td colSpan={14} className="px-8 py-4 text-center text-gray-400">
-                                                    <div className="flex flex-col items-center gap-2">
-                                                        <i className="fas fa-file-alt text-2xl opacity-50"></i>
-                                                        <p className="text-xs">No documents/data in this section</p>
-                                                        <button
-                                                            onClick={() => handleAddDocument(section.id)}
-                                                            className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-xs font-medium flex items-center gap-1.5"
-                                                        >
-                                                            <i className="fas fa-plus"></i>
-                                                            Add Document/Data
-                                                        </button>
-                                                    </div>
+                                                    <p className="text-xs">No documents in this section</p>
+                                                    <button
+                                                        onClick={() => handleAddDocument(section.id)}
+                                                        className="mt-2 px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
+                                                    >
+                                                        <i className="fas fa-plus mr-1"></i>Add Document
+                                                    </button>
                                                 </td>
                                             </tr>
                                         ) : (
                                             section.documents.map((document, documentIndex) => (
-                                                <tr 
-                                                    key={document.id} 
-                                                    draggable="true"
-                                                    onDragStart={(e) => handleDocumentDragStart(e, document, section.id, documentIndex)}
-                                                    onDragEnd={handleDocumentDragEnd}
-                                                    onDragOver={handleDocumentDragOver}
-                                                    onDragEnter={(e) => handleDocumentDragEnter(e, section.id, documentIndex)}
-                                                    onDragLeave={handleDocumentDragLeave}
-                                                    onDrop={(e) => handleDocumentDrop(e, section.id, documentIndex)}
-                                                    className={`hover:bg-gray-50/30 dark:hover:bg-slate-800/50 cursor-grab active:cursor-grabbing ${
-                                                        dragOverDocumentIndex?.sectionId === section.id && dragOverDocumentIndex?.documentIndex === documentIndex 
-                                                            ? 'border-t-2 border-primary-500' : ''
-                                                    }`}
-                                                >
+                                                <tr key={document.id} className="hover:bg-gray-50">
                                                     <td 
-                                                        className="px-4 py-1.5 sticky left-0 bg-white dark:bg-slate-900 z-50 border-r border-gray-200 dark:border-slate-700"
+                                                        className="px-4 py-1.5 sticky left-0 bg-white z-50 border-r border-gray-200"
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW }}
                                                     >
-                                                        <div className="min-w-[200px] flex items-center gap-2">
-                                                            <i className="fas fa-grip-vertical text-gray-400 text-xs"></i>
-                                                            <div className="flex-1">
-                                                                <div className="text-xs font-medium text-gray-900">{document.name}</div>
-                                                                {document.description && (
-                                                                    <div className="text-[10px] text-gray-500 mt-0.5">{document.description}</div>
-                                                                )}
-                                                            </div>
+                                                        <div className="min-w-[200px]">
+                                                            <div className="text-xs font-medium text-gray-900">{document.name}</div>
+                                                            {document.description && (
+                                                                <div className="text-[10px] text-gray-500">{document.description}</div>
+                                                            )}
                                                         </div>
                                                     </td>
                                                     {months.map(month => (
@@ -3704,7 +1974,7 @@ const parseCommentCellKey = (key) => {
                                                             {renderStatusCell(section, document, month)}
                                                         </React.Fragment>
                                                     ))}
-                                                    <td className="px-2.5 py-1.5 border-l border-gray-200 dark:border-slate-700">
+                                                    <td className="px-2.5 py-1.5 border-l border-gray-200">
                                                         <div className="flex items-center gap-1">
                                                             <button
                                                                 onClick={() => handleEditDocument(section, document)}
@@ -3728,19 +1998,20 @@ const parseCommentCellKey = (key) => {
                             )}
                         </tbody>
                     </table>
-                    </div>
                 </div>
             </div>
-
+            
+            {/* Modals */}
             {showSectionModal && <SectionModal />}
             {showDocumentModal && <DocumentModal />}
-            {showTemplateModal && <TemplateModal showTemplateList={showTemplateList} setShowTemplateList={setShowTemplateList} />}
+            {showTemplateModal && <TemplateModal />}
             {showApplyTemplateModal && <ApplyTemplateModal />}
         </div>
     );
 };
 
+// Make available globally
 window.MonthlyDocumentCollectionTracker = MonthlyDocumentCollectionTracker;
-console.log('✅ MonthlyDocumentCollectionTracker component loaded (v20250127-refactored-API)');
+console.log('✅ MonthlyDocumentCollectionTracker component loaded (OVERHAULED VERSION)');
 
 export default MonthlyDocumentCollectionTracker;

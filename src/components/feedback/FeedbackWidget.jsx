@@ -52,7 +52,7 @@ const FeedbackWidget = () => {
                 'reports': 'Reports',
                 'settings': 'Settings',
                 'account': 'Account',
-                'time': 'Time Tracking',
+                'time-tracking': 'Time Tracking',
                 'documents': 'Documents'
             };
             pageName = pageIdMap[pageId] || pageId.charAt(0).toUpperCase() + pageId.slice(1);
