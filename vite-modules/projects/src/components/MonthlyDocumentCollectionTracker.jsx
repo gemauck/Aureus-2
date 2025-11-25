@@ -584,15 +584,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
     
     const handleDeleteSection = (sectionId) => {
-        const section = sections.find(s => s.id === sectionId);
-        if (!section) return;
+        // Normalize IDs to strings for comparison
+        const normalizedSectionId = String(sectionId);
+        const section = sections.find(s => String(s.id) === normalizedSectionId);
+        
+        if (!section) {
+            console.error('❌ Section not found for deletion. ID:', sectionId, 'Available sections:', sections.map(s => ({ id: s.id, name: s.name })));
+            alert(`Error: Section not found. Cannot delete.`);
+            return;
+        }
         
         if (!confirm(`Delete section "${section.name}" and all its documents?`)) {
             return;
         }
         
-        setSections(prev => prev.filter(s => s.id !== sectionId));
-        console.log('🗑️ Deleted section:', section.name);
+        setSections(prev => {
+            const filtered = prev.filter(s => String(s.id) !== normalizedSectionId);
+            console.log('🗑️ Deleted section:', section.name, 'Remaining sections:', filtered.length);
+            return filtered;
+        });
     };
     
     // ============================================================
@@ -656,15 +666,35 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
     
     const handleDeleteDocument = (sectionId, documentId) => {
-        if (!confirm('Delete this document/data item?')) {
+        // Normalize IDs to strings for comparison
+        const normalizedSectionId = String(sectionId);
+        const normalizedDocumentId = String(documentId);
+        
+        const section = sections.find(s => String(s.id) === normalizedSectionId);
+        if (!section) {
+            console.error('❌ Section not found for document deletion. Section ID:', sectionId);
+            alert(`Error: Section not found. Cannot delete document.`);
+            return;
+        }
+        
+        const document = section.documents.find(d => String(d.id) === normalizedDocumentId);
+        if (!document) {
+            console.error('❌ Document not found for deletion. Document ID:', documentId, 'Section:', section.name);
+            alert(`Error: Document not found. Cannot delete.`);
+            return;
+        }
+        
+        if (!confirm(`Delete document "${document.name}"?`)) {
             return;
         }
         
         setSections(prev => prev.map(section => {
-            if (section.id === sectionId) {
+            if (String(section.id) === normalizedSectionId) {
+                const filteredDocuments = section.documents.filter(doc => String(doc.id) !== normalizedDocumentId);
+                console.log('🗑️ Deleted document:', document.name, 'from section:', section.name, 'Remaining documents:', filteredDocuments.length);
                 return {
                     ...section,
-                    documents: section.documents.filter(doc => doc.id !== documentId)
+                    documents: filteredDocuments
                 };
             }
             return section;
