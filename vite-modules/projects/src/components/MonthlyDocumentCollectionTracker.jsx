@@ -62,6 +62,8 @@ const getAPI = () => {
                 }
                 return result;
             },
+            // CRITICAL: fetchProject loads documentSections which is SHARED across all users
+            // No user-based filtering - all users see the same checklist data
             fetchProject: async (projectId, forceRefresh = false) => {
                 console.log('📥 FETCHING FROM DATABASE:', {
                     projectId,
@@ -359,6 +361,8 @@ const parseCommentCellKey = (key) => {
     const [selectedYear, setSelectedYear] = useState(getInitialSelectedYear);
     
     // ✅ NEW SIMPLE ARCHITECTURE: Database as single source of truth
+    // CRITICAL: documentSections is SHARED across all users - no user-based filtering
+    // All users see and can update the same checklist data
     // Store sections organized by year: { [year]: sections[] }
     const [sectionsByYear, setSectionsByYear] = useState({});
     // Current year's sections (derived from sectionsByYear[selectedYear])
@@ -562,50 +566,91 @@ const parseCommentCellKey = (key) => {
             allYears.add(currentYear);
         }
         
-        // ✅ SIMPLIFIED: Show ALL sections for ALL years - shared checklist for all users
-        // All users see the same sections regardless of year markers or data
+        // For each year, only include sections that have data for that year
+        // Sections without any year data are excluded (they're new and haven't been saved yet)
+        // CRITICAL: Sections with template markers should ONLY appear in the year they're marked for
         console.log('🔍 organizeSectionsByYear: Processing years:', Array.from(allYears).sort());
-        console.log('🔍 organizeSectionsByYear: Showing ALL sections for ALL years (shared checklist)');
+        console.log('🔍 organizeSectionsByYear: Template markers found:', Array.from(sectionTemplateMarkers.entries()).map(([id, year]) => ({ id, year })));
         
         allYears.forEach(year => {
             if (year === 2018) {
-                console.log(`🔍 Processing year 2018: Found ${flatSections.length} total sections - showing ALL`);
+                console.log(`🔍 Processing year 2018: Found ${flatSections.length} total sections`);
             }
             
-            // Include ALL sections for ALL years - no filtering based on year data or template markers
-            organized[year] = flatSections.map((section) => {
-                return {
-                    ...section,
-                    documents: section.documents?.map(doc => {
-                        const yearCollectionStatus = {};
-                        const yearComments = {};
-                        
-                        // Filter collectionStatus for this year (but show section regardless)
-                        if (doc.collectionStatus) {
-                            Object.keys(doc.collectionStatus).forEach(key => {
-                                if (key.endsWith(`-${year}`) || key === `_template-${year}`) {
-                                    yearCollectionStatus[key] = doc.collectionStatus[key];
-                                }
-                            });
+            organized[year] = flatSections
+                .map((section, sectionIdx) => {
+                    const sectionId = section.id || `section-${sectionIdx}`;
+                    
+                    // Check if this section has a template marker (from our map)
+                    const templateMarkerYear = sectionTemplateMarkers.get(sectionId);
+                    const hasTemplateMarker = templateMarkerYear !== null && templateMarkerYear !== undefined;
+                    
+                    if (year === 2018 && hasTemplateMarker) {
+                        console.log(`🔍 Year 2018: Section ${sectionId} has template marker for year ${templateMarkerYear}`);
+                    }
+                    
+                    // CRITICAL: If section has template marker, it MUST match this year exactly
+                    // If it doesn't match, exclude it completely (don't even check hasDataForYear)
+                    if (hasTemplateMarker) {
+                        if (templateMarkerYear !== year) {
+                            if (year === 2018) {
+                                console.log(`⏭️ Year 2018: Excluding section ${sectionId} (template marker is for year ${templateMarkerYear})`);
+                            }
+                            return null; // Exclude this section for this year
                         }
-                        
-                        // Filter comments for this year
-                        if (doc.comments) {
-                            Object.keys(doc.comments).forEach(key => {
-                                if (key.endsWith(`-${year}`)) {
-                                    yearComments[key] = doc.comments[key];
-                                }
-                            });
+                        if (year === 2018) {
+                            console.log(`✅ Year 2018: Including section ${sectionId} (template marker matches)`);
                         }
-                        
+                    }
+                    
+                    // For sections without template markers, check if they have data for this year
+                    const hasDataForYear = sectionYearsMap.get(sectionId)?.has(year) || false;
+                    const shouldInclude = hasTemplateMarker
+                        ? (templateMarkerYear === year) // Should always be true if we got here
+                        : hasDataForYear;
+                    
+                    if (year === 2018 && !hasTemplateMarker) {
+                        console.log(`🔍 Year 2018: Section ${sectionId} (no template marker) - hasDataForYear: ${hasDataForYear}, shouldInclude: ${shouldInclude}`);
+                    }
+                    
+                    if (shouldInclude) {
                         return {
-                            ...doc,
-                            collectionStatus: yearCollectionStatus,
-                            comments: yearComments
+                            ...section,
+                            documents: section.documents?.map(doc => {
+                                const yearCollectionStatus = {};
+                                const yearComments = {};
+                                
+                                // Filter collectionStatus for this year
+                                // Include both regular year keys (e.g., "January-2025") and template markers (e.g., "_template-2025")
+                                // Keep template markers so we can track which sections belong to which years
+                                if (doc.collectionStatus) {
+                                    Object.keys(doc.collectionStatus).forEach(key => {
+                                        if (key.endsWith(`-${year}`) || key === `_template-${year}`) {
+                                            yearCollectionStatus[key] = doc.collectionStatus[key];
+                                        }
+                                    });
+                                }
+                                
+                                // Filter comments for this year
+                                if (doc.comments) {
+                                    Object.keys(doc.comments).forEach(key => {
+                                        if (key.endsWith(`-${year}`)) {
+                                            yearComments[key] = doc.comments[key];
+                                        }
+                                    });
+                                }
+                                
+                                return {
+                                    ...doc,
+                                    collectionStatus: yearCollectionStatus,
+                                    comments: yearComments
+                                };
+                            }) || []
                         };
-                    }) || []
-                };
-            });
+                    }
+                    return null; // Exclude section for this year if it has no data
+                })
+                .filter(section => section !== null); // Remove null entries
             
             if (year === 2018) {
                 console.log(`✅ Year 2018: Final organized sections count: ${organized[year].length}`);
@@ -1680,9 +1725,10 @@ const parseCommentCellKey = (key) => {
                 }, currentUser);
             }
         } else {
-            // Create unique section ID with timestamp and random to ensure year independence
+            // Create unique section ID with timestamp, year, and random to ensure year independence
+            // CRITICAL: Include year in ID to ensure sections are completely independent per year
             const newSection = {
-                id: `section-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                id: `section-${selectedYear}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                 ...sectionData,
                 documents: []
             };
@@ -1989,9 +2035,24 @@ const parseCommentCellKey = (key) => {
     };
 
     const handleEditDocument = (section, document) => {
+        if (!section || !document) {
+            console.warn('Cannot edit: section or document is missing', { section, document });
+            return;
+        }
+        console.log('✏️ Editing document:', { sectionId: section.id, documentId: document.id, documentName: document.name });
+        // Ensure we have the latest document data from current state
+        const currentSections = sectionsByYear[selectedYear] || [];
+        const currentSection = currentSections.find(s => s.id === section.id);
+        const currentDocument = currentSection?.documents?.find(d => d.id === document.id);
+        
+        if (!currentDocument) {
+            console.warn('Document not found in current state, using provided document');
+        }
+        
+        const documentToEdit = currentDocument || document;
         editingSectionIdRef.current = section.id;
         setEditingSectionId(section.id);
-        setEditingDocument(document);
+        setEditingDocument(documentToEdit);
         setShowDocumentModal(true);
     };
 
@@ -2015,9 +2076,10 @@ const parseCommentCellKey = (key) => {
                         )
                     };
                     } else {
-                        // Create unique document ID to ensure year independence
+                        // Create unique document ID with year to ensure year independence
+                        // CRITICAL: Include year in ID to ensure documents are completely independent per year
                         const newDocument = {
-                        id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                        id: `doc-${selectedYear}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                         ...documentData,
                         collectionStatus: {},
                         comments: {}
@@ -2038,15 +2100,26 @@ const parseCommentCellKey = (key) => {
     };
 
     const handleDeleteDocument = (sectionId, documentId) => {
-        const section = sections.find(s => s.id === sectionId);
-        const document = section?.documents.find(d => d.id === documentId);
+        // Get current state to find document name for confirmation
+        const currentSections = sectionsByYear[selectedYear] || [];
+        const section = currentSections.find(s => s.id === sectionId);
+        const document = section?.documents?.find(d => d.id === documentId);
         
-        if (!section || !document) return;
+        if (!section || !document) {
+            console.warn('Document not found for deletion:', { sectionId, documentId });
+            alert('Document not found. It may have already been deleted.');
+            return;
+        }
         
-        if (confirm('Delete this document/data item?')) {
+        if (!confirm(`Delete "${document.name}"? This action cannot be undone.`)) {
+            return;
+        }
+        
+        // Use updateSectionsForYear's prev parameter to get current state (avoids stale closure)
+        updateSectionsForYear(prev => {
             // CRITICAL: Only delete from the selected year - other years remain unaffected
             // Each year's documents are completely independent
-            updateSectionsForYear(prev => prev.map(s => {
+            return prev.map(s => {
                 if (s.id === sectionId) {
                     return {
                         ...s,
@@ -2054,8 +2127,10 @@ const parseCommentCellKey = (key) => {
                     };
                 }
                 return s;
-            }));
-        }
+            });
+        });
+        
+        console.log('🗑️ Document deleted:', { sectionId, documentId, documentName: document.name });
     };
 
     const handleUpdateStatus = (sectionId, documentId, month, status) => {
@@ -3459,28 +3534,9 @@ const parseCommentCellKey = (key) => {
             </div>
 
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden dark:bg-slate-900 dark:border-slate-800">
-                <style>{`
-                    .doc-collection-scroll-container::-webkit-scrollbar {
-                        height: 12px;
-                    }
-                    .doc-collection-scroll-container::-webkit-scrollbar-track {
-                        background: #f1f5f9;
-                        border-radius: 6px;
-                    }
-                    .doc-collection-scroll-container::-webkit-scrollbar-thumb {
-                        background: #cbd5e1;
-                        border-radius: 6px;
-                    }
-                    .doc-collection-scroll-container::-webkit-scrollbar-thumb:hover {
-                        background: #94a3b8;
-                    }
-                    .doc-collection-scroll-container {
-                        scrollbar-width: thin;
-                        scrollbar-color: #cbd5e1 #f1f5f9;
-                    }
-                `}</style>
-                <div className="relative overflow-x-auto overflow-y-visible doc-collection-scroll-container" ref={tableRef}>
-                    <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-800">
+                <div className="relative overflow-x-auto overflow-y-visible" ref={tableRef} style={{ maxWidth: '100%', WebkitOverflowScrolling: 'touch', overflowX: 'auto', overflowY: 'visible' }}>
+                    <div style={{ overflowX: 'auto', width: '100%' }}>
+                        <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-800" style={{ minWidth: '1200px' }}>
                         <thead className="bg-gray-50/30 dark:bg-slate-800/60">
                             <tr>
                                 <th 
@@ -3551,38 +3607,14 @@ const parseCommentCellKey = (key) => {
                                                     >
                                                 <div className="flex items-center gap-2">
                                                     <i className="fas fa-grip-vertical text-gray-400 text-xs"></i>
-                                                    <div className="flex-1 space-y-1">
-                                                        <input
-                                                            type="text"
-                                                            value={section.name || ''}
-                                                            onChange={(e) => {
-                                                                updateSectionsForYear(prev => prev.map(s => 
-                                                                    s.id === section.id ? { ...s, name: e.target.value } : s
-                                                                ));
-                                                            }}
-                                                            onBlur={() => {
-                                                                // Auto-save is handled by the useEffect hook
-                                                            }}
-                                                            className="w-full px-2 py-1 text-sm font-semibold text-gray-900 border border-transparent rounded hover:border-gray-300 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 bg-transparent"
-                                                            placeholder="Section name"
-                                                        />
-                                                        <textarea
-                                                            value={section.description || ''}
-                                                            onChange={(e) => {
-                                                                updateSectionsForYear(prev => prev.map(s => 
-                                                                    s.id === section.id ? { ...s, description: e.target.value } : s
-                                                                ));
-                                                            }}
-                                                            onBlur={() => {
-                                                                // Auto-save is handled by the useEffect hook
-                                                            }}
-                                                            className="w-full px-2 py-0.5 text-[10px] text-gray-500 border border-transparent rounded hover:border-gray-300 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 bg-transparent resize-none"
-                                                            rows="1"
-                                                            placeholder="Description (optional)"
-                                                        />
+                                                    <div className="flex-1">
+                                                        <div className="font-semibold text-sm text-gray-900">{section.name}</div>
+                                                        {section.description && (
+                                                            <div className="text-[10px] text-gray-500">{section.description}</div>
+                                                        )}
                                                         <button
                                                             onClick={() => handleAddDocument(section.id)}
-                                                            className="mt-1 px-2 py-0.5 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 transition-colors"
+                                                            className="mt-2 px-2 py-0.5 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 transition-colors"
                                                         >
                                                             <i className="fas fa-plus mr-1"></i>
                                                             Add Document/Data
@@ -3595,13 +3627,14 @@ const parseCommentCellKey = (key) => {
                                             <td className="px-2.5 py-2 border-l border-gray-200 dark:border-slate-700">
                                                 <div className="flex items-center gap-1">
                                                     <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            e.preventDefault();
-                                                            handleDeleteSection(section.id);
-                                                        }}
+                                                        onClick={() => handleEditSection(section)}
+                                                        className="text-gray-600 hover:text-primary-600 p-1"
+                                                    >
+                                                        <i className="fas fa-edit text-xs"></i>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteSection(section.id)}
                                                         className="text-gray-600 hover:text-red-600 p-1"
-                                                        title="Delete section"
                                                     >
                                                         <i className="fas fa-trash text-xs"></i>
                                                     </button>
@@ -3647,51 +3680,11 @@ const parseCommentCellKey = (key) => {
                                                     >
                                                         <div className="min-w-[200px] flex items-center gap-2">
                                                             <i className="fas fa-grip-vertical text-gray-400 text-xs"></i>
-                                                            <div className="flex-1 space-y-1">
-                                                                <input
-                                                                    type="text"
-                                                                    value={document.name || ''}
-                                                                    onChange={(e) => {
-                                                                        updateSectionsForYear(prev => prev.map(s => {
-                                                                            if (s.id === section.id) {
-                                                                                return {
-                                                                                    ...s,
-                                                                                    documents: s.documents.map(doc => 
-                                                                                        doc.id === document.id ? { ...doc, name: e.target.value } : doc
-                                                                                    )
-                                                                                };
-                                                                            }
-                                                                            return s;
-                                                                        }));
-                                                                    }}
-                                                                    onBlur={() => {
-                                                                        // Auto-save is handled by the useEffect hook
-                                                                    }}
-                                                                    className="w-full px-2 py-0.5 text-xs font-medium text-gray-900 border border-transparent rounded hover:border-gray-300 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 bg-transparent"
-                                                                    placeholder="Document name"
-                                                                />
-                                                                <textarea
-                                                                    value={document.description || ''}
-                                                                    onChange={(e) => {
-                                                                        updateSectionsForYear(prev => prev.map(s => {
-                                                                            if (s.id === section.id) {
-                                                                                return {
-                                                                                    ...s,
-                                                                                    documents: s.documents.map(doc => 
-                                                                                        doc.id === document.id ? { ...doc, description: e.target.value } : doc
-                                                                                    )
-                                                                                };
-                                                                            }
-                                                                            return s;
-                                                                        }));
-                                                                    }}
-                                                                    onBlur={() => {
-                                                                        // Auto-save is handled by the useEffect hook
-                                                                    }}
-                                                                    className="w-full px-2 py-0.5 text-[10px] text-gray-500 border border-transparent rounded hover:border-gray-300 focus:border-primary-500 focus:ring-1 focus:ring-primary-500 bg-transparent resize-none"
-                                                                    rows="1"
-                                                                    placeholder="Description (optional)"
-                                                                />
+                                                            <div className="flex-1">
+                                                                <div className="text-xs font-medium text-gray-900">{document.name}</div>
+                                                                {document.description && (
+                                                                    <div className="text-[10px] text-gray-500 mt-0.5">{document.description}</div>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     </td>
@@ -3703,13 +3696,14 @@ const parseCommentCellKey = (key) => {
                                                     <td className="px-2.5 py-1.5 border-l border-gray-200 dark:border-slate-700">
                                                         <div className="flex items-center gap-1">
                                                             <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    e.preventDefault();
-                                                                    handleDeleteDocument(section.id, document.id);
-                                                                }}
+                                                                onClick={() => handleEditDocument(section, document)}
+                                                                className="text-gray-600 hover:text-primary-600 p-1"
+                                                            >
+                                                                <i className="fas fa-edit text-xs"></i>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteDocument(section.id, document.id)}
                                                                 className="text-gray-600 hover:text-red-600 p-1"
-                                                                title="Delete document"
                                                             >
                                                                 <i className="fas fa-trash text-xs"></i>
                                                             </button>
@@ -3723,6 +3717,7 @@ const parseCommentCellKey = (key) => {
                             )}
                         </tbody>
                     </table>
+                    </div>
                 </div>
             </div>
 
