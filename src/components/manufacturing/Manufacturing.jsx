@@ -1077,7 +1077,7 @@ const Manufacturing = () => {
     setShowModal(true);
   }, [selectedLocationId, stockLocations]);
 
-  const InventoryView = () => {
+  const renderInventoryView = () => {
     // Get unique categories from inventory items
     const uniqueCategories = [...new Set(inventory.map(item => item.category).filter(Boolean))].sort();
     
@@ -8603,7 +8603,7 @@ const Manufacturing = () => {
           {/* Content Area */}
           <div>
             {activeTab === 'dashboard' && <DashboardView />}
-            {activeTab === 'inventory' && <InventoryView />}
+            {activeTab === 'inventory' && renderInventoryView()}
             {activeTab === 'bom' && <BOMView />}
             {activeTab === 'production' && <ProductionView />}
             {activeTab === 'sales' && <SalesOrdersView />}

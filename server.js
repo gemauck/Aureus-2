@@ -604,6 +604,28 @@ app.all('/api/clients/:id/rss-subscription', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for tags endpoints with ID (GET, PATCH, DELETE /api/tags/:id)
+app.all('/api/tags/:id', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'tags.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
+// Explicit mapping for tags endpoints without ID (GET, POST /api/tags)
+app.all('/api/tags', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'tags.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
 // Explicit mapping for client tags endpoints (GET, POST, DELETE /api/clients/[id]/tags)
 app.all('/api/clients/:id/tags', async (req, res, next) => {
   try {

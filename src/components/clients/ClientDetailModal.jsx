@@ -527,6 +527,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [clientTags, setClientTags] = useState([]);
     const [allTags, setAllTags] = useState([]);
     const [showTagSelector, setShowTagSelector] = useState(false);
+    const [showNewTagForm, setShowNewTagForm] = useState(false);
     const [newTagName, setNewTagName] = useState('');
     const [newTagColor, setNewTagColor] = useState('#3B82F6');
     
@@ -706,6 +707,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 const data = await response.json();
                 const newTag = data.data.tag;
                 setAllTags(prev => [...prev, newTag]);
+                setShowNewTagForm(false);
                 setNewTagName('');
                 setNewTagColor('#3B82F6');
                 
@@ -2697,6 +2699,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         <button
                                             type="button"
                                             onClick={() => {
+                                                setShowNewTagForm(true);
                                                 setNewTagName('');
                                                 setNewTagColor('#3B82F6');
                                             }}
@@ -2707,7 +2710,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         </button>
                                     </div>
                                     
-                                    {newTagName && (
+                                    {showNewTagForm && (
                                         <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
                                             <div className="flex items-center gap-2 mb-2">
                                                 <input
@@ -2719,6 +2722,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                             e.preventDefault();
                                                             handleCreateTag();
                                                         } else if (e.key === 'Escape') {
+                                                            setShowNewTagForm(false);
                                                             setNewTagName('');
                                                             setNewTagColor('#3B82F6');
                                                         }
@@ -2746,6 +2750,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 <button
                                                     type="button"
                                                     onClick={() => {
+                                                        setShowNewTagForm(false);
                                                         setNewTagName('');
                                                         setNewTagColor('#3B82F6');
                                                     }}

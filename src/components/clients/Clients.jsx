@@ -2445,11 +2445,19 @@ const Clients = React.memo(() => {
                         ]).catch(() => {}); // Ignore errors, these are non-critical
                         
                         // Trigger background refresh and sync (non-blocking)
-                        // Use requestIdleCallback when available, otherwise fall back to setTimeout(0)
-                        const scheduleRefresh =
-                            typeof window.requestIdleCallback === 'function'
-                                ? (cb) => window.requestIdleCallback(cb, { timeout: 500 })
-                                : (cb) => setTimeout(cb, 0);
+                        // requestIdleCallback polyfills on some browsers throw if the options object
+                        // is not an actual IdleRequestOptions instance, so guard aggressively
+                        const scheduleRefresh = (cb) => {
+                            if (typeof window.requestIdleCallback === 'function') {
+                                try {
+                                    window.requestIdleCallback(cb);
+                                    return;
+                                } catch (idleErr) {
+                                    console.warn('⚠️ requestIdleCallback failed, falling back to setTimeout', idleErr);
+                                }
+                            }
+                            setTimeout(cb, 0);
+                        };
                         
                         scheduleRefresh(async () => {
                             await loadClients(true).catch(() => {}); // Force refresh
