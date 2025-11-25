@@ -11,19 +11,21 @@ import { stdin as input, stdout as output } from 'node:process';
 
 const prisma = new PrismaClient();
 
+// Ordered by dependencies - delete child records first, then parent records
 const RESOURCES = [
-  { label: 'Production Orders', model: 'productionOrder' },
-  { label: 'Stock Movements', model: 'stockMovement' },
-  { label: 'Purchase Orders', model: 'purchaseOrder' },
-  { label: 'Bills of Materials (BOMs)', model: 'bOM' },
-  { label: 'Location Inventory', model: 'locationInventory' },
-  { label: 'Inventory Items', model: 'inventoryItem' },
-  { label: 'Stock Locations', model: 'stockLocation' },
-  { label: 'Suppliers', model: 'supplier' }
+  { label: 'Production Orders', model: 'productionOrder' }, // References BOM
+  { label: 'Stock Movements', model: 'stockMovement' }, // References SKUs but no FK
+  { label: 'Purchase Orders', model: 'purchaseOrder' }, // References Supplier
+  { label: 'Bills of Materials (BOMs)', model: 'bOM' }, // References InventoryItem
+  { label: 'Location Inventory', model: 'locationInventory' }, // References StockLocation
+  { label: 'Inventory Items', model: 'inventoryItem' }, // References StockLocation
+  { label: 'Stock Locations', model: 'stockLocation' }, // Parent table
+  { label: 'Suppliers', model: 'supplier' } // Parent table
 ];
 
 async function confirmOrAbort(summary) {
-  if (!process.stdin.isTTY) {
+  // Allow non-interactive mode via environment variable
+  if (process.env.NON_INTERACTIVE === 'true' || !process.stdin.isTTY) {
     return true;
   }
 
@@ -84,5 +86,6 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+
 
 

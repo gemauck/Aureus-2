@@ -264,6 +264,9 @@ const ManagementMeetingNotes = () => {
     const [editingFields, setEditingFields] = useState({}); // { [departmentNotesId-field]: true/false }
     const [tempFieldValues, setTempFieldValues] = useState({}); // { [departmentNotesId-field]: value }
 
+    // Auto-save debounce timers
+    const autoSaveTimers = useRef({});
+
     const weekCardRefs = useRef({});
     
     const reloadMonthlyNotes = useCallback(async (preferredMonthKey = null) => {
@@ -1186,8 +1189,58 @@ const ManagementMeetingNotes = () => {
         }
     };
 
+    // Auto-save function with debounce for direct editing
+    const handleFieldChange = (departmentNotesId, field, value) => {
+        // Update local state immediately for responsive UI
+        const monthlyId = currentMonthlyNotes?.id || null;
+        updateDepartmentNotesLocal(departmentNotesId, field, value, monthlyId);
+        
+        // Clear existing timer for this field
+        const fieldKey = getFieldKey(departmentNotesId, field);
+        if (autoSaveTimers.current[fieldKey]) {
+            clearTimeout(autoSaveTimers.current[fieldKey]);
+        }
+        
+        // Set new timer for auto-save (500ms debounce)
+        autoSaveTimers.current[fieldKey] = setTimeout(async () => {
+            try {
+                await window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value });
+            } catch (error) {
+                console.error('Error auto-saving department notes:', error);
+                // Reload to revert local changes on error
+                if (selectedMonth) {
+                    await reloadMonthlyNotes(selectedMonth);
+                }
+            }
+            delete autoSaveTimers.current[fieldKey];
+        }, 500);
+    };
+    
+    // Force save on blur (immediate save without debounce)
+    const handleFieldBlur = async (departmentNotesId, field, value) => {
+        const fieldKey = getFieldKey(departmentNotesId, field);
+        // Clear any pending timer
+        if (autoSaveTimers.current[fieldKey]) {
+            clearTimeout(autoSaveTimers.current[fieldKey]);
+            delete autoSaveTimers.current[fieldKey];
+        }
+        
+        // Save immediately
+        try {
+            await window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value });
+        } catch (error) {
+            console.error('Error saving department notes on blur:', error);
+            if (selectedMonth) {
+                await reloadMonthlyNotes(selectedMonth);
+            }
+        }
+    };
+
+    // Track temp IDs to prevent duplicates when server responds
+    const tempActionItemIds = useRef({}); // { tempId: realId }
+
     // Helper function to update action items in local state
-    const updateActionItemLocal = useCallback((actionItem, isNew = false) => {
+    const updateActionItemLocal = useCallback((actionItem, isNew = false, tempId = null) => {
         const applyUpdate = (note) => {
             if (!note) return note;
 
@@ -1195,13 +1248,46 @@ const ManagementMeetingNotes = () => {
             if (actionItem.monthlyNotesId && !actionItem.weeklyNotesId && !actionItem.departmentNotesId) {
                 const monthlyActionItems = Array.isArray(note.actionItems) ? [...note.actionItems] : [];
                 if (isNew) {
+                    // Check if this temp item already exists (to prevent duplicates)
+                    if (tempId && tempActionItemIds.current[tempId]) {
+                        // Replace temp item with real item
+                        const tempIndex = monthlyActionItems.findIndex(item => item.id === tempId);
+                        if (tempIndex >= 0) {
+                            monthlyActionItems[tempIndex] = actionItem;
+                        } else {
+                            // Check if real item already exists
+                            const realIndex = monthlyActionItems.findIndex(item => item.id === actionItem.id);
+                            if (realIndex >= 0) {
+                                monthlyActionItems[realIndex] = actionItem;
+                            } else {
                     monthlyActionItems.push(actionItem);
+                            }
+                        }
+                    } else {
+                        // Check if item with same ID already exists
+                        const existingIndex = monthlyActionItems.findIndex(item => item.id === actionItem.id);
+                        if (existingIndex >= 0) {
+                            monthlyActionItems[existingIndex] = actionItem;
+                        } else {
+                            monthlyActionItems.push(actionItem);
+                        }
+                    }
                 } else {
                     const index = monthlyActionItems.findIndex(item => item.id === actionItem.id);
                     if (index >= 0) {
                         monthlyActionItems[index] = actionItem;
                     } else {
+                        // Check if there's a temp version to replace
+                        if (tempId && tempActionItemIds.current[tempId]) {
+                            const tempIndex = monthlyActionItems.findIndex(item => item.id === tempId);
+                            if (tempIndex >= 0) {
+                                monthlyActionItems[tempIndex] = actionItem;
+                    } else {
                         monthlyActionItems.push(actionItem);
+                            }
+                        } else {
+                            monthlyActionItems.push(actionItem);
+                        }
                     }
                 }
                 return { ...note, actionItems: monthlyActionItems };
@@ -1214,13 +1300,41 @@ const ManagementMeetingNotes = () => {
                       if (actionItem.weeklyNotesId === week.id && !actionItem.departmentNotesId) {
                           const weeklyActionItems = Array.isArray(week.actionItems) ? [...week.actionItems] : [];
                           if (isNew) {
+                              if (tempId && tempActionItemIds.current[tempId]) {
+                                  const tempIndex = weeklyActionItems.findIndex(item => item.id === tempId);
+                                  if (tempIndex >= 0) {
+                                      weeklyActionItems[tempIndex] = actionItem;
+                                  } else {
+                                      const realIndex = weeklyActionItems.findIndex(item => item.id === actionItem.id);
+                                      if (realIndex >= 0) {
+                                          weeklyActionItems[realIndex] = actionItem;
+                                      } else {
                               weeklyActionItems.push(actionItem);
+                                      }
+                                  }
+                              } else {
+                                  const existingIndex = weeklyActionItems.findIndex(item => item.id === actionItem.id);
+                                  if (existingIndex >= 0) {
+                                      weeklyActionItems[existingIndex] = actionItem;
+                                  } else {
+                                      weeklyActionItems.push(actionItem);
+                                  }
+                              }
                           } else {
                               const index = weeklyActionItems.findIndex(item => item.id === actionItem.id);
                               if (index >= 0) {
                                   weeklyActionItems[index] = actionItem;
                               } else {
+                                  if (tempId && tempActionItemIds.current[tempId]) {
+                                      const tempIndex = weeklyActionItems.findIndex(item => item.id === tempId);
+                                      if (tempIndex >= 0) {
+                                          weeklyActionItems[tempIndex] = actionItem;
+                              } else {
                                   weeklyActionItems.push(actionItem);
+                                      }
+                                  } else {
+                                      weeklyActionItems.push(actionItem);
+                                  }
                               }
                           }
                           return { ...week, actionItems: weeklyActionItems };
@@ -1232,13 +1346,41 @@ const ManagementMeetingNotes = () => {
                               if (deptNote.id === actionItem.departmentNotesId) {
                                   const deptActionItems = Array.isArray(deptNote.actionItems) ? [...deptNote.actionItems] : [];
                                   if (isNew) {
+                                      if (tempId && tempActionItemIds.current[tempId]) {
+                                          const tempIndex = deptActionItems.findIndex(item => item.id === tempId);
+                                          if (tempIndex >= 0) {
+                                              deptActionItems[tempIndex] = actionItem;
+                                          } else {
+                                              const realIndex = deptActionItems.findIndex(item => item.id === actionItem.id);
+                                              if (realIndex >= 0) {
+                                                  deptActionItems[realIndex] = actionItem;
+                                              } else {
                                       deptActionItems.push(actionItem);
+                                              }
+                                          }
+                                      } else {
+                                          const existingIndex = deptActionItems.findIndex(item => item.id === actionItem.id);
+                                          if (existingIndex >= 0) {
+                                              deptActionItems[existingIndex] = actionItem;
+                                          } else {
+                                              deptActionItems.push(actionItem);
+                                          }
+                                      }
                                   } else {
                                       const index = deptActionItems.findIndex(item => item.id === actionItem.id);
                                       if (index >= 0) {
                                           deptActionItems[index] = actionItem;
                                       } else {
+                                          if (tempId && tempActionItemIds.current[tempId]) {
+                                              const tempIndex = deptActionItems.findIndex(item => item.id === tempId);
+                                              if (tempIndex >= 0) {
+                                                  deptActionItems[tempIndex] = actionItem;
+                                      } else {
                                           deptActionItems.push(actionItem);
+                                              }
+                                          } else {
+                                              deptActionItems.push(actionItem);
+                                          }
                                       }
                                   }
                                   return { ...deptNote, actionItems: deptActionItems };
@@ -1276,15 +1418,18 @@ const ManagementMeetingNotes = () => {
             }
 
             const isUpdate = !!editingActionItem?.id;
+            const tempId = isUpdate ? null : `temp-${Date.now()}`;
             const tempActionItem = {
                 ...actionItemData,
-                id: editingActionItem?.id || `temp-${Date.now()}`,
+                id: editingActionItem?.id || tempId,
                 createdAt: editingActionItem?.createdAt || new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
 
-            // Optimistic update - show immediately
-            updateActionItemLocal(tempActionItem, !isUpdate);
+            // Optimistic update - show immediately (only if creating new)
+            if (!isUpdate) {
+                updateActionItemLocal(tempActionItem, true, tempId);
+            }
             setShowActionItemModal(false);
             setEditingActionItem(null);
 
@@ -1292,7 +1437,8 @@ const ManagementMeetingNotes = () => {
             console.log('💾 Saving action item:', {
                 isUpdate,
                 actionItemData,
-                editingActionItem
+                editingActionItem,
+                tempId
             });
 
             let response;
@@ -1310,8 +1456,19 @@ const ManagementMeetingNotes = () => {
             // Get the actual action item from response
             const savedActionItem = response?.data?.actionItem || response?.actionItem;
             if (savedActionItem) {
+                // Track temp ID mapping to prevent duplicates
+                if (tempId && !isUpdate) {
+                    tempActionItemIds.current[tempId] = savedActionItem.id;
+                }
                 // Update with server response (includes real ID and timestamps)
-                updateActionItemLocal(savedActionItem, false);
+                // Replace temp item with real item
+                updateActionItemLocal(savedActionItem, false, tempId);
+                // Clean up temp ID mapping after a delay
+                if (tempId) {
+                    setTimeout(() => {
+                        delete tempActionItemIds.current[tempId];
+                    }, 5000);
+                }
             } else if (response?.success) {
                 // If response just indicates success, refresh from server in background
                 window.DatabaseAPI.getMeetingNotes(selectedMonth)
@@ -2311,189 +2468,75 @@ const ManagementMeetingNotes = () => {
                                                     <div className="space-y-3 flex-grow">
                                                         {/* Successes */}
                                                         <div>
-                                                            <div className="flex items-center justify-between mb-1">
-                                                                <label className={`block text-xs font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                                            <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
                                                                     Last Week's Successes
                                                                 </label>
-                                                                {!editingFields[getFieldKey(deptNote.id, 'successes')] ? (
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleStartEdit(deptNote.id, 'successes', deptNote.successes)}
-                                                                        className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                                                                        title="Edit"
-                                                                    >
-                                                                        <i className="fas fa-edit"></i>
-                                                                        Edit
-                                                                    </button>
-                                                                ) : (
-                                                                    <div className="flex gap-1">
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={(e) => {
-                                                                                e.preventDefault();
-                                                                                e.stopPropagation();
-                                                                                handleSubmitField(e, deptNote.id, 'successes');
-                                                                            }}
-                                                                            onMouseDown={(e) => {
-                                                                                e.preventDefault();
-                                                                                e.stopPropagation();
-                                                                            }}
-                                                                            className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-green-700 text-green-200 hover:bg-green-600' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
-                                                                            title="Submit"
-                                                                        >
-                                                                            <i className="fas fa-check"></i>
-                                                                            Submit
-                                                                        </button>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => handleCancelEdit(deptNote.id, 'successes')}
-                                                                            className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-red-900 text-red-200 hover:bg-red-800' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
-                                                                            title="Cancel"
-                                                                        >
-                                                                            <i className="fas fa-times"></i>
-                                                                            Cancel
-                                                                        </button>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                            {editingFields[getFieldKey(deptNote.id, 'successes')] && window.RichTextEditor ? (
+                                                            {window.RichTextEditor ? (
                                                                 <window.RichTextEditor
-                                                                    value={tempFieldValues[getFieldKey(deptNote.id, 'successes')] ?? ''}
-                                                                    onChange={(html) => handleTempValueChange(deptNote.id, 'successes', html)}
+                                                                    value={deptNote.successes || ''}
+                                                                    onChange={(html) => handleFieldChange(deptNote.id, 'successes', html)}
                                 placeholder="What went well during the week? (Use formatting toolbar for bullets, bold, etc.)"
                                                                     rows={4}
                                                                     isDark={isDark}
                                                                 />
                                                             ) : (
-                                                                <div 
-                                                                    className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'} ${!editingFields[getFieldKey(deptNote.id, 'successes')] ? (isDark ? 'cursor-not-allowed opacity-75' : 'cursor-not-allowed opacity-60') : ''}`}
-                                                                    dangerouslySetInnerHTML={{ __html: decodeHtmlContent(deptNote.successes || '') }}
+                                                                <textarea
+                                                                    value={deptNote.successes || ''}
+                                                                    onChange={(e) => handleFieldChange(deptNote.id, 'successes', e.target.value)}
+                                                                    onBlur={(e) => handleFieldBlur(deptNote.id, 'successes', e.target.value)}
+                                                                    placeholder="What went well during the week?"
+                                                                    className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                                                    rows={4}
                                                                 />
                                                             )}
                                                         </div>
 
                                                         {/* Week to Follow */}
                                                         <div>
-                                                            <div className="flex items-center justify-between mb-1">
-                                                                <label className={`block text-xs font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                                            <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
                                                                     Weekly Plan
                                                                 </label>
-                                                                {!editingFields[getFieldKey(deptNote.id, 'weekToFollow')] ? (
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleStartEdit(deptNote.id, 'weekToFollow', deptNote.weekToFollow)}
-                                                                        className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                                                                        title="Edit"
-                                                                    >
-                                                                        <i className="fas fa-edit"></i>
-                                                                        Edit
-                                                                    </button>
-                                                                ) : (
-                                                                    <div className="flex gap-1">
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={(e) => {
-                                                                                e.preventDefault();
-                                                                                e.stopPropagation();
-                                                                                handleSubmitField(e, deptNote.id, 'weekToFollow');
-                                                                            }}
-                                                                            onMouseDown={(e) => {
-                                                                                e.preventDefault();
-                                                                                e.stopPropagation();
-                                                                            }}
-                                                                            className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-green-700 text-green-200 hover:bg-green-600' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
-                                                                            title="Submit"
-                                                                        >
-                                                                            <i className="fas fa-check"></i>
-                                                                            Submit
-                                                                        </button>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => handleCancelEdit(deptNote.id, 'weekToFollow')}
-                                                                            className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-red-900 text-red-200 hover:bg-red-800' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
-                                                                            title="Cancel"
-                                                                        >
-                                                                            <i className="fas fa-times"></i>
-                                                                            Cancel
-                                                                        </button>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                            {editingFields[getFieldKey(deptNote.id, 'weekToFollow')] && window.RichTextEditor ? (
+                                                            {window.RichTextEditor ? (
                                                                 <window.RichTextEditor
-                                                                    value={tempFieldValues[getFieldKey(deptNote.id, 'weekToFollow')] ?? ''}
-                                                                    onChange={(html) => handleTempValueChange(deptNote.id, 'weekToFollow', html)}
+                                                                    value={deptNote.weekToFollow || ''}
+                                                                    onChange={(html) => handleFieldChange(deptNote.id, 'weekToFollow', html)}
                                                                     placeholder="What's planned for the upcoming week? (Use formatting toolbar for bullets, bold, etc.)"
                                                                     rows={4}
                                                                     isDark={isDark}
                                                                 />
                                                             ) : (
-                                                                <div 
-                                                                    className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'} ${!editingFields[getFieldKey(deptNote.id, 'weekToFollow')] ? (isDark ? 'cursor-not-allowed opacity-75' : 'cursor-not-allowed opacity-60') : ''}`}
-                                                                    dangerouslySetInnerHTML={{ __html: decodeHtmlContent(deptNote.weekToFollow || '') }}
+                                                                <textarea
+                                                                    value={deptNote.weekToFollow || ''}
+                                                                    onChange={(e) => handleFieldChange(deptNote.id, 'weekToFollow', e.target.value)}
+                                                                    onBlur={(e) => handleFieldBlur(deptNote.id, 'weekToFollow', e.target.value)}
+                                                                    placeholder="What's planned for the upcoming week?"
+                                                                    className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                                                    rows={4}
                                                                 />
                                                             )}
                                                         </div>
 
                                                         {/* Frustrations */}
                                                         <div>
-                                                            <div className="flex items-center justify-between mb-1">
-                                                                <label className={`block text-xs font-medium ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                                            <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
                                                                     Frustrations/Challenges
                                                                 </label>
-                                                                {!editingFields[getFieldKey(deptNote.id, 'frustrations')] ? (
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => handleStartEdit(deptNote.id, 'frustrations', deptNote.frustrations)}
-                                                                        className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-                                                                        title="Edit"
-                                                                    >
-                                                                        <i className="fas fa-edit"></i>
-                                                                        Edit
-                                                                    </button>
-                                                                ) : (
-                                                                    <div className="flex gap-1">
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={(e) => {
-                                                                                e.preventDefault();
-                                                                                e.stopPropagation();
-                                                                                handleSubmitField(e, deptNote.id, 'frustrations');
-                                                                            }}
-                                                                            onMouseDown={(e) => {
-                                                                                e.preventDefault();
-                                                                                e.stopPropagation();
-                                                                            }}
-                                                                            className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-green-700 text-green-200 hover:bg-green-600' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
-                                                                            title="Submit"
-                                                                        >
-                                                                            <i className="fas fa-check"></i>
-                                                                            Submit
-                                                                        </button>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() => handleCancelEdit(deptNote.id, 'frustrations')}
-                                                                            className={`text-xs px-2 py-1 rounded flex items-center gap-1 ${isDark ? 'bg-red-900 text-red-200 hover:bg-red-800' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
-                                                                            title="Cancel"
-                                                                        >
-                                                                            <i className="fas fa-times"></i>
-                                                                            Cancel
-                                                                        </button>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                            {editingFields[getFieldKey(deptNote.id, 'frustrations')] && window.RichTextEditor ? (
+                                                            {window.RichTextEditor ? (
                                                                 <window.RichTextEditor
-                                                                    value={tempFieldValues[getFieldKey(deptNote.id, 'frustrations')] ?? ''}
-                                                                    onChange={(html) => handleTempValueChange(deptNote.id, 'frustrations', html)}
+                                                                    value={deptNote.frustrations || ''}
+                                                                    onChange={(html) => handleFieldChange(deptNote.id, 'frustrations', html)}
                                                                     placeholder="What challenges or blockers are we facing? (Use formatting toolbar for bullets, bold, etc.)"
                                                                     rows={4}
                                                                     isDark={isDark}
                                                                 />
                                                             ) : (
-                                                                <div 
-                                                                    className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'} ${!editingFields[getFieldKey(deptNote.id, 'frustrations')] ? (isDark ? 'cursor-not-allowed opacity-75' : 'cursor-not-allowed opacity-60') : ''}`}
-                                                                    dangerouslySetInnerHTML={{ __html: decodeHtmlContent(deptNote.frustrations || '') }}
+                                                                <textarea
+                                                                    value={deptNote.frustrations || ''}
+                                                                    onChange={(e) => handleFieldChange(deptNote.id, 'frustrations', e.target.value)}
+                                                                    onBlur={(e) => handleFieldBlur(deptNote.id, 'frustrations', e.target.value)}
+                                                                    placeholder="What challenges or blockers are we facing?"
+                                                                    className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                                                    rows={4}
                                                                 />
                                                             )}
                                                         </div>

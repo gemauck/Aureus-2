@@ -15,8 +15,8 @@
     <title>Abcotronics - Fuel Management Services</title>
     
     <!-- Favicon -->
-    <link rel="icon" type="image/svg+xml" href="./favicon.svg">
-    <link rel="icon" type="image/x-icon" href="./favicon.ico">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -24,8 +24,8 @@
           crossorigin=""/>
     
     <!-- Tailwind CSS - Production Build -->
-    <link rel="preload" href="./dist/styles.css?v=20251125-045120" as="style">
-    <link rel="stylesheet" href="./dist/styles.css?v=20251125-045120">
+    <link rel="preload" href="/dist/styles.css?v=20251125-045120" as="style">
+    <link rel="stylesheet" href="/dist/styles.css?v=20251125-045120">
     
     <!-- Resource hints for faster loading -->
     <link rel="dns-prefetch" href="https://unpkg.com">
@@ -117,16 +117,16 @@
     </script>
     
     <!-- Mobile Responsive CSS - Single clean mobile stylesheet -->
-    <link rel="stylesheet" href="mobile-responsive.css?v=20251116">
+    <link rel="stylesheet" href="/mobile-responsive.css?v=20251116">
     
     <!-- Mobile Helper JavaScript - Dynamic mobile enhancements -->
-    <script defer src="mobile-helper.js?v=20251116"></script>
+    <script defer src="/mobile-helper.js?v=20251116"></script>
     
     <!-- Dark Mode Fixes CSS -->
-    <link rel="stylesheet" href="dark-mode-fixes.css">
+    <link rel="stylesheet" href="/dark-mode-fixes.css">
     
     <!-- Public Job Card Mobile Overrides -->
-    <link rel="stylesheet" href="job-card-public-mobile.css?v=20251116-signature-250">
+    <link rel="stylesheet" href="/job-card-public-mobile.css?v=20251116-signature-250">
     
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -515,7 +515,7 @@
     </script>
     
     <!-- Core bundle: critical modules -->
-    <script defer src="./dist/core-bundle.js?v=20251125-045120"></script>
+    <script defer src="/dist/core-bundle.js?v=20251125-045120"></script>
 
     <script>
         window.addEventListener('corebundle:ready', () => {
@@ -675,7 +675,7 @@
                 script.type = 'module';
                 // Cache busting with version - update this when deploying new changes
                 // IMPORTANT: This version must match the one used above
-                script.src = './dist/vite-projects/projects-module.js?v=' + VITE_PROJECTS_VERSION + '&t=' + Date.now();
+                script.src = '/dist/vite-projects/projects-module.js?v=' + VITE_PROJECTS_VERSION + '&t=' + Date.now();
                 console.log('📦 Loading vite projects module with version:', VITE_PROJECTS_VERSION);
                 script.onload = () => {
                     console.log('✅ Vite Projects module script loaded successfully');
@@ -714,7 +714,7 @@
                 const link = document.createElement('link');
                 link.rel = 'stylesheet';
                 // Cache busting with version - update this when deploying new changes
-                link.href = './dist/vite-projects/projects-index.css?v=' + VITE_PROJECTS_VERSION;
+                link.href = '/dist/vite-projects/projects-index.css?v=' + VITE_PROJECTS_VERSION;
                 link.onerror = () => console.warn('⚠️ Failed to load Vite Projects CSS');
                 document.head.appendChild(link);
                 console.log('✅ Vite Projects module loading...');
@@ -742,7 +742,7 @@
         });
     </script>
     
-    <script defer src="./lazy-load-components.js?v=20251114-doc-collection-fix"></script>
+    <script defer src="/lazy-load-components.js?v=20251114-doc-collection-fix"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>
@@ -894,7 +894,7 @@
     
     
     <!-- Mount App - Fast loader for immediate mounting -->
-    <script defer src="./fast-loader.js"></script>
+    <script defer src="/fast-loader.js"></script>
     
     <!-- Simple fallback mount - only if fast-loader didn't mount -->
     <script>
