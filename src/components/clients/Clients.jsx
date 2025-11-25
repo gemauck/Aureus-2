@@ -2445,11 +2445,16 @@ const Clients = React.memo(() => {
                         ]).catch(() => {}); // Ignore errors, these are non-critical
                         
                         // Trigger background refresh and sync (non-blocking)
-                        // Use requestIdleCallback or setTimeout(0) to avoid blocking the UI
-                        (window.requestIdleCallback || setTimeout)(async () => {
+                        // Use requestIdleCallback when available, otherwise fall back to setTimeout(0)
+                        const scheduleRefresh =
+                            typeof window.requestIdleCallback === 'function'
+                                ? (cb) => window.requestIdleCallback(cb, { timeout: 500 })
+                                : (cb) => setTimeout(cb, 0);
+                        
+                        scheduleRefresh(async () => {
                             await loadClients(true).catch(() => {}); // Force refresh
                             window.LiveDataSync?.forceSync?.().catch(() => {}); // Background sync
-                        }, 0);
+                        });
                     }
                     
                     // Prepare saved client with merged data from API response and comprehensiveClient
