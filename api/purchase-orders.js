@@ -202,6 +202,53 @@ async function handler(req, res) {
               // For now, we'll use a default location or try to find from stock locations
               
               await prisma.$transaction(async (tx) => {
+                // Get receiving location - default to main warehouse (LOC001)
+                let toLocationId = null
+                const mainWarehouse = await tx.stockLocation.findFirst({
+                  where: { code: 'LOC001' }
+                })
+                if (mainWarehouse) {
+                  toLocationId = mainWarehouse.id
+                }
+                
+                // Helper to update LocationInventory
+                async function upsertLocationInventory(locationId, sku, itemName, quantityDelta, unitCost, reorderPoint) {
+                  if (!locationId) return null
+                  
+                  let li = await tx.locationInventory.findUnique({ 
+                    where: { locationId_sku: { locationId, sku } } 
+                  })
+                  
+                  if (!li) {
+                    li = await tx.locationInventory.create({ 
+                      data: {
+                        locationId,
+                        sku,
+                        itemName,
+                        quantity: 0,
+                        unitCost: unitCost || 0,
+                        reorderPoint: reorderPoint || 0,
+                        status: 'out_of_stock'
+                      }
+                    })
+                  }
+                  
+                  const newQty = (li.quantity || 0) + quantityDelta
+                  const status = newQty > (li.reorderPoint || reorderPoint || 0) ? 'in_stock' : (newQty > 0 ? 'low_stock' : 'out_of_stock')
+                  
+                  return await tx.locationInventory.update({
+                    where: { id: li.id },
+                    data: {
+                      quantity: newQty,
+                      unitCost: unitCost !== undefined ? unitCost : li.unitCost,
+                      reorderPoint: reorderPoint !== undefined ? reorderPoint : li.reorderPoint,
+                      status,
+                      itemName: itemName || li.itemName,
+                      lastRestocked: quantityDelta > 0 ? now : li.lastRestocked
+                    }
+                  })
+                }
+                
                 // Get last movement ID for sequencing
                 const lastMovement = await tx.stockMovement.findFirst({
                   orderBy: { createdAt: 'desc' }
@@ -232,7 +279,7 @@ async function handler(req, res) {
                       sku: item.sku,
                       quantity: quantity,
                       fromLocation: '',
-                      toLocation: '',
+                      toLocation: mainWarehouse?.code || '',
                       reference: existingOrder.orderNumber || id,
                       performedBy: req.user?.name || 'System',
                       notes: `Stock received from purchase order ${existingOrder.orderNumber || id} - Supplier: ${existingOrder.supplierName || 'N/A'}`,
@@ -262,7 +309,8 @@ async function handler(req, res) {
                         totalValue: totalValue,
                         status: quantity > 0 ? 'in_stock' : 'out_of_stock',
                         lastRestocked: now,
-                        ownerId: null
+                        ownerId: null,
+                        locationId: toLocationId
                       }
                     })
                   } else {
@@ -281,6 +329,34 @@ async function handler(req, res) {
                         totalValue: totalValue,
                         status: status,
                         lastRestocked: now
+                      }
+                    })
+                  }
+                  
+                  // Update LocationInventory
+                  if (toLocationId) {
+                    await upsertLocationInventory(
+                      toLocationId,
+                      item.sku,
+                      item.name || item.sku,
+                      quantity,
+                      unitCost,
+                      inventoryItem?.reorderPoint || 0
+                    )
+                    
+                    // Recalculate master aggregate from all locations
+                    const totalAtLocations = await tx.locationInventory.aggregate({ 
+                      _sum: { quantity: true }, 
+                      where: { sku: item.sku } 
+                    })
+                    const aggQty = totalAtLocations._sum.quantity || 0
+                    
+                    await tx.inventoryItem.update({
+                      where: { id: inventoryItem.id },
+                      data: {
+                        quantity: aggQty,
+                        totalValue: aggQty * (inventoryItem.unitCost || 0),
+                        status: aggQty > (inventoryItem.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
                       }
                     })
                   }
