@@ -3415,20 +3415,20 @@ const Manufacturing = () => {
     }
   };
 
-  const openAddMovementModal = () => {
+  const openAddMovementModal = (prefill = {}) => {
     console.log('📝 openAddMovementModal called');
     try {
       setFormData({
-        type: 'receipt',
-        sku: '',
-        itemName: '',
-        quantity: '',
-        unitCost: '',
-        fromLocation: '',
-        toLocation: '',
-        reference: '',
-        notes: '',
-        date: new Date().toISOString().split('T')[0]
+        type: prefill.type || 'receipt',
+        sku: prefill.sku || '',
+        itemName: prefill.itemName || '',
+        quantity: prefill.quantity !== undefined ? prefill.quantity : '',
+        unitCost: prefill.unitCost !== undefined ? prefill.unitCost : '',
+        fromLocation: prefill.fromLocation || '',
+        toLocation: prefill.toLocation || '',
+        reference: prefill.reference || '',
+        notes: prefill.notes || '',
+        date: prefill.date || new Date().toISOString().split('T')[0]
       });
       setModalType('add_movement');
       setShowModal(true);
@@ -7702,6 +7702,94 @@ const Manufacturing = () => {
     const [editFormData, setEditFormData] = useState({ ...item });
     const [localShowCategoryInput, setLocalShowCategoryInput] = useState(false);
     const [localNewCategoryName, setLocalNewCategoryName] = useState('');
+    const [selectedMovementTemplateId, setSelectedMovementTemplateId] = useState('');
+
+    const itemMovementsForDetail = useMemo(() => {
+      if (!item?.sku) return [];
+      return (movements || [])
+        .filter(m => m.sku === item.sku)
+        .sort((a, b) => {
+          const dateA = new Date(a.date || a.createdAt || 0);
+          const dateB = new Date(b.date || b.createdAt || 0);
+          if (dateA.getTime() !== dateB.getTime()) {
+            return dateA.getTime() - dateB.getTime();
+          }
+          return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+        });
+    }, [movements, item?.sku]);
+
+    const recentMovementTemplates = useMemo(() => {
+      if (!itemMovementsForDetail.length) return [];
+      const startIndex = Math.max(itemMovementsForDetail.length - 5, 0);
+      return itemMovementsForDetail.slice(startIndex).reverse();
+    }, [itemMovementsForDetail]);
+
+    useEffect(() => {
+      setSelectedMovementTemplateId('');
+    }, [item?.id]);
+
+    const formatMovementType = useCallback((type) => {
+      const typeMap = {
+        'receipt': 'Receipt',
+        'issue': 'Issue',
+        'transfer': 'Transfer',
+        'adjustment': 'Adjustment',
+        'sale': 'Sale',
+        'production': 'Production',
+        'consumption': 'Consumption'
+      };
+      return typeMap[type] || (type ? type.charAt(0).toUpperCase() + type.slice(1) : 'Movement');
+    }, []);
+
+    const getMovementDescription = useCallback((movement) => {
+      const type = formatMovementType(movement.type);
+      let desc = type;
+      
+      if (movement.reference) {
+        desc += ` - ${movement.reference}`;
+      }
+      
+      if (movement.fromLocation && movement.toLocation) {
+        desc += ` (${movement.fromLocation} → ${movement.toLocation})`;
+      } else if (movement.fromLocation) {
+        desc += ` (from ${movement.fromLocation})`;
+      } else if (movement.toLocation) {
+        desc += ` (to ${movement.toLocation})`;
+      }
+      
+      if (movement.notes) {
+        desc += ` - ${movement.notes}`;
+      }
+      
+      return desc;
+    }, [formatMovementType]);
+
+    const handleRecordMovementForCurrentItem = useCallback((movementId = null) => {
+      const template = movementId ? itemMovementsForDetail.find(m => m.id === movementId) : null;
+      const parsedQty = template ? parseFloat(template.quantity) || 0 : 0;
+      const normalizedQty = template
+        ? (template.type === 'adjustment' ? parsedQty : Math.abs(parsedQty))
+        : '';
+      
+      openAddMovementModal({
+        type: template?.type || 'receipt',
+        sku: item.sku,
+        itemName: item.name,
+        quantity: template ? `${normalizedQty}` : '',
+        unitCost: template && template.unitCost !== undefined && template.unitCost !== null
+          ? template.unitCost
+          : '',
+        fromLocation: template?.fromLocation || '',
+        toLocation: template?.toLocation || '',
+        reference: '',
+        notes: template?.notes || '',
+        date: new Date().toISOString().split('T')[0]
+      });
+      
+      if (movementId) {
+        setSelectedMovementTemplateId('');
+      }
+    }, [item, itemMovementsForDetail, openAddMovementModal]);
 
     // Sync editFormData when item changes
     useEffect(() => {
@@ -8287,70 +8375,63 @@ const Manufacturing = () => {
 
         {/* Stock Ledger */}
         <div className="bg-white rounded-lg border border-gray-200 p-4 mt-4">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Stock Ledger</h2>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Stock Ledger</h2>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <button
+                onClick={() => handleRecordMovementForCurrentItem()}
+                className="inline-flex items-center justify-center gap-2 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                <i className="fas fa-plus"></i>
+                Record Movement
+              </button>
+              {recentMovementTemplates.length > 0 && (
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <select
+                    value={selectedMovementTemplateId}
+                    onChange={(e) => setSelectedMovementTemplateId(e.target.value)}
+                    className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Use existing movement...</option>
+                    {recentMovementTemplates.map(movement => {
+                      const qty = Math.abs(parseFloat(movement.quantity) || 0);
+                      const dateLabel = movement.date
+                        ? new Date(movement.date).toLocaleDateString()
+                        : (movement.createdAt ? new Date(movement.createdAt).toLocaleDateString() : 'Unknown date');
+                      return (
+                        <option key={movement.id} value={movement.id}>
+                          {`${dateLabel} · ${formatMovementType(movement.type)} (${qty} ${item.unit || ''})`}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <button
+                    onClick={() => handleRecordMovementForCurrentItem(selectedMovementTemplateId)}
+                    disabled={!selectedMovementTemplateId}
+                    className={`px-3 py-2 text-sm rounded-lg border ${
+                      selectedMovementTemplateId
+                        ? 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'
+                        : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                    }`}
+                  >
+                    Use Template
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
           {(() => {
-            // Filter movements for this item
-            const itemMovements = movements
-              .filter(m => m.sku === item.sku)
-              .sort((a, b) => {
-                // Sort by date (oldest first), then by createdAt if dates are equal
-                const dateA = new Date(a.date || a.createdAt || 0);
-                const dateB = new Date(b.date || b.createdAt || 0);
-                if (dateA.getTime() !== dateB.getTime()) {
-                  return dateA.getTime() - dateB.getTime();
-                }
-                return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
-              });
+            const itemMovements = itemMovementsForDetail;
 
             // Calculate opening stock (quantity before first transaction)
-            // We'll start from 0 and show all transactions, or use the first transaction as opening
             let runningBalance = 0;
             
-            // If there are movements, calculate opening balance
             if (itemMovements.length > 0) {
-              // Opening balance is current quantity minus sum of all movements
               const totalMovementQty = itemMovements.reduce((sum, m) => sum + (parseFloat(m.quantity) || 0), 0);
               runningBalance = (item.quantity || 0) - totalMovementQty;
             } else {
-              // No movements, opening balance is current quantity
               runningBalance = item.quantity || 0;
             }
-
-            const formatMovementType = (type) => {
-              const typeMap = {
-                'receipt': 'Receipt',
-                'issue': 'Issue',
-                'transfer': 'Transfer',
-                'adjustment': 'Adjustment',
-                'sale': 'Sale',
-                'production': 'Production',
-                'consumption': 'Consumption'
-              };
-              return typeMap[type] || type.charAt(0).toUpperCase() + type.slice(1);
-            };
-
-            const getMovementDescription = (movement) => {
-              const type = formatMovementType(movement.type);
-              let desc = type;
-              
-              if (movement.reference) {
-                desc += ` - ${movement.reference}`;
-              }
-              
-              if (movement.fromLocation && movement.toLocation) {
-                desc += ` (${movement.fromLocation} → ${movement.toLocation})`;
-              } else if (movement.fromLocation) {
-                desc += ` (from ${movement.fromLocation})`;
-              } else if (movement.toLocation) {
-                desc += ` (to ${movement.toLocation})`;
-              }
-              
-              if (movement.notes) {
-                desc += ` - ${movement.notes}`;
-              }
-              
-              return desc;
-            };
 
             return (
               <div className="overflow-x-auto">
