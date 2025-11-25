@@ -637,7 +637,7 @@
                 
                 // Check if script already exists - remove old ones with timestamp cache busting
                 const existingScripts = document.querySelectorAll('script[src*="projects-module.js"]');
-                const VITE_PROJECTS_VERSION = '20251125-045120';
+                const VITE_PROJECTS_VERSION = '20251125-074000';
                 console.log('🔍 Checking for existing scripts. Found:', existingScripts.length);
                 existingScripts.forEach(oldScript => {
                     const src = oldScript.src || oldScript.getAttribute('src') || '';
@@ -675,7 +675,7 @@
                 script.type = 'module';
                 // Cache busting with version - update this when deploying new changes
                 // IMPORTANT: This version must match the one used above
-                script.src = './dist/vite-projects/projects-module.js?v=' + VITE_PROJECTS_VERSION;
+                script.src = './dist/vite-projects/projects-module.js?v=' + VITE_PROJECTS_VERSION + '&t=' + Date.now();
                 console.log('📦 Loading vite projects module with version:', VITE_PROJECTS_VERSION);
                 script.onload = () => {
                     console.log('✅ Vite Projects module script loaded successfully');
