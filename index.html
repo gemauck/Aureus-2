@@ -24,8 +24,8 @@
           crossorigin=""/>
     
     <!-- Tailwind CSS - Production Build -->
-    <link rel="preload" href="./dist/styles.css?v=20251117-openstreetmap" as="style">
-    <link rel="stylesheet" href="./dist/styles.css?v=20251117-openstreetmap">
+    <link rel="preload" href="./dist/styles.css?v=20251125-045120" as="style">
+    <link rel="stylesheet" href="./dist/styles.css?v=20251125-045120">
     
     <!-- Resource hints for faster loading -->
     <link rel="dns-prefetch" href="https://unpkg.com">
@@ -515,7 +515,7 @@
     </script>
     
     <!-- Core bundle: critical modules -->
-    <script defer src="./dist/core-bundle.js?v=20251117-openstreetmap"></script>
+    <script defer src="./dist/core-bundle.js?v=20251125-045120"></script>
 
     <script>
         window.addEventListener('corebundle:ready', () => {
@@ -637,7 +637,7 @@
                 
                 // Check if script already exists - remove old ones with timestamp cache busting
                 const existingScripts = document.querySelectorAll('script[src*="projects-module.js"]');
-                const VITE_PROJECTS_VERSION = '20251123-fix-v4-final';
+                const VITE_PROJECTS_VERSION = '20251125-045120';
                 console.log('🔍 Checking for existing scripts. Found:', existingScripts.length);
                 existingScripts.forEach(oldScript => {
                     const src = oldScript.src || oldScript.getAttribute('src') || '';
