@@ -1750,14 +1750,25 @@ const parseCommentCellKey = (key) => {
 
     const handleDeleteSection = (sectionId) => {
         const currentUser = getCurrentUser();
-        const section = sections.find(s => s.id === sectionId);
-        if (!section) return;
+        // Get current state to find section name for confirmation
+        const currentSections = sectionsByYear[selectedYear] || [];
+        const section = currentSections.find(s => s.id === sectionId);
         
-        if (!confirm(`Delete section "${section.name}" and all its documents?`)) return;
+        if (!section) {
+            console.warn('Section not found for deletion:', { sectionId });
+            alert('Section not found. It may have already been deleted.');
+            return;
+        }
+        
+        if (!confirm(`Delete section "${section.name}" and all its documents? This action cannot be undone.`)) {
+            return;
+        }
         
         // CRITICAL: Only delete from the selected year - other years remain unaffected
         // Each year's sections are completely independent
         updateSectionsForYear(prev => prev.filter(s => s.id !== sectionId));
+        
+        console.log('🗑️ Section deleted:', { sectionId, sectionName: section.name });
         
         if (window.AuditLogger) {
             window.AuditLogger.log('delete', 'projects', {
