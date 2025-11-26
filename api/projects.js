@@ -161,6 +161,20 @@ async function handler(req, res) {
           // Pass the error message to serverError which will format it as DATABASE_CONNECTION_ERROR
           return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
         }
+
+        // If the projects table or columns are missing in the database, fall back
+        // to returning an empty list instead of a hard 500 so the UI can still load.
+        const isMissingTableOrColumn =
+          dbError.code === 'P2021' || // table does not exist
+          dbError.code === 'P2022' || // column does not exist
+          /relation "project"/i.test(errorMessage) ||
+          /no such table: .*project/i.test(errorMessage) ||
+          /column .* does not exist/i.test(errorMessage)
+
+        if (isMissingTableOrColumn) {
+          console.warn('⚠️ Projects API: Project table/columns missing in database. Returning empty list fallback.')
+          return ok(res, { projects: [] })
+        }
         
         return serverError(res, 'Failed to list projects', dbError.message)
       }

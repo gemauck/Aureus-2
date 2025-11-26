@@ -139,6 +139,9 @@ export async function checkForDuplicates(data, excludeId = null) {
     // Check for matches
     const matches = []
 
+    // Only treat **exact** matches on key fields as duplicates.
+    // We no longer consider "similar" matches here – those will just
+    // be surfaced as a non‑blocking warning to the UI.
     for (const record of allRecords) {
       const recordName = normalizeString(record.name)
       const recordWebsite = normalizeString(record.website)
@@ -148,7 +151,7 @@ export async function checkForDuplicates(data, excludeId = null) {
 
       const matchReasons = []
 
-      // Check name similarity (exact match first)
+      // Check name match (exact match only – no fuzzy match here)
       if (name && recordName) {
         if (recordName === name) {
           matchReasons.push('name')
@@ -187,46 +190,10 @@ export async function checkForDuplicates(data, excludeId = null) {
       }
     }
 
-    // Also check for similar names (fuzzy match) if no exact matches found
-    if (name && matches.length === 0) {
-      // Only query if we haven't already queried all records
-      const similarRecords = (emails.length > 0 || phones.length > 0) 
-        ? allRecords 
-        : await prisma.client.findMany({
-            where: excludeCondition
-          })
-
-      for (const record of similarRecords) {
-        const recordName = normalizeString(record.name)
-        
-        // Check for very similar names (e.g., "ABC Corp" vs "ABC Corporation")
-        if (recordName && recordName !== name) {
-          // Calculate similarity (simple check for substring match or high similarity)
-          const nameWords = name.split(/\s+/).filter(w => w.length > 2)
-          const recordWords = recordName.split(/\s+/).filter(w => w.length > 2)
-          
-          if (nameWords.length === 0 || recordWords.length === 0) continue
-          
-          // If major words match, consider it potentially duplicate
-          const matchingWords = nameWords.filter(word => 
-            word.length > 3 && recordWords.some(rw => rw.includes(word) || word.includes(rw))
-          )
-          
-          // Require at least 70% word match or exact substring match
-          const similarityThreshold = Math.min(nameWords.length, recordWords.length) * 0.7
-          if (matchingWords.length >= similarityThreshold || 
-              (name.length > 5 && recordName.includes(name)) ||
-              (recordName.length > 5 && name.includes(recordName))) {
-            matches.push({
-              id: record.id,
-              name: record.name,
-              type: record.type || 'client',
-              matchReasons: ['similar name']
-            })
-          }
-        }
-      }
-    }
+    // NOTE: We intentionally removed the fuzzy "similar name" matching
+    // here to make the duplicate detection less strict. If you still
+    // want to surface "similar" records to the UI in a non‑blocking
+    // way, that should be implemented separately from this function.
 
     if (matches.length === 0) {
       return null
@@ -235,7 +202,7 @@ export async function checkForDuplicates(data, excludeId = null) {
     return {
       isDuplicate: true,
       matches,
-      message: `Potential duplicate found: ${matches.length} similar ${matches.length === 1 ? 'record' : 'records'} already exist`
+      message: `Potential duplicate found: ${matches.length} ${matches.length === 1 ? 'exact match' : 'exact matches'} already exist`
     }
   } catch (error) {
     console.error('❌ Error checking for duplicates:', error)

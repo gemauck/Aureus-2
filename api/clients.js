@@ -291,12 +291,12 @@ async function handler(req, res) {
       if (!body.name) return badRequest(res, 'name required')
 
       // Check for duplicate clients/leads before creating
+      // NOTE: This is now non‑blocking – we always continue to create
+      // the client, but we include any duplicates in the response so
+      // the UI can show a warning instead of a hard error.
+      let duplicateCheck = null
       try {
-        const duplicateCheck = await checkForDuplicates(body)
-        if (duplicateCheck && duplicateCheck.isDuplicate) {
-          const errorMessage = formatDuplicateError(duplicateCheck) || duplicateCheck.message
-          return badRequest(res, errorMessage)
-        }
+        duplicateCheck = await checkForDuplicates(body)
       } catch (dupError) {
         console.error('⚠️ Duplicate check failed, proceeding with creation:', dupError.message)
         // Don't block creation if duplicate check fails
@@ -422,7 +422,8 @@ async function handler(req, res) {
         
         console.log(`📤 Returning created client to ${userEmail}:`, { id: parsedClient.id, name: parsedClient.name, ownerId: parsedClient.ownerId || 'null', type: parsedClient.type })
         
-        return created(res, { client: parsedClient })
+        // Attach duplicate info (if any) so frontend can show a warning
+        return created(res, { client: parsedClient, duplicateWarning: duplicateCheck })
       } catch (dbError) {
         console.error('❌ Database error creating client:', dbError)
         return serverError(res, 'Failed to create client', dbError.message)

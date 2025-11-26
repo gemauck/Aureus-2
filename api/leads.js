@@ -344,13 +344,12 @@ async function handler(req, res) {
       }
 
       // Check for duplicate clients/leads before creating
+      // NOTE: This is now non‑blocking – we always continue to create
+      // the lead, but we include any duplicates in the response so the
+      // UI can show a warning instead of a hard error.
+      let duplicateCheck = null
       try {
-        const duplicateCheck = await checkForDuplicates(body)
-        if (duplicateCheck && duplicateCheck.isDuplicate) {
-          const errorMessage = formatDuplicateError(duplicateCheck) || duplicateCheck.message
-          console.log('❌ Duplicate lead detected:', errorMessage)
-          return badRequest(res, errorMessage)
-        }
+        duplicateCheck = await checkForDuplicates(body)
       } catch (dupError) {
         console.error('⚠️ Duplicate check failed, proceeding with creation:', dupError.message)
         // Don't block creation if duplicate check fails
@@ -475,7 +474,8 @@ async function handler(req, res) {
         
         console.log(`📤 Returning created lead to ${userEmail}:`, { id: parsedLead.id, name: parsedLead.name, ownerId: parsedLead.ownerId || 'null', type: parsedLead.type })
         
-        return created(res, { lead: parsedLead })
+        // Attach duplicate info (if any) so frontend can show a warning
+        return created(res, { lead: parsedLead, duplicateWarning: duplicateCheck })
       } catch (dbError) {
         console.error('❌ Database error creating lead:', dbError)
         console.error('❌ Database error details:', {
