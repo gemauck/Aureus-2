@@ -48,8 +48,9 @@ git pull origin "${GIT_BRANCH}"
 echo
 echo "-> Installing dependencies (including dev, needed for build)..."
 # We install full dependencies because build tools (like Tailwind, bundlers, etc.)
-# are typically in devDependencies but are required at build time.
-NODE_ENV=production npm install
+# are typically in devDependencies but are required at build time. Using NODE_ENV=production
+# here would cause npm to skip devDependencies, so we explicitly install with dev deps included.
+npm install --include=dev
 
 echo
 echo "-> Building application..."
