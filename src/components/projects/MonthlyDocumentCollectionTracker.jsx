@@ -2160,10 +2160,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             {/* Table */}
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 {/* Global top horizontal scrollbar so users don't have to go to bottom */}
-                <div className="border-b border-gray-200">
+                <div className="border-b border-gray-700/40 bg-slate-900/40">
                     <div className="overflow-x-auto" data-doc-collection-scroll="true">
-                        {/* Placeholder bar whose width is synced to the main table via effect */}
-                        <div className="h-2" />
+                        {/* Visible top scroll track (width synced to table via effect) */}
+                        <div className="h-3 bg-slate-800/60" />
                     </div>
                 </div>
                 <div className="relative overflow-x-auto" ref={tableRef}>
@@ -2260,9 +2260,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         
                                         {/* Per-section horizontal scrollbar so each section can scroll independently */}
                                         <tr>
-                                            <td colSpan={14} className="px-0 py-0 bg-gray-100">
+                                            <td colSpan={14} className="px-0 py-0 bg-slate-900/40">
                                                 <div className="overflow-x-auto" data-doc-collection-scroll="true">
-                                                    <div className="h-1" />
+                                                    {/* Per-section scroll track (synced to main table width) */}
+                                                    <div className="h-3 bg-slate-800/60" />
                                                 </div>
                                             </td>
                                         </tr>
