@@ -84,6 +84,8 @@ const SummaryRow = ({ label, value }) => (
   </div>
 );
 
+const NO_CLIENT_ID = 'NO_CLIENT';
+
 const JobCardFormPublic = () => {
   const [formData, setFormData] = useState({
     agentName: '',
@@ -772,46 +774,59 @@ const JobCardFormPublic = () => {
 
   useEffect(() => {
     const loadSitesForClient = async () => {
+      // When "No Client" is selected, clear sites and rely on manual entry
+      if (formData.clientId === NO_CLIENT_ID) {
+        setAvailableSites([]);
+        setFormData(prev => ({ ...prev, siteId: '', siteName: prev.siteName || '' }));
+        return;
+      }
+
       if (formData.clientId && clients.length > 0) {
         const client = clients.find(c => c.id === formData.clientId);
-        if (client) {
-          console.log('📡 JobCardFormPublic: Loading sites for client:', client.id);
-          
-          // First, try to get sites from client object
-          let sites = typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []);
-          
-          console.log(`📋 JobCardFormPublic: Found ${sites.length} sites in client object`);
-          
-          // Also try to load from API if online
-          if (isOnline && sites.length === 0) {
-            try {
-              console.log('📡 JobCardFormPublic: Attempting to load sites from API...');
-              const response = await fetch(`/api/sites/client/${formData.clientId}`, {
-                method: 'GET',
-                headers: {
-                  'Content-Type': 'application/json'
-                }
-              });
-              
-              if (response.ok) {
-                const data = await response.json();
-                const apiSites = data?.data?.sites || data?.sites || [];
-                if (Array.isArray(apiSites) && apiSites.length > 0) {
-                  console.log(`✅ JobCardFormPublic: Loaded ${apiSites.length} sites from API`);
-                  sites = apiSites;
-                }
-              } else {
-                console.warn('⚠️ JobCardFormPublic: Sites API returned error:', response.status);
-              }
-            } catch (error) {
-              console.warn('⚠️ JobCardFormPublic: Failed to load sites from API:', error.message);
-            }
-          }
-          
-          setAvailableSites(sites);
-          setFormData(prev => ({ ...prev, clientName: client.name || '' }));
-          console.log(`✅ JobCardFormPublic: Set ${sites.length} sites for client`);
+
+        if (!client) {
+          // Client id not found in list – clear available sites
+          setAvailableSites([]);
+          setFormData(prev => ({ ...prev, siteId: '', siteName: '' }));
+          return;
         }
+
+        console.log('📡 JobCardFormPublic: Loading sites for client:', client.id);
+        
+        // First, try to get sites from client object
+        let sites = typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []);
+        
+        console.log(`📋 JobCardFormPublic: Found ${sites.length} sites in client object`);
+        
+        // Also try to load from API if online
+        if (isOnline && sites.length === 0) {
+          try {
+            console.log('📡 JobCardFormPublic: Attempting to load sites from API...');
+            const response = await fetch(`/api/sites/client/${formData.clientId}`, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              const apiSites = data?.data?.sites || data?.sites || [];
+              if (Array.isArray(apiSites) && apiSites.length > 0) {
+                console.log(`✅ JobCardFormPublic: Loaded ${apiSites.length} sites from API`);
+                sites = apiSites;
+              }
+            } else {
+              console.warn('⚠️ JobCardFormPublic: Sites API returned error:', response.status);
+            }
+          } catch (error) {
+            console.warn('⚠️ JobCardFormPublic: Failed to load sites from API:', error.message);
+          }
+        }
+        
+        setAvailableSites(sites);
+        setFormData(prev => ({ ...prev, clientName: client.name || '' }));
+        console.log(`✅ JobCardFormPublic: Set ${sites.length} sites for client`);
       } else {
         setAvailableSites([]);
         setFormData(prev => ({ ...prev, siteId: '', siteName: '' }));
@@ -822,67 +837,42 @@ const JobCardFormPublic = () => {
   }, [formData.clientId, clients, isOnline]);
 
   useEffect(() => {
-    if (formData.siteId && availableSites.length > 0) {
-      const site = availableSites.find(s => s.id === formData.siteId || s === formData.siteId);
-      if (site) {
-        setFormData(prev => ({ ...prev, siteName: site.name || site }));
-      }
-    }
-  }, [formData.siteId, availableSites]);
-
-  useEffect(() => {
     resizeSignatureCanvas();
 
-    const canvas = signatureCanvasRef.current;
-    if (!canvas) return;
-
     const handleResize = () => resizeSignatureCanvas();
-
-    // Pointer events (modern browsers)
-    canvas.addEventListener('pointerdown', startSignature);
-    canvas.addEventListener('pointermove', drawSignature);
-    canvas.addEventListener('pointerup', endSignature);
-    canvas.addEventListener('pointerleave', endSignature);
-    window.addEventListener('pointerup', endSignature);
-
-    // Mouse events fallback (desktop browsers without full pointer support)
-    canvas.addEventListener('mousedown', startSignature);
-    canvas.addEventListener('mousemove', drawSignature);
-    canvas.addEventListener('mouseup', endSignature);
-    canvas.addEventListener('mouseleave', endSignature);
-    window.addEventListener('mouseup', endSignature);
-
-    // Touch events fallback (older mobile browsers)
-    canvas.addEventListener('touchstart', startSignature, { passive: false });
-    canvas.addEventListener('touchmove', drawSignature, { passive: false });
-    canvas.addEventListener('touchend', endSignature);
-    canvas.addEventListener('touchcancel', endSignature);
-    window.addEventListener('touchend', endSignature);
-
     window.addEventListener('resize', handleResize);
 
     return () => {
-      canvas.removeEventListener('pointerdown', startSignature);
-      canvas.removeEventListener('pointermove', drawSignature);
-      canvas.removeEventListener('pointerup', endSignature);
-      canvas.removeEventListener('pointerleave', endSignature);
-      window.removeEventListener('pointerup', endSignature);
-      canvas.removeEventListener('mousedown', startSignature);
-      canvas.removeEventListener('mousemove', drawSignature);
-      canvas.removeEventListener('mouseup', endSignature);
-      canvas.removeEventListener('mouseleave', endSignature);
-      window.removeEventListener('mouseup', endSignature);
-      canvas.removeEventListener('touchstart', startSignature);
-      canvas.removeEventListener('touchmove', drawSignature);
-      canvas.removeEventListener('touchend', endSignature);
-      canvas.removeEventListener('touchcancel', endSignature);
-      window.removeEventListener('touchend', endSignature);
       window.removeEventListener('resize', handleResize);
     };
-  }, [drawSignature, endSignature, resizeSignatureCanvas, startSignature]);
+  }, [resizeSignatureCanvas]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
+
+    // When the client selection changes, clear site selection and handle "No Client"
+    if (name === 'clientId') {
+      if (value === NO_CLIENT_ID) {
+        setFormData(prev => ({
+          ...prev,
+          clientId: value,
+          clientName: prev.clientName || '',
+          siteId: '',
+          siteName: prev.siteName || ''
+        }));
+        setAvailableSites([]);
+        return;
+      }
+
+      setFormData(prev => ({
+        ...prev,
+        clientId: value,
+        siteId: '',
+        siteName: ''
+      }));
+      return;
+    }
+
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
@@ -1076,7 +1066,7 @@ const JobCardFormPublic = () => {
 
   const handleSave = async () => {
     if (!formData.clientId) {
-      setStepError('Please select a client before submitting.');
+      setStepError('Please select a client or choose "No Client" before submitting.');
       setCurrentStep(0);
       return;
     }
@@ -1188,7 +1178,7 @@ const JobCardFormPublic = () => {
     switch (STEP_IDS[stepIndex]) {
       case 'assignment':
         if (!formData.agentName) return 'Select the attending technician to continue.';
-        if (!formData.clientId) return 'A client must be selected before moving on.';
+        if (!formData.clientId) return 'Select a client or choose "No Client" to continue.';
         return '';
       default:
         return '';
@@ -1321,30 +1311,64 @@ const JobCardFormPublic = () => {
               {clients.map(client => (
                 <option key={client.id} value={client.id}>{client.name}</option>
               ))}
+              <option value={NO_CLIENT_ID}>No Client (enter details manually)</option>
             </select>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Site
-            </label>
-            <select
-              name="siteId"
-              value={formData.siteId}
-              onChange={handleChange}
-              disabled={!formData.clientId || availableSites.length === 0}
-              className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 bg-white"
-              style={{ fontSize: '16px' }}
-            >
-              <option value="">
-                {availableSites.length === 0 ? 'No sites available for this client' : 'Select site'}
-              </option>
-              {availableSites.map(site => (
-                <option key={site.id || site.name || site} value={site.id || site.name || site}>
-                  {site.name || site}
+          {formData.clientId === NO_CLIENT_ID ? (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Client Name (manual)
+                </label>
+                <input
+                  type="text"
+                  name="clientName"
+                  value={formData.clientName}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                  placeholder="Enter client name"
+                  style={{ fontSize: '16px' }}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Site (manual)
+                </label>
+                <input
+                  type="text"
+                  name="siteName"
+                  value={formData.siteName}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                  placeholder="Enter site / location"
+                  style={{ fontSize: '16px' }}
+                />
+              </div>
+            </>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Site
+              </label>
+              <select
+                name="siteId"
+                value={formData.siteId}
+                onChange={handleChange}
+                disabled={!formData.clientId || availableSites.length === 0}
+                className="w-full px-4 py-3 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 bg-white"
+                style={{ fontSize: '16px' }}
+              >
+                <option value="">
+                  {availableSites.length === 0 ? 'No sites available for this client' : 'Select site'}
                 </option>
-              ))}
-            </select>
-          </div>
+                {availableSites.map(site => (
+                  <option key={site.id || site.name || site} value={site.id || site.name || site}>
+                    {site.name || site}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </section>
       {renderNavigationButtons()}

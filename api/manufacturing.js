@@ -1894,7 +1894,10 @@ async function handler(req, res) {
         }
         
         // Handle status change TO 'received' - allocate/reserve stock for BOM components
-        if (newStatus === 'received' && oldStatus !== 'received') {
+        // NOTE: Orders created in 'requested' status already allocate stock during creation.
+        // To avoid double-allocation, we only run this block when coming from a status
+        // that did NOT previously allocate BOM components.
+        if (newStatus === 'received' && oldStatus !== 'received' && oldStatus !== 'requested') {
           console.log(`📋 Triggering stock allocation for production order ${id} (status: ${oldStatus} -> ${newStatus})`)
           
           if (!existingOrder.bomId) {
@@ -2535,7 +2538,9 @@ async function handler(req, res) {
         if ((newStatus === 'completed' && oldStatus !== 'completed') ||
             (newStatus === 'in_production' && (oldStatus === 'requested' || oldStatus === 'received')) ||
             (newStatus === 'requested' && oldStatus === 'in_production') ||
-            (newStatus === 'received' && oldStatus !== 'received') ||
+            // Only treat 'received' as transaction-handled when we actually ran the
+            // allocation transaction above (i.e. not when coming from 'requested')
+            (newStatus === 'received' && oldStatus !== 'received' && oldStatus !== 'requested') ||
             (oldStatus === 'received' && newStatus !== 'received' && newStatus !== 'in_production') ||
             newStatus === 'cancelled') {
           // Status was already updated in the transaction above, remove it from updateData

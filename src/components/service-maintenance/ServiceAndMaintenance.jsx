@@ -135,7 +135,7 @@ const ServiceAndMaintenance = () => {
   };
 
   return (
-    <div className="relative p-4">
+    <div className="relative p-4 min-h-[calc(100vh-56px)]">
       <div className="flex flex-col gap-4 mb-6">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
