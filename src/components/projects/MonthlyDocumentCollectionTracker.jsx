@@ -15,10 +15,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
     
     const workingMonths = getWorkingMonths();
-    
-    const tableRef = useRef(null);
-    const monthRefs = useRef({});
-    const hasInitialScrolled = useRef(false);
     const saveTimeoutRef = useRef(null);
     const isSavingRef = useRef(false);
     const previousProjectIdRef = useRef(project?.id);
@@ -205,52 +201,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     useEffect(() => {
         sectionsRef.current = sectionsByYear;
     }, [sectionsByYear]);
-
-    // Sync all horizontal scrollbars (top + per section) with main table scrollbar
-    useEffect(() => {
-        const tableEl = tableRef.current;
-        if (!tableEl) return;
-
-        const scrollEls = Array.from(document.querySelectorAll('[data-doc-collection-scroll="true"]'));
-        if (!scrollEls.length) return;
-
-        const updateWidths = () => {
-            const width = tableEl.scrollWidth || tableEl.clientWidth || 0;
-            scrollEls.forEach(el => {
-                const placeholder = el.firstElementChild;
-                if (placeholder) {
-                    placeholder.style.width = `${width}px`;
-                }
-            });
-        };
-
-        const handleBarScroll = (event) => {
-            const src = event.currentTarget;
-            if (tableEl.scrollLeft !== src.scrollLeft) {
-                tableEl.scrollLeft = src.scrollLeft;
-            }
-        };
-
-        const handleTableScroll = () => {
-            scrollEls.forEach(el => {
-                if (el.scrollLeft !== tableEl.scrollLeft) {
-                    el.scrollLeft = tableEl.scrollLeft;
-                }
-            });
-        };
-
-        updateWidths();
-
-        scrollEls.forEach(el => el.addEventListener('scroll', handleBarScroll));
-        tableEl.addEventListener('scroll', handleTableScroll);
-        window.addEventListener('resize', updateWidths);
-
-        return () => {
-            scrollEls.forEach(el => el.removeEventListener('scroll', handleBarScroll));
-            tableEl.removeEventListener('scroll', handleTableScroll);
-            window.removeEventListener('resize', updateWidths);
-        };
-    }, [sections.length, months.length, selectedYear]);
     
     useEffect(() => {
         // Always prefer singleton instance created by DocumentCollectionAPI service
@@ -1255,31 +1205,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
     };
     
-    // ============================================================
-    // SCROLL TO WORKING MONTHS
-    // ============================================================
-    
-    useEffect(() => {
-        if (!hasInitialScrolled.current && sections.length > 0 && tableRef.current && selectedYear === currentYear) {
-            setTimeout(() => {
-                const firstWorkingMonthName = months[workingMonths[0]];
-                const firstMonthElement = monthRefs.current[firstWorkingMonthName];
-                
-                if (firstMonthElement && tableRef.current) {
-                    const container = tableRef.current;
-                    const elementLeft = firstMonthElement.offsetLeft;
-                    const documentColumnWidth = 250;
-                    const scrollPosition = elementLeft - documentColumnWidth - 100;
-                    
-                    container.scrollTo({
-                        left: Math.max(0, scrollPosition),
-                        behavior: 'smooth'
-                    });
-                }
-                hasInitialScrolled.current = true;
-            }, 100);
-        }
-    }, [sections, selectedYear]);
+    // (Per-section tables now scroll independently, so we skip auto-scroll to working months)
     
     // ============================================================
     // COMMENT POPUP MANAGEMENT
@@ -2157,117 +2083,92 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 </div>
             </div>
             
-            {/* Table */}
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                {/* Global top horizontal scrollbar so users don't have to go to bottom */}
-                <div className="border-b border-gray-700/40 bg-slate-900/40">
-                    <div className="overflow-x-auto" data-doc-collection-scroll="true">
-                        {/* Visible top scroll track (width synced to table via effect) */}
-                        <div className="h-3 bg-slate-800/60" />
+            {/* Per-section tables with independent horizontal scroll */}
+            <div className="space-y-3">
+                {sections.length === 0 ? (
+                    <div className="bg-white rounded-lg border border-gray-200 p-6 text-center text-gray-400">
+                        <i className="fas fa-folder-open text-3xl mb-2 opacity-50"></i>
+                        <p className="text-sm">No sections yet</p>
+                        <button
+                            onClick={handleAddSection}
+                            className="mt-3 px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
+                        >
+                            <i className="fas fa-plus mr-1"></i>Add First Section
+                        </button>
                     </div>
-                </div>
-                <div className="relative overflow-x-auto" ref={tableRef}>
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th 
-                                    className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase sticky left-0 bg-gray-50 z-50 border-r border-gray-200"
-                                    style={{ boxShadow: STICKY_COLUMN_SHADOW }}
-                                >
-                                    Document / Data
-                                </th>
-                                {months.map((month, idx) => (
-                                    <th 
-                                        key={month}
-                                        ref={el => monthRefs.current[month] = el}
-                                        className={`px-1.5 py-1.5 text-center text-[10px] font-semibold uppercase border-l border-gray-200 ${
-                                            workingMonths.includes(idx) && selectedYear === currentYear
-                                                ? 'bg-primary-50 text-primary-700'
-                                                : 'text-gray-600'
-                                        }`}
+                ) : (
+                    sections.map((section, sectionIndex) => (
+                        <div
+                            key={section.id}
+                            className="bg-white rounded-lg border border-gray-200 overflow-hidden"
+                            draggable="true"
+                            onDragStart={(e) => handleSectionDragStart(e, section, sectionIndex)}
+                            onDragEnd={handleSectionDragEnd}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={(e) => handleSectionDrop(e, sectionIndex)}
+                        >
+                            {/* Section header */}
+                            <div className="px-3 py-2 bg-gray-100 flex items-center justify-between cursor-grab active:cursor-grabbing">
+                                <div className="flex items-center gap-2">
+                                    <i className="fas fa-grip-vertical text-gray-400 text-xs"></i>
+                                    <div>
+                                        <div className="font-semibold text-sm text-gray-900">{section.name}</div>
+                                        {section.description && (
+                                            <div className="text-[10px] text-gray-500">{section.description}</div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => handleAddDocument(section.id)}
+                                        className="px-2 py-0.5 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700"
                                     >
-                                        {month.slice(0, 3)} '{String(selectedYear).slice(-2)}
-                                    </th>
-                                ))}
-                                <th className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase border-l border-gray-200">
-                                    Actions
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-100">
-                            {sections.length === 0 ? (
-                                <tr>
-                                    <td colSpan={14} className="px-6 py-8 text-center text-gray-400">
-                                        <i className="fas fa-folder-open text-3xl mb-2 opacity-50"></i>
-                                        <p className="text-sm">No sections yet</p>
-                                        <button
-                                            onClick={handleAddSection}
-                                            className="mt-3 px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
-                                        >
-                                            <i className="fas fa-plus mr-1"></i>Add First Section
-                                        </button>
-                                    </td>
-                                </tr>
-                            ) : (
-                                sections.map((section, sectionIndex) => (
-                                    <React.Fragment key={section.id}>
-                                        <tr 
-                                            draggable="true"
-                                            onDragStart={(e) => handleSectionDragStart(e, section, sectionIndex)}
-                                            onDragEnd={handleSectionDragEnd}
-                                            onDragOver={(e) => e.preventDefault()}
-                                            onDrop={(e) => handleSectionDrop(e, sectionIndex)}
-                                            className="bg-gray-100 cursor-grab active:cursor-grabbing"
-                                        >
-                                            <td 
-                                                className="px-2.5 py-2 sticky left-0 bg-gray-100 z-50 border-r border-gray-200"
+                                        <i className="fas fa-plus mr-1"></i>Add Document
+                                    </button>
+                                    <button
+                                        onClick={() => handleEditSection(section)}
+                                        className="text-gray-600 hover:text-primary-600 p-1"
+                                    >
+                                        <i className="fas fa-edit text-xs"></i>
+                                    </button>
+                                    <button
+                                        onClick={() => handleDeleteSection(section.id)}
+                                        className="text-gray-600 hover:text-red-600 p-1"
+                                    >
+                                        <i className="fas fa-trash text-xs"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Scrollable month/document grid for this section only */}
+                            <div className="border-t border-gray-200 overflow-x-auto">
+                                <table className="min-w-full divide-y divide-gray-200">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th
+                                                className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase sticky left-0 bg-gray-50 z-20 border-r border-gray-200"
                                                 style={{ boxShadow: STICKY_COLUMN_SHADOW }}
                                             >
-                                                <div className="flex items-center gap-2">
-                                                    <i className="fas fa-grip-vertical text-gray-400 text-xs"></i>
-                                                    <div className="flex-1">
-                                                        <div className="font-semibold text-sm text-gray-900">{section.name}</div>
-                                                        {section.description && (
-                                                            <div className="text-[10px] text-gray-500">{section.description}</div>
-                                                        )}
-                                                        <button
-                                                            onClick={() => handleAddDocument(section.id)}
-                                                            className="mt-2 px-2 py-0.5 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700"
-                                                        >
-                                                            <i className="fas fa-plus mr-1"></i>Add Document
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td colSpan={12} className="px-2 py-2"></td>
-                                            <td className="px-2.5 py-2 border-l border-gray-200">
-                                                <div className="flex items-center gap-1">
-                                                    <button
-                                                        onClick={() => handleEditSection(section)}
-                                                        className="text-gray-600 hover:text-primary-600 p-1"
-                                                    >
-                                                        <i className="fas fa-edit text-xs"></i>
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDeleteSection(section.id)}
-                                                        className="text-gray-600 hover:text-red-600 p-1"
-                                                    >
-                                                        <i className="fas fa-trash text-xs"></i>
-                                                    </button>
-                                                </div>
-                                            </td>
+                                                Document / Data
+                                            </th>
+                                            {months.map((month, idx) => (
+                                                <th
+                                                    key={month}
+                                                    className={`px-1.5 py-1.5 text-center text-[10px] font-semibold uppercase border-l border-gray-200 ${
+                                                        workingMonths.includes(idx) && selectedYear === currentYear
+                                                            ? 'bg-primary-50 text-primary-700'
+                                                            : 'text-gray-600'
+                                                    }`}
+                                                >
+                                                    {month.slice(0, 3)} '{String(selectedYear).slice(-2)}
+                                                </th>
+                                            ))}
+                                            <th className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase border-l border-gray-200">
+                                                Actions
+                                            </th>
                                         </tr>
-                                        
-                                        {/* Per-section horizontal scrollbar so each section can scroll independently */}
-                                        <tr>
-                                            <td colSpan={14} className="px-0 py-0 bg-slate-900/40">
-                                                <div className="overflow-x-auto" data-doc-collection-scroll="true">
-                                                    {/* Per-section scroll track (synced to main table width) */}
-                                                    <div className="h-3 bg-slate-800/60" />
-                                                </div>
-                                            </td>
-                                        </tr>
-                                        
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-100">
                                         {section.documents.length === 0 ? (
                                             <tr>
                                                 <td colSpan={14} className="px-8 py-4 text-center text-gray-400">
@@ -2281,10 +2182,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                 </td>
                                             </tr>
                                         ) : (
-                                            section.documents.map((document, documentIndex) => (
+                                            section.documents.map((document) => (
                                                 <tr key={document.id} className="hover:bg-gray-50">
-                                                    <td 
-                                                        className="px-4 py-1.5 sticky left-0 bg-white z-50 border-r border-gray-200"
+                                                    <td
+                                                        className="px-4 py-1.5 sticky left-0 bg-white z-20 border-r border-gray-200"
                                                         style={{ boxShadow: STICKY_COLUMN_SHADOW }}
                                                     >
                                                         <div className="min-w-[200px]">
@@ -2294,7 +2195,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                             )}
                                                         </div>
                                                     </td>
-                                                    {months.map(month => (
+                                                    {months.map((month) => (
                                                         <React.Fragment key={`${document.id}-${month}`}>
                                                             {renderStatusCell(section, document, month)}
                                                         </React.Fragment>
@@ -2318,12 +2219,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                 </tr>
                                             ))
                                         )}
-                                    </React.Fragment>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    ))
+                )}
             </div>
             
             {/* Modals */}
