@@ -550,21 +550,7 @@ const DatabaseAPI = {
             this._releaseRequestSlot();
         }
     },
-
-    _shouldFallbackPurchaseOrders(error) {
-        if (!error) return false;
-        const message = (error?.message || '').toLowerCase();
-        return (
-            message.includes('invalid manufacturing endpoint') ||
-            message.includes('invalid method or purchase order action') ||
-            // New explicit hint from /api/manufacturing/purchase-orders telling the client to use /api/purchase-orders
-            message.includes('purchase orders are handled at /api/purchase-orders') ||
-            message.includes('not /api/manufacturing/purchase-orders') ||
-            message.includes('not found') ||
-            message.includes('404')
-        );
-    },
-
+    
     async _callPurchaseOrdersEndpoint(pathSuffix = '', requestOptions = {}) {
         const suffix = pathSuffix ? `/${pathSuffix.replace(/^\//, '')}` : '';
         const candidateBases = ['/manufacturing/purchase-orders', '/purchase-orders'];
@@ -577,20 +563,17 @@ const DatabaseAPI = {
                 return await this.makeRequest(endpoint, requestOptions);
             } catch (error) {
                 lastError = error;
-                const shouldFallback = this._shouldFallbackPurchaseOrders(error);
-                if (i === candidateBases.length - 1 || !shouldFallback) {
+                // Always attempt to fall back to the next candidate base if available.
+                // This makes the client robust even if the manufacturing endpoint returns
+                // a 400 with a hint instead of a 404 or specific error message.
+                if (i === candidateBases.length - 1) {
                     throw error;
-                }
-                // Silently fallback - this is expected behavior, not an error
-                // Only log if it's the last attempt or if it's not a fallback-able error
-                if (i < candidateBases.length - 1 && shouldFallback) {
-                    // Expected fallback, don't log as error
-                    continue;
                 }
                 console.warn(
                     `⚠️ Purchase orders endpoint ${endpoint} unavailable - falling back to alternate route...`,
                     error?.message || error
                 );
+                continue;
             }
         }
 
