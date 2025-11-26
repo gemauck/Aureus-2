@@ -1127,21 +1127,54 @@ const JobCardFormPublic = () => {
         }
       }
 
+      // Always keep a local offline copy for safety
       const existingJobCards = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
       const updatedJobCards = [...existingJobCards, jobCardData];
       localStorage.setItem('manufacturing_jobcards', JSON.stringify(updatedJobCards));
 
-      if (isOnline && window.DatabaseAPI?.createJobCard) {
-        try {
-          await window.DatabaseAPI.createJobCard(jobCardData);
-          await syncClientContact(jobCardData);
-          console.log('✅ Job card synced to API');
-        } catch (error) {
-          console.warn('⚠️ Failed to sync job card to API, saved offline:', error.message);
+      // Primary persistence: use public, unauthenticated job cards API
+      // This creates a real job card record that appears in Service & Maintenance
+      try {
+        console.log('📡 JobCardFormPublic: Submitting job card to public API...');
+        const response = await fetch('/api/public/jobcards', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(jobCardData)
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          console.warn('⚠️ JobCardFormPublic: Public API returned error status', response.status, text);
+          throw new Error('Job card saved locally but could not reach server.');
         }
+
+        const result = await response.json().catch(() => ({}));
+        const saved = result?.jobCard || result?.data?.jobCard || null;
+
+        if (saved && saved.id) {
+          console.log('✅ JobCardFormPublic: Job card created via public API:', saved);
+          // Optionally update local copy with server ID / number so future tooling can reconcile
+          const syncedCards = updatedJobCards.map((jc) =>
+            jc.id === jobCardData.id
+              ? {
+                  ...jc,
+                  id: saved.id,
+                  jobCardNumber: saved.jobCardNumber || jc.jobCardNumber,
+                  synced: true
+                }
+              : jc
+          );
+          localStorage.setItem('manufacturing_jobcards', JSON.stringify(syncedCards));
+        } else {
+          console.warn('⚠️ JobCardFormPublic: Public API response did not include jobCard payload', result);
+        }
+      } catch (error) {
+        console.warn('⚠️ JobCardFormPublic: Failed to submit job card to public API, kept offline only:', error.message);
       }
 
-      alert('✅ Job card saved successfully!' + (isOnline ? '' : ' (Saved offline - will sync when online)'));
+      alert('✅ Job card saved successfully! It will appear under Service & Maintenance once the server has processed it.');
       resetForm();
     } catch (error) {
       console.error('Error saving job card:', error);

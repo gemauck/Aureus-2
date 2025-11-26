@@ -416,18 +416,23 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             console.log('⏭️ Still loading data, skipping save');
             return;
         }
-        
+
         const payload = sectionsRef.current || {};
-        
-        // Guard against wiping data with an all‑empty payload
+        const serialized = serializeSections(payload);
+
+        // Guard against wiping data with an all‑empty payload when we never had data,
+        // but ALLOW saving an empty state when the user has explicitly deleted sections.
         const hasAnySections = Object.values(payload || {}).some(
             (yearSections) => Array.isArray(yearSections) && yearSections.length > 0
         );
-        if (!hasAnySections) {
-            console.log('⏭️ Skipping save: sections payload is empty for all years – avoiding overwrite');
+        if (!hasAnySections && serialized === lastSavedSnapshotRef.current) {
+            console.log('⏭️ Skipping save: sections payload is empty and matches last saved snapshot – nothing to persist');
             return;
         }
-        
+        if (!hasAnySections && serialized !== lastSavedSnapshotRef.current) {
+            console.log('💾 All sections cleared for all years – saving empty state to persist deletions');
+        }
+
         isSavingRef.current = true;
         
         try {
@@ -444,7 +449,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 throw new Error('No available API for saving document sections');
             }
             
-            const serialized = serializeSections(payload);
             lastSavedSnapshotRef.current = serialized;
             
             // Persist a snapshot locally so navigation issues cannot lose user data
