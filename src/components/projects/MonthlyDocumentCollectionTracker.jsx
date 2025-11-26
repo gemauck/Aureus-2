@@ -248,7 +248,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         setIsLoading(true);
         try {
             const snapshotKey = getSnapshotKey(project.id);
-            const normalizedFromProp = normalizeSectionsByYear(project.documentSections, selectedYear);
+            const normalizedFromProp = normalizeSectionsByYear(project.documentSections);
             let normalized = normalizedFromProp;
             
             const yearKeys = Object.keys(normalizedFromProp || {});
@@ -264,7 +264,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     const snapshotString = window.localStorage.getItem(snapshotKey);
                     if (snapshotString) {
                         const snapshotParsed = JSON.parse(snapshotString);
-                        const snapshotMap = normalizeSectionsByYear(snapshotParsed, selectedYear);
+                        const snapshotMap = normalizeSectionsByYear(snapshotParsed);
                         const snapshotYears = Object.keys(snapshotMap || {});
                         if (snapshotYears.length > 0) {
                             console.log('🩹 Restoring document sections from local snapshot.', {
@@ -279,15 +279,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
             }
             
-            // If the currently selected year has no data but another year does, default to the first year with data
-            if ((!normalized[selectedYear] || normalized[selectedYear].length === 0) && yearKeys.length > 0) {
-                const fallbackYear = parseInt(yearKeys[0], 10);
-                if (!Number.isNaN(fallbackYear) && fallbackYear !== selectedYear) {
-                    console.log('🔄 Adjusting selectedYear to first year with data:', fallbackYear);
-                    setSelectedYear(fallbackYear);
-                }
-            }
-            
             setSectionsByYear(normalized);
             lastSavedSnapshotRef.current = serializeSections(normalized);
         } catch (error) {
@@ -298,7 +289,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             hasLoadedInitialDataRef.current = true;
             setIsLoading(false);
         }
-    }, [project?.documentSections, project?.id, selectedYear]);
+    }, [project?.documentSections, project?.id]);
     
     const refreshFromDatabase = useCallback(async () => {
         if (!project?.id || !apiRef.current) return;
@@ -306,7 +297,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         try {
             const freshProject = await apiRef.current.fetchProject(project.id);
             const snapshotKey = getSnapshotKey(project.id);
-            const normalizedFromDb = normalizeSectionsByYear(freshProject?.documentSections, selectedYear);
+            const normalizedFromDb = normalizeSectionsByYear(freshProject?.documentSections);
             let normalized = normalizedFromDb;
             const yearKeys = Object.keys(normalizedFromDb || {});
             const currentSnapshot = serializeSections(sectionsRef.current);
@@ -318,7 +309,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     const snapshotString = window.localStorage.getItem(snapshotKey);
                     if (snapshotString) {
                         const snapshotParsed = JSON.parse(snapshotString);
-                        const snapshotMap = normalizeSectionsByYear(snapshotParsed, selectedYear);
+                        const snapshotMap = normalizeSectionsByYear(snapshotParsed);
                         const snapshotYears = Object.keys(snapshotMap || {});
                         if (snapshotYears.length > 0) {
                             console.log('🩹 DB returned empty documentSections. Restoring from local snapshot and re‑applying.');
@@ -330,15 +321,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
             }
             
-            // If selectedYear has no data in fresh payload but other years do, adjust selection
-            if ((!normalized[selectedYear] || normalized[selectedYear].length === 0) && yearKeys.length > 0) {
-                const fallbackYear = parseInt(yearKeys[0], 10);
-                if (!Number.isNaN(fallbackYear) && fallbackYear !== selectedYear) {
-                    console.log('🔄 Adjusting selectedYear (from fresh DB) to first year with data:', fallbackYear);
-                    setSelectedYear(fallbackYear);
-                }
-            }
-            
             if (freshSnapshot !== currentSnapshot) {
                 console.log('🔄 Updating sections map from fresh database data. Years:', yearKeys);
                 setSectionsByYear(normalized);
@@ -347,7 +329,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         } catch (error) {
             console.error('❌ Error fetching fresh project data:', error);
         }
-    }, [project?.id, selectedYear]);
+    }, [project?.id]);
     
     useEffect(() => {
         if (!project?.id) return;

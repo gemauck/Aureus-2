@@ -27,6 +27,59 @@ const JobCards = ({ clients = [], users = [] }) => {
   const [error, setError] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [clientFilter, setClientFilter] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingJobCard, setEditingJobCard] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const reloadJobCards = async () => {
+    let cancelled = false;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const token = window.storage?.getToken?.();
+      if (!token) {
+        setError('You must be logged in to view job cards.');
+        return;
+      }
+
+      const response = await fetch('/api/jobcards', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        console.error('❌ JobCards: Failed to reload job cards', response.status, text);
+        throw new Error('Failed to load job cards.');
+      }
+
+      const raw = await response.json();
+      const data =
+        (raw && (raw.jobCards || raw.data?.jobCards || raw.data)) || [];
+
+      if (!cancelled) {
+        setJobCards(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      if (!cancelled) {
+        console.error('❌ JobCards: Error reloading job cards', e);
+        setError(e.message || 'Unable to load job cards.');
+        setJobCards([]);
+      }
+    } finally {
+      if (!cancelled) {
+        setLoading(false);
+      }
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -127,6 +180,57 @@ const JobCards = ({ clients = [], users = [] }) => {
     return date.toLocaleString();
   };
 
+  const handleRowClick = (jobCard) => {
+    setEditingJobCard(jobCard);
+    setIsModalOpen(true);
+  };
+
+  const handleNewJobCard = () => {
+    setEditingJobCard(null);
+    setIsModalOpen(true);
+  };
+
+  const handleSaveJobCard = async (formData) => {
+    if (!window.DatabaseAPI) {
+      console.error('❌ DatabaseAPI is not available on window');
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      if (editingJobCard && editingJobCard.id) {
+        await window.DatabaseAPI.updateJobCard(editingJobCard.id, formData);
+      } else {
+        await window.DatabaseAPI.createJobCard(formData);
+      }
+
+      setIsModalOpen(false);
+      setEditingJobCard(null);
+
+      // Refresh list after save
+      await reloadJobCards();
+    } catch (e) {
+      console.error('❌ Failed to save job card from classic manager:', e);
+      alert(e.message || 'Failed to save job card. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Expose a simple global API so the Service & Maintenance page can open the modal
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        window.JobCards = {
+          openNewJobCardModal: handleNewJobCard,
+        };
+      }
+    } catch (error) {
+      console.error('❌ JobCards.jsx: Error registering global API:', error);
+    }
+  }, []);
+
   return (
     <div className="mt-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
       <div className="px-4 py-4 sm:px-6 sm:py-5 border-b border-slate-200 dark:border-slate-700 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -224,7 +328,11 @@ const JobCards = ({ clients = [], users = [] }) => {
                     : 'bg-slate-50 text-slate-700 border-slate-200';
 
                 return (
-                  <tr key={jc.id}>
+                  <tr
+                    key={jc.id}
+                    className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/80"
+                    onClick={() => handleRowClick(jc)}
+                  >
                     <td className="px-4 py-2 whitespace-nowrap text-slate-800 dark:text-slate-100">
                       <div className="font-semibold">
                         {jc.jobCardNumber || '–'}
@@ -259,6 +367,21 @@ const JobCards = ({ clients = [], users = [] }) => {
           </table>
         </div>
       )}
+      {/* Classic manager modal for creating / editing job cards */}
+      {window.JobCardModal ? (
+        <window.JobCardModal
+          isOpen={isModalOpen}
+          onClose={() => {
+            if (!saving) {
+              setIsModalOpen(false);
+              setEditingJobCard(null);
+            }
+          }}
+          jobCard={editingJobCard}
+          onSave={handleSaveJobCard}
+          clients={clients}
+        />
+      ) : null}
     </div>
   );
 };
