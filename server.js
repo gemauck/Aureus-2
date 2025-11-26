@@ -1079,58 +1079,82 @@ app.use((err, req, res, next) => {
   }
 })
 
+// Shared static headers helper for HTTP/2-safe responses
+function setHttp2SafeStaticHeaders(res, path) {
+  // CRITICAL: Set all headers BEFORE any data is written (HTTP/2 requirement)
+  // This prevents ERR_HTTP2_PROTOCOL_ERROR
+
+  // Set content type first
+  if (path.endsWith('.jsx')) {
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
+    // No caching for JSX files (they're dynamic)
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+    res.setHeader('Pragma', 'no-cache')
+    res.setHeader('Expires', '0')
+  } else if (path.endsWith('.js')) {
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
+    // Always revalidate JS so deployments propagate instantly
+    res.setHeader('Cache-Control', 'no-cache, must-revalidate')
+    res.setHeader('Pragma', 'no-cache')
+    res.setHeader('Expires', '0')
+  } else if (path.endsWith('.css')) {
+    res.setHeader('Content-Type', 'text/css; charset=utf-8')
+    // Always revalidate CSS to prevent stale styles after deploy
+    res.setHeader('Cache-Control', 'no-cache, must-revalidate')
+    res.setHeader('Pragma', 'no-cache')
+    res.setHeader('Expires', '0')
+  } else if (path.endsWith('.html')) {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, must-revalidate')
+  } else if (path.match(/\.(png|jpg|jpeg|gif|svg|webp|ico)$/i)) {
+    // Images: cache for 1 year
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+  } else if (path.match(/\.(woff|woff2|ttf|eot)$/i)) {
+    // Fonts: cache for 1 year
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+  }
+
+  // Do NOT set Content-Length manually here.
+  // When upstream (e.g., Nginx) applies gzip/brotli under HTTP/2, a manual
+  // Content-Length can cause ERR_HTTP2_PROTOCOL_ERROR due to length mismatch.
+  // Let Express/proxy determine the correct transfer semantics.
+
+  // Additional HTTP/2 safe headers
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+}
+
+// Serve Vite Projects bundle and CSS from /vite-projects
+// This maps /vite-projects/* URLs to dist/vite-projects output directory
+app.use(
+  '/vite-projects',
+  express.static(path.join(__dirname, 'dist', 'vite-projects'), {
+    index: false,
+    dotfiles: 'ignore',
+    etag: true,
+    lastModified: true,
+    maxAge: '7d',
+    redirect: false,
+    setHeaders: (res, filePath, stat) => {
+      setHttp2SafeStaticHeaders(res, filePath)
+    }
+  })
+)
+
 // Serve static files from root directory with HTTP/2-safe headers
 // MUST be after API routes to avoid serving HTML for API endpoints
-app.use(express.static(rootDir, {
-  index: false, // Don't serve index.html automatically
-  dotfiles: 'ignore',
-  etag: true,
-  lastModified: true,
-  maxAge: '7d', // Cache for 7 days for better performance
-  redirect: false, // Disable automatic redirects for trailing slashes
-  setHeaders: (res, path, stat) => {
-    // CRITICAL: Set all headers BEFORE any data is written (HTTP/2 requirement)
-    // This prevents ERR_HTTP2_PROTOCOL_ERROR
-    
-    // Set content type first
-    if (path.endsWith('.jsx')) {
-      res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
-      // No caching for JSX files (they're dynamic)
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
-      res.setHeader('Pragma', 'no-cache')
-      res.setHeader('Expires', '0')
-    } else if (path.endsWith('.js')) {
-      res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
-      // Always revalidate JS so deployments propagate instantly
-      res.setHeader('Cache-Control', 'no-cache, must-revalidate')
-      res.setHeader('Pragma', 'no-cache')
-      res.setHeader('Expires', '0')
-    } else if (path.endsWith('.css')) {
-      res.setHeader('Content-Type', 'text/css; charset=utf-8')
-      // Always revalidate CSS to prevent stale styles after deploy
-      res.setHeader('Cache-Control', 'no-cache, must-revalidate')
-      res.setHeader('Pragma', 'no-cache')
-      res.setHeader('Expires', '0')
-    } else if (path.endsWith('.html')) {
-      res.setHeader('Content-Type', 'text/html; charset=utf-8')
-      res.setHeader('Cache-Control', 'no-cache, must-revalidate')
-    } else if (path.match(/\.(png|jpg|jpeg|gif|svg|webp|ico)$/i)) {
-      // Images: cache for 1 year
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
-    } else if (path.match(/\.(woff|woff2|ttf|eot)$/i)) {
-      // Fonts: cache for 1 year
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+app.use(
+  express.static(rootDir, {
+    index: false, // Don't serve index.html automatically
+    dotfiles: 'ignore',
+    etag: true,
+    lastModified: true,
+    maxAge: '7d', // Cache for 7 days for better performance
+    redirect: false, // Disable automatic redirects for trailing slashes
+    setHeaders: (res, filePath, stat) => {
+      setHttp2SafeStaticHeaders(res, filePath)
     }
-    
-    // Do NOT set Content-Length manually here.
-    // When upstream (e.g., Nginx) applies gzip/brotli under HTTP/2, a manual
-    // Content-Length can cause ERR_HTTP2_PROTOCOL_ERROR due to length mismatch.
-    // Let Express/proxy determine the correct transfer semantics.
-    
-    // Additional HTTP/2 safe headers
-    res.setHeader('X-Content-Type-Options', 'nosniff')
-  }
-}))
+  })
+)
 
 // Catch-all route for static files - must come last
 // Only serve index.html for non-API routes

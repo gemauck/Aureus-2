@@ -1,5 +1,6 @@
-// Use React from window
-const { useState, useEffect } = React;
+// Use React from window (fallback to global React if needed)
+const ReactGlobal = (typeof window !== 'undefined' && window.React) || (typeof React !== 'undefined' && React) || {};
+const { useState, useEffect } = ReactGlobal;
 
 const ServiceAndMaintenance = () => {
   const { user } = window.useAuth();
@@ -96,18 +97,6 @@ const ServiceAndMaintenance = () => {
     }
   };
 
-  // Wait for JobCards component to be available
-  if (!jobCardsReady || !window.JobCards) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mb-4"></div>
-          <p className="text-gray-500">Loading Service and Maintenance...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="p-4">
       <div className="flex flex-col gap-4 mb-6">
@@ -188,6 +177,11 @@ const ServiceAndMaintenance = () => {
                   <i className="fa-solid fa-plus text-xs" />
                   New job card
                 </button>
+                {!jobCardsReady || !window.JobCards ? (
+                  <span className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Loading job cards module&hellip;
+                  </span>
+                ) : null}
               </div>
             </div>
           </div>
@@ -245,10 +239,19 @@ const ServiceAndMaintenance = () => {
         </div>
       </div>
 
-      <window.JobCards
-        clients={clients}
-        users={users}
-      />
+      {jobCardsReady && window.JobCards ? (
+        <window.JobCards
+          clients={clients}
+          users={users}
+        />
+      ) : (
+        <div className="mt-6 flex items-center justify-center">
+          <div className="text-center text-sm text-gray-500">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-500 mx-auto mb-3" />
+            <p>Job cards module is still loading. You can continue to use the mobile form in the meantime.</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

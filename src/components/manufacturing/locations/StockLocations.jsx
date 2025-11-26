@@ -256,6 +256,16 @@ const StockLocations = ({ inventory = [], onInventoryUpdate }) => {
       </div>
     </div>
   );
-  };
+};
+
+// Register globally so Manufacturing.jsx can render this via window.StockLocations
+try {
+  if (typeof window !== 'undefined') {
+    window.StockLocations = StockLocations;
+    console.log('✅ StockLocations component registered on window.StockLocations');
+  }
+} catch (error) {
+  console.error('❌ StockLocations.jsx: Error registering component on window.StockLocations', error);
+}
 
 export default StockLocations;

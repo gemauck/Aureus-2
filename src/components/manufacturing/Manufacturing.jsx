@@ -2052,7 +2052,11 @@ const Manufacturing = () => {
                     </td>
                     <td className="px-3 py-2 text-sm text-gray-600 capitalize">{item.category ? item.category.replace('_', ' ') : 'N/A'}</td>
                     <td className="px-3 py-2 text-sm text-gray-600 capitalize">
-                      {item.type === 'final_product' ? 'Final Product' : item.type === 'component' ? 'Component' : item.type.replace('_', ' ')}
+                      {item.type === 'final_product'
+                        ? 'Final Product'
+                        : item.type === 'component'
+                          ? 'Component'
+                          : (item.type || '').replace('_', ' ')}
                     </td>
                     <td className="px-3 py-2 text-right">
                       {item.type === 'final_product' ? (
