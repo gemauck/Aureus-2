@@ -24,8 +24,9 @@
           crossorigin=""/>
     
     <!-- Tailwind CSS - Production Build -->
-    <link rel="preload" href="/dist/styles.css?v=20251125-045120" as="style">
-    <link rel="stylesheet" href="/dist/styles.css?v=20251125-045120">
+    <!-- CACHE BUST: 20251126-1 -->
+    <link rel="preload" href="/dist/styles.css?v=20251126-1" as="style">
+    <link rel="stylesheet" href="/dist/styles.css?v=20251126-1">
     
     <!-- Resource hints for faster loading -->
     <link rel="dns-prefetch" href="https://unpkg.com">
@@ -637,7 +638,8 @@
                 
                 // Check if script already exists - remove old ones with timestamp cache busting
                 const existingScripts = document.querySelectorAll('script[src*="projects-module.js"]');
-                const VITE_PROJECTS_VERSION = '20251125-074200';
+                // CACHE BUST VERSION: bump when deploying new Vite projects bundle
+                const VITE_PROJECTS_VERSION = '20251126-1';
                 console.log('🔍 Checking for existing scripts. Found:', existingScripts.length);
                 existingScripts.forEach(oldScript => {
                     const src = oldScript.src || oldScript.getAttribute('src') || '';
@@ -744,7 +746,8 @@
         });
     </script>
     
-    <script defer src="/lazy-load-components.js?v=20251114-doc-collection-fix"></script>
+    <!-- Lazy loader - CACHE BUST 20251126-1 -->
+    <script defer src="/lazy-load-components.js?v=20251126-1"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>
