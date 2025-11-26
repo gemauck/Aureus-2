@@ -458,9 +458,42 @@ async function handler(req, res) {
     // DELETE
     if (req.method === 'DELETE' && id) {
       try {
-        const existsInv = await prisma.locationInventory.findFirst({ where: { locationId: id } })
-        if (existsInv) return badRequest(res, 'Cannot delete location with inventory')
-        await prisma.stockLocation.delete({ where: { id } })
+        // Only prevent deletion when there is NON-ZERO stock or allocations at this location.
+        // Placeholder records with quantity 0 are safe to remove.
+        const hasNonZeroLocationInventory = await prisma.locationInventory.findFirst({
+          where: {
+            locationId: id,
+            quantity: { gt: 0 }
+          }
+        })
+
+        const hasNonZeroInventoryItems = await prisma.inventoryItem.findFirst({
+          where: {
+            locationId: id,
+            OR: [
+              { quantity: { gt: 0 } },
+              { allocatedQuantity: { gt: 0 } },
+              { inProductionQuantity: { gt: 0 } },
+              { completedQuantity: { gt: 0 } }
+            ]
+          }
+        })
+
+        if (hasNonZeroLocationInventory || hasNonZeroInventoryItems) {
+          return badRequest(
+            res,
+            'Cannot delete location with non-zero inventory or allocations'
+          )
+        }
+
+        // Safe to delete – clean up any zero-quantity per-location records and inventory items,
+        // then remove the location itself in a single transaction.
+        await prisma.$transaction(async (tx) => {
+          await tx.locationInventory.deleteMany({ where: { locationId: id } })
+          await tx.inventoryItem.deleteMany({ where: { locationId: id } })
+          await tx.stockLocation.delete({ where: { id } })
+        })
+
         return ok(res, { deleted: true })
       } catch (e) {
         if (e.code === 'P2025') return notFound(res, 'Location not found')
@@ -1227,6 +1260,23 @@ async function handler(req, res) {
     // DELETE (DELETE /api/manufacturing/inventory/:id)
     if (req.method === 'DELETE' && id) {
       try {
+        // IMPORTANT SAFETY CHECK:
+        // Don't allow deleting an inventory item that is linked to one or more BOMs
+        // as the finished product. Prisma will also enforce this via FK constraints,
+        // but this gives the user a clear, friendly error message instead of a
+        // generic server error.
+        const linkedBomCount = await prisma.bOM.count({
+          where: { inventoryItemId: id }
+        })
+
+        if (linkedBomCount > 0) {
+          return badRequest(
+            res,
+            `Cannot delete this item because it is linked to ${linkedBomCount} Bill(s) of Materials. ` +
+            'Please remove or reassign those BOMs before deleting the item.'
+          )
+        }
+
         await prisma.inventoryItem.delete({ where: { id } })
         console.log('✅ Deleted inventory item:', id)
         return ok(res, { deleted: true })

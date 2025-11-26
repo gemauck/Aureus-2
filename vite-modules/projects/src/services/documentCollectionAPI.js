@@ -63,17 +63,26 @@ class DocumentCollectionAPI {
     /**
      * Save document sections to project
      * @param {string} projectId - The project ID
-     * @param {Array} sections - The document sections to save
+     * @param {Object|Array} sectionsPayload - Either a flat sections array (legacy)
+     *                                        or a `{ [year]: Section[] }` map (new, year‑scoped)
      * @param {boolean} skipParentUpdate - If true, skip updating parent component (useful when modals are open)
      */
-    async saveDocumentSections(projectId, sections, skipParentUpdate = false) {
+    async saveDocumentSections(projectId, sectionsPayload, skipParentUpdate = false) {
         if (!projectId) {
             throw new Error('Project ID is required');
         }
 
+        const payload =
+            sectionsPayload && typeof sectionsPayload === 'object'
+                ? sectionsPayload
+                : Array.isArray(sectionsPayload)
+                    ? sectionsPayload
+                    : [];
+
         try {
+            const serialized = JSON.stringify(payload);
             const result = await window.DatabaseAPI.updateProject(projectId, {
-                documentSections: JSON.stringify(sections)
+                documentSections: serialized
             });
 
             // Update parent component's project prop if available and not skipping
@@ -83,7 +92,7 @@ class DocumentCollectionAPI {
                 if (updatedProject) {
                     window.updateViewingProject({
                         ...updatedProject,
-                        documentSections: JSON.stringify(sections)
+                        documentSections: serialized
                     });
                 }
             }

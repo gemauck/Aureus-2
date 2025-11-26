@@ -2921,7 +2921,8 @@ const Manufacturing = () => {
         setShowModal(false);
       } catch (error) {
         console.error('Error deleting inventory item:', error);
-        alert('Failed to delete inventory item. Please try again.');
+        const message = error?.message || 'Failed to delete inventory item. Please try again.';
+        alert(message);
       }
     }
   };

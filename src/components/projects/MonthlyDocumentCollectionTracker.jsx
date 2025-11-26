@@ -44,7 +44,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     const [selectedYear, setSelectedYear] = useState(getInitialSelectedYear);
     
-    // Parse documentSections safely
+    // Parse documentSections safely (legacy flat array support)
     const parseSections = (data) => {
         if (!data) return [];
         if (Array.isArray(data)) return data;
@@ -85,13 +85,93 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
         return [];
     };
+
+    // Snapshot serializer for any documentSections shape (array or year map)
+    const serializeSections = (data) => {
+        try {
+            return JSON.stringify(data ?? {});
+        } catch (error) {
+            console.warn('Failed to serialize documentSections snapshot:', error);
+            return '{}';
+        }
+    };
+
+    const cloneSectionsArray = (sections) => {
+        try {
+            return JSON.parse(JSON.stringify(Array.isArray(sections) ? sections : []));
+        } catch {
+            return Array.isArray(sections) ? [...sections] : [];
+        }
+    };
+
+    const inferYearsFromSections = (sections) => {
+        const years = new Set();
+        (sections || []).forEach(section => {
+            (section.documents || []).forEach(doc => {
+                const keys = [
+                    ...Object.keys(doc.collectionStatus || {}),
+                    ...Object.keys(doc.comments || {})
+                ];
+                keys.forEach(key => {
+                    if (!key) return;
+                    const parts = String(key).split('-');
+                    const maybeYear = parseInt(parts[parts.length - 1], 10);
+                    if (!Number.isNaN(maybeYear) && maybeYear > 1900 && maybeYear < 3000) {
+                        years.add(maybeYear);
+                    }
+                });
+            });
+        });
+        return Array.from(years).sort();
+    };
+
+    const normalizeSectionsByYear = (rawValue, fallbackYear) => {
+        if (!rawValue) return {};
+
+        let parsedValue = rawValue;
+
+        if (typeof rawValue === 'string') {
+            const trimmed = rawValue.trim();
+            if (!trimmed) return {};
+            try {
+                parsedValue = JSON.parse(trimmed);
+            } catch {
+                parsedValue = parseSections(rawValue);
+            }
+        }
+
+        if (parsedValue && typeof parsedValue === 'object' && !Array.isArray(parsedValue)) {
+            const result = {};
+            Object.keys(parsedValue).forEach(yearKey => {
+                const value = parsedValue[yearKey];
+                result[yearKey] = Array.isArray(value) ? value : parseSections(value);
+            });
+            return result;
+        }
+
+        const baseSections = Array.isArray(parsedValue) ? parsedValue : parseSections(parsedValue);
+        const inferredYears = inferYearsFromSections(baseSections);
+        const targetYears = inferredYears.length > 0
+            ? inferredYears
+            : (fallbackYear ? [fallbackYear] : []);
+
+        if (targetYears.length === 0) {
+            return {};
+        }
+
+        const map = {};
+        targetYears.forEach(year => {
+            map[year] = cloneSectionsArray(baseSections);
+        });
+        return map;
+    };
     
     // ============================================================
     // SIMPLIFIED STATE MANAGEMENT - Single source of truth
     // ============================================================
     
-    // Main data state - loaded from database
-    const [sections, setSections] = useState([]);
+    // Main data state - loaded from database, stored per year
+    const [sectionsByYear, setSectionsByYear] = useState({});
     const [isLoading, setIsLoading] = useState(true);
     
     // Templates state
@@ -128,10 +208,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         setIsLoading(true);
         try {
-            // Parse sections from project data
-            const parsed = parseSections(project.documentSections);
-            console.log('✅ Loaded sections from project:', parsed.length, 'sections');
-            setSections(parsed);
+            // Normalize sections into per‑year map from project data
+            const normalized = normalizeSectionsByYear(project.documentSections, selectedYear);
+            console.log('✅ Loaded sections from project (per‑year map). Years:', Object.keys(normalized));
+            setSectionsByYear(normalized);
         } catch (error) {
             console.error('❌ Error loading sections:', error);
             setSections([]);
@@ -163,7 +243,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         console.log('📋 MonthlyDocumentCollectionTracker: Loading data from database');
         loadFromDatabase();
-    }, [project?.id]); // Only depend on project ID
+    }, [project?.id, selectedYear]); // Also depend on selectedYear for legacy conversion
     
     // ============================================================
     // SIMPLE AUTO-SAVE - Debounced, saves entire state
@@ -183,8 +263,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         // Don't save while loading initial data
         if (isLoading) return;
         
-        // Don't save if no sections (initial state)
-        if (sections.length === 0 && !project?.documentSections) return;
+        // Don't save if no sections map (initial state)
+        if ((!sectionsByYear || Object.keys(sectionsByYear).length === 0) && !project?.documentSections) return;
         
         // Clear any pending save
         if (saveTimeoutRef.current) {
@@ -222,19 +302,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         isSavingRef.current = true;
         
         try {
-            console.log('💾 Saving sections to database:', sections.length, 'sections');
+            console.log('💾 Saving sections map to database. Years:', Object.keys(sectionsByYear));
             
-            if (!window.DatabaseAPI || typeof window.DatabaseAPI.updateProject !== 'function') {
+                if (!window.DatabaseAPI || typeof window.DatabaseAPI.updateProject !== 'function') {
                 throw new Error('DatabaseAPI.updateProject is not available');
             }
             
-            // Validate sections data before saving
-            if (!Array.isArray(sections)) {
-                throw new Error('Sections data is not an array');
-            }
-            
             const updatePayload = {
-                documentSections: JSON.stringify(sections)
+                documentSections: serializeSections(sectionsByYear)
             };
             
             await window.DatabaseAPI.updateProject(project.id, updatePayload);

@@ -79,7 +79,8 @@ const StockLocations = ({ inventory = [], onInventoryUpdate }) => {
       await loadLocations();
     } catch (error) {
       console.error('❌ StockLocations: Failed to delete location', error);
-      alert('Failed to delete location. Please try again.');
+      const message = error?.message || 'Failed to delete location. Please try again.';
+      alert(message);
     } finally {
       setIsSaving(false);
     }
