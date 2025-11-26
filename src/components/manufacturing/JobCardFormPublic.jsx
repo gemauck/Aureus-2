@@ -1932,6 +1932,18 @@ const JobCardFormPublic = () => {
                 ref={signatureCanvasRef}
                 className="signature-canvas w-full h-48 touch-none"
                 style={{ touchAction: 'none', display: 'block' }}
+                onPointerDown={startSignature}
+                onPointerMove={drawSignature}
+                onPointerUp={endSignature}
+                onPointerLeave={endSignature}
+                onMouseDown={startSignature}
+                onMouseMove={drawSignature}
+                onMouseUp={endSignature}
+                onMouseLeave={endSignature}
+                onTouchStart={startSignature}
+                onTouchMove={drawSignature}
+                onTouchEnd={endSignature}
+                onTouchCancel={endSignature}
               />
               {!hasSignature && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

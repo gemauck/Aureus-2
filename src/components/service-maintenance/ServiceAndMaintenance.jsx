@@ -540,15 +540,30 @@ const ServiceAndMaintenance = () => {
                   </header>
                   <div className="mt-3 h-64 rounded-xl overflow-hidden border border-slate-800">
                     {selectedJobCard.locationLatitude && selectedJobCard.locationLongitude ? (
-                      <iframe
-                        title="Job location"
-                        className="h-full w-full border-0"
-                        src={`https://www.google.com/maps?q=${encodeURIComponent(
+                      <a
+                        href={`https://www.google.com/maps?q=${encodeURIComponent(
                           `${selectedJobCard.locationLatitude},${selectedJobCard.locationLongitude}`
-                        )}&z=15&output=embed`}
-                        loading="lazy"
-                        referrerPolicy="no-referrer-when-downgrade"
-                      />
+                        )}&z=15`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="group flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 text-slate-100"
+                      >
+                        <div className="text-center px-6">
+                          <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-sky-500/15 text-sky-300 mb-3">
+                            <i className="fa-solid fa-location-dot text-lg" />
+                          </div>
+                          <p className="text-sm font-semibold">
+                            Open this location in Google Maps
+                          </p>
+                          <p className="mt-1 text-xs text-slate-300">
+                            {selectedJobCard.locationLatitude.toFixed(6)},{' '}
+                            {selectedJobCard.locationLongitude.toFixed(6)}
+                          </p>
+                          <p className="mt-2 text-[11px] text-slate-400 group-hover:text-slate-300">
+                            Click to view full map, directions, and nearby info.
+                          </p>
+                        </div>
+                      </a>
                     ) : (
                       <div className="flex h-full items-center justify-center bg-slate-950/60">
                         <div className="text-center">
