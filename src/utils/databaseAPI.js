@@ -553,34 +553,11 @@ const DatabaseAPI = {
     
     async _callPurchaseOrdersEndpoint(pathSuffix = '', requestOptions = {}) {
         const suffix = pathSuffix ? `/${pathSuffix.replace(/^\//, '')}` : '';
-        // Always prefer the canonical /purchase-orders endpoint.
-        // The /manufacturing/purchase-orders route is legacy and simply returns
-        // a 400 with a hint to use /api/purchase-orders instead.
-        const candidateBases = ['/purchase-orders', '/manufacturing/purchase-orders'];
-        let lastError = null;
-
-        for (let i = 0; i < candidateBases.length; i += 1) {
-            const base = candidateBases[i];
-            const endpoint = `${base}${suffix}`;
-            try {
-                return await this.makeRequest(endpoint, requestOptions);
-            } catch (error) {
-                lastError = error;
-                // Always attempt to fall back to the next candidate base if available.
-                // This makes the client robust even if the manufacturing endpoint returns
-                // a 400 with a hint instead of a 404 or specific error message.
-                if (i === candidateBases.length - 1) {
-                    throw error;
-                }
-                console.warn(
-                    `⚠️ Purchase orders endpoint ${endpoint} unavailable - falling back to alternate route...`,
-                    error?.message || error
-                );
-                continue;
-            }
-        }
-
-        throw lastError || new Error('Unable to reach purchase orders endpoint');
+        // Use the canonical /purchase-orders endpoint.
+        // The /manufacturing/purchase-orders route is legacy and always returns
+        // a 400 with a hint; the client should not rely on it.
+        const endpoint = `/purchase-orders${suffix}`;
+        return this.makeRequest(endpoint, requestOptions);
     },
 
     // CLIENT OPERATIONS
@@ -1303,54 +1280,6 @@ const DatabaseAPI = {
             method: 'DELETE'
         });
         console.log('✅ Sales order deleted from database');
-        return response;
-    },
-
-    // PURCHASE ORDERS
-    async getPurchaseOrders() {
-        console.log('📡 Fetching purchase orders from database...');
-        const raw = await this.makeRequest('/purchase-orders');
-        const normalized = {
-            data: {
-                purchaseOrders: Array.isArray(raw?.data?.purchaseOrders)
-                    ? raw.data.purchaseOrders
-                    : Array.isArray(raw?.purchaseOrders)
-                        ? raw.purchaseOrders
-                        : Array.isArray(raw?.data)
-                            ? raw.data
-                            : []
-            }
-        };
-        console.log('✅ Purchase orders fetched from database:', normalized.data.purchaseOrders.length);
-        return normalized;
-    },
-
-    async createPurchaseOrder(orderData) {
-        console.log('📡 Creating purchase order in database...');
-        const response = await this.makeRequest('/purchase-orders', {
-            method: 'POST',
-            body: JSON.stringify(orderData)
-        });
-        console.log('✅ Purchase order created in database');
-        return response;
-    },
-
-    async updatePurchaseOrder(id, orderData) {
-        console.log(`📡 Updating purchase order ${id} in database...`);
-        const response = await this.makeRequest(`/purchase-orders/${id}`, {
-            method: 'PATCH',
-            body: JSON.stringify(orderData)
-        });
-        console.log('✅ Purchase order updated in database');
-        return response;
-    },
-
-    async deletePurchaseOrder(id) {
-        console.log(`📡 Deleting purchase order ${id} from database...`);
-        const response = await this.makeRequest(`/purchase-orders/${id}`, {
-            method: 'DELETE'
-        });
-        console.log('✅ Purchase order deleted from database');
         return response;
     },
 
