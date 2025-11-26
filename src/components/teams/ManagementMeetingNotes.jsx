@@ -342,11 +342,35 @@ const ManagementMeetingNotes = () => {
         []
     );
 
-    // Initialize selected month to current month
+    // Initialize selected month:
+    // - Respect an explicit month in the URL (for shared links / navigation)
+    // - Otherwise, default to the current calendar month
     useEffect(() => {
-        const now = new Date();
-        const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-        setSelectedMonth(monthKey);
+        try {
+            const monthFromURL = getMonthFromURL();
+            
+            if (monthFromURL) {
+                const normalizedFromURL = normalizeMonthKeyInput(monthFromURL);
+                if (normalizedFromURL) {
+                    setSelectedMonth(normalizedFromURL);
+                    return;
+                }
+            }
+            
+            // No (valid) month in URL - use the current month
+            const now = new Date();
+            const monthKey = getMonthKeyFromDate(now);
+            if (monthKey) {
+                setSelectedMonth(monthKey);
+            }
+        } catch (error) {
+            console.warn('ManagementMeetingNotes: failed to initialize month, falling back to current month', error);
+            const now = new Date();
+            const monthKey = getMonthKeyFromDate(now);
+            if (monthKey) {
+                setSelectedMonth(monthKey);
+            }
+        }
     }, []);
 
     // Load users

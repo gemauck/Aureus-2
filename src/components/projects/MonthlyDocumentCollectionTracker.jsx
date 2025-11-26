@@ -3,6 +3,30 @@ const { useState, useEffect, useRef, useCallback } = React;
 const storage = window.storage;
 const STICKY_COLUMN_SHADOW = '4px 0 12px rgba(15, 23, 42, 0.08)';
 
+// Derive a human‑readable facilities label from the project, handling both
+// array and string shapes and falling back gracefully when nothing is set.
+const getFacilitiesLabel = (project) => {
+    if (!project) return '';
+
+    const candidate =
+        project.facilities ??
+        project.facility ??
+        project.sites ??
+        project.siteNames ??
+        project.operations ??
+        project.operationNames ??
+        '';
+
+    if (Array.isArray(candidate)) {
+        const cleaned = candidate
+            .map((value) => (value == null ? '' : String(value).trim()))
+            .filter(Boolean);
+        return cleaned.join(', ');
+    }
+
+    return String(candidate || '').trim();
+};
+
 const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth(); // 0-11
@@ -1993,7 +2017,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     </button>
                     <div>
                         <h1 className="text-lg font-semibold text-gray-900">Monthly Document Collection Tracker</h1>
-                        <p className="text-xs text-gray-500">{project.name} • {project.client}</p>
+                        <p className="text-xs text-gray-500">
+                            {project?.name}
+                            {' • '}
+                            {project?.client}
+                            {' • '}
+                            Facilities:
+                            {' '}
+                            {getFacilitiesLabel(project) || 'Not specified'}
+                        </p>
                     </div>
                 </div>
                 

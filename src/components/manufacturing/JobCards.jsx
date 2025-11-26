@@ -303,6 +303,39 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     }
   };
 
+  // Safely parse GPS coordinates from a job card record
+  const getJobCardCoordinates = (jobCard) => {
+    if (!jobCard) return null;
+
+    const parseCoordinate = (value) => {
+      if (value == null) return null;
+
+      // If it's already a finite number, use it as-is
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+      }
+
+      // If it's a non-empty string, try to parse it
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) return null;
+        const parsed = Number(trimmed);
+        return Number.isFinite(parsed) ? parsed : null;
+      }
+
+      return null;
+    };
+
+    const lat = parseCoordinate(jobCard.locationLatitude);
+    const lng = parseCoordinate(jobCard.locationLongitude);
+
+    if (lat == null || lng == null) {
+      return null;
+    }
+
+    return { lat, lng };
+  };
+
   // Expose a simple global API so the Service & Maintenance page can open the modal
   useEffect(() => {
     try {
@@ -737,31 +770,38 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                     </div>
                   </header>
                   <div className="mt-3 h-64 rounded-xl overflow-hidden border border-slate-800">
-                    {selectedJobCard.locationLatitude && selectedJobCard.locationLongitude ? (
-                      <a
-                        href={`https://www.google.com/maps?q=${encodeURIComponent(
-                          `${selectedJobCard.locationLatitude},${selectedJobCard.locationLongitude}`
-                        )}&z=15`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="group flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 text-slate-100"
-                      >
-                        <div className="text-center px-6">
-                          <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-sky-500/15 text-sky-300 mb-3">
-                            <i className="fa-solid fa-location-dot text-lg" />
-                          </div>
-                          <p className="text-sm font-semibold">
-                            Open this location in Google Maps
-                          </p>
-                          <p className="mt-1 text-xs text-slate-300">
-                            {selectedJobCard.locationLatitude.toFixed(6)},{' '}
-                            {selectedJobCard.locationLongitude.toFixed(6)}
-                          </p>
-                          <p className="mt-2 text-[11px] text-slate-400 group-hover:text-slate-300">
-                            Click to view full map, directions, and nearby info.
-                          </p>
-                        </div>
-                      </a>
+                    {getJobCardCoordinates(selectedJobCard) ? (
+                      (() => {
+                        const coords = getJobCardCoordinates(selectedJobCard);
+                        const latFixed = coords.lat.toFixed(6);
+                        const lngFixed = coords.lng.toFixed(6);
+
+                        return (
+                          <a
+                            href={`https://www.google.com/maps?q=${encodeURIComponent(
+                              `${coords.lat},${coords.lng}`
+                            )}&z=15`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="group flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 text-slate-100"
+                          >
+                            <div className="text-center px-6">
+                              <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-sky-500/15 text-sky-300 mb-3">
+                                <i className="fa-solid fa-location-dot text-lg" />
+                              </div>
+                              <p className="text-sm font-semibold">
+                                Open this location in Google Maps
+                              </p>
+                              <p className="mt-1 text-xs text-slate-300">
+                                {latFixed}, {lngFixed}
+                              </p>
+                              <p className="mt-2 text-[11px] text-slate-400 group-hover:text-slate-300">
+                                Click to view full map, directions, and nearby info.
+                              </p>
+                            </div>
+                          </a>
+                        );
+                      })()
                     ) : (
                       <div className="flex h-full items-center justify-center bg-slate-950/60">
                         <div className="text-center">
