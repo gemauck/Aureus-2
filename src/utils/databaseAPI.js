@@ -553,7 +553,10 @@ const DatabaseAPI = {
     
     async _callPurchaseOrdersEndpoint(pathSuffix = '', requestOptions = {}) {
         const suffix = pathSuffix ? `/${pathSuffix.replace(/^\//, '')}` : '';
-        const candidateBases = ['/manufacturing/purchase-orders', '/purchase-orders'];
+        // Always prefer the canonical /purchase-orders endpoint.
+        // The /manufacturing/purchase-orders route is legacy and simply returns
+        // a 400 with a hint to use /api/purchase-orders instead.
+        const candidateBases = ['/purchase-orders', '/manufacturing/purchase-orders'];
         let lastError = null;
 
         for (let i = 0; i < candidateBases.length; i += 1) {
