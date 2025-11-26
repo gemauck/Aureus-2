@@ -55,9 +55,14 @@ const JobCards = ({ clients = [], users = [] }) => {
           throw new Error('Failed to load job cards.');
         }
 
-        const data = await response.json();
+        const raw = await response.json();
+
+        // Support both flat `{ jobCards: [] }` and wrapped `{ data: { jobCards: [] } }` API shapes
+        const data =
+          (raw && (raw.jobCards || raw.data?.jobCards || raw.data)) || [];
+
         if (!cancelled) {
-          setJobCards(Array.isArray(data.jobCards) ? data.jobCards : []);
+          setJobCards(Array.isArray(data) ? data : []);
         }
       } catch (e) {
         if (!cancelled) {
