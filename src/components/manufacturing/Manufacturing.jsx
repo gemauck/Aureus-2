@@ -4060,13 +4060,32 @@ const Manufacturing = () => {
     }
     
     if (modalType === 'add_item' || modalType === 'edit_item') {
+      // Resolve human-friendly location name for context in the modal
+      const resolvedLocation = (() => {
+        const explicitLoc = selectedLocationId && selectedLocationId !== 'all'
+          ? stockLocations.find(loc => loc.id === selectedLocationId)
+          : stockLocations.find(loc => loc.code === 'LOC001');
+        if (explicitLoc) {
+          return `${explicitLoc.name} (${explicitLoc.code})`;
+        }
+        if (selectedLocationId && selectedLocationId !== 'all') {
+          return 'Selected location';
+        }
+        return 'Default location';
+      })();
+
       return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
-              <h2 className="text-lg font-semibold text-gray-900">
-                {modalType === 'edit_item' ? 'Edit Inventory Item' : 'Add Inventory Item'}
-              </h2>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  {modalType === 'edit_item' ? 'Edit Inventory Item' : 'Add Inventory Item'}
+                </h2>
+                <p className="mt-1 text-xs text-gray-500">
+                  This item will be created for: <span className="font-medium text-gray-700">{resolvedLocation}</span>
+                </p>
+              </div>
               <button
                 onClick={() => { setShowModal(false); setSelectedItem(null); setFormData({}); }}
                 className="text-gray-400 hover:text-gray-600"
