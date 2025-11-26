@@ -110,7 +110,8 @@ const templateData = {
             ]
         }
     ],
-    isDefault: false
+    // Mark this as a default template so it shows first and can be used as a base
+    isDefault: true
 };
 
 async function uploadTemplate() {
