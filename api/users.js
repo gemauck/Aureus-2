@@ -4,6 +4,8 @@ import { prisma } from './_lib/prisma.js'
 import { badRequest, ok, serverError, unauthorized } from './_lib/response.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { sendNotificationEmail } from './_lib/email.js'
+import { getAppUrl } from './_lib/getAppUrl.js'
 
 async function handler(req, res) {
     if (req.method === 'GET') {
@@ -171,19 +173,60 @@ async function handler(req, res) {
                 }
             })
 
-            // TODO: Send email with temporary password
             console.log('User created with temporary password:', tempPassword)
+
+            // Attempt to send a welcome email with the temporary password
+            let emailSent = false
+            let emailError = null
+            try {
+                const appUrl = getAppUrl()
+                const loginUrl = `${appUrl}/login`
+
+                const subject = 'Your Abcotronics account has been created'
+                const message = `
+                    <p>Hi ${name || email},</p>
+                    <p>An administrator has created an account for you on the Abcotronics system.</p>
+                    <p><strong>Login details:</strong></p>
+                    <ul>
+                        <li><strong>Email:</strong> ${email}</li>
+                        <li><strong>Temporary password:</strong> ${tempPassword}</li>
+                    </ul>
+                    <p>Please log in using the button below and change your password when prompted.</p>
+                    <p style="margin: 16px 0;">
+                        <a href="${loginUrl}" style="background:#007bff;color:#fff;padding:10px 18px;text-decoration:none;border-radius:4px;font-weight:bold;display:inline-block;">
+                            Go to Abcotronics
+                        </a>
+                    </p>
+                    <p>If you did not expect this email, please contact your administrator.</p>
+                `
+
+                await sendNotificationEmail(
+                    email,
+                    subject,
+                    message,
+                    { isProjectRelated: false }
+                )
+                emailSent = true
+                console.log('✅ New user welcome email sent:', email)
+            } catch (err) {
+                emailError = err
+                console.error('❌ Failed to send new user welcome email:', err)
+            }
 
             return ok(res, {
                 success: true,
-                message: 'User created successfully',
+                message: emailSent
+                    ? 'User created successfully and welcome email sent'
+                    : 'User created successfully, but sending the welcome email failed. Please share the temporary password manually.',
                 user: {
                     id: user.id,
                     email: user.email,
                     name: user.name,
                     role: user.role
                 },
-                tempPassword // In production, send this via email instead
+                tempPassword, // Still returned so the UI can show it if needed
+                emailSent,
+                emailError: emailError ? emailError.message : null
             })
 
         } catch (error) {
