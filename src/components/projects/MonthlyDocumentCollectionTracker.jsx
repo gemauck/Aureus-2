@@ -2058,6 +2058,37 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         >
                             <i className="fas fa-layer-group mr-1"></i>Templates
                         </button>
+                        <button
+                            onClick={() => {
+                                try {
+                                    if (!sections || sections.length === 0) {
+                                        alert('There are no sections in this year to save as a template.');
+                                        return;
+                                    }
+                                    const defaultName = `${project?.name || 'Project'} - ${selectedYear} template`;
+                                    const name = window.prompt('Template name', defaultName);
+                                    if (!name || !name.trim()) {
+                                        return;
+                                    }
+                                    // Use current year’s sections as the template body
+                                    setEditingTemplate({
+                                        id: null,
+                                        name: name.trim(),
+                                        description: `Saved from ${project?.name || 'project'} - year ${selectedYear}`,
+                                        sections: cloneSectionsArray(sections)
+                                    });
+                                    setShowTemplateList(false);
+                                    setShowTemplateModal(true);
+                                } catch (e) {
+                                    console.error('❌ Failed to prepare template from current year:', e);
+                                    alert('Could not prepare template from current year. See console for details.');
+                                }
+                            }}
+                            className="px-3 py-1 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-[10px] font-medium"
+                            title="Save current year as template"
+                        >
+                            <i className="fas fa-save mr-1"></i>Save Year as Template
+                        </button>
                     </div>
                 </div>
             </div>
