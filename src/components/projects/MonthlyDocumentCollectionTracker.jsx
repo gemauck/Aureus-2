@@ -17,7 +17,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const workingMonths = getWorkingMonths();
     
     const tableRef = useRef(null);
-    const topScrollRef = useRef(null);
     const monthRefs = useRef({});
     const hasInitialScrolled = useRef(false);
     const saveTimeoutRef = useRef(null);
@@ -207,43 +206,49 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         sectionsRef.current = sectionsByYear;
     }, [sectionsByYear]);
 
-    // Sync top horizontal scrollbar with main table scrollbar
+    // Sync all horizontal scrollbars (top + per section) with main table scrollbar
     useEffect(() => {
         const tableEl = tableRef.current;
-        const topEl = topScrollRef.current;
-        if (!tableEl || !topEl) return;
+        if (!tableEl) return;
 
-        const placeholder = topEl.firstElementChild;
+        const scrollEls = Array.from(document.querySelectorAll('[data-doc-collection-scroll="true"]'));
+        if (!scrollEls.length) return;
 
-        const updateWidth = () => {
-            if (!placeholder) return;
-            // Match the scrollable width of the table so scroll ranges align
+        const updateWidths = () => {
             const width = tableEl.scrollWidth || tableEl.clientWidth || 0;
-            placeholder.style.width = `${width}px`;
+            scrollEls.forEach(el => {
+                const placeholder = el.firstElementChild;
+                if (placeholder) {
+                    placeholder.style.width = `${width}px`;
+                }
+            });
         };
 
-        const handleTopScroll = () => {
-            if (tableEl.scrollLeft !== topEl.scrollLeft) {
-                tableEl.scrollLeft = topEl.scrollLeft;
+        const handleBarScroll = (event) => {
+            const src = event.currentTarget;
+            if (tableEl.scrollLeft !== src.scrollLeft) {
+                tableEl.scrollLeft = src.scrollLeft;
             }
         };
 
         const handleTableScroll = () => {
-            if (topEl.scrollLeft !== tableEl.scrollLeft) {
-                topEl.scrollLeft = tableEl.scrollLeft;
-            }
+            scrollEls.forEach(el => {
+                if (el.scrollLeft !== tableEl.scrollLeft) {
+                    el.scrollLeft = tableEl.scrollLeft;
+                }
+            });
         };
 
-        updateWidth();
+        updateWidths();
 
-        topEl.addEventListener('scroll', handleTopScroll);
+        scrollEls.forEach(el => el.addEventListener('scroll', handleBarScroll));
         tableEl.addEventListener('scroll', handleTableScroll);
-        window.addEventListener('resize', updateWidth);
+        window.addEventListener('resize', updateWidths);
 
         return () => {
-            topEl.removeEventListener('scroll', handleTopScroll);
+            scrollEls.forEach(el => el.removeEventListener('scroll', handleBarScroll));
             tableEl.removeEventListener('scroll', handleTableScroll);
-            window.removeEventListener('resize', updateWidth);
+            window.removeEventListener('resize', updateWidths);
         };
     }, [sections.length, months.length, selectedYear]);
     
@@ -2154,9 +2159,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
             {/* Table */}
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                {/* Top horizontal scrollbar so users don't have to go to bottom */}
+                {/* Global top horizontal scrollbar so users don't have to go to bottom */}
                 <div className="border-b border-gray-200">
-                    <div className="overflow-x-auto" ref={topScrollRef}>
+                    <div className="overflow-x-auto" data-doc-collection-scroll="true">
                         {/* Placeholder bar whose width is synced to the main table via effect */}
                         <div className="h-2" />
                     </div>
@@ -2249,6 +2254,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                     >
                                                         <i className="fas fa-trash text-xs"></i>
                                                     </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        
+                                        {/* Per-section horizontal scrollbar so each section can scroll independently */}
+                                        <tr>
+                                            <td colSpan={14} className="px-0 py-0 bg-gray-100">
+                                                <div className="overflow-x-auto" data-doc-collection-scroll="true">
+                                                    <div className="h-1" />
                                                 </div>
                                             </td>
                                         </tr>
