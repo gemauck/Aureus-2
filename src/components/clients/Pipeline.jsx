@@ -1920,22 +1920,24 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     e.preventDefault();
                     e.stopPropagation();
                     setDraggedOverStage(null);
-                    
-                    // Match TaskManagement exactly - simple getData call
-                    const itemId = e.dataTransfer.getData('pipelineItemId');
-                    if (!itemId || itemId === '') {
-                        return;
+
+                    // Prefer React state for the dragged item (more reliable than dataTransfer on some browsers)
+                    let item = draggedItem || null;
+
+                    // Fallback: attempt to resolve via dataTransfer ID if state is missing
+                    if (!item && e?.dataTransfer) {
+                        const itemId = e.dataTransfer.getData('pipelineItemId');
+                        if (itemId && itemId !== '') {
+                            if (draggedType) {
+                                item = getPipelineItems().find(
+                                    (i) => String(i.id) === String(itemId) && i.type === draggedType
+                                );
+                            } else {
+                                item = getPipelineItems().find((i) => String(i.id) === String(itemId));
+                            }
+                        }
                     }
 
-                    // Find item by ID (use draggedType from state if available, otherwise search both types)
-                    let item = null;
-                    if (draggedType) {
-                        item = getPipelineItems().find(i => String(i.id) === String(itemId) && i.type === draggedType);
-                    } else {
-                        // Fallback: search both leads and opportunities
-                        item = getPipelineItems().find(i => String(i.id) === String(itemId));
-                    }
-                    
                     if (!item || item.stage === stage.name) {
                         return;
                     }

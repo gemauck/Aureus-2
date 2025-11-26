@@ -776,11 +776,15 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                         const latFixed = coords.lat.toFixed(6);
                         const lngFixed = coords.lng.toFixed(6);
 
+                        const openStreetMapUrl = `https://www.openstreetmap.org/?mlat=${encodeURIComponent(
+                          coords.lat
+                        )}&mlon=${encodeURIComponent(
+                          coords.lng
+                        )}&zoom=15`
+
                         return (
                           <a
-                            href={`https://www.google.com/maps?q=${encodeURIComponent(
-                              `${coords.lat},${coords.lng}`
-                            )}&z=15`}
+                            href={openStreetMapUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="group flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 text-slate-100"
@@ -790,7 +794,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                                 <i className="fa-solid fa-location-dot text-lg" />
                               </div>
                               <p className="text-sm font-semibold">
-                                Open this location in Google Maps
+                                Open this location in OpenStreetMap
                               </p>
                               <p className="mt-1 text-xs text-slate-300">
                                 {latFixed}, {lngFixed}

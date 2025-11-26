@@ -12,6 +12,32 @@ const StockLocations = ({ inventory = [], onInventoryUpdate }) => {
   });
   const [editingLocation, setEditingLocation] = useState(null);
 
+  const syncLocationsState = (updater) => {
+    setLocations((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      try {
+        localStorage.setItem('stock_locations', JSON.stringify(next));
+      } catch (error) {
+        console.error('❌ StockLocations: Failed to cache locations', error);
+      }
+
+      // Notify Manufacturing.jsx about updated locations
+      if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+        try {
+          window.dispatchEvent(
+            new CustomEvent('stockLocationsUpdated', {
+              detail: { locations: next }
+            })
+          );
+        } catch (error) {
+          console.error('❌ StockLocations: Failed to dispatch stockLocationsUpdated event', error);
+        }
+      }
+
+      return next;
+    });
+  };
+
   const loadLocations = async () => {
     if (!window.DatabaseAPI || typeof window.DatabaseAPI.getStockLocations !== 'function') {
       console.error('❌ StockLocations: DatabaseAPI.getStockLocations is not available');
@@ -21,20 +47,12 @@ const StockLocations = ({ inventory = [], onInventoryUpdate }) => {
     try {
       const response = await window.DatabaseAPI.getStockLocations();
       const locs = response?.data?.locations || [];
-      setLocations(locs);
-      localStorage.setItem('stock_locations', JSON.stringify(locs));
-
-      // Notify Manufacturing.jsx about updated locations
-      if (typeof window.dispatchEvent === 'function') {
-        window.dispatchEvent(new CustomEvent('stockLocationsUpdated', {
-          detail: { locations: locs }
-        }));
-      }
+      syncLocationsState(locs);
     } catch (error) {
       console.error('❌ StockLocations: Failed to load locations', error);
       const cached = JSON.parse(localStorage.getItem('stock_locations') || '[]');
       if (cached.length) {
-        setLocations(cached);
+        syncLocationsState(cached);
       }
     } finally {
       setIsLoading(false);
@@ -76,7 +94,9 @@ const StockLocations = ({ inventory = [], onInventoryUpdate }) => {
     setIsSaving(true);
     try {
       await window.DatabaseAPI.deleteStockLocation(loc.id);
-      await loadLocations();
+      // Optimistically update the UI so the row disappears immediately,
+      // without waiting for any cached responses in DatabaseAPI.
+      syncLocationsState((prev) => prev.filter((item) => item.id !== loc.id));
     } catch (error) {
       console.error('❌ StockLocations: Failed to delete location', error);
       const message = error?.message || 'Failed to delete location. Please try again.';

@@ -46,8 +46,12 @@ async function handler(req, res) {
     if (req.method === 'GET' && !id) {
       try {
         const owner = req.user?.sub
+        // Limit the number of job cards returned to keep the dashboard fast.
+        // This endpoint is used for the "recent job cards" views, so we only
+        // need the latest slice rather than the full history.
         const jobCards = await prisma.jobCard.findMany({
-          orderBy: { createdAt: 'desc' }
+          orderBy: { createdAt: 'desc' },
+          take: 250
         })
         console.log('📋 List job cards', { owner, count: jobCards.length })
         
