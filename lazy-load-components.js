@@ -188,9 +188,12 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
             }
             if (src.includes('MonthlyDocumentCollectionTracker.jsx') || src.includes('MonthlyDocumentCollectionTracker.js')) {
                 if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
-                    console.log('✅ MonthlyDocumentCollectionTracker component already available from Vite module - skipping lazy load');
-                    resolve();
-                    return;
+                    // IMPORTANT:
+                    // Do NOT skip loading our dist version for MonthlyDocumentCollectionTracker.
+                    // We intentionally allow the lazy-loaded (dist) component to load even when
+                    // a Vite module version is already present so that the latest bug‑fixed
+                    // implementation can override older bundled versions.
+                    console.log('✅ MonthlyDocumentCollectionTracker component already available from Vite module - loading dist override anyway');
                 }
             }
             
