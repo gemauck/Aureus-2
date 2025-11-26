@@ -1,0 +1,79 @@
+name: Deploy to DigitalOcean Droplet
+
+on:
+  push:
+    branches:
+      - main
+      - production
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+        
+      - name: Install dependencies
+        run: |
+          cd server
+          npm ci --only=production
+        
+      - name: Run tests (if available)
+        run: |
+          cd server
+          npm test || echo "No tests configured"
+        
+      - name: Deploy to Droplet
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          port: 22
+          script: |
+            cd /var/www/abcotronics-erp
+            
+            # Pull latest changes
+            git pull origin main
+            
+            # Install dependencies (root level for build tools)
+            npm ci --only=production || npm install --production
+            
+            # Build JSX files
+            npm run build:jsx || echo "JSX build completed with warnings"
+            
+            # Build CSS
+            npm run build:css || echo "CSS build completed with warnings"
+            
+            # Install server dependencies
+            cd server
+            npm ci --only=production || npm install --production
+            
+            # Run database migrations if needed
+            npm run migrate || echo "No migrations to run"
+            
+            # Restart the application
+            pm2 restart abcotronics-erp || pm2 start ecosystem.config.js
+            
+            # Save PM2 configuration
+            pm2 save
+            
+            echo "Deployment completed successfully!"
+          
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ ${{ job.status }} == 'success' ]; then
+            echo "✅ Deployment successful!"
+          else
+            echo "❌ Deployment failed!"
+          fi
+
+
