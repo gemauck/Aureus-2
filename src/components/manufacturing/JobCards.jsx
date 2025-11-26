@@ -10,7 +10,7 @@ const ReactGlobal =
 
 const { useState, useEffect, useMemo } = ReactGlobal;
 
-const JobCards = ({ clients = [], users = [] }) => {
+const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   if (!useState || !useEffect || !useMemo) {
     return (
       <div className="mt-6 flex items-center justify-center">
@@ -262,6 +262,10 @@ const JobCards = ({ clients = [], users = [] }) => {
   };
 
   const handleRowClick = (jobCard) => {
+    if (typeof onOpenDetail === 'function') {
+      onOpenDetail(jobCard);
+      return;
+    }
     setSelectedJobCard(jobCard);
     setShowDetail(true);
   };
@@ -307,6 +311,10 @@ const JobCards = ({ clients = [], users = [] }) => {
         window.JobCards = JobCards;
         // Attach helper method for "New job card" buttons
         window.JobCards.openNewJobCardModal = handleNewJobCard;
+        window.JobCards.openEditJobCardModal = (jobCard) => {
+          setEditingJobCard(jobCard);
+          setIsModalOpen(true);
+        };
       }
     } catch (error) {
       console.error('❌ JobCards.jsx: Error registering global API:', error);

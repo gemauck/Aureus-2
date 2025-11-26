@@ -9,6 +9,8 @@ const ServiceAndMaintenance = () => {
   const [jobCardsReady, setJobCardsReady] = useState(!!window.JobCards);
   const [isOnline, setIsOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
   const [copyStatus, setCopyStatus] = useState('Copy share link');
+  const [selectedJobCard, setSelectedJobCard] = useState(null);
+  const [showJobCardDetail, setShowJobCardDetail] = useState(false);
 
   // Load clients and users for JobCards
   useEffect(() => {
@@ -88,6 +90,23 @@ const ServiceAndMaintenance = () => {
     }
   };
 
+  const handleOpenJobCardDetail = (jobCard) => {
+    setSelectedJobCard(jobCard);
+    setShowJobCardDetail(true);
+  };
+
+  const handleCloseJobCardDetail = () => {
+    setShowJobCardDetail(false);
+    setSelectedJobCard(null);
+  };
+
+  const formatDate = (value) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleString();
+  };
+
   const handleOpenClassic = () => {
     try {
       // If the JobCards manager is available, ask it to open the classic manager UI
@@ -116,7 +135,7 @@ const ServiceAndMaintenance = () => {
   };
 
   return (
-    <div className="p-4">
+    <div className="relative p-4">
       <div className="flex flex-col gap-4 mb-6">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
@@ -262,6 +281,7 @@ const ServiceAndMaintenance = () => {
           <window.JobCards
             clients={clients}
             users={users}
+            onOpenDetail={handleOpenJobCardDetail}
           />
         ) : (
           <div className="flex items-center justify-center">
@@ -272,6 +292,355 @@ const ServiceAndMaintenance = () => {
           </div>
         )}
       </div>
+
+      {/* Full-area job card detail overlay (within main content, not over sidebar) */}
+      {showJobCardDetail && selectedJobCard && (
+        <div className="absolute inset-0 z-40 flex flex-col bg-slate-950/80 backdrop-blur-sm">
+          {/* Top bar */}
+          <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 shadow-lg">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleCloseJobCardDetail}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-800/70 text-slate-100 hover:bg-slate-700"
+                aria-label="Back to job cards"
+              >
+                <i className="fa-solid fa-arrow-left" />
+              </button>
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  Job Card
+                </div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-semibold text-white">
+                    {selectedJobCard.jobCardNumber || 'New job card'}
+                  </h2>
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                      (selectedJobCard.status || 'draft').toString().toLowerCase() === 'completed'
+                        ? 'bg-emerald-500/10 text-emerald-300 border-emerald-400/40'
+                        : (selectedJobCard.status || 'draft').toString().toLowerCase() === 'open'
+                        ? 'bg-sky-500/10 text-sky-300 border-sky-400/40'
+                        : (selectedJobCard.status || 'draft').toString().toLowerCase() === 'cancelled'
+                        ? 'bg-rose-500/10 text-rose-300 border-rose-400/40'
+                        : 'bg-slate-700/60 text-slate-100 border-slate-600'
+                    }`}
+                  >
+                    <span className="h-2 w-2 rounded-full bg-current" />
+                    {(selectedJobCard.status || 'draft').toString().toUpperCase()}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-slate-300">
+                  {selectedJobCard.clientName || 'Unknown client'} •{' '}
+                  {selectedJobCard.agentName || 'Unknown technician'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (window.JobCards?.openEditJobCardModal) {
+                  window.JobCards.openEditJobCardModal(selectedJobCard);
+                } else if (window.JobCardModal) {
+                  // Fallback: dispatch event for JobCards to handle
+                  window.dispatchEvent(
+                    new CustomEvent('jobcards:edit', { detail: { jobCard: selectedJobCard } })
+                  );
+                }
+              }}
+              className="inline-flex items-center gap-2 rounded-full bg-primary-500 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-primary-600"
+            >
+              <i className="fa-solid fa-pen" />
+              Edit job card
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto px-6 py-6">
+            <div className="grid gap-6 xl:grid-cols-3">
+              {/* Left / main column */}
+              <div className="xl:col-span-2 space-y-6">
+                {/* Key info */}
+                <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-sm">
+                  <div className="grid gap-4 md:grid-cols-3 text-sm text-slate-100">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase text-slate-400">
+                        Client
+                      </div>
+                      <div className="mt-1">
+                        {selectedJobCard.clientName || '–'}
+                        {selectedJobCard.siteName && (
+                          <span className="ml-1 text-slate-400">• {selectedJobCard.siteName}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase text-slate-400">
+                        Technician
+                      </div>
+                      <div className="mt-1">
+                        {selectedJobCard.agentName || 'Unknown technician'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase text-slate-400">
+                        Created
+                      </div>
+                      <div className="mt-1">{formatDate(selectedJobCard.createdAt)}</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-4 sm:grid-cols-3 text-xs text-slate-300">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase text-slate-500">
+                        Location
+                      </div>
+                      <div className="mt-1">
+                        {selectedJobCard.location || selectedJobCard.siteName || 'Not recorded'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase text-slate-500">
+                        Departure
+                      </div>
+                      <div className="mt-1">
+                        {selectedJobCard.timeOfDeparture
+                          ? formatDate(selectedJobCard.timeOfDeparture)
+                          : '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase text-slate-500">
+                        Arrival
+                      </div>
+                      <div className="mt-1">
+                        {selectedJobCard.timeOfArrival
+                          ? formatDate(selectedJobCard.timeOfArrival)
+                          : '—'}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Narrative */}
+                <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 space-y-4">
+                  <header className="flex items-center gap-2">
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary-500/10 text-primary-300">
+                      <i className="fa-solid fa-clipboard-list text-sm" />
+                    </span>
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        Visit summary
+                      </div>
+                      <div className="text-sm text-slate-100">
+                        {selectedJobCard.reasonForVisit || 'No visit reason captured.'}
+                      </div>
+                    </div>
+                  </header>
+
+                  <div className="grid gap-4 md:grid-cols-2 text-sm text-slate-100">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase text-slate-500">
+                        Diagnosis
+                      </div>
+                      <p className="mt-1 leading-relaxed">
+                        {selectedJobCard.diagnosis || 'No diagnosis captured.'}
+                      </p>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase text-slate-500">
+                        Actions taken
+                      </div>
+                      <p className="mt-1 leading-relaxed">
+                        {selectedJobCard.actionsTaken || 'No actions recorded.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {selectedJobCard.otherComments ? (
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase text-slate-500 mb-1">
+                        Customer feedback &amp; notes
+                      </div>
+                      <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950/40 p-3 text-sm leading-relaxed text-slate-100 whitespace-pre-wrap">
+                        {selectedJobCard.otherComments}
+                      </div>
+                    </div>
+                  ) : null}
+                </section>
+
+                {/* Travel */}
+                <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 space-y-4">
+                  <header className="flex items-center gap-2">
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-300">
+                      <i className="fa-solid fa-car-side text-sm" />
+                    </span>
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                        Travel &amp; usage
+                      </div>
+                      <div className="text-sm text-slate-100">
+                        {typeof selectedJobCard.travelKilometers === 'number'
+                          ? `${selectedJobCard.travelKilometers.toFixed(1)} km travelled`
+                          : 'Travel distance not recorded'}
+                      </div>
+                    </div>
+                  </header>
+
+                  <div className="grid gap-4 sm:grid-cols-3 text-sm text-slate-100">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase text-slate-500">
+                        Vehicle
+                      </div>
+                      <div className="mt-1">
+                        {selectedJobCard.vehicleUsed || 'Not specified'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase text-slate-500">
+                        KM before
+                      </div>
+                      <div className="mt-1">
+                        {selectedJobCard.kmReadingBefore ?? '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase text-slate-500">
+                        KM after
+                      </div>
+                      <div className="mt-1">
+                        {selectedJobCard.kmReadingAfter ?? '—'}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              </div>
+
+              {/* Right column: map + photos */}
+              <div className="space-y-6">
+                {/* Map */}
+                <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-sm">
+                  <header className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-sky-500/10 text-sky-300">
+                        <i className="fa-solid fa-location-dot text-sm" />
+                      </span>
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          Job location
+                        </div>
+                        <div className="text-sm text-slate-100">
+                          {selectedJobCard.location ||
+                            selectedJobCard.siteName ||
+                            selectedJobCard.clientName ||
+                            'Not specified'}
+                        </div>
+                      </div>
+                    </div>
+                  </header>
+                  <div className="mt-3 h-64 rounded-xl overflow-hidden border border-slate-800">
+                    {selectedJobCard.locationLatitude && selectedJobCard.locationLongitude ? (
+                      <iframe
+                        title="Job location"
+                        className="h-full w-full border-0"
+                        src={`https://www.google.com/maps?q=${encodeURIComponent(
+                          `${selectedJobCard.locationLatitude},${selectedJobCard.locationLongitude}`
+                        )}&z=15&output=embed`}
+                        loading="lazy"
+                        referrerPolicy="no-referrer-when-downgrade"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center bg-slate-950/60">
+                        <div className="text-center">
+                          <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 mb-2">
+                            <i className="fa-regular fa-map text-slate-400" />
+                          </div>
+                          <p className="text-sm font-medium text-slate-100">
+                            No GPS data recorded
+                          </p>
+                          <p className="text-xs text-slate-400 mt-1">
+                            Ask the technician to enable location services for future visits.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                {/* Photos */}
+                <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-sm">
+                  <header className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-pink-500/10 text-pink-300">
+                        <i className="fa-regular fa-image text-sm" />
+                      </span>
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          Photos
+                        </div>
+                        <div className="text-sm text-slate-100">
+                          {Array.isArray(selectedJobCard.photos)
+                            ? selectedJobCard.photos.length
+                            : 0}{' '}
+                          photo
+                          {Array.isArray(selectedJobCard.photos) &&
+                          selectedJobCard.photos.length === 1
+                            ? ''
+                            : 's'}
+                        </div>
+                      </div>
+                    </div>
+                  </header>
+                  {Array.isArray(selectedJobCard.photos) && selectedJobCard.photos.length > 0 ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {selectedJobCard.photos.map((photo, idx) => (
+                        <figure
+                          key={idx}
+                          className="group relative overflow-hidden rounded-xl bg-slate-800"
+                        >
+                          <img
+                            src={typeof photo === 'string' ? photo : photo.url}
+                            alt={`Job card photo ${idx + 1}`}
+                            className="h-32 w-full object-cover transition-transform duration-200 group-hover:scale-105"
+                          />
+                        </figure>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-700/70 bg-slate-950/40 px-4 py-8 text-center">
+                      <i className="fa-regular fa-image text-slate-500 text-xl mb-2" />
+                      <p className="text-sm text-slate-300">
+                        No photos have been attached to this job card.
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Encourage technicians to capture photos for better traceability.
+                      </p>
+                    </div>
+                  )}
+                </section>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between border-t border-slate-800 pt-4 text-xs text-slate-400">
+              <div className="flex items-center gap-2">
+                <i className="fa-regular fa-clock" />
+                <span>
+                  Last updated{' '}
+                  {formatDate(selectedJobCard.updatedAt || selectedJobCard.createdAt)}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-full border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
+                onClick={handleCloseJobCardDetail}
+              >
+                <i className="fa-solid fa-xmark" />
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
