@@ -222,14 +222,15 @@ const JobCards = ({ clients = [], users = [] }) => {
   useEffect(() => {
     try {
       if (typeof window !== 'undefined') {
-        window.JobCards = {
-          openNewJobCardModal: handleNewJobCard,
-        };
+        // Ensure JobCards remains a valid React component type for rendering
+        window.JobCards = JobCards;
+        // Attach helper method for "New job card" buttons
+        window.JobCards.openNewJobCardModal = handleNewJobCard;
       }
     } catch (error) {
       console.error('❌ JobCards.jsx: Error registering global API:', error);
     }
-  }, []);
+  }, [handleNewJobCard]);
 
   return (
     <div className="mt-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
