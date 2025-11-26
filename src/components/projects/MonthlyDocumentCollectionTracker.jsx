@@ -323,12 +323,21 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return;
         }
         
+        // Guard against wiping data with an all‑empty payload
+        const hasAnySections = Object.values(sectionsByYear || {}).some(
+            (yearSections) => Array.isArray(yearSections) && yearSections.length > 0
+        );
+        if (!hasAnySections) {
+            console.log('⏭️ Skipping save: sectionsByYear is empty for all years – avoiding overwrite');
+            return;
+        }
+        
         isSavingRef.current = true;
         
         try {
             console.log('💾 Saving sections map to database. Years:', Object.keys(sectionsByYear));
             
-                if (!window.DatabaseAPI || typeof window.DatabaseAPI.updateProject !== 'function') {
+            if (!window.DatabaseAPI || typeof window.DatabaseAPI.updateProject !== 'function') {
                 throw new Error('DatabaseAPI.updateProject is not available');
             }
             

@@ -347,6 +347,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         isSavingRef.current = true;
         const payload = sectionsRef.current || {};
 
+        // Guard against wiping data with an all‑empty payload
+        const hasAnySections = Object.values(payload || {}).some(
+            (yearSections) => Array.isArray(yearSections) && yearSections.length > 0
+        );
+        if (!hasAnySections) {
+            console.log('⏭️ Skipping save: sections payload is empty for all years – avoiding overwrite');
+            isSavingRef.current = false;
+            return;
+        }
+
         try {
             console.log('💾 Saving sections map to database. Years:', Object.keys(payload));
             await apiRef.current.saveDocumentSections(project.id, payload, options.skipParentUpdate);
