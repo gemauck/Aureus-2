@@ -154,21 +154,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return result;
         }
 
+        // LEGACY MODE:
+        // For flat sections arrays (no per‑year map yet), scope them ONLY to the
+        // active/fallback year instead of cloning across all inferred years.
+        // Cloning across inferred years caused edits in one year to appear in all years.
         const baseSections = Array.isArray(parsedValue) ? parsedValue : parseSections(parsedValue);
-        const inferredYears = inferYearsFromSections(baseSections);
-        const targetYears = inferredYears.length > 0
-            ? inferredYears
-            : (fallbackYear ? [fallbackYear] : []);
-
-        if (targetYears.length === 0) {
+        const targetYear = fallbackYear || new Date().getFullYear();
+        if (!targetYear) {
             return {};
         }
 
-        const map = {};
-        targetYears.forEach(year => {
-            map[year] = cloneSectionsArray(baseSections);
-        });
-        return map;
+        return {
+            [targetYear]: cloneSectionsArray(baseSections)
+        };
     };
     
     // ============================================================
