@@ -27,6 +27,8 @@ const JobCards = ({ clients = [], users = [] }) => {
   const [error, setError] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [clientFilter, setClientFilter] = useState('');
+  const [sortField, setSortField] = useState('createdAt'); // jobCardNumber | client | technician | status | createdAt
+  const [sortDirection, setSortDirection] = useState('desc'); // asc | desc
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJobCard, setEditingJobCard] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -160,20 +162,97 @@ const JobCards = ({ clients = [], users = [] }) => {
     ];
   }, [clients, jobCards]);
 
-  const filteredJobCards = useMemo(() => {
-    return jobCards.filter((jc) => {
-      if (statusFilter !== 'all' && (jc.status || 'draft') !== statusFilter) {
-        return false;
+  const filteredJobCards = useMemo(
+    () =>
+      jobCards.filter((jc) => {
+        if (statusFilter !== 'all' && (jc.status || 'draft') !== statusFilter) {
+          return false;
+        }
+        if (clientFilter) {
+          return jc.clientId === clientFilter || jc.clientName === clientFilter;
+        }
+        return true;
+      }),
+    [jobCards, statusFilter, clientFilter]
+  );
+
+  const sortedJobCards = useMemo(() => {
+    const data = [...filteredJobCards];
+
+    data.sort((a, b) => {
+      let aVal;
+      let bVal;
+
+      switch (sortField) {
+        case 'jobCardNumber':
+          aVal = a.jobCardNumber || '';
+          bVal = b.jobCardNumber || '';
+          break;
+        case 'client':
+          aVal = a.clientName || '';
+          bVal = b.clientName || '';
+          break;
+        case 'technician': {
+          const aTech = a.agentName || (users.find((u) => u.id === a.ownerId) || {}).name || '';
+          const bTech = b.agentName || (users.find((u) => u.id === b.ownerId) || {}).name || '';
+          aVal = aTech;
+          bVal = bTech;
+          break;
+        }
+        case 'status':
+          aVal = (a.status || 'draft').toString();
+          bVal = (b.status || 'draft').toString();
+          break;
+        case 'createdAt':
+        default:
+          aVal = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          bVal = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          break;
       }
-      if (clientFilter) {
-        return (
-          jc.clientId === clientFilter ||
-          jc.clientName === clientFilter
-        );
+
+      let cmp = 0;
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        cmp = aVal.localeCompare(bVal);
+      } else {
+        const aNum = Number(aVal) || 0;
+        const bNum = Number(bVal) || 0;
+        if (aNum < bNum) cmp = -1;
+        if (aNum > bNum) cmp = 1;
       }
-      return true;
+
+      return sortDirection === 'asc' ? cmp : -cmp;
     });
-  }, [jobCards, statusFilter, clientFilter]);
+
+    return data;
+  }, [filteredJobCards, sortField, sortDirection, users]);
+
+  const handleSort = (field) => {
+    setSortField((prevField) => {
+      if (prevField === field) {
+        setSortDirection((prevDir) => (prevDir === 'asc' ? 'desc' : 'asc'));
+        return prevField;
+      }
+      // default to descending for createdAt, ascending for others
+      setSortDirection(field === 'createdAt' ? 'desc' : 'asc');
+      return field;
+    });
+  };
+
+  const renderSortIcon = (field) => {
+    if (sortField !== field) {
+      return (
+        <i
+          className="fa-solid fa-up-down text-[10px] text-slate-400"
+          aria-hidden="true"
+        />
+      );
+    }
+    return sortDirection === 'asc' ? (
+      <i className="fa-solid fa-arrow-up-short-wide text-[10px]" aria-hidden="true" />
+    ) : (
+      <i className="fa-solid fa-arrow-down-wide-short text-[10px]" aria-hidden="true" />
+    );
+  };
 
   const formatDate = (value) => {
     if (!value) return '';
@@ -292,27 +371,62 @@ const JobCards = ({ clients = [], users = [] }) => {
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800 text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-800/60">
+            <thead className="bg-slate-50 dark:bg-slate-800/60 text-xs text-slate-500 dark:text-slate-300">
               <tr>
-                <th className="px-4 py-2 text-left font-semibold text-slate-600 dark:text-slate-300">
-                  Job Card
+                <th className="px-4 py-2 text-left">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 font-semibold hover:text-primary-500"
+                    onClick={() => handleSort('jobCardNumber')}
+                  >
+                    <span>Job Card</span>
+                    {renderSortIcon('jobCardNumber')}
+                  </button>
                 </th>
-                <th className="px-4 py-2 text-left font-semibold text-slate-600 dark:text-slate-300">
-                  Client
+                <th className="px-4 py-2 text-left">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 font-semibold hover:text-primary-500"
+                    onClick={() => handleSort('client')}
+                  >
+                    <span>Client</span>
+                    {renderSortIcon('client')}
+                  </button>
                 </th>
-                <th className="px-4 py-2 text-left font-semibold text-slate-600 dark:text-slate-300">
-                  Technician
+                <th className="px-4 py-2 text-left">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 font-semibold hover:text-primary-500"
+                    onClick={() => handleSort('technician')}
+                  >
+                    <span>Technician</span>
+                    {renderSortIcon('technician')}
+                  </button>
                 </th>
-                <th className="px-4 py-2 text-left font-semibold text-slate-600 dark:text-slate-300">
-                  Status
+                <th className="px-4 py-2 text-left">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 font-semibold hover:text-primary-500"
+                    onClick={() => handleSort('status')}
+                  >
+                    <span>Status</span>
+                    {renderSortIcon('status')}
+                  </button>
                 </th>
-                <th className="px-4 py-2 text-left font-semibold text-slate-600 dark:text-slate-300">
-                  Created
+                <th className="px-4 py-2 text-left">
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 font-semibold hover:text-primary-500"
+                    onClick={() => handleSort('createdAt')}
+                  >
+                    <span>Created</span>
+                    {renderSortIcon('createdAt')}
+                  </button>
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
-              {filteredJobCards.map((jc) => {
+              {sortedJobCards.map((jc) => {
                 const technicianName =
                   jc.agentName ||
                   users.find((u) => u.id === jc.ownerId)?.name ||

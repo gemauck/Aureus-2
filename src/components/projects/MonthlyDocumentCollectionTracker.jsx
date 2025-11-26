@@ -17,6 +17,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const workingMonths = getWorkingMonths();
     
     const tableRef = useRef(null);
+    const topScrollRef = useRef(null);
     const monthRefs = useRef({});
     const hasInitialScrolled = useRef(false);
     const saveTimeoutRef = useRef(null);
@@ -205,6 +206,46 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     useEffect(() => {
         sectionsRef.current = sectionsByYear;
     }, [sectionsByYear]);
+
+    // Sync top horizontal scrollbar with main table scrollbar
+    useEffect(() => {
+        const tableEl = tableRef.current;
+        const topEl = topScrollRef.current;
+        if (!tableEl || !topEl) return;
+
+        const placeholder = topEl.firstElementChild;
+
+        const updateWidth = () => {
+            if (!placeholder) return;
+            // Match the scrollable width of the table so scroll ranges align
+            const width = tableEl.scrollWidth || tableEl.clientWidth || 0;
+            placeholder.style.width = `${width}px`;
+        };
+
+        const handleTopScroll = () => {
+            if (tableEl.scrollLeft !== topEl.scrollLeft) {
+                tableEl.scrollLeft = topEl.scrollLeft;
+            }
+        };
+
+        const handleTableScroll = () => {
+            if (topEl.scrollLeft !== tableEl.scrollLeft) {
+                topEl.scrollLeft = tableEl.scrollLeft;
+            }
+        };
+
+        updateWidth();
+
+        topEl.addEventListener('scroll', handleTopScroll);
+        tableEl.addEventListener('scroll', handleTableScroll);
+        window.addEventListener('resize', updateWidth);
+
+        return () => {
+            topEl.removeEventListener('scroll', handleTopScroll);
+            tableEl.removeEventListener('scroll', handleTableScroll);
+            window.removeEventListener('resize', updateWidth);
+        };
+    }, [sections.length, months.length, selectedYear]);
     
     useEffect(() => {
         // Always prefer singleton instance created by DocumentCollectionAPI service
@@ -2113,6 +2154,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
             {/* Table */}
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                {/* Top horizontal scrollbar so users don't have to go to bottom */}
+                <div className="border-b border-gray-200">
+                    <div className="overflow-x-auto" ref={topScrollRef}>
+                        {/* Placeholder bar whose width is synced to the main table via effect */}
+                        <div className="h-2" />
+                    </div>
+                </div>
                 <div className="relative overflow-x-auto" ref={tableRef}>
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
