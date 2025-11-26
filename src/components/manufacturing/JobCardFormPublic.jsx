@@ -1,88 +1,6 @@
 // Public Job Card Form - Accessible without login
-// Standalone form for technicians to submit job cards offline with a mobile-first experience
-const { useState, useEffect, useCallback, useMemo, useRef } = React;
-
-const STEP_IDS = ['assignment', 'visit', 'work', 'stock', 'signoff'];
-
-const STEP_META = {
-  assignment: {
-    title: 'Team & Client',
-    subtitle: 'Assign crew & site',
-    icon: 'fa-user-check'
-  },
-  visit: {
-    title: 'Site Visit',
-    subtitle: 'Trip & timing',
-    icon: 'fa-route'
-  },
-  work: {
-    title: 'Work Notes',
-    subtitle: 'Diagnosis & actions',
-    icon: 'fa-clipboard-list'
-  },
-  stock: {
-    title: 'Stock & Costs',
-    subtitle: 'Usage & purchases',
-    icon: 'fa-boxes-stacked'
-  },
-  signoff: {
-    title: 'Customer Sign-off',
-    subtitle: 'Feedback & approval',
-    icon: 'fa-signature'
-  }
-};
-
-const StepBadge = ({ index, stepId, active, complete, onClick, className = '' }) => {
-  const meta = STEP_META[stepId] || {};
-  const baseClasses = 'group flex items-center lg:flex-col lg:items-start lg:justify-start sm:flex-col sm:items-center justify-between sm:justify-center gap-3 sm:gap-2 lg:gap-3 rounded-xl px-3 py-3 sm:px-4 sm:py-4 lg:px-3 lg:py-3 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-600 min-w-[160px] sm:min-w-0 lg:min-w-0 snap-start w-full lg:w-full';
-  const stateClass = active
-    ? 'bg-white/95 text-blue-700 shadow-lg shadow-blue-500/25'
-    : complete
-      ? 'bg-white/30 text-white'
-      : 'bg-white/10 text-white/80 hover:bg-white/20';
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`${baseClasses} ${stateClass} ${className}`}
-      aria-current={active ? 'step' : undefined}
-    >
-      <div
-        className={[
-          'flex h-11 w-11 items-center justify-center rounded-full border-2 transition',
-          active
-            ? 'bg-white text-blue-600 border-white shadow'
-            : complete
-              ? 'bg-white/90 text-blue-600 border-transparent'
-              : 'bg-white/20 text-white border-white/30 group-hover:border-white/50'
-        ].join(' ')}
-      >
-        <i className={`fa-solid ${meta.icon || 'fa-circle-dot'} text-base`}></i>
-      </div>
-      <div className="flex-1 sm:flex sm:w-full sm:flex-col sm:items-center lg:items-start lg:flex-1">
-        <span className={`text-[11px] uppercase tracking-wide font-semibold ${active ? 'text-blue-500' : 'text-white/70'} sm:text-center lg:text-left`}>
-          Step {index + 1}
-        </span>
-        <span className={`text-sm font-semibold ${active ? 'text-blue-700' : 'text-white'} sm:text-center lg:text-left`}>
-          {meta.title || stepId}
-        </span>
-        {meta.subtitle && (
-          <span className={`text-[11px] sm:text-xs mt-0.5 ${active ? 'text-blue-500/80' : 'text-white/70'} sm:text-center lg:text-left`}>
-            {meta.subtitle}
-          </span>
-        )}
-      </div>
-    </button>
-  );
-};
-
-const SummaryRow = ({ label, value }) => (
-  <div className="flex justify-between gap-4 text-sm">
-    <span className="text-gray-500">{label}</span>
-    <span className="text-gray-900 text-right font-medium">{value || '—'}</span>
-  </div>
-);
+// Standalone form for technicians to submit job cards offline
+const { useState, useEffect, useCallback, useRef } = React;
 
 const JobCardFormPublic = () => {
   const [formData, setFormData] = useState({
@@ -93,8 +11,6 @@ const JobCardFormPublic = () => {
     siteId: '',
     siteName: '',
     location: '',
-    latitude: '',
-    longitude: '',
     timeOfDeparture: '',
     timeOfArrival: '',
     vehicleUsed: '',
@@ -103,716 +19,864 @@ const JobCardFormPublic = () => {
     reasonForVisit: '',
     diagnosis: '',
     actionsTaken: '',
-    otherComments: '',
     stockUsed: [],
     materialsBought: [],
+    otherComments: '',
     photos: [],
-    status: 'draft',
-    customerName: '',
-    customerTitle: '',
-    customerFeedback: '',
-    customerSignDate: '',
-    customerSignature: ''
+    status: 'draft'
   });
-
   const [technicianInput, setTechnicianInput] = useState('');
   const [selectedPhotos, setSelectedPhotos] = useState([]);
   const [availableSites, setAvailableSites] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [inventory, setInventory] = useState([]);
+  const [stockLocations, setStockLocations] = useState([]);
+  const [newStockItem, setNewStockItem] = useState({ sku: '', quantity: 0, locationId: '' });
+  const [newMaterialItem, setNewMaterialItem] = useState({ itemName: '', description: '', reason: '', cost: 0 });
+  const [clients, setClients] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [currentStep, setCurrentStep] = useState(0);
-  const [stepError, setStepError] = useState('');
-  const [saveStatus, setSaveStatus] = useState('');
-  const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
-  const [deviceInfo, setDeviceInfo] = useState('');
-  const [isMapLoaded, setIsMapLoaded] = useState(false);
-  const [showMapModal, setShowMapModal] = useState(false);
 
-  const signatureCanvasRef = useRef(null);
-  const signatureContainerRef = useRef(null);
-  const touchScrollRef = useRef({
-    isDrawing: false,
-    lastX: 0,
-    lastY: 0,
-    isTouching: false,
-    lastTouchY: 0,
-    lastTouchX: 0,
-    lastScrollTop: 0
-  });
-  const signatureObserverRef = useRef(null);
-  const canvasResizeObserverRef = useRef(null);
-  const mapContainerRef = useRef(null);
-  const leafletMapRef = useRef(null);
-  const leafletMarkerRef = useRef(null);
-
-  // Load stored draft and environment data
+  // Monitor online/offline status
   useEffect(() => {
-    try {
-      const savedDraft = JSON.parse(localStorage.getItem('jobCardFormDraft') || '{}');
-      if (savedDraft && Object.keys(savedDraft).length > 0) {
-        setFormData(prev => ({
-          ...prev,
-          ...savedDraft,
-          stockUsed: Array.isArray(savedDraft.stockUsed) ? savedDraft.stockUsed : prev.stockUsed,
-          materialsBought: Array.isArray(savedDraft.materialsBought) ? savedDraft.materialsBought : prev.materialsBought,
-          photos: Array.isArray(savedDraft.photos) ? savedDraft.photos : prev.photos
-        }));
-        if (Array.isArray(savedDraft.photos) && savedDraft.photos.length > 0) {
-          setSelectedPhotos(savedDraft.photos.map(url => ({ url })));
-        }
-      }
-
-      const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
-      setDeviceInfo(ua);
-    } catch (err) {
-      console.error('Error loading saved draft:', err);
-    }
-  }, []);
-
-  // Watch online/offline status
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
+    const handleOnline = () => {
+      setIsOnline(true);
+      console.log('🌐 Connection restored');
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      console.log('📴 Connection lost - working offline');
+    };
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
-  // Load clients, sites, and stock from DatabaseAPI when available
+  // Load clients (public access - cached)
   useEffect(() => {
-    let cancelled = false;
-
-    const loadData = async () => {
+    const loadClients = async () => {
       try {
-        setLoading(true);
-        setError(null);
-
-        if (window.DatabaseAPI && typeof window.DatabaseAPI.getJobCardFormData === 'function') {
-          const result = await window.DatabaseAPI.getJobCardFormData();
-          if (cancelled) return;
-
-          const { clients, stockItems } = result || {};
-
-          const clientList = Array.isArray(clients) ? clients.filter(c => c.type === 'client') : [];
-          const websites = clientList.flatMap(client =>
-            Array.isArray(client.sites) ? client.sites.map(site => ({ ...site, clientId: client.id, clientName: client.name })) : []
-          );
-
-          setAvailableSites(websites);
-
-          setFormData(prev => ({
-            ...prev,
-            clients: clientList,
-            stockItems: Array.isArray(stockItems) ? stockItems : []
-          }));
+        const cached = JSON.parse(localStorage.getItem('manufacturing_clients') || '[]');
+        const activeClients = Array.isArray(cached) ? cached.filter(c => {
+          const status = (c.status || '').toLowerCase();
+          const type = (c.type || 'client').toLowerCase();
+          return (status === 'active' || status === '' || !c.status) && 
+                 (type === 'client' || !c.type);
+        }) : [];
+        
+        if (activeClients.length > 0) {
+          setClients(activeClients);
         }
-      } catch (err) {
-        if (!cancelled) {
-          console.error('Error loading job card form data:', err);
-          setError('Could not load latest clients and stock. You can still submit a job card and it will sync when online.');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
 
-    loadData();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Persist draft to localStorage
-  useEffect(() => {
-    try {
-      const draftToSave = {
-        ...formData,
-        photos: formData.photos
-      };
-      localStorage.setItem('jobCardFormDraft', JSON.stringify(draftToSave));
-    } catch (err) {
-      console.error('Error saving draft:', err);
-    }
-  }, [formData]);
-
-  const handleInputChange = useCallback((field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  }, []);
-
-  const handleChange = useCallback((event) => {
-    const { name, value } = event.target;
-    handleInputChange(name, value);
-  }, [handleInputChange]);
-
-  const handleClientChange = useCallback((event) => {
-    const clientId = event.target.value;
-    const clients = Array.isArray(formData.clients) ? formData.clients : [];
-    const selectedClient = clients.find(client => client.id === clientId);
-
-    setFormData(prev => ({
-      ...prev,
-      clientId,
-      clientName: selectedClient ? selectedClient.name : '',
-      siteId: '',
-      siteName: ''
-    }));
-  }, [formData.clients]);
-
-  const handleSiteChange = useCallback((event) => {
-    const siteId = event.target.value;
-    const selectedSite = availableSites.find(site => site.id === siteId);
-
-    setFormData(prev => ({
-      ...prev,
-      siteId,
-      siteName: selectedSite ? selectedSite.name : '',
-      location: selectedSite ? selectedSite.address || selectedSite.name : prev.location
-    }));
-  }, [availableSites]);
-
-  const handleAddTechnician = useCallback(() => {
-    if (!technicianInput.trim()) return;
-    setFormData(prev => ({
-      ...prev,
-      otherTechnicians: [...prev.otherTechnicians, technicianInput.trim()]
-    }));
-    setTechnicianInput('');
-  }, [technicianInput]);
-
-  const handleRemoveTechnician = useCallback((tech) => {
-    setFormData(prev => ({
-      ...prev,
-      otherTechnicians: prev.otherTechnicians.filter(t => t !== tech)
-    }));
-  }, []);
-
-  const handlePhotoUpload = useCallback((event) => {
-    const files = Array.from(event.target.files || []);
-    if (files.length === 0) return;
-
-    const maxFiles = 10;
-    const remainingSlots = maxFiles - selectedPhotos.length;
-    const filesToProcess = files.slice(0, remainingSlots);
-
-    filesToProcess.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const dataUrl = e.target.result;
-        setSelectedPhotos(prev => [...prev, { name: file.name, url: dataUrl, size: file.size }]);
-        setFormData(prev => ({
-          ...prev,
-          photos: [...(prev.photos || []), dataUrl]
-        }));
-      };
-      reader.readAsDataURL(file);
-    });
-  }, [selectedPhotos.length]);
-
-  const handleRemovePhoto = useCallback((index) => {
-    setSelectedPhotos(prev => prev.filter((_, i) => i !== index));
-    setFormData(prev => ({
-      ...prev,
-      photos: prev.photos.filter((_, i) => i !== index)
-    }));
-  }, []);
-
-  const handleAddStockItem = useCallback(() => {
-    setFormData(prev => ({
-      ...prev,
-      stockUsed: [...(prev.stockUsed || []), { itemId: '', description: '', quantity: 1 }]
-    }));
-  }, []);
-
-  const handleUpdateStockItem = useCallback((index, field, value) => {
-    setFormData(prev => {
-      const stockUsed = [...(prev.stockUsed || [])];
-      stockUsed[index] = {
-        ...(stockUsed[index] || {}),
-        [field]: value
-      };
-      return { ...prev, stockUsed };
-    });
-  }, []);
-
-  const handleRemoveStockItem = useCallback((index) => {
-    setFormData(prev => ({
-      ...prev,
-      stockUsed: (prev.stockUsed || []).filter((_, i) => i !== index)
-    }));
-  }, []);
-
-  const handleAddMaterial = useCallback(() => {
-    setFormData(prev => ({
-      ...prev,
-      materialsBought: [...(prev.materialsBought || []), { description: '', quantity: 1, cost: '' }]
-    }));
-  }, []);
-
-  const handleUpdateMaterial = useCallback((index, field, value) => {
-    setFormData(prev => {
-      const materialsBought = [...(prev.materialsBought || [])];
-      materialsBought[index] = {
-        ...(materialsBought[index] || {}),
-        [field]: value
-      };
-      return { ...prev, materialsBought };
-    });
-  }, []);
-
-  const handleRemoveMaterial = useCallback((index) => {
-    setFormData(prev => ({
-      ...prev,
-      materialsBought: (prev.materialsBought || []).filter((_, i) => i !== index)
-    }));
-  }, []);
-
-  const handleSignatureStart = useCallback((event) => {
-    const canvas = signatureCanvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.strokeStyle = '#111827';
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-
-    const isTouchEvent = event.type === 'touchstart';
-    const point = isTouchEvent ? event.touches[0] : event;
-
-    touchScrollRef.current.isDrawing = true;
-    touchScrollRef.current.lastX = point.clientX - rect.left;
-    touchScrollRef.current.lastY = point.clientY - rect.top;
-
-    ctx.beginPath();
-    ctx.moveTo(touchScrollRef.current.lastX, touchScrollRef.current.lastY);
-
-    if (isTouchEvent) {
-      event.preventDefault();
-    }
-  }, []);
-
-  const handleSignatureMove = useCallback((event) => {
-    const canvas = signatureCanvasRef.current;
-    if (!canvas || !touchScrollRef.current.isDrawing) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const isTouchEvent = event.type === 'touchmove';
-    const point = isTouchEvent ? event.touches[0] : event;
-
-    const x = point.clientX - rect.left;
-    const y = point.clientY - rect.top;
-
-    ctx.lineTo(x, y);
-    ctx.stroke();
-
-    touchScrollRef.current.lastX = x;
-    touchScrollRef.current.lastY = y;
-
-    if (isTouchEvent) {
-      event.preventDefault();
-    }
-  }, []);
-
-  const handleSignatureEnd = useCallback(() => {
-    touchScrollRef.current.isDrawing = false;
-
-    const canvas = signatureCanvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const pixels = imageData.data;
-    let hasInk = false;
-
-    for (let i = 0; i < pixels.length; i += 4) {
-      const alpha = pixels[i + 3];
-      if (alpha !== 0) {
-        hasInk = true;
-        break;
-      }
-    }
-
-    if (hasInk) {
-      const dataUrl = canvas.toDataURL('image/png');
-      setFormData(prev => ({
-        ...prev,
-        customerSignature: dataUrl
-      }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        customerSignature: ''
-      }));
-    }
-  }, []);
-
-  const handleClearSignature = useCallback(() => {
-    const canvas = signatureCanvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    setFormData(prev => ({
-      ...prev,
-      customerSignature: ''
-    }));
-  }, []);
-
-  const initialiseSignatureCanvas = useCallback(() => {
-    const canvas = signatureCanvasRef.current;
-    const container = signatureContainerRef.current;
-    if (!canvas || !container) return;
-
-    const resizeCanvas = () => {
-      const rect = container.getBoundingClientRect();
-      const width = rect.width;
-      const height = 160;
-
-      const ratio = window.devicePixelRatio || 1;
-      canvas.width = width * ratio;
-      canvas.height = height * ratio;
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
-
-      const context = canvas.getContext('2d');
-      if (context) {
-        context.setTransform(ratio, 0, 0, ratio, 0, 0);
-        context.clearRect(0, 0, width, height);
-        context.fillStyle = '#ffffff';
-        context.fillRect(0, 0, width, height);
-      }
-    };
-
-    resizeCanvas();
-
-    if (canvasResizeObserverRef.current) {
-      canvasResizeObserverRef.current.disconnect();
-    }
-
-    canvasResizeObserverRef.current = new ResizeObserver(() => {
-      resizeCanvas();
-    });
-
-    canvasResizeObserverRef.current.observe(container);
-  }, []);
-
-  useEffect(() => {
-    initialiseSignatureCanvas();
-
-    signatureObserverRef.current = new MutationObserver(() => {
-      initialiseSignatureCanvas();
-    });
-
-    if (signatureContainerRef.current) {
-      signatureObserverRef.current.observe(signatureContainerRef.current, {
-        childList: true,
-        subtree: true
-      });
-    }
-
-    return () => {
-      if (signatureObserverRef.current) {
-        signatureObserverRef.current.disconnect();
-      }
-      if (canvasResizeObserverRef.current) {
-        canvasResizeObserverRef.current.disconnect();
-      }
-    };
-  }, [initialiseSignatureCanvas]);
-
-  const loadLeafletScript = useCallback(() => {
-    return new Promise((resolve, reject) => {
-      const existingScript = document.getElementById('leaflet-js');
-      if (existingScript) {
-        resolve();
-        return;
-      }
-
-      const script = document.createElement('script');
-      script.id = 'leaflet-js';
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-      script.async = true;
-      script.onload = () => resolve();
-      script.onerror = (error) => reject(error);
-      document.body.appendChild(script);
-
-      const link = document.createElement('link');
-      link.id = 'leaflet-css';
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      document.head.appendChild(link);
-    });
-  }, []);
-
-  const initialiseMap = useCallback(async () => {
-    if (!mapContainerRef.current || leafletMapRef.current || typeof window === 'undefined') {
-      return;
-    }
-
-    try {
-      await loadLeafletScript();
-
-      const L = window.L;
-      if (!L) {
-        console.error('Leaflet not available');
-        return;
-      }
-
-      const map = L.map(mapContainerRef.current).setView([-26.2041, 28.0473], 13);
-      leafletMapRef.current = map;
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
-      }).addTo(map);
-
-      const updateMarker = (lat, lng) => {
-        if (leafletMarkerRef.current) {
-          leafletMarkerRef.current.setLatLng([lat, lng]);
-        } else {
-          leafletMarkerRef.current = L.marker([lat, lng]).addTo(map);
-        }
-      };
-
-      map.on('click', (e) => {
-        const { lat, lng } = e.latlng;
-        updateMarker(lat, lng);
-        setFormData(prev => ({
-          ...prev,
-          latitude: lat.toFixed(6),
-          longitude: lng.toFixed(6)
-        }));
-      });
-
-      if (formData.latitude && formData.longitude) {
-        const lat = parseFloat(formData.latitude);
-        const lng = parseFloat(formData.longitude);
-        if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
-          map.setView([lat, lng], 15);
-          updateMarker(lat, lng);
-        }
-      } else if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            const { latitude, longitude } = position.coords;
-            map.setView([latitude, longitude], 15);
-            updateMarker(latitude, longitude);
-          },
-          (error) => {
-            console.error('Error getting geolocation:', error);
+        // Try to sync from API if online (no auth needed for public endpoint)
+        if (isOnline) {
+          try {
+            const response = await fetch('/api/clients');
+            if (response.ok) {
+              const data = await response.json();
+              const allClients = data?.data?.clients || data?.data || [];
+              const active = Array.isArray(allClients) ? allClients.filter(c => {
+                const status = (c.status || '').toLowerCase();
+                const type = (c.type || 'client').toLowerCase();
+                return (status === 'active' || status === '' || !c.status) && 
+                       (type === 'client' || !c.type);
+              }) : [];
+              
+              if (active.length > 0) {
+                setClients(active);
+                localStorage.setItem('manufacturing_clients', JSON.stringify(active));
+              }
+            }
+          } catch (error) {
+            console.warn('Failed to load clients from API, using cache:', error);
           }
-        );
+        }
+      } catch (error) {
+        console.error('Error loading clients:', error);
+      } finally {
+        setIsLoading(false);
       }
+    };
+    loadClients();
+  }, [isOnline]);
 
-      setIsMapLoaded(true);
-    } catch (error) {
-      console.error('Error initialising map:', error);
-    }
-  }, [formData.latitude, formData.longitude, loadLeafletScript]);
-
-  const openMapModal = useCallback(() => {
-    setShowMapModal(true);
-  }, []);
-
-  const handleCloseMap = useCallback(() => {
-    setShowMapModal(false);
-  }, []);
-
+  // Load users (for technician selection)
   useEffect(() => {
-    if (showMapModal && !isMapLoaded) {
-      initialiseMap();
+    const loadUsers = async () => {
+      try {
+        const cached = JSON.parse(localStorage.getItem('manufacturing_users') || '[]');
+        if (cached.length > 0) {
+          setUsers(cached);
+        }
+
+        if (isOnline) {
+          try {
+            const response = await fetch('/api/users');
+            if (response.ok) {
+              const data = await response.json();
+              const usersData = data?.data?.users || data?.data || [];
+              if (Array.isArray(usersData) && usersData.length > 0) {
+                setUsers(usersData);
+                localStorage.setItem('manufacturing_users', JSON.stringify(usersData));
+              }
+            }
+          } catch (error) {
+            console.warn('Failed to load users from API, using cache:', error);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading users:', error);
+      }
+    };
+    loadUsers();
+  }, [isOnline]);
+
+  // Load inventory and stock locations
+  useEffect(() => {
+    const loadStockData = async () => {
+      try {
+        const cachedInventory = JSON.parse(localStorage.getItem('manufacturing_inventory') || '[]');
+        if (cachedInventory.length > 0) {
+          setInventory(cachedInventory);
+        }
+
+        if (isOnline) {
+          try {
+            const invResponse = await fetch('/api/manufacturing/inventory');
+            if (invResponse.ok) {
+              const invData = await invResponse.json();
+              const inventoryItems = invData?.data?.inventory || invData?.data || [];
+              if (Array.isArray(inventoryItems) && inventoryItems.length > 0) {
+                setInventory(inventoryItems);
+                localStorage.setItem('manufacturing_inventory', JSON.stringify(inventoryItems));
+              }
+            }
+          } catch (error) {
+            console.warn('Failed to load inventory:', error);
+          }
+        }
+        
+        const cachedLocations = JSON.parse(localStorage.getItem('stock_locations') || '[]');
+        if (cachedLocations.length > 0) {
+          setStockLocations(cachedLocations);
+        } else {
+          const defaultLocations = [
+            { id: 'LOC001', code: 'WH-MAIN', name: 'Main Warehouse', type: 'warehouse' },
+            { id: 'LOC002', code: 'LDV-001', name: 'Service LDV 1', type: 'vehicle' }
+          ];
+          setStockLocations(defaultLocations);
+          localStorage.setItem('stock_locations', JSON.stringify(defaultLocations));
+        }
+      } catch (error) {
+        console.error('Error loading stock data:', error);
+      }
+    };
+    loadStockData();
+  }, [isOnline]);
+
+  // Load sites when client changes
+  useEffect(() => {
+    if (formData.clientId && clients.length > 0) {
+      const client = clients.find(c => c.id === formData.clientId);
+      if (client) {
+        const sites = typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []);
+        setAvailableSites(sites);
+        setFormData(prev => ({ ...prev, clientName: client.name || '' }));
+      }
+    } else {
+      setAvailableSites([]);
+      setFormData(prev => ({ ...prev, siteId: '', siteName: '' }));
     }
-  }, [showMapModal, isMapLoaded, initialiseMap]);
+  }, [formData.clientId, clients]);
 
-  const currentStepId = STEP_IDS[currentStep];
-
-  const progressPercent = useMemo(() => {
-    const completedSteps = currentStep;
-    return ((completedSteps + 1) / STEP_IDS.length) * 100;
-  }, [currentStep]);
-
-  const validateCurrentStep = useCallback(() => {
-    const stepId = STEP_IDS[currentStep];
-
-    if (stepId === 'assignment') {
-      if (!formData.agentName.trim()) {
-        setStepError('Please enter the lead technician\'s name.');
-        return false;
+  // Set site name when site changes
+  useEffect(() => {
+    if (formData.siteId && availableSites.length > 0) {
+      const site = availableSites.find(s => s.id === formData.siteId);
+      if (site) {
+        setFormData(prev => ({ ...prev, siteName: site.name || '' }));
       }
-      if (!formData.clientId) {
-        setStepError('Please select a client.');
-        return false;
-      }
-      if (!formData.siteId) {
-        setStepError('Please select a site.');
-        return false;
-      }
-      setStepError('');
-      return true;
     }
+  }, [formData.siteId, availableSites]);
 
-    if (stepId === 'visit') {
-      if (!formData.timeOfDeparture || !formData.timeOfArrival) {
-        setStepError('Please capture both departure and arrival times.');
-        return false;
-      }
-      if (!formData.vehicleUsed.trim()) {
-        setStepError('Please enter the vehicle used.');
-        return false;
-      }
-      if (!formData.kmReadingBefore || !formData.kmReadingAfter) {
-        setStepError('Please capture kilometer readings before and after the trip.');
-        return false;
-      }
-      setStepError('');
-      return true;
-    }
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
 
-    if (stepId === 'work') {
-      if (!formData.reasonForVisit.trim()) {
-        setStepError('Please enter the reason for the call out / visit.');
-        return false;
-      }
-      setStepError('');
-      return true;
-    }
-
-    if (stepId === 'signoff') {
-      if (!formData.customerName.trim()) {
-        setStepError('Please capture the customer\'s name.');
-        return false;
-      }
-      if (!formData.customerSignature) {
-        setStepError('Please capture the customer\'s signature.');
-        return false;
-      }
-      setStepError('');
-      return true;
-    }
-
-    setStepError('');
-    return true;
-  }, [currentStep, formData]);
-
-  const handleNext = useCallback(() => {
-    if (!validateCurrentStep()) {
-      return;
-    }
-
-    setCurrentStep(prev => Math.min(prev + 1, STEP_IDS.length - 1));
-  }, [validateCurrentStep]);
-
-  const handlePrevious = useCallback(() => {
-    setCurrentStep(prev => Math.max(prev - 1, 0));
-  }, []);
-
-  const calculateTravelDistance = useMemo(() => {
-    const before = parseFloat(formData.kmReadingBefore || '0');
-    const after = parseFloat(formData.kmReadingAfter || '0');
-    if (Number.isNaN(before) || Number.isNaN(after)) return 0;
-    return Math.max(0, after - before);
-  }, [formData.kmReadingBefore, formData.kmReadingAfter]);
-
-  const handleSave = useCallback(async () => {
-    if (!validateCurrentStep()) {
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      setSaveStatus('');
-
-      const payload = {
-        ...formData,
-        travelDistance: calculateTravelDistance,
-        deviceInfo,
-        isOnline
-      };
-
-      if (window.DatabaseAPI && typeof window.DatabaseAPI.submitJobCard === 'function') {
-        await window.DatabaseAPI.submitJobCard(payload);
-        setSaveStatus('Job card saved and will sync to Abcotronics when online.');
-      } else {
-        setSaveStatus('Job card saved locally. It will sync when the app is online and connected.');
-      }
-
-      localStorage.removeItem('jobCardFormDraft');
-
+  const handleAddTechnician = () => {
+    const techName = technicianInput.trim();
+    if (techName && !formData.otherTechnicians.includes(techName)) {
       setFormData(prev => ({
         ...prev,
-        status: 'submitted'
+        otherTechnicians: [...prev.otherTechnicians, techName]
       }));
+      setTechnicianInput('');
+    }
+  };
+
+  const handleRemoveTechnician = (technician) => {
+    setFormData(prev => ({
+      ...prev,
+      otherTechnicians: prev.otherTechnicians.filter(t => t !== technician)
+    }));
+  };
+
+  const handlePhotoUpload = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length > 0) {
+      files.forEach(file => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const dataUrl = reader.result;
+          setSelectedPhotos(prev => [...prev, { name: file.name, url: dataUrl, size: file.size }]);
+          setFormData(prev => ({ ...prev, photos: [...prev.photos, dataUrl] }));
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const handleRemovePhoto = (index) => {
+    const newPhotos = selectedPhotos.filter((_, i) => i !== index);
+    setSelectedPhotos(newPhotos);
+    setFormData(prev => ({ ...prev, photos: newPhotos.map(p => typeof p === 'string' ? p : p.url) }));
+  };
+
+  // Stock usage handlers
+  const handleAddStockItem = () => {
+    if (!newStockItem.sku || !newStockItem.locationId || newStockItem.quantity <= 0) {
+      alert('Please select a component, location, and enter quantity > 0');
+      return;
+    }
+    
+    const invItem = inventory.find(item => item.sku === newStockItem.sku || item.id === newStockItem.sku);
+    if (!invItem) {
+      alert('Selected item not found in inventory');
+      return;
+    }
+
+    const stockItem = {
+      id: Date.now().toString(),
+      sku: invItem.sku || invItem.id,
+      itemName: invItem.name || '',
+      quantity: parseFloat(newStockItem.quantity),
+      locationId: newStockItem.locationId,
+      locationName: stockLocations.find(loc => loc.id === newStockItem.locationId)?.name || '',
+      unitCost: invItem.unitCost || 0
+    };
+
+    setFormData(prev => ({
+      ...prev,
+      stockUsed: [...prev.stockUsed, stockItem]
+    }));
+    
+    setNewStockItem({ sku: '', quantity: 0, locationId: '' });
+  };
+
+  const handleRemoveStockItem = (id) => {
+    setFormData(prev => ({
+      ...prev,
+      stockUsed: prev.stockUsed.filter(item => item.id !== id)
+    }));
+  };
+
+  // Materials bought handlers
+  const handleAddMaterialItem = () => {
+    if (!newMaterialItem.itemName || newMaterialItem.cost <= 0) {
+      alert('Please enter item name and cost > 0');
+      return;
+    }
+
+    const materialItem = {
+      id: Date.now().toString(),
+      itemName: newMaterialItem.itemName,
+      description: newMaterialItem.description || '',
+      reason: newMaterialItem.reason || '',
+      cost: parseFloat(newMaterialItem.cost)
+    };
+
+    setFormData(prev => ({
+      ...prev,
+      materialsBought: [...prev.materialsBought, materialItem]
+    }));
+    
+    setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
+  };
+
+  const handleRemoveMaterialItem = (id) => {
+    setFormData(prev => ({
+      ...prev,
+      materialsBought: prev.materialsBought.filter(item => item.id !== id)
+    }));
+  };
+
+  const handleSave = async () => {
+    // Validation: Only Client is required
+    if (!formData.clientId) {
+      alert('Please select a client');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const jobCardData = {
+        ...formData,
+        id: Date.now().toString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      // Calculate travel kilometers
+      const kmBefore = parseFloat(formData.kmReadingBefore) || 0;
+      const kmAfter = parseFloat(formData.kmReadingAfter) || 0;
+      jobCardData.travelKilometers = Math.max(0, kmAfter - kmBefore);
+
+      // Calculate total cost for materials bought
+      jobCardData.totalMaterialsCost = (formData.materialsBought || []).reduce((sum, item) => sum + (item.cost || 0), 0);
+
+      // Create stock movements for any stock used (regardless of job card status)
+      if (formData.stockUsed && formData.stockUsed.length > 0) {
+        try {
+          const jobCardId = jobCardData.id;
+          const jobCardReference = `Job Card ${jobCardId}`;
+          
+          for (const stockItem of formData.stockUsed) {
+            if (!stockItem.locationId || !stockItem.sku || stockItem.quantity <= 0) {
+              console.warn('Skipping invalid stock item:', stockItem);
+              continue;
+            }
+
+            const movementData = {
+              type: 'consumption',
+              sku: stockItem.sku,
+              itemName: stockItem.itemName || '',
+              quantity: parseFloat(stockItem.quantity),
+              unitCost: stockItem.unitCost ? parseFloat(stockItem.unitCost) : undefined,
+              fromLocation: stockItem.locationId,
+              toLocation: '',
+              reference: jobCardReference,
+              notes: `Stock used in job card: ${jobCardReference}${formData.location ? ` - Location: ${formData.location}` : ''}`,
+              date: new Date().toISOString()
+            };
+
+            // Store in localStorage (works offline)
+            const cachedMovements = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
+            cachedMovements.push({
+              ...movementData,
+              id: `MOV${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              synced: false
+            });
+            localStorage.setItem('manufacturing_movements', JSON.stringify(cachedMovements));
+            
+            // Try to sync if online (fire and forget)
+            if (isOnline && window.DatabaseAPI?.createStockMovement) {
+              window.DatabaseAPI.createStockMovement(movementData).catch(err => {
+                console.warn('Failed to sync stock movement:', err);
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Error creating stock movements:', error);
+        }
+      }
+
+      // Save to localStorage (offline support)
+      const existingJobCards = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
+      const updatedJobCards = [...existingJobCards, jobCardData];
+      localStorage.setItem('manufacturing_jobcards', JSON.stringify(updatedJobCards));
+
+      // Try to sync with API if online (fire and forget - no auth blocking)
+      if (isOnline && window.DatabaseAPI?.createJobCard) {
+        try {
+          await window.DatabaseAPI.createJobCard(jobCardData);
+        } catch (error) {
+          console.warn('⚠️ Failed to sync job card to API, saved offline:', error.message);
+        }
+      }
+
+      alert('✅ Job card saved successfully!' + (isOnline ? '' : ' (Saved offline - will sync when online)'));
+      
+      // Reset form
+      setFormData({
+        agentName: '',
+        otherTechnicians: [],
+        clientId: '',
+        clientName: '',
+        siteId: '',
+        siteName: '',
+        location: '',
+        timeOfDeparture: '',
+        timeOfArrival: '',
+        vehicleUsed: '',
+        kmReadingBefore: '',
+        kmReadingAfter: '',
+        reasonForVisit: '',
+        diagnosis: '',
+        actionsTaken: '',
+        stockUsed: [],
+        materialsBought: [],
+        otherComments: '',
+        photos: [],
+        status: 'draft'
+      });
+      setSelectedPhotos([]);
+      setTechnicianInput('');
+      setNewStockItem({ sku: '', quantity: 0, locationId: '' });
+      setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
     } catch (error) {
       console.error('Error saving job card:', error);
-      setSaveStatus('There was an error saving the job card. Please try again.');
+      alert(`Failed to save job card: ${error.message}`);
     } finally {
       setIsSubmitting(false);
     }
-  }, [calculateTravelDistance, deviceInfo, formData, isOnline, validateCurrentStep]);
+  };
 
-  const renderAssignmentStep = () => {
-    const clients = Array.isArray(formData.clients) ? formData.clients : [];
+  const availableTechnicians = users.filter(u => u.status !== 'inactive' && u.status !== 'suspended');
 
-    const clientOptions = clients.filter(c => c.type === 'client');
-
-    const sites = availableSites.filter(site => site.clientId === formData.clientId);
-
+  if (isLoading) {
     return (
-      <div className="space-y-4">
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">
-            Lead Technician *
-          </label>
-          <input
-            type="text"
-            name="agentName"
-            value={formData.agentName}
-            onChange={handleChange}
-            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="Name of agent filling out this form"
-            required
-          />
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading form...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const travelKm = formData.kmReadingBefore && formData.kmReadingAfter
+    ? parseFloat(formData.kmReadingAfter) - parseFloat(formData.kmReadingBefore)
+    : 0;
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-8 px-4">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Job Card Form</h1>
+              <p className="text-sm text-gray-500 mt-1">
+                {!isOnline && <span className="text-orange-600">⚠️ Offline Mode - Changes will sync when connection is restored</span>}
+                {isOnline && <span className="text-green-600">✓ Online</span>}
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">
-            Other Technicians
-          </label>
-          <div className="flex gap-2 mb-2">
+        {/* Form */}
+        <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-6">
+          {/* Agent Name */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Agent Name *
+            </label>
+            <select
+              name="agentName"
+              value={formData.agentName}
+              onChange={handleChange}
+              required
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">Select technician</option>
+              {availableTechnicians.map(tech => (
+                <option key={tech.id} value={tech.name || tech.email}>
+                  {tech.name || tech.email} {tech.department ? `(${tech.department})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Client - REQUIRED */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Client *
+            </label>
+            <select
+              name="clientId"
+              value={formData.clientId}
+              onChange={handleChange}
+              required
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">Select client</option>
+              {clients.map(client => (
+                <option key={client.id} value={client.id}>{client.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Rest of form fields - copy from JobCards.jsx but simplified */}
+          {/* Site - OPTIONAL */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Site
+            </label>
+            <select
+              name="siteId"
+              value={formData.siteId}
+              onChange={handleChange}
+              disabled={!formData.clientId || availableSites.length === 0}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+            >
+              <option value="">
+                {availableSites.length === 0 ? 'No sites available for this client' : 'Select site'}
+              </option>
+              {availableSites.map(site => (
+                <option key={site.id || site.name} value={site.id || site.name}>
+                  {site.name || site}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Location */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Location
+            </label>
             <input
               type="text"
-              value={technicianInput}
-              onChange={(e) => setTechnicianInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTechnician())}
-              className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Add technician name"
+              name="location"
+              value={formData.location}
+              onChange={handleChange}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="Specific location details"
             />
-            <button
-              type="button"
-              onClick={handleAddTechnician}
-              className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
-            >
-              <i className="fas fa-plus"></i>
-            </button>
           </div>
+
+          {/* Reason for Visit - OPTIONAL */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Reason for Call Out / Visit
+            </label>
+            <textarea
+              name="reasonForVisit"
+              value={formData.reasonForVisit}
+              onChange={handleChange}
+              rows={3}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="Why was the agent requested to come out?"
+            />
+          </div>
+
+          {/* Time of Departure and Arrival */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Time of Departure
+              </label>
+              <input
+                type="datetime-local"
+                name="timeOfDeparture"
+                value={formData.timeOfDeparture}
+                onChange={handleChange}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Time of Arrival
+              </label>
+              <input
+                type="datetime-local"
+                name="timeOfArrival"
+                value={formData.timeOfArrival}
+                onChange={handleChange}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          {/* Vehicle and Kilometer Readings */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Vehicle Used
+              </label>
+              <input
+                type="text"
+                name="vehicleUsed"
+                value={formData.vehicleUsed}
+                onChange={handleChange}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="e.g., AB12 CD 3456"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                KM Reading Before
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                name="kmReadingBefore"
+                value={formData.kmReadingBefore}
+                onChange={handleChange}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="0.0"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                KM Reading After
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                name="kmReadingAfter"
+                value={formData.kmReadingAfter}
+                onChange={handleChange}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="0.0"
+              />
+            </div>
+          </div>
+
+          {/* Travel Kilometers Display */}
+          {travelKm > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-sm font-medium text-blue-900">
+                Travel Distance: {travelKm.toFixed(1)} km
+              </p>
+            </div>
+          )}
+
+          {/* Diagnosis */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Diagnosis
+            </label>
+            <textarea
+              name="diagnosis"
+              value={formData.diagnosis}
+              onChange={handleChange}
+              rows={4}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="Notes and comments about diagnosis"
+            />
+          </div>
+
+          {/* Actions Taken */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Actions Taken
+            </label>
+            <textarea
+              name="actionsTaken"
+              value={formData.actionsTaken}
+              onChange={handleChange}
+              rows={4}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="Describe what actions were taken to resolve the issue"
+            />
+          </div>
+
+          {/* Stock Used Section */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Stock Used</h3>
+            <div className="grid grid-cols-12 gap-2 mb-3">
+              <div className="col-span-4">
+                <select
+                  value={newStockItem.sku}
+                  onChange={(e) => setNewStockItem({ ...newStockItem, sku: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                >
+                  <option value="">Select component</option>
+                  {inventory.map(item => (
+                    <option key={item.id || item.sku} value={item.sku || item.id}>
+                      {item.name} ({item.sku || item.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-span-4">
+                <select
+                  value={newStockItem.locationId}
+                  onChange={(e) => setNewStockItem({ ...newStockItem, locationId: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                >
+                  <option value="">Select location</option>
+                  {stockLocations.map(loc => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.name} ({loc.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-span-2">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={newStockItem.quantity || ''}
+                  onChange={(e) => setNewStockItem({ ...newStockItem, quantity: parseFloat(e.target.value) || 0 })}
+                  placeholder="Qty"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                />
+              </div>
+              <div className="col-span-2">
+                <button
+                  type="button"
+                  onClick={handleAddStockItem}
+                  className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                >
+                  <i className="fas fa-plus mr-1"></i>Add
+                </button>
+              </div>
+            </div>
+            {formData.stockUsed.length > 0 && (
+              <div className="space-y-2">
+                {formData.stockUsed.map(item => (
+                  <div key={item.id} className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg p-3">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-900">{item.itemName}</p>
+                      <p className="text-xs text-gray-600">
+                        {item.locationName} • Qty: {item.quantity} • SKU: {item.sku}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveStockItem(item.id)}
+                      className="ml-2 text-red-600 hover:text-red-800"
+                      title="Remove"
+                    >
+                      <i className="fas fa-times"></i>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Materials Bought Section */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Materials Bought (Not from Stock)</h3>
+            <div className="space-y-2 mb-3">
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={newMaterialItem.itemName}
+                  onChange={(e) => setNewMaterialItem({ ...newMaterialItem, itemName: e.target.value })}
+                  placeholder="Item Name *"
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={newMaterialItem.cost || ''}
+                  onChange={(e) => setNewMaterialItem({ ...newMaterialItem, cost: parseFloat(e.target.value) || 0 })}
+                  placeholder="Cost (R) *"
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                />
+              </div>
+              <input
+                type="text"
+                value={newMaterialItem.description}
+                onChange={(e) => setNewMaterialItem({ ...newMaterialItem, description: e.target.value })}
+                placeholder="Description"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+              />
+              <input
+                type="text"
+                value={newMaterialItem.reason}
+                onChange={(e) => setNewMaterialItem({ ...newMaterialItem, reason: e.target.value })}
+                placeholder="Reason for purchase"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+              />
+              <button
+                type="button"
+                onClick={handleAddMaterialItem}
+                className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+              >
+                <i className="fas fa-plus mr-1"></i>Add Material
+              </button>
+            </div>
+            {formData.materialsBought.length > 0 && (
+              <div className="space-y-2">
+                {formData.materialsBought.map(item => (
+                  <div key={item.id} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-900">{item.itemName}</p>
+                        {item.description && (
+                          <p className="text-xs text-gray-600 mt-1">{item.description}</p>
+                        )}
+                        {item.reason && (
+                          <p className="text-xs text-gray-500 mt-1">Reason: {item.reason}</p>
+                        )}
+                        <p className="text-sm font-semibold text-gray-900 mt-2">R {item.cost.toFixed(2)}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveMaterialItem(item.id)}
+                        className="ml-2 text-red-600 hover:text-red-800"
+                        title="Remove"
+                      >
+                        <i className="fas fa-times"></i>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <div className="border-t border-gray-300 pt-2 mt-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-semibold text-gray-900">Total Cost:</span>
+                    <span className="text-lg font-bold text-blue-600">
+                      R {formData.materialsBought.reduce((sum, item) => sum + (item.cost || 0), 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Other Comments */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Other Comments
+            </label>
+            <textarea
+              name="otherComments"
+              value={formData.otherComments}
+              onChange={handleChange}
+              rows={3}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              placeholder="Additional comments or observations"
+            />
+          </div>
+
+          {/* Submit Button */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <button
+              type="submit"
+              disabled={isSubmitting || !formData.clientId}
+              className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            >
+              {isSubmitting ? 'Saving...' : 'Save Job Card'}
+            </button>
+            <p className="text-xs text-gray-500 mt-2 text-center">
+              * Client is required. Other fields are optional.
+            </p>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// Register component globally
+try {
+  window.JobCardFormPublic = JobCardFormPublic;
+  if (window.debug && !window.debug.performanceMode) {
+    console.log('✅ JobCardFormPublic.jsx loaded and registered');
+  }
+} catch (error) {
+  console.error('❌ JobCardFormPublic.jsx: Error registering component:', error);
+}
+
