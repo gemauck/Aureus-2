@@ -2028,6 +2028,7 @@ const ManagementMeetingNotes = () => {
                         </select>
                         <div className="flex items-center gap-2">
                             <input
+                                type="month"
                                 value={newMonthKey}
                                 onChange={(e) => setNewMonthKey(e.target.value)}
                                 onKeyDown={(e) => {
@@ -2036,10 +2037,9 @@ const ManagementMeetingNotes = () => {
                                         handleCreateMonth(e.currentTarget.value);
                                     }
                                 }}
-                                placeholder="YYYY-MM"
-                                aria-label="Create month key"
-                                title="Enter a month (YYYY-MM) to create meeting notes ahead of time"
-                                className={`w-32 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition shadow-sm ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'}`}
+                                aria-label="Create month"
+                                title="Pick a month to create meeting notes ahead of time"
+                                className={`w-36 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition shadow-sm ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'}`}
                             />
                             <button
                                 onClick={() => handleCreateMonth()}
