@@ -149,7 +149,12 @@ const deriveWeekDetails = (value) => {
     weekEnd.setDate(weekStart.getDate() + 6);
 
     const weekKey = `${weekStart.getFullYear()}-${padTwo(weekStart.getMonth() + 1)}-${padTwo(weekStart.getDate())}`;
-    const monthKey = getMonthKeyFromDate(weekStart);
+    // IMPORTANT:
+    // Use the ORIGINAL selected/base date to determine the "month" this week belongs to,
+    // not the derived weekStart Sunday. This ensures that when a user selects a date like
+    // 1 December, the week is grouped under December (the selected month) instead of
+    // November (because the Sunday weekStart might still be in November).
+    const monthKey = getMonthKeyFromDate(baseDate);
 
     return { weekStart, weekEnd, weekKey, monthKey };
 };
