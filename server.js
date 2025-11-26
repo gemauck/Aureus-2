@@ -184,6 +184,8 @@ app.use(helmet({
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", "https://unpkg.com"],
       fontSrc: ["'self'", "data:", "https://cdnjs.cloudflare.com"],
+      // Allow embedded maps from OpenStreetMap
+      frameSrc: ["'self'", "https://www.openstreetmap.org"],
     },
   },
   crossOriginEmbedderPolicy: false, // Allow embedding
