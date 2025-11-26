@@ -775,33 +775,64 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
                         const coords = getJobCardCoordinates(selectedJobCard);
                         const latFixed = coords.lat.toFixed(6);
                         const lngFixed = coords.lng.toFixed(6);
+                        const zoom = 15;
+
+                        // Build a small bounding box around the point so the embedded map
+                        // shows the marker nicely centred.
+                        const delta = 0.01;
+                        const minLat = coords.lat - delta;
+                        const maxLat = coords.lat + delta;
+                        const minLng = coords.lng - delta;
+                        const maxLng = coords.lng + delta;
+
+                        const embedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${encodeURIComponent(
+                          `${minLng},${minLat},${maxLng},${maxLat}`
+                        )}&layer=mapnik&marker=${encodeURIComponent(
+                          `${coords.lat},${coords.lng}`
+                        )}&zoom=${zoom}`;
 
                         const openStreetMapUrl = `https://www.openstreetmap.org/?mlat=${encodeURIComponent(
                           coords.lat
                         )}&mlon=${encodeURIComponent(
                           coords.lng
-                        )}&zoom=15`
+                        )}&zoom=${zoom}`;
 
                         return (
                           <a
                             href={openStreetMapUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="group flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 text-slate-100"
+                            className="group block h-full w-full"
                           >
-                            <div className="text-center px-6">
-                              <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-sky-500/15 text-sky-300 mb-3">
-                                <i className="fa-solid fa-location-dot text-lg" />
+                            <div className="relative h-full w-full bg-slate-900">
+                              <iframe
+                                title="Job location preview"
+                                src={embedUrl}
+                                className="h-full w-full border-0"
+                                loading="lazy"
+                                referrerPolicy="no-referrer-when-downgrade"
+                              />
+                              <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-900/90 to-transparent px-4 py-3">
+                                <div className="flex items-center justify-between gap-3 text-xs text-slate-100">
+                                  <div className="flex items-center gap-2">
+                                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-sky-500/20 text-sky-300">
+                                      <i className="fa-solid fa-location-dot text-sm" />
+                                    </span>
+                                    <div>
+                                      <p className="font-semibold">
+                                        Open this location in OpenStreetMap
+                                      </p>
+                                      <p className="text-[11px] text-slate-300">
+                                        {latFixed}, {lngFixed}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-slate-800/80 px-2 py-1 text-[10px] font-medium text-slate-200 group-hover:bg-slate-700">
+                                    <span>View full map</span>
+                                    <i className="fa-solid fa-arrow-up-right-from-square" />
+                                  </span>
+                                </div>
                               </div>
-                              <p className="text-sm font-semibold">
-                                Open this location in OpenStreetMap
-                              </p>
-                              <p className="mt-1 text-xs text-slate-300">
-                                {latFixed}, {lngFixed}
-                              </p>
-                              <p className="mt-2 text-[11px] text-slate-400 group-hover:text-slate-300">
-                                Click to view full map, directions, and nearby info.
-                              </p>
                             </div>
                           </a>
                         );

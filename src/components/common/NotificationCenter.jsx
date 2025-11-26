@@ -457,12 +457,30 @@ const NotificationCenter = () => {
             const hashMatch = notification.link.match(/#([^?&]+)/);
             if (hashMatch && hashMatch[1]) {
                 const anchorId = hashMatch[1];
-                findAndScrollToElement([
-                    `#${anchorId}`,
+
+                // If the anchor looks like a route (e.g. "/clients") it is NOT a valid CSS id,
+                // so avoid building a selector like "#/clients" which throws errors.
+                const maybeIdSelector = (id) => {
+                    // Valid CSS id must not start with "/" and must not contain spaces
+                    if (!id || id.startsWith('/') || /\s/.test(id)) {
+                        return null;
+                    }
+                    return `#${id}`;
+                };
+
+                const idSelector = maybeIdSelector(anchorId);
+                const selectors = [
                     `[data-id="${anchorId}"]`,
                     `[name="${anchorId}"]`,
                     `[id*="${anchorId}"]`
-                ]);
+                ];
+
+                // Only include the id selector if it is valid
+                if (idSelector) {
+                    selectors.unshift(idSelector);
+                }
+
+                findAndScrollToElement(selectors);
             }
         } else {
             // Even if no link, try to navigate based on metadata

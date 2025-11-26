@@ -1136,6 +1136,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
             event.dataTransfer.setData('pipelineItemId', String(item.id));
             event.dataTransfer.effectAllowed = 'move';
         }
+        console.log('🎯 Pipeline: dragStart', {
+            id: item?.id,
+            type,
+            stage: item?.stage,
+            hasDataTransfer: !!event?.dataTransfer
+        });
         setDraggedItem(item);
         setDraggedType(type); // Store type in state for recovery
         setIsDragging(true);
@@ -1938,7 +1944,18 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         }
                     }
 
+                    console.log('🎯 Pipeline: drop', {
+                        stageTarget: stage.name,
+                        draggedItemId: draggedItem?.id,
+                        draggedItemType: draggedType,
+                        resolvedItemId: item?.id,
+                        resolvedItemType: item?.type
+                    });
+
                     if (!item || item.stage === stage.name) {
+                        if (!item) {
+                            console.warn('⚠️ Pipeline: drop handler could not resolve dragged item');
+                        }
                         return;
                     }
 
