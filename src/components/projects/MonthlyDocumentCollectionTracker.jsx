@@ -1753,9 +1753,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         <div className="space-y-3">
             {/* Comment Popup */}
             {hoverCommentCell && (() => {
-                const [sectionId, documentId, month] = hoverCommentCell.split('-');
-                const section = sections.find(s => s.id === parseInt(sectionId));
-                const document = section?.documents.find(d => d.id === parseInt(documentId));
+                // IMPORTANT: Section/document IDs can be strings (e.g. "file3", "file3-doc1")
+                // Never parseInt them – always compare as strings to ensure we find the right row.
+                const [rawSectionId, rawDocumentId, month] = hoverCommentCell.split('-');
+                const section = sections.find(s => String(s.id) === String(rawSectionId));
+                const document = section?.documents.find(d => String(d.id) === String(rawDocumentId));
                 const comments = document ? getDocumentComments(document, month) : [];
                 
                 return (
@@ -1777,7 +1779,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                 })}</span>
                                             </div>
                                             <button
-                                                onClick={() => handleDeleteComment(parseInt(sectionId), parseInt(documentId), month, comment.id)}
+                                                onClick={() => {
+                                                    if (!section || !document) return;
+                                                    handleDeleteComment(section.id, document.id, month, comment.id);
+                                                }}
                                                 className="absolute top-1 right-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100"
                                                 type="button"
                                             >
@@ -1795,8 +1800,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 value={quickComment}
                                 onChange={(e) => setQuickComment(e.target.value)}
                                 onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && e.ctrlKey) {
-                                        handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
+                                    if (e.key === 'Enter' && e.ctrlKey && section && document) {
+                                        handleAddComment(section.id, document.id, month, quickComment);
                                     }
                                 }}
                                 className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500"
@@ -1805,7 +1810,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 autoFocus
                             />
                             <button
-                                onClick={() => handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment)}
+                                onClick={() => {
+                                    if (!section || !document) return;
+                                    handleAddComment(section.id, document.id, month, quickComment);
+                                }}
                                 disabled={!quickComment.trim()}
                                 className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 disabled:opacity-50"
                             >
