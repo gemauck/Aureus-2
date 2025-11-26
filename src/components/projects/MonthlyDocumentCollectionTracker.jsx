@@ -972,7 +972,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         });
     }, [selectedYear]);
     
-    const handleAddComment = (sectionId, documentId, month, commentText) => {
+    const handleAddComment = async (sectionId, documentId, month, commentText) => {
         if (!commentText.trim()) return;
         
         const currentUser = getCurrentUser();
@@ -1005,6 +1005,49 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }));
         
         setQuickComment('');
+
+        // ========================================================
+        // @MENTIONS - Process mentions and create notifications
+        // ========================================================
+        try {
+            if (window.MentionHelper && window.MentionHelper.hasMentions(commentText)) {
+                const token = window.storage?.getToken?.();
+                
+                if (token && window.DatabaseAPI?.getUsers) {
+                    // Fetch all users once for matching mentions
+                    const usersResponse = await window.DatabaseAPI.getUsers();
+                    const allUsers =
+                        usersResponse?.data?.users ||
+                        usersResponse?.data?.data?.users ||
+                        usersResponse?.users ||
+                        [];
+                    
+                    const contextTitle = `Document Collection - ${project?.name || 'Project'}`;
+                    const contextLink = `#/projects/${project?.id || ''}`;
+                    const projectInfo = {
+                        projectId: project?.id,
+                        projectName: project?.name
+                    };
+                    
+                    // Fire mention notifications (do not block UI on errors)
+                    window.MentionHelper.processMentions(
+                        commentText,
+                        contextTitle,
+                        contextLink,
+                        currentUser.name || currentUser.email || 'Unknown',
+                        allUsers,
+                        projectInfo
+                    ).then(() => {
+                        console.log('✅ @Mention notifications processed for document collection comment');
+                    }).catch(error => {
+                        console.error('❌ Error processing @mentions for document collection comment:', error);
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('❌ Unexpected error in handleAddComment @mentions processing:', error);
+            // Swallow errors so commenting UI never breaks due to notifications
+        }
     };
     
     const handleDeleteComment = (sectionId, documentId, month, commentId) => {
@@ -1909,7 +1952,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 <div ref={commentPopupContainerRef} className="max-h-32 overflow-y-auto space-y-2 mb-2">
                                     {comments.map((comment, idx) => (
                                         <div key={comment.id || idx} className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5 relative group">
-                                            <p className="text-xs text-gray-700 whitespace-pre-wrap pr-6">{comment.text}</p>
+                                            <p
+                                                className="text-xs text-gray-700 whitespace-pre-wrap pr-6"
+                                                dangerouslySetInnerHTML={{
+                                                    __html:
+                                                        window.MentionHelper && comment.text
+                                                            ? window.MentionHelper.highlightMentions(comment.text)
+                                                            : (comment.text || '')
+                                                }}
+                                            />
                                             <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
                                                 <span className="font-medium">{comment.author}</span>
                                                 <span>{new Date(comment.date).toLocaleString('en-ZA', { 
