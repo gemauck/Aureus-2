@@ -314,7 +314,7 @@ const JobCards = ({ clients = [], users = [] }) => {
   }, [handleNewJobCard]);
 
   return (
-    <div className="mt-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
+    <div className="relative mt-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm overflow-hidden">
       <div className="px-4 py-4 sm:px-6 sm:py-5 border-b border-slate-200 dark:border-slate-700 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
@@ -484,9 +484,9 @@ const JobCards = ({ clients = [], users = [] }) => {
           </table>
         </div>
       )}
-      {/* In-page immersive job card viewer (within main content, not full viewport) */}
+      {/* Immersive job card viewer overlayed on this card block (within content area, not whole app shell) */}
       {showDetail && selectedJobCard && (
-        <div className="mt-4 px-4 pb-4 sm:px-6 sm:pb-6 bg-slate-950/40">
+        <div className="absolute inset-0 z-40 flex flex-col bg-slate-950/80 backdrop-blur-sm">
           {/* Top bar */}
           <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 shadow-lg">
             <div className="flex items-center gap-3">
