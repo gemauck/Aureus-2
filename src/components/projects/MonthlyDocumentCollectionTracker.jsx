@@ -26,6 +26,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const sectionsRef = useRef({});
     const lastSavedSnapshotRef = useRef('{}');
     const apiRef = useRef(window.DocumentCollectionAPI || null);
+    
+    const getSnapshotKey = (projectId) => projectId ? `documentCollectionSnapshot_${projectId}` : null;
 
     const months = [
         'January', 'February', 'March', 'April', 'May', 'June',
@@ -247,13 +249,37 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         setIsLoading(true);
         try {
-            const normalized = normalizeSectionsByYear(project.documentSections, selectedYear);
-            const yearKeys = Object.keys(normalized || {});
+            const snapshotKey = getSnapshotKey(project.id);
+            const normalizedFromProp = normalizeSectionsByYear(project.documentSections, selectedYear);
+            let normalized = normalizedFromProp;
+            
+            const yearKeys = Object.keys(normalizedFromProp || {});
             console.log('✅ Loaded sections map from project prop.', {
                 years: yearKeys,
                 selectedYear,
-                hasDataForSelectedYear: Array.isArray(normalized?.[selectedYear]) && normalized[selectedYear].length > 0
+                hasDataForSelectedYear: Array.isArray(normalizedFromProp?.[selectedYear]) && normalizedFromProp[selectedYear].length > 0
             });
+            
+            // If prop has no data but we have a local snapshot, restore from snapshot
+            if ((!normalizedFromProp || yearKeys.length === 0) && snapshotKey && window.localStorage) {
+                try {
+                    const snapshotString = window.localStorage.getItem(snapshotKey);
+                    if (snapshotString) {
+                        const snapshotParsed = JSON.parse(snapshotString);
+                        const snapshotMap = normalizeSectionsByYear(snapshotParsed, selectedYear);
+                        const snapshotYears = Object.keys(snapshotMap || {});
+                        if (snapshotYears.length > 0) {
+                            console.log('🩹 Restoring document sections from local snapshot.', {
+                                snapshotYears,
+                                selectedYear
+                            });
+                            normalized = snapshotMap;
+                        }
+                    }
+                } catch (snapshotError) {
+                    console.warn('⚠️ Failed to restore document collection snapshot from localStorage:', snapshotError);
+                }
+            }
             
             // If the currently selected year has no data but another year does, default to the first year with data
             if ((!normalized[selectedYear] || normalized[selectedYear].length === 0) && yearKeys.length > 0) {
@@ -281,10 +307,30 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         try {
             const freshProject = await apiRef.current.fetchProject(project.id);
-            const normalized = normalizeSectionsByYear(freshProject?.documentSections, selectedYear);
-            const yearKeys = Object.keys(normalized || {});
+            const snapshotKey = getSnapshotKey(project.id);
+            const normalizedFromDb = normalizeSectionsByYear(freshProject?.documentSections, selectedYear);
+            let normalized = normalizedFromDb;
+            const yearKeys = Object.keys(normalizedFromDb || {});
             const currentSnapshot = serializeSections(sectionsRef.current);
             const freshSnapshot = serializeSections(normalized);
+            
+            // If DB has no data but we have a local snapshot, treat snapshot as source of truth
+            if ((!normalizedFromDb || yearKeys.length === 0) && snapshotKey && window.localStorage) {
+                try {
+                    const snapshotString = window.localStorage.getItem(snapshotKey);
+                    if (snapshotString) {
+                        const snapshotParsed = JSON.parse(snapshotString);
+                        const snapshotMap = normalizeSectionsByYear(snapshotParsed, selectedYear);
+                        const snapshotYears = Object.keys(snapshotMap || {});
+                        if (snapshotYears.length > 0) {
+                            console.log('🩹 DB returned empty documentSections. Restoring from local snapshot and re‑applying.');
+                            normalized = snapshotMap;
+                        }
+                    }
+                } catch (snapshotError) {
+                    console.warn('⚠️ Failed to apply document collection snapshot as DB fallback:', snapshotError);
+                }
+            }
             
             // If selectedYear has no data in fresh payload but other years do, adjust selection
             if ((!normalized[selectedYear] || normalized[selectedYear].length === 0) && yearKeys.length > 0) {
@@ -400,7 +446,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 throw new Error('No available API for saving document sections');
             }
             
-            lastSavedSnapshotRef.current = serializeSections(payload);
+            const serialized = serializeSections(payload);
+            lastSavedSnapshotRef.current = serialized;
+            
+            // Persist a snapshot locally so navigation issues cannot lose user data
+            const snapshotKey = getSnapshotKey(project.id);
+            if (snapshotKey && window.localStorage) {
+                try {
+                    window.localStorage.setItem(snapshotKey, serialized);
+                    console.log('🧷 Document collection snapshot saved locally for resilience.');
+                } catch (storageError) {
+                    console.warn('⚠️ Failed to save document collection snapshot to localStorage:', storageError);
+                }
+            }
             console.log('✅ Save successful');
         } catch (error) {
             console.error('❌ Error saving to database:', error);
