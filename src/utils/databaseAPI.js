@@ -1049,6 +1049,49 @@ const DatabaseAPI = {
             method: 'DELETE'
         });
         console.log('✅ Inventory item deleted from database');
+
+        // Invalidate any cached inventory responses so deleted items
+        // don't "reappear" from the cache and then fail with 404s
+        try {
+            // Clear generic inventory cache (all locations)
+            this.clearEndpointCache('/manufacturing/inventory', 'GET');
+
+            // Also clear any per-location inventory caches
+            if (this._responseCache && typeof this._responseCache.keys === 'function') {
+                const keysToDelete = [];
+                for (const key of this._responseCache.keys()) {
+                    if (typeof key === 'string' && key.startsWith('GET:/manufacturing/inventory?locationId=')) {
+                        keysToDelete.push(key);
+                    }
+                }
+                keysToDelete.forEach(key => {
+                    this._responseCache.delete(key);
+                    console.log(`🧹 Cleared inventory cache entry: ${key}`);
+                });
+            }
+
+            // Clear any pending requests for inventory endpoints
+            if (this._pendingRequests && typeof this._pendingRequests.keys === 'function') {
+                const pendingKeysToDelete = [];
+                for (const key of this._pendingRequests.keys()) {
+                    if (
+                        typeof key === 'string' &&
+                        (key === 'GET:/manufacturing/inventory' ||
+                         key.startsWith('GET:/manufacturing/inventory?locationId='))
+                    ) {
+                        pendingKeysToDelete.push(key);
+                    }
+                }
+                pendingKeysToDelete.forEach(key => {
+                    this._pendingRequests.delete(key);
+                    console.log(`🧹 Cleared pending inventory request: ${key}`);
+                });
+            }
+        } catch (cacheError) {
+            // Never break deletion flow because of cache cleanup issues
+            console.warn('⚠️ Failed to clear inventory cache after delete:', cacheError);
+        }
+
         return response;
     },
 

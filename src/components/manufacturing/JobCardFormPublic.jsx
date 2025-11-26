@@ -838,11 +838,27 @@ const JobCardFormPublic = () => {
 
     const handleResize = () => resizeSignatureCanvas();
 
+    // Pointer events (modern browsers)
     canvas.addEventListener('pointerdown', startSignature);
     canvas.addEventListener('pointermove', drawSignature);
     canvas.addEventListener('pointerup', endSignature);
     canvas.addEventListener('pointerleave', endSignature);
     window.addEventListener('pointerup', endSignature);
+
+    // Mouse events fallback (desktop browsers without full pointer support)
+    canvas.addEventListener('mousedown', startSignature);
+    canvas.addEventListener('mousemove', drawSignature);
+    canvas.addEventListener('mouseup', endSignature);
+    canvas.addEventListener('mouseleave', endSignature);
+    window.addEventListener('mouseup', endSignature);
+
+    // Touch events fallback (older mobile browsers)
+    canvas.addEventListener('touchstart', startSignature, { passive: false });
+    canvas.addEventListener('touchmove', drawSignature, { passive: false });
+    canvas.addEventListener('touchend', endSignature);
+    canvas.addEventListener('touchcancel', endSignature);
+    window.addEventListener('touchend', endSignature);
+
     window.addEventListener('resize', handleResize);
 
     return () => {
@@ -851,6 +867,16 @@ const JobCardFormPublic = () => {
       canvas.removeEventListener('pointerup', endSignature);
       canvas.removeEventListener('pointerleave', endSignature);
       window.removeEventListener('pointerup', endSignature);
+      canvas.removeEventListener('mousedown', startSignature);
+      canvas.removeEventListener('mousemove', drawSignature);
+      canvas.removeEventListener('mouseup', endSignature);
+      canvas.removeEventListener('mouseleave', endSignature);
+      window.removeEventListener('mouseup', endSignature);
+      canvas.removeEventListener('touchstart', startSignature);
+      canvas.removeEventListener('touchmove', drawSignature);
+      canvas.removeEventListener('touchend', endSignature);
+      canvas.removeEventListener('touchcancel', endSignature);
+      window.removeEventListener('touchend', endSignature);
       window.removeEventListener('resize', handleResize);
     };
   }, [drawSignature, endSignature, resizeSignatureCanvas, startSignature]);
@@ -1059,11 +1085,6 @@ const JobCardFormPublic = () => {
       setCurrentStep(0);
       return;
     }
-    if (!hasSignature) {
-      setStepError('Customer signature is required before submitting.');
-      setCurrentStep(STEP_IDS.indexOf('signoff'));
-      return;
-    }
 
     setIsSubmitting(true);
     setStepError('');
@@ -1135,9 +1156,6 @@ const JobCardFormPublic = () => {
       case 'assignment':
         if (!formData.agentName) return 'Select the attending technician to continue.';
         if (!formData.clientId) return 'A client must be selected before moving on.';
-        return '';
-      case 'signoff':
-        if (!hasSignature) return 'Please capture the customer signature before submitting.';
         return '';
       default:
         return '';
@@ -1849,13 +1867,13 @@ const JobCardFormPublic = () => {
             <div
               ref={signatureWrapperRef}
               className={[
-                'border-2 rounded-lg overflow-hidden relative bg-white',
+                'signature-wrapper border-2 rounded-lg overflow-hidden relative bg-white',
                 hasSignature ? 'border-blue-500' : 'border-gray-300'
               ].join(' ')}
             >
               <canvas
                 ref={signatureCanvasRef}
-                className="w-full h-48 touch-none"
+                className="signature-canvas w-full h-48 touch-none"
                 style={{ touchAction: 'none', display: 'block' }}
               />
               {!hasSignature && (

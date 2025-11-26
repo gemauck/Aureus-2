@@ -316,10 +316,8 @@
     gap: 1rem !important;
   }
   
-  /* Signature field - ensure it's visible and functional */
-  body.job-card-public .signature-canvas,
-  body.job-card-public canvas[class*="signature"],
-  body.job-card-public canvas[id*="signature"] {
+  /* Signature field - ensure it's visible and functional on mobile */
+  body.job-card-public .signature-canvas {
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
@@ -343,9 +341,7 @@
     appearance: none !important;
   }
   
-  body.job-card-public .signature-wrapper,
-  body.job-card-public div[class*="signature-wrapper"],
-  body.job-card-public div[class*="signature-container"] {
+  body.job-card-public .signature-wrapper {
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;

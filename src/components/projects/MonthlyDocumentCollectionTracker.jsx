@@ -23,6 +23,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const isSavingRef = useRef(false);
     const previousProjectIdRef = useRef(project?.id);
     const hasLoadedInitialDataRef = useRef(false);
+    const sectionsRef = useRef({});
+    const lastSavedSnapshotRef = useRef('{}');
+    const apiRef = useRef(window.DocumentCollectionAPI || null);
 
     const months = [
         'January', 'February', 'March', 'April', 'May', 'June',
@@ -198,6 +201,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     const [isLoading, setIsLoading] = useState(true);
     
+    // Keep refs in sync with latest state
+    useEffect(() => {
+        sectionsRef.current = sectionsByYear;
+    }, [sectionsByYear]);
+    
+    useEffect(() => {
+        // Always prefer singleton instance created by DocumentCollectionAPI service
+        if (window.DocumentCollectionAPI) {
+            apiRef.current = window.DocumentCollectionAPI;
+        }
+    }, []);
+    
     // Templates state
     const [templates, setTemplates] = useState([]);
     const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
@@ -223,51 +238,92 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const commentPopupContainerRef = useRef(null);
     
     // ============================================================
-    // LOAD DATA FROM DATABASE ON MOUNT
+    // LOAD DATA FROM PROJECT PROP + REFRESH FROM DATABASE
     // ============================================================
-    // ⚠️ IMPORTANT: Only load on initial mount or when project ID actually changes (not on every prop update)
+    // ⚠️ IMPORTANT: Only load on initial mount or when project ID actually changes
     
-    const loadFromDatabase = async () => {
+    const loadFromProjectProp = useCallback(() => {
         if (!project?.id) return;
         
         setIsLoading(true);
         try {
-            // Normalize sections into per‑year map from project data
             const normalized = normalizeSectionsByYear(project.documentSections, selectedYear);
-            console.log('✅ Loaded sections from project (per‑year map). Years:', Object.keys(normalized));
+            const yearKeys = Object.keys(normalized || {});
+            console.log('✅ Loaded sections map from project prop.', {
+                years: yearKeys,
+                selectedYear,
+                hasDataForSelectedYear: Array.isArray(normalized?.[selectedYear]) && normalized[selectedYear].length > 0
+            });
+            
+            // If the currently selected year has no data but another year does, default to the first year with data
+            if ((!normalized[selectedYear] || normalized[selectedYear].length === 0) && yearKeys.length > 0) {
+                const fallbackYear = parseInt(yearKeys[0], 10);
+                if (!Number.isNaN(fallbackYear) && fallbackYear !== selectedYear) {
+                    console.log('🔄 Adjusting selectedYear to first year with data:', fallbackYear);
+                    setSelectedYear(fallbackYear);
+                }
+            }
+            
             setSectionsByYear(normalized);
+            lastSavedSnapshotRef.current = serializeSections(normalized);
         } catch (error) {
-            console.error('❌ Error loading sections:', error);
-            setSections([]);
+            console.error('❌ Error loading sections from prop:', error);
+            setSectionsByYear({});
+            lastSavedSnapshotRef.current = '{}';
         } finally {
-            setIsLoading(false);
             hasLoadedInitialDataRef.current = true;
+            setIsLoading(false);
         }
-    };
+    }, [project?.documentSections, project?.id, selectedYear]);
+    
+    const refreshFromDatabase = useCallback(async () => {
+        if (!project?.id || !apiRef.current) return;
+        
+        try {
+            const freshProject = await apiRef.current.fetchProject(project.id);
+            const normalized = normalizeSectionsByYear(freshProject?.documentSections, selectedYear);
+            const yearKeys = Object.keys(normalized || {});
+            const currentSnapshot = serializeSections(sectionsRef.current);
+            const freshSnapshot = serializeSections(normalized);
+            
+            // If selectedYear has no data in fresh payload but other years do, adjust selection
+            if ((!normalized[selectedYear] || normalized[selectedYear].length === 0) && yearKeys.length > 0) {
+                const fallbackYear = parseInt(yearKeys[0], 10);
+                if (!Number.isNaN(fallbackYear) && fallbackYear !== selectedYear) {
+                    console.log('🔄 Adjusting selectedYear (from fresh DB) to first year with data:', fallbackYear);
+                    setSelectedYear(fallbackYear);
+                }
+            }
+            
+            if (freshSnapshot !== currentSnapshot) {
+                console.log('🔄 Updating sections map from fresh database data. Years:', yearKeys);
+                setSectionsByYear(normalized);
+                lastSavedSnapshotRef.current = freshSnapshot;
+            }
+        } catch (error) {
+            console.error('❌ Error fetching fresh project data:', error);
+        }
+    }, [project?.id, selectedYear]);
     
     useEffect(() => {
         if (!project?.id) return;
         
-        // Check if this is a new project (project ID actually changed)
         const isNewProject = previousProjectIdRef.current !== project.id;
-        
-        // Reset initial load flag when project ID changes
         if (isNewProject) {
-            hasLoadedInitialDataRef.current = false;
             previousProjectIdRef.current = project.id;
+            hasLoadedInitialDataRef.current = false;
         }
         
-        // Only load data if:
-        // 1. This is the initial load (hasn't loaded data yet)
-        // 2. OR this is a new project (project ID changed)
-        if (!isNewProject && hasLoadedInitialDataRef.current) {
-            // Already loaded data for this project, don't reload
-            return;
+        const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
+        if (isNewProject || !hasUnsavedChanges) {
+            console.log('📋 Loading document sections from prop for project:', project.id);
+            loadFromProjectProp();
+        } else {
+            console.log('⏸️ Skipping prop load due to unsaved changes');
         }
         
-        console.log('📋 MonthlyDocumentCollectionTracker: Loading data from database');
-        loadFromDatabase();
-    }, [project?.id, selectedYear]); // Also depend on selectedYear for legacy conversion
+        refreshFromDatabase();
+    }, [project?.id, project?.documentSections, loadFromProjectProp, refreshFromDatabase]);
     
     // ============================================================
     // SIMPLE AUTO-SAVE - Debounced, saves entire state
@@ -284,11 +340,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // Using a function declaration avoids that temporal‑dead‑zone issue while
     // remaining safe because mutable state lives in refs and React state.
     useEffect(() => {
-        // Don't save while loading initial data
-        if (isLoading) return;
-        
-        // Don't save if no sections map (initial state)
-        if ((!sectionsByYear || Object.keys(sectionsByYear).length === 0) && !project?.documentSections) return;
+        if (isLoading || !project?.id) return;
         
         // Clear any pending save
         if (saveTimeoutRef.current) {
@@ -305,57 +357,92 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 clearTimeout(saveTimeoutRef.current);
             }
         };
-    }, [sections, isLoading]);
+    }, [sectionsByYear, isLoading, project?.id]);
     
-    async function saveToDatabase() {
+    async function saveToDatabase(options = {}) {
         if (isSavingRef.current) {
             console.log('⏭️ Save already in progress, skipping');
             return;
         }
-        
         if (!project?.id) {
             console.warn('⚠️ Cannot save: No project ID');
             return;
         }
-        
         if (isLoading) {
             console.log('⏭️ Still loading data, skipping save');
             return;
         }
         
+        const payload = sectionsRef.current || {};
+        
         // Guard against wiping data with an all‑empty payload
-        const hasAnySections = Object.values(sectionsByYear || {}).some(
+        const hasAnySections = Object.values(payload || {}).some(
             (yearSections) => Array.isArray(yearSections) && yearSections.length > 0
         );
         if (!hasAnySections) {
-            console.log('⏭️ Skipping save: sectionsByYear is empty for all years – avoiding overwrite');
+            console.log('⏭️ Skipping save: sections payload is empty for all years – avoiding overwrite');
             return;
         }
         
         isSavingRef.current = true;
         
         try {
-            console.log('💾 Saving sections map to database. Years:', Object.keys(sectionsByYear));
+            console.log('💾 Saving sections map to database. Years:', Object.keys(payload));
             
-            if (!window.DatabaseAPI || typeof window.DatabaseAPI.updateProject !== 'function') {
-                throw new Error('DatabaseAPI.updateProject is not available');
+            if (apiRef.current && typeof apiRef.current.saveDocumentSections === 'function') {
+                await apiRef.current.saveDocumentSections(project.id, payload, options.skipParentUpdate);
+            } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
+                const updatePayload = {
+                    documentSections: serializeSections(payload)
+                };
+                await window.DatabaseAPI.updateProject(project.id, updatePayload);
+            } else {
+                throw new Error('No available API for saving document sections');
             }
             
-            const updatePayload = {
-                documentSections: serializeSections(sectionsByYear)
-            };
-            
-            await window.DatabaseAPI.updateProject(project.id, updatePayload);
+            lastSavedSnapshotRef.current = serializeSections(payload);
             console.log('✅ Save successful');
-            
         } catch (error) {
             console.error('❌ Error saving to database:', error);
-            // Don't throw - allow user to continue working
-            // The auto-save will retry on next change
+            // Don't throw - allow user to continue working; auto‑save will retry on next change
         } finally {
             isSavingRef.current = false;
         }
     };
+    
+    // Save pending changes on hard refresh / tab close
+    useEffect(() => {
+        if (!project?.id) return;
+        
+        const handleBeforeUnload = (event) => {
+            const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
+            if (hasUnsavedChanges && !isSavingRef.current) {
+                // Fire-and-forget save; we can't await during beforeunload
+                saveToDatabase({ skipParentUpdate: true });
+                event.preventDefault();
+                event.returnValue = '';
+            }
+        };
+        
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
+    }, [project?.id]);
+
+    // Ensure pending changes are saved when the component unmounts (e.g. user navigates away)
+    useEffect(() => {
+        if (!project?.id) return;
+
+        return () => {
+            const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
+            if (hasUnsavedChanges && !isSavingRef.current) {
+                console.log('💾 Component unmount: flushing pending document collection changes to database');
+                // Fire-and-forget save on unmount; parent update is optional here
+                saveToDatabase({ skipParentUpdate: true });
+            }
+        };
+    }, [project?.id]);
     
     // ============================================================
     // TEMPLATE MANAGEMENT - Database storage only

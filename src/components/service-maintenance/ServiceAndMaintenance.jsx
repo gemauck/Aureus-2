@@ -89,6 +89,18 @@ const ServiceAndMaintenance = () => {
   };
 
   const handleOpenClassic = () => {
+    try {
+      // Prefer scrolling to the classic Job Cards manager section on this page
+      const classicSection = document.querySelector('[data-section="jobcards-classic-manager"]');
+      if (classicSection) {
+        classicSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        return;
+      }
+    } catch (error) {
+      console.warn('ServiceAndMaintenance: Failed to scroll to classic manager section', error);
+    }
+
+    // Fallback: keep legacy behaviour of navigating to the Service & Maintenance page
     const mainNav = document.querySelector('[data-navigation-target="service-maintenance"]');
     if (mainNav) {
       mainNav.click();
@@ -239,19 +251,21 @@ const ServiceAndMaintenance = () => {
         </div>
       </div>
 
-      {jobCardsReady && window.JobCards ? (
-        <window.JobCards
-          clients={clients}
-          users={users}
-        />
-      ) : (
-        <div className="mt-6 flex items-center justify-center">
-          <div className="text-center text-sm text-gray-500">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-500 mx-auto mb-3" />
-            <p>Job cards module is still loading. You can continue to use the mobile form in the meantime.</p>
+      <div className="mt-6" data-section="jobcards-classic-manager">
+        {jobCardsReady && window.JobCards ? (
+          <window.JobCards
+            clients={clients}
+            users={users}
+          />
+        ) : (
+          <div className="flex items-center justify-center">
+            <div className="text-center text-sm text-gray-500">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-500 mx-auto mb-3" />
+              <p>Job cards module is still loading. You can continue to use the mobile form in the meantime.</p>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
