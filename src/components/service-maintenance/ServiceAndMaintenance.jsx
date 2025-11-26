@@ -90,7 +90,13 @@ const ServiceAndMaintenance = () => {
 
   const handleOpenClassic = () => {
     try {
-      // Prefer scrolling to the classic Job Cards manager section on this page
+      // If the JobCards manager is available, ask it to open the classic manager UI
+      if (window.JobCards && typeof window.JobCards.openNewJobCardModal === 'function') {
+        window.JobCards.openNewJobCardModal();
+        return;
+      }
+
+      // Fallback: scroll to the classic Job Cards manager section on this page
       const classicSection = document.querySelector('[data-section="jobcards-classic-manager"]');
       if (classicSection) {
         classicSection.scrollIntoView({ behavior: 'smooth', block: 'start' });

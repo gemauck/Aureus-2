@@ -30,6 +30,8 @@ const JobCards = ({ clients = [], users = [] }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingJobCard, setEditingJobCard] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [selectedJobCard, setSelectedJobCard] = useState(null);
+  const [showDetail, setShowDetail] = useState(false);
 
   const reloadJobCards = async () => {
     let cancelled = false;
@@ -181,8 +183,8 @@ const JobCards = ({ clients = [], users = [] }) => {
   };
 
   const handleRowClick = (jobCard) => {
-    setEditingJobCard(jobCard);
-    setIsModalOpen(true);
+    setSelectedJobCard(jobCard);
+    setShowDetail(true);
   };
 
   const handleNewJobCard = () => {
@@ -366,6 +368,206 @@ const JobCards = ({ clients = [], users = [] }) => {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+      {/* Full-page style detail viewer for a single job card */}
+      {showDetail && selectedJobCard && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
+          <div className="relative flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-slate-900">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-700">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                  Job Card {selectedJobCard.jobCardNumber || ''}
+                </h3>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {selectedJobCard.clientName || 'Unknown client'} •{' '}
+                  {selectedJobCard.agentName || 'Unknown technician'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingJobCard(selectedJobCard);
+                    setIsModalOpen(true);
+                  }}
+                  className="inline-flex items-center rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700"
+                >
+                  <i className="fa-solid fa-pen text-[11px] mr-1" />
+                  Edit job card
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDetail(false);
+                    setSelectedJobCard(null);
+                  }}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                >
+                  <i className="fa-solid fa-xmark text-sm" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 text-xs">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <div>
+                    <div className="font-semibold text-slate-700 dark:text-slate-200">
+                      Client & Site
+                    </div>
+                    <div className="mt-1 text-slate-700 dark:text-slate-300">
+                      {selectedJobCard.clientName || '–'}
+                      {selectedJobCard.siteName ? ` • ${selectedJobCard.siteName}` : ''}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-slate-700 dark:text-slate-200">
+                      Location
+                    </div>
+                    <div className="mt-1 text-slate-700 dark:text-slate-300">
+                      {selectedJobCard.location || '–'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-slate-700 dark:text-slate-200">
+                      Status & Technician
+                    </div>
+                    <div className="mt-1 text-slate-700 dark:text-slate-300">
+                      {(selectedJobCard.status || 'draft').toString().toUpperCase()}
+                      {' • '}
+                      {selectedJobCard.agentName || '–'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div>
+                    <div className="font-semibold text-slate-700 dark:text-slate-200">
+                      Timing
+                    </div>
+                    <div className="mt-1 text-slate-700 dark:text-slate-300">
+                      {selectedJobCard.timeOfDeparture
+                        ? `Departure: ${formatDate(selectedJobCard.timeOfDeparture)}`
+                        : 'Departure: –'}
+                      <br />
+                      {selectedJobCard.timeOfArrival
+                        ? `Arrival: ${formatDate(selectedJobCard.timeOfArrival)}`
+                        : 'Arrival: –'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-slate-700 dark:text-slate-200">
+                      Travel
+                    </div>
+                    <div className="mt-1 text-slate-700 dark:text-slate-300">
+                      {typeof selectedJobCard.travelKilometers === 'number'
+                        ? `${selectedJobCard.travelKilometers} km`
+                        : '–'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-slate-700 dark:text-slate-200">
+                      Created
+                    </div>
+                    <div className="mt-1 text-slate-700 dark:text-slate-300">
+                      {formatDate(selectedJobCard.createdAt)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-3">
+                  <div>
+                    <div className="font-semibold text-slate-700 dark:text-slate-200">
+                      Reason for Visit
+                    </div>
+                    <div className="mt-1 whitespace-pre-line rounded-lg bg-slate-50 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      {selectedJobCard.reasonForVisit || 'No reason captured.'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-slate-700 dark:text-slate-200">
+                      Diagnosis
+                    </div>
+                    <div className="mt-1 whitespace-pre-line rounded-lg bg-slate-50 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      {selectedJobCard.diagnosis || 'No diagnosis captured.'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-slate-700 dark:text-slate-200">
+                      Actions Taken
+                    </div>
+                    <div className="mt-1 whitespace-pre-line rounded-lg bg-slate-50 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      {selectedJobCard.actionsTaken || 'No actions captured.'}
+                    </div>
+                  </div>
+                  {selectedJobCard.otherComments ? (
+                    <div>
+                      <div className="font-semibold text-slate-700 dark:text-slate-200">
+                        Additional Comments
+                      </div>
+                      <div className="mt-1 whitespace-pre-line rounded-lg bg-slate-50 p-2 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                        {selectedJobCard.otherComments}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <div className="font-semibold text-slate-700 dark:text-slate-200">
+                      Location Map
+                    </div>
+                    <div className="mt-1 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800 aspect-video">
+                      {selectedJobCard.locationLatitude && selectedJobCard.locationLongitude ? (
+                        <iframe
+                          title="Job card location"
+                          className="h-full w-full border-0"
+                          src={`https://www.google.com/maps?q=${encodeURIComponent(
+                            `${selectedJobCard.locationLatitude},${selectedJobCard.locationLongitude}`
+                          )}&z=15&output=embed`}
+                          loading="lazy"
+                          referrerPolicy="no-referrer-when-downgrade"
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center text-[11px] text-slate-500 dark:text-slate-400 px-3 text-center">
+                          No GPS coordinates captured for this job card.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="font-semibold text-slate-700 dark:text-slate-200">
+                      Photos
+                    </div>
+                    <div className="mt-1 grid grid-cols-3 gap-2">
+                      {Array.isArray(selectedJobCard.photos) && selectedJobCard.photos.length > 0 ? (
+                        selectedJobCard.photos.map((photo, idx) => (
+                          <div
+                            key={idx}
+                            className="relative h-24 overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800"
+                          >
+                            <img
+                              src={typeof photo === 'string' ? photo : photo.url}
+                              alt={`Job card photo ${idx + 1}`}
+                              className="h-full w-full object-cover"
+                            />
+                          </div>
+                        ))
+                      ) : (
+                        <div className="col-span-3 text-[11px] text-slate-500 dark:text-slate-400">
+                          No photos attached to this job card.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
       {/* Classic manager modal for creating / editing job cards */}
