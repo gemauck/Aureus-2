@@ -38,7 +38,8 @@
     "android:sync": "npx cap sync android",
     "android:open": "npx cap open android",
     "android:build": "npm run build && npm run android:sync",
-    "android:run": "npm run android:build && npx cap run android"
+    "android:run": "npm run android:build && npx cap run android",
+    "deploy": "ssh doadmin@165.22.127.196 'cd /var/www/abcotronics-erp-modular && ./deploy.sh'"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",

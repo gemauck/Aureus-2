@@ -158,25 +158,70 @@ const App = () => {
     
     // If public job card page, render it directly without providers (no auth needed)
     const isPublicJobCardPage = pathname === '/job-card' || pathname === '/jobcard';
-    if (isPublicJobCardPage) {
-        // Wait for component to load if not available yet
-        if (window.JobCardFormPublic) {
-            return (
-                <window.ThemeProvider>
-                    <window.JobCardFormPublic />
-                </window.ThemeProvider>
-            );
+
+    // Track readiness of the public job card component so we can
+    // re-render when it becomes available on window.JobCardFormPublic.
+    const [publicJobCardReady, setPublicJobCardReady] = window.React.useState(
+        !!(window.JobCardFormPublic && typeof window.JobCardFormPublic === 'function')
+    );
+
+    window.React.useEffect(() => {
+        if (!isPublicJobCardPage || publicJobCardReady) {
+            return;
         }
-        // Show loading state while component loads
+
+        const checkReady = () => {
+            if (window.JobCardFormPublic && typeof window.JobCardFormPublic === 'function') {
+                setPublicJobCardReady(true);
+                return true;
+            }
+            return false;
+        };
+
+        // Initial synchronous check
+        if (checkReady()) {
+            return;
+        }
+
+        // Listen for explicit ready event from component
+        const handleReadyEvent = () => {
+            if (checkReady()) {
+                window.removeEventListener('jobCardFormPublicReady', handleReadyEvent);
+            }
+        };
+        window.addEventListener('jobCardFormPublicReady', handleReadyEvent);
+
+        // Poll as a fallback in case event is missed
+        let attempts = 0;
+        const maxAttempts = 100; // 10 seconds
+        const interval = setInterval(() => {
+            attempts += 1;
+            if (checkReady() || attempts >= maxAttempts) {
+                clearInterval(interval);
+                window.removeEventListener('jobCardFormPublicReady', handleReadyEvent);
+            }
+        }, 100);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('jobCardFormPublicReady', handleReadyEvent);
+        };
+    }, [isPublicJobCardPage, publicJobCardReady]);
+
+    if (isPublicJobCardPage) {
         return (
             <window.ThemeProvider>
-                <div className="min-h-screen flex items-center justify-center bg-gray-50">
-                    <div className="text-center">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                        <p className="text-gray-600">Loading job card form...</p>
-                        <p className="text-xs text-gray-500 mt-2">If this doesn't load, check browser console</p>
+                {window.JobCardFormPublic && publicJobCardReady ? (
+                    <window.JobCardFormPublic />
+                ) : (
+                    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                        <div className="text-center">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                            <p className="text-gray-600">Loading job card form...</p>
+                            <p className="text-xs text-gray-500 mt-2">If this doesn't load, check browser console</p>
+                        </div>
                     </div>
-                </div>
+                )}
             </window.ThemeProvider>
         );
     }
