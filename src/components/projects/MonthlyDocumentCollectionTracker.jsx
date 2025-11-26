@@ -172,6 +172,30 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     // Main data state - loaded from database, stored per year
     const [sectionsByYear, setSectionsByYear] = useState({});
+    
+    // View model for the currently selected year only
+    // This ensures that edits (adding sections, documents, comments, etc.)
+    // are scoped to a single year instead of affecting every year.
+    const sections = React.useMemo(
+        () => sectionsByYear[selectedYear] || [],
+        [sectionsByYear, selectedYear]
+    );
+
+    // Year‑scoped setter: only updates the array for the active year
+    const setSections = (updater) => {
+        setSectionsByYear(prev => {
+            const prevForYear = prev[selectedYear] || [];
+            const nextForYear = typeof updater === 'function'
+                ? updater(prevForYear)
+                : (updater || []);
+            
+            return {
+                ...prev,
+                [selectedYear]: nextForYear
+            };
+        });
+    };
+
     const [isLoading, setIsLoading] = useState(true);
     
     // Templates state
