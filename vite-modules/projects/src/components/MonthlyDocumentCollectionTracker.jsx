@@ -39,7 +39,7 @@ const parseSections = (data) => {
                     }
                     return [];
                 } catch (parseError) {
-                    if (cleaned.startsWith('"") && cleaned.endsWith('"')) {
+                    if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
                         cleaned = cleaned.slice(1, -1);
                     }
                     cleaned = cleaned.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
@@ -456,7 +456,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 sections: templateData.sections || []
             };
             
-            if (editingTemplate) {
+            const isEditingExisting = !!(editingTemplate && editingTemplate.id);
+            
+            if (isEditingExisting) {
                 await apiRef.current.updateTemplate(editingTemplate.id, payload);
                 console.log('✅ Template updated via API');
             } else {

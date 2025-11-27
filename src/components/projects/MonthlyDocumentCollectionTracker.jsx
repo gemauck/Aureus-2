@@ -236,6 +236,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     // Templates state
     const [templates, setTemplates] = useState([]);
+
+    const getTemplateDisplayName = (template) => {
+        if (!template) return '';
+        const EXXARO_DEFAULT_NAME = 'Exxaro Grootegeluk document collection checklist for 2025';
+        if (template.name === EXXARO_DEFAULT_NAME || template.isDefault) {
+            return 'Default Checklist';
+        }
+        return template.name;
+    };
     const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
     
     // UI state
@@ -567,6 +576,19 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
     }, [showTemplateModal, showApplyTemplateModal]);
     
+    // Build a lightweight template snapshot from the current year's sections,
+    // stripping out runtime-only fields like collectionStatus/comments.
+    const buildTemplateSectionsFromCurrent = () => {
+        return (sections || []).map(section => ({
+            name: section.name,
+            description: section.description || '',
+            documents: (section.documents || []).map(doc => ({
+                name: doc.name,
+                description: doc.description || ''
+            }))
+        }));
+    };
+    
     const saveTemplate = async (templateData) => {
         try {
             const token = window.storage?.getToken?.();
@@ -576,7 +598,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
             const currentUser = getCurrentUser();
             
-            if (editingTemplate) {
+            const isEditingExisting = !!(editingTemplate && editingTemplate.id);
+            
+            if (isEditingExisting) {
                 // Update existing template in database
                 const response = await fetch(`/api/document-collection-templates/${editingTemplate.id}`, {
                     method: 'PUT',
@@ -1639,7 +1663,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         <div key={template.id} className="border border-gray-200 rounded-lg p-3 bg-gray-50 hover:bg-gray-100">
                                             <div className="flex justify-between items-start">
                                                 <div className="flex-1">
-                                                    <h3 className="text-sm font-semibold text-gray-900 mb-1">{template.name}</h3>
+                                                    <h3 className="text-sm font-semibold text-gray-900 mb-1">
+                                                        {getTemplateDisplayName(template)}
+                                                    </h3>
                                                     {template.description && (
                                                         <p className="text-xs text-gray-600 mb-2">{template.description}</p>
                                                     )}
@@ -1932,7 +1958,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         <option value="">-- Select a template --</option>
                                         {templates.map(template => (
                                             <option key={template.id} value={template.id}>
-                                                {template.name} ({Array.isArray(template.sections) ? template.sections.length : 0} sections)
+                                                {getTemplateDisplayName(template)} ({Array.isArray(template.sections) ? template.sections.length : 0} sections)
                                             </option>
                                         ))}
                                     </select>
@@ -2183,14 +2209,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     if (!name || !name.trim()) {
                                         return;
                                     }
-                                    // Use current year’s sections as the template body, but route
-                                    // through the "create" flow (prefilledTemplate) so we POST
-                                    // a brand‑new template instead of trying to update an existing one.
+                                    // Build a clean template payload from the current year's sections
+                                    // (names/descriptions only, no status/comments) and route it
+                                    // through the "create" flow so we POST a brand‑new template.
                                     setEditingTemplate(null);
                                     setPrefilledTemplate({
                                         name: name.trim(),
                                         description: `Saved from ${project?.name || 'project'} - year ${selectedYear}`,
-                                        sections: cloneSectionsArray(sections)
+                                        sections: buildTemplateSectionsFromCurrent()
                                     });
                                     setShowTemplateList(false);
                                     setShowTemplateModal(true);
