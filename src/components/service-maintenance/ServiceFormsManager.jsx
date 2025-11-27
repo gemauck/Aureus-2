@@ -74,9 +74,13 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
         }
         const data = await res.json();
         if (!cancelled) {
-          setTemplates(
-            Array.isArray(data.templates) ? data.templates.filter(Boolean) : []
-          );
+          const templatesPayload = Array.isArray(data.templates)
+            ? data.templates
+            : Array.isArray(data.data?.templates)
+            ? data.data.templates
+            : [];
+
+          setTemplates(templatesPayload.filter(Boolean));
         }
       } catch (error) {
         console.error('ServiceFormsManager: Error loading templates', error);
@@ -233,7 +237,9 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
       }
 
       const data = await res.json();
-      const saved = data && data.template;
+      const saved =
+        (data && data.template) ||
+        (data && data.data && (data.data.template || data.data));
 
       if (!saved || !saved.id) {
         console.error(
@@ -253,14 +259,19 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
           });
           if (reloadRes.ok) {
             const reloadData = await reloadRes.json();
-            setTemplates(
-              Array.isArray(reloadData.templates)
-                ? reloadData.templates.filter(Boolean)
-                : []
-            );
+            const templatesPayload = Array.isArray(reloadData.templates)
+              ? reloadData.templates
+              : Array.isArray(reloadData.data?.templates)
+              ? reloadData.data.templates
+              : [];
+
+            setTemplates(templatesPayload.filter(Boolean));
           }
         } catch (reloadError) {
-          console.error('ServiceFormsManager: Failed to reload templates after save', reloadError);
+          console.error(
+            'ServiceFormsManager: Failed to reload templates after save',
+            reloadError
+          );
         }
         // Keep the current editor state; don't attempt to open a non-existent template.
         return;
