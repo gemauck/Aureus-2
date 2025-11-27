@@ -43,7 +43,7 @@ async function handler(req, res) {
     const stockUsed = parseJson(body.stockUsed, [])
     const materialsBought = parseJson(body.materialsBought, [])
     const photos = parseJson(body.photos, [])
-    const checklists = parseJson(body.checklists, [])
+    const serviceForms = parseJson(body.serviceForms, [])
     
     const kmBefore = parseFloat(body.kmReadingBefore) || 0
     const kmAfter = parseFloat(body.kmReadingAfter) || 0
@@ -52,28 +52,6 @@ async function handler(req, res) {
     const totalMaterialsCost = materialsBought && materialsBought.length > 0
       ? materialsBought.reduce((sum, item) => sum + (parseFloat(item.cost) || 0), 0)
       : parseFloat(body.totalMaterialsCost) || 0
-
-    // Render checklists into a readable text block that can be stored with the job card
-    const checklistLines =
-      Array.isArray(checklists) && checklists.length > 0
-        ? [
-            '--- Checklists ---',
-            ...checklists.flatMap((cl) => {
-              const title = (cl && cl.title) || 'Checklist'
-              const items = Array.isArray(cl?.items) ? cl.items : []
-              const itemLines =
-                items.length > 0
-                  ? items.map((item) => {
-                      const label = (item && item.label) || 'Item'
-                      const done = !!(item && (item.done || item.checked))
-                      const status = done ? '[x]' : '[ ]'
-                      return `  ${status} ${label}`
-                    })
-                  : ['  [ ] (no items captured)']
-              return [`* ${title}`, ...itemLines]
-            }),
-          ]
-        : []
 
     // Create job card
     const jobCard = await prisma.jobCard.create({
@@ -108,7 +86,6 @@ async function handler(req, res) {
           body.customerPosition ? `Position: ${body.customerPosition}` : '',
           body.customerFeedback ? `Feedback: ${body.customerFeedback}` : '',
           body.customerSignature ? `Signature: [Captured]` : '',
-          ...checklistLines,
         ]
           .filter(Boolean)
           .join('\n'),
@@ -119,6 +96,48 @@ async function handler(req, res) {
     })
     
     console.log(`✅ Public job card endpoint: Created job card ${jobCard.id} (${jobCardNumber})`)
+
+    // Create service form instances if provided
+    if (serviceForms.length > 0) {
+      try {
+        for (const formData of serviceForms) {
+          if (!formData.templateId) continue
+
+          // Verify template exists
+          const template = await prisma.serviceFormTemplate.findUnique({
+            where: { id: formData.templateId }
+          })
+
+          if (!template) {
+            console.warn(`⚠️ Template ${formData.templateId} not found, skipping form instance`)
+            continue
+          }
+
+          // Convert answers object to array format
+          const answersArray = Object.entries(formData.answers || {}).map(([fieldId, value]) => ({
+            fieldId,
+            value: String(value || '')
+          }))
+
+          await prisma.serviceFormInstance.create({
+            data: {
+              jobCardId: jobCard.id,
+              templateId: formData.templateId,
+              templateName: formData.templateName || template.name,
+              templateVersion: formData.templateVersion || template.version || 1,
+              status: 'completed', // Mark as completed since it was submitted with the job card
+              answers: JSON.stringify(answersArray),
+              completedAt: new Date()
+            }
+          })
+
+          console.log(`✅ Created service form instance for template ${formData.templateId}`)
+        }
+      } catch (formError) {
+        // Log but don't fail the job card creation if form instances fail
+        console.error('⚠️ Error creating service form instances:', formError)
+      }
+    }
     
     return created(res, { 
       jobCard: {

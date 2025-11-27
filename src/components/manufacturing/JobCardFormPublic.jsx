@@ -109,9 +109,9 @@ const JobCardFormPublic = () => {
     stockUsed: [],
     materialsBought: [],
     photos: [],
-    // Simple, local checklists that become part of the wizard payload
-    // [{ id, title, items: [{ id, label, done }] }]
-    checklists: [],
+    // Service form instances attached to this job card
+    // [{ id, templateId, templateName, answers: { fieldId: value } }]
+    serviceForms: [],
     status: 'draft',
     customerName: '',
     customerTitle: '',
@@ -136,8 +136,10 @@ const JobCardFormPublic = () => {
   const [stepError, setStepError] = useState('');
   const [hasSignature, setHasSignature] = useState(false);
   const [shareStatus, setShareStatus] = useState('Copy share link');
-  // Inline checklist builder state for the Work Notes step
-  const [activeChecklistId, setActiveChecklistId] = useState(null);
+  // Service form templates and selection state
+  const [formTemplates, setFormTemplates] = useState([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
 
   const signatureCanvasRef = useRef(null);
   const signatureWrapperRef = useRef(null);
@@ -984,111 +986,128 @@ const JobCardFormPublic = () => {
     }));
   };
 
-  // --- Work step checklists -------------------------------------------------
+  // --- Service form templates loading ----------------------------------------
 
-  const ensureChecklistArray = (prev) => Array.isArray(prev.checklists) ? prev.checklists : [];
+  useEffect(() => {
+    let cancelled = false;
 
-  const handleAddChecklist = () => {
-    const id = `cl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const loadTemplates = async () => {
+      if (!isOnline) {
+        // Try to load from cache if offline
+        const cached = JSON.parse(localStorage.getItem('service_form_templates') || '[]');
+        if (cached.length > 0) {
+          setFormTemplates(cached);
+        }
+        return;
+      }
+
+      try {
+        setLoadingTemplates(true);
+        const response = await fetch('/api/public/service-forms', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          console.warn('⚠️ JobCardFormPublic: Failed to load form templates', response.status);
+          // Try cache as fallback
+          const cached = JSON.parse(localStorage.getItem('service_form_templates') || '[]');
+          if (cached.length > 0 && !cancelled) {
+            setFormTemplates(cached);
+          }
+          return;
+        }
+
+        const data = await response.json();
+        const templates = Array.isArray(data.templates) ? data.templates : [];
+        
+        if (!cancelled) {
+          setFormTemplates(templates);
+          // Cache for offline use
+          localStorage.setItem('service_form_templates', JSON.stringify(templates));
+        }
+      } catch (error) {
+        console.warn('⚠️ JobCardFormPublic: Error loading form templates:', error);
+        // Try cache as fallback
+        const cached = JSON.parse(localStorage.getItem('service_form_templates') || '[]');
+        if (cached.length > 0 && !cancelled) {
+          setFormTemplates(cached);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingTemplates(false);
+        }
+      }
+    };
+
+    loadTemplates();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOnline]);
+
+  // --- Service form instance handlers ----------------------------------------
+
+  const ensureServiceFormsArray = (prev) => Array.isArray(prev.serviceForms) ? prev.serviceForms : [];
+
+  const handleAddForm = (templateId) => {
+    const template = formTemplates.find(t => t.id === templateId);
+    if (!template) return;
+
+    const formId = `form_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     setFormData(prev => {
-      const existing = ensureChecklistArray(prev);
+      const existing = ensureServiceFormsArray(prev);
+      // Check if this template is already added
+      if (existing.some(f => f.templateId === templateId)) {
+        alert('This form is already added to the job card.');
+        return prev;
+      }
       return {
         ...prev,
-        checklists: [
+        serviceForms: [
           ...existing,
           {
-            id,
-            title: '',
-            items: [
-              {
-                id: `${id}_item_1`,
-                label: '',
-                done: false
-              }
-            ]
+            id: formId,
+            templateId: template.id,
+            templateName: template.name,
+            templateVersion: template.version || 1,
+            answers: {}
           }
         ]
       };
     });
-    setActiveChecklistId(id);
+    setShowTemplateModal(false);
   };
 
-  const handleRemoveChecklist = (checklistId) => {
+  const handleRemoveForm = (formId) => {
     setFormData(prev => ({
       ...prev,
-      checklists: ensureChecklistArray(prev).filter(cl => cl.id !== checklistId)
-    }));
-    if (activeChecklistId === checklistId) {
-      setActiveChecklistId(null);
-    }
-  };
-
-  const handleChecklistTitleChange = (checklistId, title) => {
-    setFormData(prev => ({
-      ...prev,
-      checklists: ensureChecklistArray(prev).map(cl =>
-        cl.id === checklistId ? { ...cl, title } : cl
-      )
+      serviceForms: ensureServiceFormsArray(prev).filter(f => f.id !== formId)
     }));
   };
 
-  const handleAddChecklistItemRow = (checklistId) => {
-    setFormData(prev => ({
-      ...prev,
-      checklists: ensureChecklistArray(prev).map(cl => {
-        if (cl.id !== checklistId) return cl;
-        const baseItems = Array.isArray(cl.items) ? cl.items : [];
-        const newItemId = `${checklistId}_item_${baseItems.length + 1}_${Math.random()
-          .toString(36)
-          .slice(2, 5)}`;
-        return {
-          ...cl,
-          items: [
-            ...baseItems,
-            {
-              id: newItemId,
-              label: '',
-              done: false
+  const handleFormAnswerChange = (formId, fieldId, value) => {
+    setFormData(prev => {
+      const existing = ensureServiceFormsArray(prev);
+      return {
+        ...prev,
+        serviceForms: existing.map(f => {
+          if (f.id !== formId) return f;
+          return {
+            ...f,
+            answers: {
+              ...(f.answers || {}),
+              [fieldId]: value
             }
-          ]
-        };
-      })
-    }));
+          };
+        })
+      };
+    });
   };
 
-  const handleChecklistItemChange = (checklistId, itemId, changes) => {
-    setFormData(prev => ({
-      ...prev,
-      checklists: ensureChecklistArray(prev).map(cl => {
-        if (cl.id !== checklistId) return cl;
-        const baseItems = Array.isArray(cl.items) ? cl.items : [];
-        return {
-          ...cl,
-          items: baseItems.map(item =>
-            item.id === itemId ? { ...item, ...changes } : item
-          )
-        };
-      })
-    }));
-  };
-
-  const handleRemoveChecklistItemRow = (checklistId, itemId) => {
-    setFormData(prev => ({
-      ...prev,
-      checklists: ensureChecklistArray(prev).map(cl => {
-        if (cl.id !== checklistId) return cl;
-        const baseItems = Array.isArray(cl.items) ? cl.items : [];
-        return {
-          ...cl,
-          items: baseItems.filter(item => item.id !== itemId)
-        };
-      })
-    }));
-  };
-
-  const handleToggleChecklistItem = (checklistId, itemId, done) => {
-    handleChecklistItemChange(checklistId, itemId, { done });
-  };
 
   const persistStockMovement = async (movementData) => {
             const cachedMovements = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
@@ -1160,8 +1179,8 @@ const JobCardFormPublic = () => {
         stockUsed: [],
         materialsBought: [],
         photos: [],
-        // Reset local checklists
-        checklists: [],
+        // Reset service forms
+        serviceForms: [],
         status: 'draft',
         customerName: '',
         customerTitle: '',
@@ -1669,15 +1688,14 @@ const JobCardFormPublic = () => {
           <div className="flex flex-col items-end gap-2">
             <button
               type="button"
-              onClick={handleAddChecklist}
+              onClick={() => setShowTemplateModal(true)}
               className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500"
             >
               <i className="fa-solid fa-list-check text-xs" />
               <span>Add a Checklist</span>
             </button>
             <p className="text-[11px] text-gray-400 max-w-xs text-right">
-              Create a quick checklist for this job so you can tick items off while
-              completing the work.
+              Select a form template created by your admin to complete as part of this job.
             </p>
           </div>
         </header>
@@ -1708,117 +1726,191 @@ const JobCardFormPublic = () => {
         />
       </section>
 
-      {/* Inline checklists for this job card */}
-      {Array.isArray(formData.checklists) && formData.checklists.length > 0 && (
+      {/* Service forms attached to this job card */}
+      {Array.isArray(formData.serviceForms) && formData.serviceForms.length > 0 && (
         <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
-          <header className="mb-3">
+          <header className="mb-4">
             <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
               <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-50 text-blue-600">
                 <i className="fa-solid fa-list-check text-xs" />
               </span>
-              Job Checklists
+              Job Checklists & Forms
             </h3>
             <p className="text-sm text-gray-500 mt-1">
-              Use these mini checklists to capture step-by-step actions or quality checks.
+              Complete these forms as part of your work documentation.
             </p>
           </header>
 
           <div className="space-y-4">
-            {formData.checklists.map((checklist) => {
-              const items = Array.isArray(checklist.items) ? checklist.items : [];
+            {formData.serviceForms.map((form) => {
+              const template = formTemplates.find(t => t.id === form.templateId);
+              const fields = Array.isArray(template?.fields) ? template.fields : [];
+              const answers = form.answers || {};
+
               return (
                 <div
-                  key={checklist.id}
-                  className="border border-gray-200 rounded-lg p-3 sm:p-4 bg-gray-50"
+                  key={form.id}
+                  className="border border-gray-200 rounded-lg p-4 bg-gray-50"
                 >
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div className="flex-1 space-y-1">
-                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                        Checklist title
-                      </label>
-                      <input
-                        type="text"
-                        value={checklist.title || ''}
-                        onChange={(e) =>
-                          handleChecklistTitleChange(checklist.id, e.target.value)
-                        }
-                        placeholder="e.g., Pump start-up checks"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
-                      />
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-900">
+                        {form.templateName || template?.name || 'Form'}
+                      </h4>
+                      {template?.description && (
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {template.description}
+                        </p>
+                      )}
                     </div>
                     <button
                       type="button"
-                      onClick={() => handleRemoveChecklist(checklist.id)}
+                      onClick={() => handleRemoveForm(form.id)}
                       className="inline-flex items-center justify-center h-8 w-8 rounded-full border border-gray-200 text-gray-400 hover:text-red-600 hover:border-red-200"
-                      aria-label="Remove checklist"
+                      aria-label="Remove form"
                     >
                       <i className="fa-solid fa-trash text-xs" />
                     </button>
                   </div>
 
-                  <div className="space-y-2">
-                    {items.length === 0 && (
-                      <p className="text-xs text-gray-500">
-                        Start by adding a few checklist items below.
-                      </p>
-                    )}
-                    {items.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-start gap-2 bg-white rounded-md border border-gray-200 px-2 py-1.5"
-                      >
-                        <input
-                          type="checkbox"
-                          className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded"
-                          checked={!!item.done}
-                          onChange={(e) =>
-                            handleToggleChecklistItem(
-                              checklist.id,
-                              item.id,
-                              e.target.checked
-                            )
-                          }
-                        />
-                        <input
-                          type="text"
-                          value={item.label || ''}
-                          onChange={(e) =>
-                            handleChecklistItemChange(checklist.id, item.id, {
-                              label: e.target.value
-                            })
-                          }
-                          placeholder="Checklist item"
-                          className="flex-1 px-2 py-1 text-xs sm:text-sm border-0 focus:ring-0 focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleRemoveChecklistItemRow(checklist.id, item.id)
-                          }
-                          className="inline-flex items-center justify-center h-7 w-7 rounded-full text-gray-400 hover:text-red-600"
-                          aria-label="Remove item"
-                        >
-                          <i className="fa-solid fa-xmark text-xs" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+                  {fields.length === 0 ? (
+                    <p className="text-xs text-gray-500">
+                      This form has no fields configured.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {fields.map((field, idx) => {
+                        const fieldId = field.id || `field_${idx}`;
+                        const value = answers[fieldId] ?? '';
 
-                  <div className="mt-3">
-                    <button
-                      type="button"
-                      onClick={() => handleAddChecklistItemRow(checklist.id)}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100"
-                    >
-                      <i className="fa-solid fa-plus text-[10px]" />
-                      Add item
-                    </button>
-                  </div>
+                        // Handle conditional visibility
+                        if (field.visibilityCondition && field.visibilityCondition.fieldId) {
+                          const refValue = String(answers[field.visibilityCondition.fieldId] || '').toLowerCase();
+                          const expected = String(field.visibilityCondition.equals || '').toLowerCase();
+                          if (!expected || refValue !== expected) {
+                            return null;
+                          }
+                        }
+
+                        const commonProps = {
+                          id: `${form.id}_${fieldId}`,
+                          value,
+                          onChange: (e) => handleFormAnswerChange(form.id, fieldId, e.target.value),
+                          className: 'w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500',
+                        };
+
+                        return (
+                          <div key={fieldId} className="space-y-1">
+                            <label
+                              htmlFor={commonProps.id}
+                              className="flex items-center justify-between gap-2 text-xs font-medium text-gray-700"
+                            >
+                              <span>{field.label || 'Field'}</span>
+                              {field.required && (
+                                <span className="text-[10px] font-semibold text-red-600">
+                                  Required
+                                </span>
+                              )}
+                            </label>
+                            {field.type === 'textarea' ? (
+                              <textarea
+                                rows={3}
+                                {...commonProps}
+                              />
+                            ) : field.type === 'number' ? (
+                              <input
+                                type="number"
+                                {...commonProps}
+                              />
+                            ) : field.type === 'checkbox' ? (
+                              <select {...commonProps}>
+                                <option value="">Select…</option>
+                                <option value="yes">Yes</option>
+                                <option value="no">No</option>
+                              </select>
+                            ) : field.type === 'select' ? (
+                              <select {...commonProps}>
+                                <option value="">Select…</option>
+                                {Array.isArray(field.options)
+                                  ? field.options.filter(Boolean).map((opt) => (
+                                      <option key={opt} value={opt}>
+                                        {opt}
+                                      </option>
+                                    ))
+                                  : null}
+                              </select>
+                            ) : (
+                              <input
+                                type="text"
+                                {...commonProps}
+                              />
+                            )}
+                            {field.helpText && (
+                              <p className="text-[10px] text-gray-500">
+                                {field.helpText}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         </section>
+      )}
+
+      {/* Template selection modal */}
+      {showTemplateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowTemplateModal(false)}>
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Select a Form</h3>
+              <button
+                type="button"
+                onClick={() => setShowTemplateModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <i className="fa-solid fa-xmark" />
+              </button>
+            </div>
+            <div className="p-4">
+              {loadingTemplates ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">Loading forms...</p>
+                </div>
+              ) : formTemplates.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-sm text-gray-500">
+                    No form templates available. Ask your admin to create forms in the form builder.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {formTemplates.map((template) => (
+                    <button
+                      key={template.id}
+                      type="button"
+                      onClick={() => handleAddForm(template.id)}
+                      className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition"
+                    >
+                      <div className="font-medium text-sm text-gray-900">{template.name}</div>
+                      {template.description && (
+                        <div className="text-xs text-gray-500 mt-1">{template.description}</div>
+                      )}
+                      <div className="text-xs text-gray-400 mt-1">
+                        {Array.isArray(template.fields) ? template.fields.length : 0} field{template.fields?.length !== 1 ? 's' : ''}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
       {renderNavigationButtons()}
     </div>

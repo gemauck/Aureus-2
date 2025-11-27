@@ -465,15 +465,37 @@ const Manufacturing = () => {
         if (typeof window.DatabaseAPI.getClients === 'function') {
           apiCalls.push(
             window.DatabaseAPI.getClients()
-              .then(clientsData => {
-                const processed = Array.isArray(clientsData) ? clientsData : [];
-                const activeClients = processed.filter(c => c.status === 'active' && c.type === 'client');
+              .then(response => {
+                // Extract clients from response - handle different response structures
+                const allClients = response?.data?.clients || response?.data || (Array.isArray(response) ? response : []);
+                const processed = Array.isArray(allClients) ? allClients : [];
+                // Filter for active clients - also include clients without explicit status/type
+                const activeClients = processed.filter(c => {
+                  const status = (c.status || '').toLowerCase();
+                  const type = (c.type || 'client').toLowerCase();
+                  return (status === 'active' || status === '') && (type === 'client' || type === '');
+                });
                 setClients(activeClients);
-                console.log('✅ Manufacturing: Clients loaded:', activeClients.length);
+                console.log('✅ Manufacturing: Clients loaded:', activeClients.length, 'from', processed.length, 'total');
                 return { type: 'clients', data: activeClients };
               })
               .catch(error => {
                 console.error('Error loading clients:', error);
+                // Try to load from localStorage as fallback
+                try {
+                  const cachedClients = JSON.parse(localStorage.getItem('clients') || '[]');
+                  if (Array.isArray(cachedClients) && cachedClients.length > 0) {
+                    const activeClients = cachedClients.filter(c => {
+                      const status = (c.status || '').toLowerCase();
+                      const type = (c.type || 'client').toLowerCase();
+                      return (status === 'active' || status === '') && (type === 'client' || type === '');
+                    });
+                    setClients(activeClients);
+                    console.log('✅ Manufacturing: Clients loaded from cache:', activeClients.length);
+                  }
+                } catch (cacheError) {
+                  console.error('Error loading clients from cache:', cacheError);
+                }
                 return { type: 'clients', error };
               })
           );
@@ -8595,14 +8617,23 @@ const Manufacturing = () => {
           {(() => {
             const itemMovements = itemMovementsForDetail;
 
-            // Calculate opening stock (quantity before first transaction)
-            let runningBalance = 0;
+            // Calculate starting balance from current quantity and movements
+            // This ensures closing balance matches current quantity
+            let runningBalance = item.quantity || 0;
             
             if (itemMovements.length > 0) {
-              const totalMovementQty = itemMovements.reduce((sum, m) => sum + (parseFloat(m.quantity) || 0), 0);
+              // Subtract all movements to get the opening balance (which we won't display)
+              const totalMovementQty = itemMovements.reduce((sum, m) => {
+                let qty = parseFloat(m.quantity) || 0;
+                // Normalize quantity based on type
+                if (m.type === 'receipt' || m.type === 'production') {
+                  qty = Math.abs(qty);
+                } else if (m.type === 'consumption' || m.type === 'sale') {
+                  qty = -Math.abs(qty);
+                }
+                return sum + qty;
+              }, 0);
               runningBalance = (item.quantity || 0) - totalMovementQty;
-            } else {
-              runningBalance = item.quantity || 0;
             }
 
             return (
@@ -8627,23 +8658,6 @@ const Manufacturing = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
-                      {/* Opening Balance Row */}
-                      <tr className="bg-blue-50 font-semibold">
-                        <td className="px-3 py-2 text-sm text-gray-700">
-                          {itemMovements.length > 0 
-                            ? new Date(itemMovements[0].date || itemMovements[0].createdAt).toLocaleDateString()
-                            : 'Opening'}
-                        </td>
-                        <td className="px-3 py-2 text-sm text-gray-700">Opening Stock</td>
-                        <td className="px-3 py-2 text-sm text-gray-700">Initial stock balance</td>
-                        <td className="px-3 py-2 text-sm text-right text-gray-700">-</td>
-                        <td className="px-3 py-2 text-sm text-right text-gray-700">-</td>
-                        <td className="px-3 py-2 text-sm text-right font-bold text-gray-900">
-                          {runningBalance.toFixed(2)} {item.unit}
-                        </td>
-                        <td className="px-3 py-2 text-sm text-gray-700">-</td>
-                      </tr>
-                      
                       {/* Transaction Rows */}
                       {itemMovements.map((movement, index) => {
                         let qty = parseFloat(movement.quantity) || 0;

@@ -1793,6 +1793,7 @@ const LeadDetailModal = ({
             case 'Interest': return 'bg-purple-100 text-purple-800';
             case 'Desire': return 'bg-yellow-100 text-yellow-800';
             case 'Action': return 'bg-green-100 text-green-800';
+            case 'Tender': return 'bg-orange-100 text-orange-800';
             case 'Closed Won': return 'bg-emerald-100 text-emerald-800';
             case 'Closed Lost': return 'bg-gray-100 text-gray-800';
             default: return 'bg-gray-100 text-gray-800';
@@ -2277,6 +2278,7 @@ const LeadDetailModal = ({
                                             <option value="Interest">Interest - Lead shows engagement</option>
                                             <option value="Desire">Desire - Lead wants our solution</option>
                                             <option value="Action">Action - Ready to purchase</option>
+                                            <option value="Tender">Tender - Tender submitted</option>
                                             <option value="Closed Won">Closed Won - Deal completed</option>
                                             <option value="Closed Lost">Closed Lost - Deal lost</option>
                                         </select>
