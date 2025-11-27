@@ -74,7 +74,9 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
         }
         const data = await res.json();
         if (!cancelled) {
-          setTemplates(Array.isArray(data.templates) ? data.templates : []);
+          setTemplates(
+            Array.isArray(data.templates) ? data.templates.filter(Boolean) : []
+          );
         }
       } catch (error) {
         console.error('ServiceFormsManager: Error loading templates', error);
@@ -109,6 +111,10 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
   };
 
   const handleEditTemplate = (tpl) => {
+    if (!tpl || !tpl.id) {
+      console.warn('ServiceFormsManager: handleEditTemplate called with invalid template', tpl);
+      return;
+    }
     setSelected(tpl);
     setEditor({
       id: tpl.id,
@@ -207,11 +213,42 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
       }
 
       const data = await res.json();
-      const saved = data.template;
+      const saved = data && data.template;
+
+      if (!saved || !saved.id) {
+        console.error(
+          'ServiceFormsManager: Save response did not include a valid template object',
+          data
+        );
+        alert(
+          'The form was saved on the server, but the response was missing details. Reloading the list…'
+        );
+        // Reload templates defensively so the left-hand list stays in sync.
+        try {
+          const reloadRes = await fetch('/api/service-forms', {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          });
+          if (reloadRes.ok) {
+            const reloadData = await reloadRes.json();
+            setTemplates(
+              Array.isArray(reloadData.templates)
+                ? reloadData.templates.filter(Boolean)
+                : []
+            );
+          }
+        } catch (reloadError) {
+          console.error('ServiceFormsManager: Failed to reload templates after save', reloadError);
+        }
+        // Keep the current editor state; don't attempt to open a non-existent template.
+        return;
+      }
 
       setTemplates((prev) => {
-        const list = Array.isArray(prev) ? [...prev] : [];
-        const idx = list.findIndex((t) => t.id === saved.id);
+        const list = Array.isArray(prev) ? prev.filter(Boolean) : [];
+        const idx = list.findIndex((t) => t && t.id === saved.id);
         if (idx >= 0) {
           list[idx] = saved;
         } else {
@@ -323,7 +360,9 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
               </div>
             )}
             {!loading &&
-              (templates || []).map((tpl) => (
+              (templates || [])
+                .filter(Boolean)
+                .map((tpl) => (
                 <button
                   key={tpl.id}
                   type="button"
