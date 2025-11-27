@@ -204,9 +204,10 @@
     ];
 
     const componentCacheVersions = {
-        'components/service-maintenance/ServiceAndMaintenance.jsx': 'service-maintenance-ui-v20251111',
-        // Bump cache-buster to ensure latest form builder script is always loaded
-        'components/service-maintenance/ServiceFormsManager.jsx': 'service-forms-manager-v20251127c'
+        // Bump both Service & Maintenance entry and form builder so browsers
+        // are forced to fetch the latest logic.
+        'components/service-maintenance/ServiceAndMaintenance.jsx': 'service-maintenance-ui-v20251127b',
+        'components/service-maintenance/ServiceFormsManager.jsx': 'service-forms-manager-v20251127d'
     };
     
     function loadComponent(path) {
