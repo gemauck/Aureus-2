@@ -554,9 +554,29 @@ const JobCardFormsSection = ({ jobCard }) => {
                 </div>
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {fields.map((field, idx) => {
+          {fields.map((field, idx) => {
                     const fieldId = field.id || `field_${idx}`;
                     const value = answers[fieldId] ?? '';
+
+                    // Simple conditional visibility: if a field defines a
+                    // visibilityCondition, only render it when the referenced
+                    // field's answer matches the expected value.
+                    if (field.visibilityCondition && field.visibilityCondition.fieldId) {
+                      const raw = answers[field.visibilityCondition.fieldId];
+                      const normalised =
+                        raw == null
+                          ? ''
+                          : typeof raw === 'string'
+                          ? raw.toLowerCase()
+                          : String(raw).toLowerCase();
+                      const expected = String(
+                        field.visibilityCondition.equals ?? ''
+                      ).toLowerCase();
+                      if (!expected || normalised !== expected) {
+                        return null;
+                      }
+                    }
+
                     const commonProps = {
                       id: `${form.id}_${fieldId}`,
                       value,

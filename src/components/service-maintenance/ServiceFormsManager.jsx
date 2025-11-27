@@ -9,11 +9,14 @@ const { useState, useEffect } = ReactGlobal;
 const EMPTY_FIELD = () => ({
   id: `field_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
   label: '',
-  type: 'text', // text | textarea | number | checkbox | select
+  type: 'text', // text | textarea | number | checkbox (yes/no) | select
   required: false,
   options: [],
   helpText: '',
   order: 0,
+  // Optional visibility rule:
+  // { fieldId: 'field_x', equals: 'yes' } or equals: 'Option 1'
+  visibilityCondition: null,
 });
 
 const ServiceFormsManager = ({ isOpen, onClose }) => {
@@ -135,6 +138,16 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
         helpText: field.helpText || '',
         order: typeof field.order === 'number' ? field.order : idx,
         options: Array.isArray(field.options) ? field.options : [],
+        visibilityCondition:
+          field.visibilityCondition && typeof field.visibilityCondition === 'object'
+            ? {
+                fieldId: field.visibilityCondition.fieldId || '',
+                equals:
+                  typeof field.visibilityCondition.equals === 'string'
+                    ? field.visibilityCondition.equals
+                    : '',
+              }
+            : null,
       };
     });
 
@@ -169,6 +182,10 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
     }));
   };
 
+  const handleFieldConditionChange = (fieldId, condition) => {
+    handleFieldChange(fieldId, { visibilityCondition: condition });
+  };
+
   const handleRemoveField = (fieldId) => {
     setEditor((prev) => ({
       ...prev,
@@ -196,6 +213,26 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
         isActive: !!editor.isActive,
         fields: safeFields.map((f, idx) => {
           const field = f && typeof f === 'object' ? f : {};
+          const baseOptions = Array.isArray(field.options)
+            ? field.options
+            : typeof field.options === 'string'
+            ? field.options
+                .split(',')
+                .map((v) => v.trim())
+                .filter(Boolean)
+            : [];
+
+          const visibilityCondition =
+            field.visibilityCondition && typeof field.visibilityCondition === 'object'
+              ? {
+                  fieldId: field.visibilityCondition.fieldId || '',
+                  equals:
+                    typeof field.visibilityCondition.equals === 'string'
+                      ? field.visibilityCondition.equals
+                      : '',
+                }
+              : null;
+
           return {
             id: field.id || `field_${idx}`,
             label: field.label || '',
@@ -203,14 +240,8 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
             required: !!field.required,
             helpText: field.helpText || '',
             order: typeof field.order === 'number' ? field.order : idx,
-            options: Array.isArray(field.options)
-              ? field.options
-              : typeof field.options === 'string'
-              ? field.options
-                  .split(',')
-                  .map((v) => v.trim())
-                  .filter(Boolean)
-              : [],
+            options: baseOptions,
+            visibilityCondition,
           };
         }),
       };
@@ -545,7 +576,29 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
             </div>
 
             <div className="space-y-3">
-              {(editor.fields || []).map((field) => (
+              {(editor.fields || []).map((field, index) => {
+                const previousFields = (editor.fields || [])
+                  .slice(0, index)
+                  .filter(
+                    (f) =>
+                      f &&
+                      (f.type === 'checkbox' || f.type === 'select') &&
+                      (f.label || '').trim()
+                  );
+
+                const controllingField =
+                  field.visibilityCondition &&
+                  previousFields.find((f) => f.id === field.visibilityCondition.fieldId);
+
+                const controllingType = controllingField?.type;
+                const controllingOptions =
+                  controllingType === 'checkbox'
+                    ? ['yes', 'no']
+                    : Array.isArray(controllingField?.options)
+                    ? controllingField.options.filter(Boolean)
+                    : [];
+
+                return (
                 <div
                   key={field.id}
                   className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-xs shadow-sm dark:border-slate-700 dark:bg-slate-900/60"
@@ -627,8 +680,74 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
                       </label>
                     </div>
                   </div>
+                  {previousFields.length > 0 && (
+                    <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+                      <div>
+                        <label className="mb-1 block text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                          Show this question only when
+                        </label>
+                        <select
+                          value={field.visibilityCondition?.fieldId || ''}
+                          onChange={(e) => {
+                            const nextFieldId = e.target.value;
+                            if (!nextFieldId) {
+                              handleFieldConditionChange(field.id, null);
+                              return;
+                            }
+                            const target = previousFields.find((f) => f.id === nextFieldId);
+                            const defaultEquals =
+                              target?.type === 'checkbox'
+                                ? 'yes'
+                                : Array.isArray(target?.options) && target.options[0]
+                                ? target.options[0]
+                                : '';
+                            handleFieldConditionChange(field.id, {
+                              fieldId: nextFieldId,
+                              equals: defaultEquals,
+                            });
+                          }}
+                          className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                        >
+                          <option value="">Always visible</option>
+                          {previousFields.map((pf) => (
+                            <option key={pf.id} value={pf.id}>
+                              {pf.label || 'Question'}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {field.visibilityCondition?.fieldId && controllingOptions.length > 0 && (
+                        <div>
+                          <label className="mb-1 block text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                            Equals
+                          </label>
+                          <select
+                            value={field.visibilityCondition.equals || ''}
+                            onChange={(e) =>
+                              handleFieldConditionChange(field.id, {
+                                fieldId: field.visibilityCondition.fieldId,
+                                equals: e.target.value,
+                              })
+                            }
+                            className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                          >
+                            {controllingOptions.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {controllingType === 'checkbox'
+                                  ? opt === 'yes'
+                                    ? 'Yes'
+                                    : 'No'
+                                  : opt}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
 
               {(editor.fields || []).length === 0 && (
                 <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-center text-[11px] text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-400">
