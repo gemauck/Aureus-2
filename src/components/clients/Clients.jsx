@@ -3577,7 +3577,6 @@ const Clients = React.memo(() => {
                         window.DatabaseAPI.clearCache('/clients');
                         window.DatabaseAPI.clearCache('/leads');
                     }
-                    }
                     // Also invalidate DataContext cache if available so lists re-hydrate with fresh data
                     if (window.dataManager?.invalidate) {
                         try {
