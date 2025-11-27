@@ -236,8 +236,33 @@ async function buildLocationInventoryResponse(locationId) {
     const status = baseStatus || getStatusFromQuantity(quantity, reorderPoint)
 
     return {
+      // Spread the base inventory template first so we can
+      //  1) preserve the original inventory item id, and
+      //  2) safely override only the fields we want to be
+      //     location-specific (like quantity / location label).
       ...template,
+
+      // IMPORTANT:
+      // For location-specific inventory rows we were previously
+      // overloading the `id` field with a synthetic value that
+      // combined the locationInventory.id and locationId:
+      //   id: `${record.id}-${locationId}`
+      //
+      // This broke delete/update operations in the UI because the
+      // frontend was sending this synthetic id to the
+      // `/manufacturing/inventory/:id` endpoint, which expects the
+      // real `inventoryItem.id`.
+      //
+      // To fix this cleanly while keeping backwards compatibility
+      // with any UI logic that expects `id` to be location-scoped:
+      //   - We keep `id` as the location-scoped identifier
+      //   - We *also* expose the real inventory item id via
+      //     `inventoryItemId`
+      //   - We expose the locationInventory primary key via
+      //     `locationInventoryId`
       id: `${record.id}-${locationId}`,
+      inventoryItemId: template.id || null,
+      locationInventoryId: record.id,
       sku: record.sku,
       name: record.itemName || template.name || record.sku,
       quantity,

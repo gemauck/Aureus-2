@@ -33,6 +33,28 @@ const Manufacturing = () => {
     }
     return await window.DatabaseAPI[methodName](...args);
   };
+
+  // Helper to resolve the canonical inventory item id.
+  // In some views (e.g. location-filtered inventory) the backend
+  // returns a location-scoped `id` like `${locationInventoryId}-${locationId}`
+  // as well as `inventoryItemId` which is the real inventoryItem.id.
+  // All write operations (update/delete) should use the canonical id.
+  const getInventoryItemId = (itemOrId) => {
+    if (!itemOrId) return null;
+
+    // If we were passed a primitive id, just return it
+    if (typeof itemOrId === 'string') {
+      return itemOrId;
+    }
+
+    // Prefer the explicit inventoryItemId when present
+    if (itemOrId.inventoryItemId) {
+      return itemOrId.inventoryItemId;
+    }
+
+    // Fallback: use the item's own id
+    return itemOrId.id || null;
+  };
   const getInitialTabFromURL = () => {
     try {
       if (window.RouteState) {
@@ -1585,7 +1607,7 @@ const Manufacturing = () => {
                           <i className="fas fa-edit mr-1"></i> Edit
                         </button>
                         <button
-                          onClick={() => handleDeleteItem(item.id)}
+                          onClick={() => handleDeleteItem(item)}
                           className="px-3 py-2 text-sm bg-red-50 text-red-600 rounded-lg hover:bg-red-100 font-medium"
                         >
                           <i className="fas fa-trash"></i>
@@ -2791,9 +2813,10 @@ const Manufacturing = () => {
 
       if (selectedItem?.id) {
         // Update existing - don't send quantity or SKU
-        const response = await safeCallAPI('updateInventoryItem', selectedItem.id, itemData);
+        const targetId = getInventoryItemId(selectedItem);
+        const response = await safeCallAPI('updateInventoryItem', targetId, itemData);
         if (response?.data?.item) {
-          const updatedInventory = inventory.map(item => item.id === selectedItem.id ? response.data.item : item);
+          const updatedInventory = inventory.map(item => getInventoryItemId(item) === targetId ? response.data.item : item);
           setInventory(updatedInventory);
           localStorage.setItem('manufacturing_inventory', JSON.stringify(updatedInventory));
         }
@@ -2911,11 +2934,17 @@ const Manufacturing = () => {
     }
   };
 
-  const handleDeleteItem = async (itemId) => {
+  const handleDeleteItem = async (itemOrId) => {
+    const itemId = getInventoryItemId(itemOrId);
+    if (!itemId) {
+      alert('Unable to determine which item to delete. Please refresh and try again.');
+      return;
+    }
+
     if (confirm('Are you sure you want to delete this item?')) {
       try {
         await safeCallAPI('deleteInventoryItem', itemId);
-        const updatedInventory = inventory.filter(item => item.id !== itemId);
+        const updatedInventory = inventory.filter(item => getInventoryItemId(item) !== itemId);
         setInventory(updatedInventory);
         localStorage.setItem('manufacturing_inventory', JSON.stringify(updatedInventory));
         setShowModal(false);
@@ -4546,7 +4575,7 @@ const Manufacturing = () => {
               <div>
                 {modalType === 'edit_item' && (
                   <button
-                    onClick={() => handleDeleteItem(selectedItem.id)}
+                    onClick={() => handleDeleteItem(selectedItem)}
                     className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700"
                   >
                     Delete Item
@@ -7968,9 +7997,10 @@ const Manufacturing = () => {
           itemData.legacyPartNumber = editFormData.legacyPartNumber || '';
         }
 
-        const response = await safeCallAPI('updateInventoryItem', item.id, itemData);
+        const targetId = getInventoryItemId(item);
+        const response = await safeCallAPI('updateInventoryItem', targetId, itemData);
         if (response?.data?.item) {
-          const updatedInventory = inventory.map(invItem => invItem.id === item.id ? response.data.item : invItem);
+          const updatedInventory = inventory.map(invItem => getInventoryItemId(invItem) === targetId ? response.data.item : invItem);
           setInventory(updatedInventory);
           localStorage.setItem('manufacturing_inventory', JSON.stringify(updatedInventory));
           setViewingInventoryItemDetail(response.data.item);
@@ -8023,7 +8053,7 @@ const Manufacturing = () => {
                     Edit Item
                   </button>
                   <button
-                    onClick={() => handleDeleteItem(item.id)}
+                    onClick={() => handleDeleteItem(item)}
                     className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2"
                   >
                     <i className="fas fa-trash"></i>

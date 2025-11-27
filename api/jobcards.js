@@ -9,6 +9,26 @@ async function handler(req, res) {
   const resourceType = pathSegments[0] // jobcards (direct endpoint, not nested like /api/manufacturing/*)
   const id = pathSegments[1]
 
+  // Helper to read pagination params from the query string
+  const getPagination = () => {
+    try {
+      const url = new URL(req.url, 'http://localhost')
+      const rawPage = parseInt(url.searchParams.get('page') || '1', 10)
+      const rawPageSize = parseInt(url.searchParams.get('pageSize') || '50', 10)
+
+      const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1
+      // Keep page size within a safe range to avoid overloading the dashboard
+      let pageSize =
+        Number.isFinite(rawPageSize) && rawPageSize > 0 ? rawPageSize : 50
+      pageSize = Math.max(10, Math.min(pageSize, 100))
+
+      return { page, pageSize }
+    } catch {
+      // Fallback to sensible defaults if URL parsing fails for any reason
+      return { page: 1, pageSize: 50 }
+    }
+  }
+
   // Helper to parse JSON fields
   const parseJson = (str, defaultValue = []) => {
     try {
@@ -45,15 +65,26 @@ async function handler(req, res) {
     // LIST (GET /api/jobcards)
     if (req.method === 'GET' && !id) {
       try {
+        const { page, pageSize } = getPagination()
         const owner = req.user?.sub
-        // Limit the number of job cards returned to keep the dashboard fast.
-        // This endpoint is used for the "recent job cards" views, so we only
-        // need the latest slice rather than the full history.
-        const jobCards = await prisma.jobCard.findMany({
-          orderBy: { createdAt: 'desc' },
-          take: 250
+        // Limit the number of job cards returned and support simple pagination
+        // to keep the dashboard fast even as history grows.
+        const [totalItems, jobCards] = await Promise.all([
+          prisma.jobCard.count(),
+          prisma.jobCard.findMany({
+            orderBy: { createdAt: 'desc' },
+            skip: (page - 1) * pageSize,
+            take: pageSize
+          })
+        ])
+
+        console.log('📋 List job cards', {
+          owner,
+          count: jobCards.length,
+          page,
+          pageSize,
+          totalItems
         })
-        console.log('📋 List job cards', { owner, count: jobCards.length })
         
         // Format dates for response
         const formatted = jobCards.map(jobCard => ({
@@ -71,7 +102,15 @@ async function handler(req, res) {
           updatedAt: formatDate(jobCard.updatedAt)
         }))
         
-        return ok(res, { jobCards: formatted })
+        return ok(res, { 
+          jobCards: formatted,
+          pagination: {
+            page,
+            pageSize,
+            totalItems,
+            totalPages: Math.max(1, Math.ceil(totalItems / pageSize))
+          }
+        })
       } catch (error) {
         console.error('❌ Failed to list job cards:', error)
         return serverError(res, 'Failed to list job cards', error.message)

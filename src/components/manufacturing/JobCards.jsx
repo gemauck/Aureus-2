@@ -27,6 +27,8 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const [error, setError] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all');
   const [clientFilter, setClientFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState(null);
   const [sortField, setSortField] = useState('createdAt'); // jobCardNumber | client | technician | status | createdAt
   const [sortDirection, setSortDirection] = useState('desc'); // asc | desc
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -35,8 +37,12 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const [selectedJobCard, setSelectedJobCard] = useState(null);
   const [showDetail, setShowDetail] = useState(false);
 
-  const reloadJobCards = async () => {
+  const pageSize = 25;
+
+  const reloadJobCards = async (targetPage) => {
     let cancelled = false;
+
+    const pageToLoad = targetPage || page || 1;
 
     try {
       setLoading(true);
@@ -48,25 +54,29 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
         return;
       }
 
-      const response = await fetch('/api/jobcards', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
+      const response = await fetch(
+        `/api/jobcards?page=${pageToLoad}&pageSize=${pageSize}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      
       if (!response.ok) {
         const text = await response.text();
         console.error('❌ JobCards: Failed to reload job cards', response.status, text);
         throw new Error('Failed to load job cards.');
       }
-
+      
       const raw = await response.json();
       const data =
         (raw && (raw.jobCards || raw.data?.jobCards || raw.data)) || [];
-
+      
       if (!cancelled) {
         setJobCards(Array.isArray(data) ? data : []);
+        setPagination(raw.pagination || null);
       }
     } catch (e) {
       if (!cancelled) {
@@ -79,7 +89,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
         setLoading(false);
       }
     }
-
+    
     return () => {
       cancelled = true;
     };
@@ -99,18 +109,20 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
           return;
         }
 
-        const response = await fetch('/api/jobcards', {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-        });
-
-        if (!response.ok) {
-          const text = await response.text();
-          console.error('❌ JobCards: Failed to load job cards', response.status, text);
-          throw new Error('Failed to load job cards.');
-        }
+        const response = await fetch(
+          `/api/jobcards?page=${page}&pageSize=${pageSize}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+      if (!response.ok) {
+        const text = await response.text();
+        console.error('❌ JobCards: Failed to reload job cards', response.status, text);
+        throw new Error('Failed to load job cards.');
+      }
 
         const raw = await response.json();
 
@@ -120,6 +132,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
 
         if (!cancelled) {
           setJobCards(Array.isArray(data) ? data : []);
+          setPagination(raw.pagination || null);
         }
       } catch (e) {
         if (!cancelled) {
@@ -139,7 +152,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [page]);
 
   const clientOptions = useMemo(() => {
     const base = clients.map((c) => ({
@@ -273,6 +286,20 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const handleNewJobCard = () => {
     setEditingJobCard(null);
     setIsModalOpen(true);
+  };
+
+  const handleNextPage = () => {
+    if (pagination && page < (pagination.totalPages || 1)) {
+      setPage((prev) =>
+        Math.min(prev + 1, pagination.totalPages || prev + 1)
+      );
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (page > 1) {
+      setPage((prev) => Math.max(prev - 1, 1));
+    }
   };
 
   const handleSaveJobCard = async (formData) => {
@@ -523,6 +550,55 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
               })}
             </tbody>
           </table>
+          {pagination && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400">
+              <div>
+                <span>
+                  Page {page} of {pagination.totalPages || 1}
+                </span>
+                {typeof pagination.totalItems === 'number' && (
+                  <span className="ml-2">
+                    • {pagination.totalItems} total job card
+                    {pagination.totalItems === 1 ? '' : 's'}
+                  </span>
+                )}
+              </div>
+              <div className="inline-flex gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrevPage}
+                  disabled={loading || page <= 1}
+                  className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 ${
+                    page <= 1 || loading
+                      ? 'border-slate-200 text-slate-300 dark:border-slate-700 dark:text-slate-600 cursor-not-allowed'
+                      : 'border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <i className="fa-solid fa-chevron-left text-[9px]" />
+                  <span>Previous</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleNextPage}
+                  disabled={
+                    loading ||
+                    !pagination ||
+                    page >= (pagination.totalPages || 1)
+                  }
+                  className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 ${
+                    loading ||
+                    !pagination ||
+                    page >= (pagination.totalPages || 1)
+                      ? 'border-slate-200 text-slate-300 dark:border-slate-700 dark:text-slate-600 cursor-not-allowed'
+                      : 'border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <span>Next</span>
+                  <i className="fa-solid fa-chevron-right text-[9px]" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
       {/* Immersive job card viewer overlayed on this card block (within content area, not whole app shell) */}
