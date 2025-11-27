@@ -448,48 +448,24 @@ function initializeProjectDetail() {
         console.log('✅ ProjectDetail: All required components loaded');
     }
     
-    const getStoredActiveSection = (projectId) => {
-        if (!projectId) {
-            return 'overview';
-        }
-        try {
-            const stored = sessionStorage.getItem(`project-${projectId}-activeSection`);
-            if (stored && typeof stored === 'string') {
-                return stored;
-            }
-        } catch (error) {
-            console.warn('Failed to read stored active section:', error);
-        }
-        return 'overview';
-    };
-    
-    // Tab navigation state - restore last section per project when available
-    const [activeSection, setActiveSection] = useState(() => getStoredActiveSection(project?.id));
+    // Tab navigation state
+    // Always default to the Overview tab when opening a project.
+    // We intentionally do NOT restore the last viewed tab from storage anymore,
+    // as per product decision to keep the entry point consistent.
+    const [activeSection, setActiveSection] = useState('overview');
     
     // Memoize the back callback to prevent DocumentCollectionProcessSection from re-rendering
     const handleBackToOverview = useCallback(() => {
         setActiveSection('overview');
     }, []);
     
-    // Persist activeSection to sessionStorage (for navigation within the same session)
+    // Ensure we are on the overview tab when switching to a different project.
     useEffect(() => {
         if (!project?.id) return;
-        try {
-            sessionStorage.setItem(`project-${project.id}-activeSection`, activeSection);
-        } catch (error) {
-            console.warn('Failed to store active section:', error);
+        if (activeSection !== 'overview') {
+            setActiveSection('overview');
         }
-        console.log('🟢 Active section changed to:', activeSection);
-    }, [activeSection, project?.id]);
-    
-    // Reset to overview when project changes (opening a different project)
-    useEffect(() => {
-        if (!project?.id) return;
-        const storedSection = getStoredActiveSection(project.id);
-        if (storedSection !== activeSection) {
-            setActiveSection(storedSection);
-        }
-        console.log('🔄 Project changed, restoring section:', storedSection);
+        console.log('🔄 Project changed, forcing section to overview');
     }, [project?.id]);
 
     // If the project is opened via a deep-link to the document collection tracker
