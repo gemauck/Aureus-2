@@ -113,8 +113,27 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
   const handleEditTemplate = (tpl) => {
     if (!tpl || !tpl.id) {
       console.warn('ServiceFormsManager: handleEditTemplate called with invalid template', tpl);
+      resetEditor();
       return;
     }
+
+    const rawFields = Array.isArray(tpl.fields) ? tpl.fields : [];
+
+    const normalisedFields = rawFields.map((f, idx) => {
+      const field = f && typeof f === 'object' ? f : { label: String(f ?? ''), type: 'text' };
+      return {
+        id:
+          field.id ||
+          `field_${idx}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
+        label: field.label || '',
+        type: field.type || 'text',
+        required: !!field.required,
+        helpText: field.helpText || '',
+        order: typeof field.order === 'number' ? field.order : idx,
+        options: Array.isArray(field.options) ? field.options : [],
+      };
+    });
+
     setSelected(tpl);
     setEditor({
       id: tpl.id,
@@ -122,13 +141,7 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
       description: tpl.description || '',
       category: tpl.category || 'General',
       isActive: tpl.isActive !== false,
-      fields: Array.isArray(tpl.fields)
-        ? tpl.fields.map((f, idx) => ({
-            ...f,
-            order: typeof f.order === 'number' ? f.order : idx,
-            options: Array.isArray(f.options) ? f.options : [],
-          }))
-        : [],
+      fields: normalisedFields,
     });
   };
 
