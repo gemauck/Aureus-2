@@ -72,6 +72,7 @@ model User {
   actionItemsAssigned       MeetingActionItem[]     @relation("ActionItemAssignee")
   userTasks                 UserTask[]              @relation("UserTaskOwner")
   userTaskTags              UserTaskTag[]           @relation("UserTaskTagOwner")
+  serviceFormTemplates      ServiceFormTemplate[]
   createdAt                 DateTime                @default(now())
   updatedAt                 DateTime                @updatedAt
 }
