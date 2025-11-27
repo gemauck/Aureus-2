@@ -803,15 +803,39 @@ async function handler(req, res) {
           }
         }
         
-        const deduplicatedItems = Array.from(itemMap.values());
-        
+        let deduplicatedItems = Array.from(itemMap.values());
+
         if (deduplicatedItems.length < items.length) {
           const removedCount = items.length - deduplicatedItems.length;
           console.log(`⚠️  Deduplication: Removed ${removedCount} duplicate inventory items (${items.length} → ${deduplicatedItems.length})`);
         } else {
           console.log(`✅ No duplicates found (${items.length} items)`);
         }
-        
+
+        // When showing "All Locations" we don't want to surface legacy
+        // template items that have no locationId if there are
+        // location-specific records for the same SKU. Those template
+        // rows are used for metadata only and cause confusing
+        // "blank location" duplicates in the UI.
+        const skuHasLocation = new Set();
+        for (const item of deduplicatedItems) {
+          if (item.locationId && item.locationId !== 'null' && item.locationId !== 'undefined') {
+            skuHasLocation.add(item.sku);
+          }
+        }
+
+        deduplicatedItems = deduplicatedItems.filter(item => {
+          const hasRealLocation = item.locationId && item.locationId !== 'null' && item.locationId !== 'undefined';
+          // Keep all items that have a real locationId.
+          if (hasRealLocation) return true;
+          // Drop legacy template rows (no locationId) when there is
+          // at least one location-scoped row for the same SKU.
+          if (!hasRealLocation && skuHasLocation.has(item.sku)) {
+            return false;
+          }
+          return true;
+        });
+
         // Format dates for response
         const formatted = deduplicatedItems.map(item => ({
           ...item,
