@@ -242,14 +242,13 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
         (data && data.data && (data.data.template || data.data));
 
       if (!saved || !saved.id) {
-        console.error(
-          'ServiceFormsManager: Save response did not include a valid template object',
+        console.warn(
+          'ServiceFormsManager: Save response did not include a standalone template object; falling back to reload.',
           data
         );
-        alert(
-          'The form was saved on the server, but the response was missing details. Reloading the list…'
-        );
-        // Reload templates defensively so the left-hand list stays in sync.
+        // Reload templates defensively so the left-hand list stays in sync,
+        // but don't bother the user with an extra alert as long as the save
+        // request itself succeeded.
         try {
           const reloadRes = await fetch('/api/service-forms', {
             headers: {
