@@ -181,27 +181,34 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
 
     try {
       setSaving(true);
+      const safeFields = Array.isArray(editor.fields)
+        ? editor.fields.filter(Boolean)
+        : [];
+
       const payload = {
         name: editor.name || 'Untitled form',
         description: editor.description || '',
         category: editor.category || 'General',
         isActive: !!editor.isActive,
-        fields: (editor.fields || []).map((f, idx) => ({
-          id: f.id || `field_${idx}`,
-          label: f.label || '',
-          type: f.type || 'text',
-          required: !!f.required,
-          helpText: f.helpText || '',
-          order: typeof f.order === 'number' ? f.order : idx,
-          options: Array.isArray(f.options)
-            ? f.options
-            : typeof f.options === 'string'
-            ? f.options
-                .split(',')
-                .map((v) => v.trim())
-                .filter(Boolean)
-            : [],
-        })),
+        fields: safeFields.map((f, idx) => {
+          const field = f && typeof f === 'object' ? f : {};
+          return {
+            id: field.id || `field_${idx}`,
+            label: field.label || '',
+            type: field.type || 'text',
+            required: !!field.required,
+            helpText: field.helpText || '',
+            order: typeof field.order === 'number' ? field.order : idx,
+            options: Array.isArray(field.options)
+              ? field.options
+              : typeof field.options === 'string'
+              ? field.options
+                  .split(',')
+                  .map((v) => v.trim())
+                  .filter(Boolean)
+              : [],
+          };
+        }),
       };
 
       const method = editor.id ? 'PATCH' : 'POST';
