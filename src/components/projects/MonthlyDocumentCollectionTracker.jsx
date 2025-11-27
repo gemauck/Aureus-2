@@ -248,6 +248,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [editingDocument, setEditingDocument] = useState(null);
     const [editingSectionId, setEditingSectionId] = useState(null);
     const [editingTemplate, setEditingTemplate] = useState(null);
+    // When creating a template from the current year's sections, we pre‑seed
+    // the modal via this state so that it goes through the "create" code path
+    // (POST) instead of trying to update an existing template.
+    const [prefilledTemplate, setPrefilledTemplate] = useState(null);
     const [draggedSection, setDraggedSection] = useState(null);
     const [dragOverIndex, setDragOverIndex] = useState(null);
     const [draggedDocument, setDraggedDocument] = useState(null);
@@ -618,6 +622,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
             console.log('✅ Template saved successfully');
             setEditingTemplate(null);
+            setPrefilledTemplate(null);
             setShowTemplateList(true);
             
         } catch (error) {
@@ -1542,10 +1547,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
     
     const TemplateModal = () => {
-        const [formData, setFormData] = useState({
-            name: editingTemplate?.name || '',
-            description: editingTemplate?.description || '',
-            sections: editingTemplate ? parseSections(editingTemplate.sections) : []
+        const [formData, setFormData] = useState(() => {
+            if (editingTemplate) {
+                return {
+                    name: editingTemplate.name || '',
+                    description: editingTemplate.description || '',
+                    sections: parseSections(editingTemplate.sections)
+                };
+            }
+            if (prefilledTemplate) {
+                return {
+                    name: prefilledTemplate.name || '',
+                    description: prefilledTemplate.description || '',
+                    sections: parseSections(prefilledTemplate.sections)
+                };
+            }
+            return { name: '', description: '', sections: [] };
         });
         
         useEffect(() => {
@@ -1555,8 +1572,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     description: editingTemplate.description || '',
                     sections: parseSections(editingTemplate.sections)
                 });
+            } else if (prefilledTemplate) {
+                setFormData({
+                    name: prefilledTemplate.name || '',
+                    description: prefilledTemplate.description || '',
+                    sections: parseSections(prefilledTemplate.sections)
+                });
+            } else {
+                setFormData({ name: '', description: '', sections: [] });
             }
-        }, [editingTemplate]);
+        }, [editingTemplate, prefilledTemplate]);
         
         const handleSubmit = (e) => {
             e.preventDefault();
@@ -2158,9 +2183,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                     if (!name || !name.trim()) {
                                         return;
                                     }
-                                    // Use current year’s sections as the template body
-                                    setEditingTemplate({
-                                        id: null,
+                                    // Use current year’s sections as the template body, but route
+                                    // through the "create" flow (prefilledTemplate) so we POST
+                                    // a brand‑new template instead of trying to update an existing one.
+                                    setEditingTemplate(null);
+                                    setPrefilledTemplate({
                                         name: name.trim(),
                                         description: `Saved from ${project?.name || 'project'} - year ${selectedYear}`,
                                         sections: cloneSectionsArray(sections)

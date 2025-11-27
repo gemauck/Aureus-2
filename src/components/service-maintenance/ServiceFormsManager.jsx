@@ -32,6 +32,7 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
 
   const user = window.storage?.getUser?.();
   const isAdmin = user?.role?.toLowerCase?.() === 'admin';
+  const [featureUnavailable, setFeatureUnavailable] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -56,6 +57,19 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
         if (!res.ok) {
           const text = await res.text();
           console.error('ServiceFormsManager: Failed to load templates', res.status, text);
+          // If the backend tells us the feature is unavailable (tables missing), switch
+          // into a read-only "feature disabled" mode instead of just failing silently.
+          try {
+            const parsed = JSON.parse(text);
+            const details = parsed?.error?.details || parsed?.details;
+            if (details === 'SERVICE_FORMS_TABLE_MISSING') {
+              setFeatureUnavailable(true);
+              setTemplates([]);
+              return;
+            }
+          } catch {
+            // Ignore JSON parse errors and fall back to generic handling
+          }
           return;
         }
         const data = await res.json();
@@ -275,14 +289,32 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={resetEditor}
-            className="mb-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary-600 px-3 py-2 text-xs font-semibold text-white shadow hover:bg-primary-700"
-          >
-            <i className="fa-solid fa-plus text-[11px]" />
-            New form
-          </button>
+          {featureUnavailable && (
+            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
+              <div className="flex items-start gap-2">
+                <i className="fa-solid fa-triangle-exclamation mt-0.5 text-[10px]" />
+                <div>
+                  <div className="font-semibold">Service forms not enabled</div>
+                  <div className="mt-0.5">
+                    The database for this environment does not yet include the tables required
+                    for service forms and checklists. You can continue using job cards as normal,
+                    but form templates will only be available after the migration is applied.
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!featureUnavailable && (
+            <button
+              type="button"
+              onClick={resetEditor}
+              className="mb-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary-600 px-3 py-2 text-xs font-semibold text-white shadow hover:bg-primary-700"
+            >
+              <i className="fa-solid fa-plus text-[11px]" />
+              New form
+            </button>
+          )}
 
           <div className="space-y-1 overflow-y-auto text-xs">
             {loading && (

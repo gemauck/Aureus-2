@@ -2,6 +2,25 @@ import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
 import { ok, created, badRequest, notFound, serverError } from './_lib/response.js'
 
+// Some deployments may not yet have the optional service form tables used by
+// the job card forms feature. When those tables are missing, Prisma throws
+// a specific error. We treat that as "feature not available" instead of a
+// hard failure so the rest of the job cards module remains usable.
+function isMissingServiceFormInstanceTables(error) {
+  if (!error) return false
+
+  const message = String(error.message || '')
+  const code = error.code
+
+  if (code === 'P2021' || code === 'P2023') return true
+
+  if (message.includes('ServiceFormTemplate') || message.includes('ServiceFormInstance')) {
+    return true
+  }
+
+  return false
+}
+
 async function handler(req, res) {
   // Strip query parameters before splitting
   const urlPath = req.url.split('?')[0].split('#')[0].replace(/^\/api\//, '/')
@@ -398,6 +417,13 @@ async function handler(req, res) {
 
         return ok(res, { forms: formatted })
       } catch (error) {
+        if (isMissingServiceFormInstanceTables(error)) {
+          console.warn(
+            '⚠️ Job card service form tables are missing; returning empty forms list instead of 500.'
+          )
+          return ok(res, { forms: [] })
+        }
+
         console.error('❌ Failed to list job card forms:', error)
         return serverError(res, 'Failed to list job card forms', error.message)
       }
@@ -439,6 +465,17 @@ async function handler(req, res) {
           }
         })
       } catch (error) {
+        if (isMissingServiceFormInstanceTables(error)) {
+          console.warn(
+            '⚠️ Job card service form tables are missing; cannot attach forms in this environment.'
+          )
+          return serverError(
+            res,
+            'Job card forms feature is not available in this environment',
+            'SERVICE_FORMS_TABLE_MISSING'
+          )
+        }
+
         console.error('❌ Failed to attach form to job card:', error)
         return serverError(res, 'Failed to attach form to job card', error.message)
       }
@@ -481,6 +518,17 @@ async function handler(req, res) {
           }
         })
       } catch (error) {
+        if (isMissingServiceFormInstanceTables(error)) {
+          console.warn(
+            '⚠️ Job card service form tables are missing; cannot update forms in this environment.'
+          )
+          return serverError(
+            res,
+            'Job card forms feature is not available in this environment',
+            'SERVICE_FORMS_TABLE_MISSING'
+          )
+        }
+
         console.error('❌ Failed to update job card form:', error)
         return serverError(res, 'Failed to update job card form', error.message)
       }

@@ -193,6 +193,7 @@ const JobCardFormsSection = ({ jobCard }) => {
   const [savingFormId, setSavingFormId] = useState(null);
   const [attachTemplateId, setAttachTemplateId] = useState('');
   const [answersByForm, setAnswersByForm] = useState({});
+  const [featureUnavailable, setFeatureUnavailable] = useState(false);
 
   const user = window.storage?.getUser?.();
   const isAdmin = user?.role?.toLowerCase?.() === 'admin';
@@ -274,6 +275,20 @@ const JobCardFormsSection = ({ jobCard }) => {
         if (!res.ok) {
           const text = await res.text();
           console.error('JobCardFormsSection: Failed to load templates', res.status, text);
+          // If the backend has service forms disabled (tables missing), switch into a
+          // featureUnavailable state so we can show a clear message instead of a
+          // silent failure.
+          try {
+            const parsed = JSON.parse(text);
+            const details = parsed?.error?.details || parsed?.details;
+            if (details === 'SERVICE_FORMS_TABLE_MISSING') {
+              setFeatureUnavailable(true);
+              setTemplates([]);
+              return;
+            }
+          } catch {
+            // Ignore parse errors and fall back to generic logging
+          }
           return;
         }
         const data = await res.json();
@@ -299,7 +314,7 @@ const JobCardFormsSection = ({ jobCard }) => {
   }, [token, isAdmin]);
 
   const handleAttachTemplate = async () => {
-    if (!attachTemplateId || !token) return;
+    if (!attachTemplateId || !token || featureUnavailable) return;
     try {
       const res = await fetch(
         `/api/jobcards/${encodeURIComponent(jobCard.id)}/forms`,
@@ -406,7 +421,9 @@ const JobCardFormsSection = ({ jobCard }) => {
               Forms &amp; checklists
             </div>
             <div className="text-sm text-slate-100">
-              {overallCount === 0
+              {featureUnavailable
+                ? 'Forms feature not enabled in this environment'
+                : overallCount === 0
                 ? 'No forms attached'
                 : `${completedCount}/${overallCount} forms completed`}
             </div>
@@ -414,30 +431,39 @@ const JobCardFormsSection = ({ jobCard }) => {
         </div>
         {isAdmin && (
           <div className="flex items-center gap-2 text-[11px]">
-            <select
-              className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-              value={attachTemplateId}
-              disabled={loadingTemplates}
-              onChange={(e) => setAttachTemplateId(e.target.value)}
-            >
-              <option value="">
-                {loadingTemplates ? 'Loading templates…' : 'Attach form'}
-              </option>
-              {(templates || []).map((tpl) => (
-                <option key={tpl.id} value={tpl.id}>
-                  {tpl.name}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={handleAttachTemplate}
-              disabled={!attachTemplateId}
-              className="inline-flex items-center gap-1 rounded-full bg-primary-500 px-3 py-1 text-[11px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <i className="fa-solid fa-plus text-[9px]" />
-              Add
-            </button>
+            {featureUnavailable ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-3 py-1 text-[11px] font-medium text-amber-200">
+                <i className="fa-solid fa-triangle-exclamation text-[10px]" />
+                Forms disabled
+              </span>
+            ) : (
+              <>
+                <select
+                  className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  value={attachTemplateId}
+                  disabled={loadingTemplates}
+                  onChange={(e) => setAttachTemplateId(e.target.value)}
+                >
+                  <option value="">
+                    {loadingTemplates ? 'Loading templates…' : 'Attach form'}
+                  </option>
+                  {(templates || []).map((tpl) => (
+                    <option key={tpl.id} value={tpl.id}>
+                      {tpl.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleAttachTemplate}
+                  disabled={!attachTemplateId}
+                  className="inline-flex items-center gap-1 rounded-full bg-primary-500 px-3 py-1 text-[11px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <i className="fa-solid fa-plus text-[9px]" />
+                  Add
+                </button>
+              </>
+            )}
           </div>
         )}
       </header>
@@ -449,14 +475,15 @@ const JobCardFormsSection = ({ jobCard }) => {
         </div>
       )}
 
-      {!loadingForms && forms.length === 0 && (
+      {!loadingForms && !featureUnavailable && forms.length === 0 && (
         <p className="text-xs text-slate-300">
           No forms have been attached to this job card yet.
         </p>
       )}
 
       <div className="space-y-3">
-        {forms.map((form) => {
+        {!featureUnavailable &&
+          forms.map((form) => {
           const tpl = templates.find((t) => t.id === form.templateId) || {};
           const fields = Array.isArray(tpl.fields) ? tpl.fields : [];
           const answers = answersByForm[form.id] || {};

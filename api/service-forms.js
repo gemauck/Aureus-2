@@ -19,6 +19,27 @@ function requireAdmin(req, res) {
   return true
 }
 
+// In some environments the new service forms tables might not exist yet.
+// Prisma will then throw an error like:
+// "The table `public.ServiceFormTemplate` does not exist in the current database."
+// We want to gracefully degrade instead of spamming 500s in the UI.
+function isMissingServiceFormsTables(error) {
+  if (!error) return false
+
+  const message = String(error.message || '')
+  const code = error.code
+
+  // Prisma uses P2021 / P2023 for missing tables/columns in many drivers.
+  if (code === 'P2021' || code === 'P2023') return true
+
+  // Fallback to a defensive string check on the table names logged in production.
+  if (message.includes('ServiceFormTemplate') || message.includes('ServiceFormInstance')) {
+    return true
+  }
+
+  return false
+}
+
 function parseJsonSafe(value, fallback) {
   if (!value) return fallback
   if (Array.isArray(value)) return value
@@ -56,6 +77,15 @@ async function handler(req, res) {
 
       return ok(res, { templates: formatted })
     } catch (error) {
+      // If the new tables don't exist yet, just return an empty list so the
+      // dashboard can continue working without noisy 500s.
+      if (isMissingServiceFormsTables(error)) {
+        console.warn(
+          '⚠️ Service forms tables are missing; returning empty templates list instead of 500.'
+        )
+        return ok(res, { templates: [] })
+      }
+
       console.error('❌ Failed to list service form templates:', error)
       return serverError(res, 'Failed to list service form templates', error.message)
     }
@@ -79,6 +109,13 @@ async function handler(req, res) {
         },
       })
     } catch (error) {
+      if (isMissingServiceFormsTables(error)) {
+        console.warn(
+          '⚠️ Service forms tables are missing; cannot load individual template, returning 404-like response.'
+        )
+        return notFound(res, 'Service form template not found')
+      }
+
       console.error('❌ Failed to get service form template:', error)
       return serverError(res, 'Failed to get service form template', error.message)
     }
@@ -112,6 +149,17 @@ async function handler(req, res) {
         },
       })
     } catch (error) {
+      if (isMissingServiceFormsTables(error)) {
+        console.warn(
+          '⚠️ Service forms tables are missing; CREATE is not available in this environment.'
+        )
+        return serverError(
+          res,
+          'Service forms feature is not available in this environment',
+          'SERVICE_FORMS_TABLE_MISSING'
+        )
+      }
+
       console.error('❌ Failed to create service form template:', error)
       return serverError(res, 'Failed to create service form template', error.message)
     }
@@ -154,6 +202,17 @@ async function handler(req, res) {
         },
       })
     } catch (error) {
+      if (isMissingServiceFormsTables(error)) {
+        console.warn(
+          '⚠️ Service forms tables are missing; UPDATE is not available in this environment.'
+        )
+        return serverError(
+          res,
+          'Service forms feature is not available in this environment',
+          'SERVICE_FORMS_TABLE_MISSING'
+        )
+      }
+
       console.error('❌ Failed to update service form template:', error)
       return serverError(res, 'Failed to update service form template', error.message)
     }
@@ -172,6 +231,17 @@ async function handler(req, res) {
       await prisma.serviceFormTemplate.delete({ where: { id } })
       return ok(res, { deleted: true, id })
     } catch (error) {
+      if (isMissingServiceFormsTables(error)) {
+        console.warn(
+          '⚠️ Service forms tables are missing; DELETE is not available in this environment.'
+        )
+        return serverError(
+          res,
+          'Service forms feature is not available in this environment',
+          'SERVICE_FORMS_TABLE_MISSING'
+        )
+      }
+
       console.error('❌ Failed to delete service form template:', error)
       return serverError(res, 'Failed to delete service form template', error.message)
     }
