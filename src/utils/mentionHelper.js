@@ -136,7 +136,7 @@ const MentionHelper = {
                 ? commentText.substring(0, 100) + '...' 
                 : commentText;
             
-            // Build metadata with project information if available
+            // Build metadata with base information
             const metadata = {
                 mentionedBy: mentionedByName,
                 context: contextTitle,
@@ -144,13 +144,36 @@ const MentionHelper = {
                 commentText: commentText  // Also include as commentText for consistency
             };
             
-            // Add project information if available
-            if (projectInfo.projectId) {
-                metadata.projectId = projectInfo.projectId;
-                metadata.projectName = projectInfo.projectName;
+            // Add project / context information if available.
+            // IMPORTANT: We keep this in sync with NotificationCenter's expectations:
+            // - projectId, projectName
+            // - taskId, taskTitle
+            // - sectionId, documentId, month, commentId (for document collection tracker)
+            if (projectInfo && typeof projectInfo === 'object') {
+                if (projectInfo.projectId) {
+                    metadata.projectId = projectInfo.projectId;
+                }
+                if (projectInfo.projectName) {
+                    metadata.projectName = projectInfo.projectName;
+                }
                 if (projectInfo.taskId) {
                     metadata.taskId = projectInfo.taskId;
+                }
+                if (projectInfo.taskTitle) {
                     metadata.taskTitle = projectInfo.taskTitle;
+                }
+                // MonthlyDocumentCollectionTracker deep-link support
+                if (projectInfo.sectionId) {
+                    metadata.sectionId = projectInfo.sectionId;
+                }
+                if (projectInfo.documentId) {
+                    metadata.documentId = projectInfo.documentId;
+                }
+                if (projectInfo.month !== undefined && projectInfo.month !== null) {
+                    metadata.month = projectInfo.month;
+                }
+                if (projectInfo.commentId) {
+                    metadata.commentId = projectInfo.commentId;
                 }
             }
             

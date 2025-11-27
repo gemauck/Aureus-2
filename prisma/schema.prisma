@@ -833,6 +833,7 @@ model JobCard {
   submittedAt         DateTime?
   completedAt         DateTime?
   ownerId             String? // User who created the job card
+  serviceForms        ServiceFormInstance[]
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
@@ -841,6 +842,48 @@ model JobCard {
   @@index([status])
   @@index([createdAt])
   @@index([vehicleId])
+}
+
+// Service & Maintenance - Dynamic Forms / Checklists
+model ServiceFormTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  category    String   @default("General")
+  isActive    Boolean  @default(true)
+  version     Int      @default(1)
+  fields      String   @default("[]") // JSON array of field definitions [{id, label, type, required, options, helpText, defaultValue, order}]
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  instances ServiceFormInstance[]
+
+  @@index([category])
+  @@index([isActive])
+  @@index([createdById])
+}
+
+model ServiceFormInstance {
+  id             String   @id @default(cuid())
+  jobCardId      String
+  templateId     String
+  templateName   String   @default("")
+  templateVersion Int     @default(1)
+  status         String   @default("not_started") // not_started, in_progress, completed
+  answers        String   @default("[]") // JSON array of answers [{fieldId, value}]
+  completedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  jobCard  JobCard            @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  template ServiceFormTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([jobCardId])
+  @@index([templateId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 // Client News Articles - Daily news search results

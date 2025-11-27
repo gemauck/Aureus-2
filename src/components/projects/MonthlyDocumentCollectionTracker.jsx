@@ -997,8 +997,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         if (!commentText.trim()) return;
         
         const currentUser = getCurrentUser();
+        const newCommentId = Date.now();
         const newComment = {
-            id: Date.now(),
+            id: newCommentId,
             text: commentText,
             date: new Date().toISOString(),
             author: currentUser.name,
@@ -1044,10 +1045,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         [];
                     
                     const contextTitle = `Document Collection - ${project?.name || 'Project'}`;
-                    const contextLink = `#/projects/${project?.id || ''}`;
+                    // Deep-link directly to the document collection cell & comment for email + in-app navigation
+                    const contextLink = `#/projects/${project?.id || ''}?docSectionId=${encodeURIComponent(sectionId)}&docDocumentId=${encodeURIComponent(documentId)}&docMonth=${encodeURIComponent(month)}&commentId=${encodeURIComponent(newCommentId)}`;
                     const projectInfo = {
                         projectId: project?.id,
-                        projectName: project?.name
+                        projectName: project?.name,
+                        sectionId,
+                        documentId,
+                        month,
+                        commentId: newCommentId
                     };
                     
                     // Fire mention notifications (do not block UI on errors)
@@ -1260,6 +1266,32 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [hoverCommentCell]);
+
+    // When opened via a deep-link (e.g. from an email notification), automatically
+    // switch to the correct comment cell and open the popup so the user can
+    // immediately see the relevant discussion.
+    useEffect(() => {
+        try {
+            const search = window.location.search || '';
+            if (!search) return;
+            const params = new URLSearchParams(search);
+            const deepSectionId = params.get('docSectionId');
+            const deepDocumentId = params.get('docDocumentId');
+            const deepMonth = params.get('docMonth');
+            
+            if (deepSectionId && deepDocumentId && deepMonth) {
+                const cellKey = `${deepSectionId}-${deepDocumentId}-${deepMonth}`;
+                // Center the popup on screen; the underlying grid provides context.
+                setCommentPopupPosition({
+                    top: Math.max(window.innerHeight / 2 - 160, 60),
+                    left: Math.max(window.innerWidth / 2 - 180, 20)
+                });
+                setHoverCommentCell(cellKey);
+            }
+        } catch (error) {
+            console.warn('⚠️ Failed to apply document collection deep-link:', error);
+        }
+    }, []);
     
     // ============================================================
     // RENDER STATUS CELL

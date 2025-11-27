@@ -491,6 +491,26 @@ function initializeProjectDetail() {
         }
         console.log('🔄 Project changed, restoring section:', storedSection);
     }, [project?.id]);
+
+    // If the project is opened via a deep-link to the document collection tracker
+    // (for example from an email notification), ensure the Document Collection tab
+    // is active so the MonthlyDocumentCollectionTracker can show the target comment.
+    useEffect(() => {
+        if (!project?.id) return;
+        try {
+            const search = window.location.search || '';
+            if (!search) return;
+            const params = new URLSearchParams(search);
+            const deepSectionId = params.get('docSectionId');
+            const deepDocumentId = params.get('docDocumentId');
+            const deepMonth = params.get('docMonth');
+            if (deepSectionId && deepDocumentId && deepMonth) {
+                setActiveSection('documentCollection');
+            }
+        } catch (error) {
+            console.warn('⚠️ ProjectDetail: failed to apply document collection deep-link:', error);
+        }
+    }, [project?.id]);
     
     // Track if document collection process exists
     // Normalize the value from project prop (handle boolean, string, number, undefined)

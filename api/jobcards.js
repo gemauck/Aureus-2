@@ -8,6 +8,7 @@ async function handler(req, res) {
   const pathSegments = urlPath.split('/').filter(Boolean)
   const resourceType = pathSegments[0] // jobcards (direct endpoint, not nested like /api/manufacturing/*)
   const id = pathSegments[1]
+  const subResource = pathSegments[2]
 
   // Helper to read pagination params from the query string
   const getPagination = () => {
@@ -61,7 +62,7 @@ async function handler(req, res) {
   }
 
   // JOB CARDS
-  if (resourceType === 'jobcards') {
+  if (resourceType === 'jobcards' && !subResource) {
     // LIST (GET /api/jobcards)
     if (req.method === 'GET' && !id) {
       try {
@@ -376,6 +377,116 @@ async function handler(req, res) {
         return serverError(res, 'Failed to delete job card', error.message)
       }
     }
+  }
+
+  // JOB CARD FORMS (nested resource)
+  if (resourceType === 'jobcards' && subResource === 'forms') {
+    const formInstanceId = pathSegments[3]
+
+    // LIST INSTANCES FOR A JOBCARD (GET /api/jobcards/:jobCardId/forms)
+    if (req.method === 'GET' && id && !formInstanceId) {
+      try {
+        const instances = await prisma.serviceFormInstance.findMany({
+          where: { jobCardId: id },
+          orderBy: { createdAt: 'asc' }
+        })
+
+        const formatted = instances.map((inst) => ({
+          ...inst,
+          answers: parseJson(inst.answers, [])
+        }))
+
+        return ok(res, { forms: formatted })
+      } catch (error) {
+        console.error('❌ Failed to list job card forms:', error)
+        return serverError(res, 'Failed to list job card forms', error.message)
+      }
+    }
+
+    // ATTACH TEMPLATE / CREATE INSTANCE (POST /api/jobcards/:jobCardId/forms)
+    if (req.method === 'POST' && id && !formInstanceId) {
+      const body = req.body || {}
+      const templateId = body.templateId
+
+      if (!templateId) {
+        return badRequest(res, 'templateId is required')
+      }
+
+      try {
+        const template = await prisma.serviceFormTemplate.findUnique({
+          where: { id: templateId }
+        })
+
+        if (!template) {
+          return notFound(res, 'Service form template not found')
+        }
+
+        const instance = await prisma.serviceFormInstance.create({
+          data: {
+            jobCardId: id,
+            templateId: template.id,
+            templateName: template.name,
+            templateVersion: template.version,
+            status: body.status || 'not_started',
+            answers: Array.isArray(body.answers) ? JSON.stringify(body.answers) : body.answers || '[]'
+          }
+        })
+
+        return created(res, {
+          form: {
+            ...instance,
+            answers: parseJson(instance.answers, [])
+          }
+        })
+      } catch (error) {
+        console.error('❌ Failed to attach form to job card:', error)
+        return serverError(res, 'Failed to attach form to job card', error.message)
+      }
+    }
+
+    // UPDATE INSTANCE (PATCH /api/jobcards/:jobCardId/forms/:formInstanceId)
+    if (req.method === 'PATCH' && id && formInstanceId) {
+      const body = req.body || {}
+
+      try {
+        const existing = await prisma.serviceFormInstance.findUnique({
+          where: { id: formInstanceId }
+        })
+
+        if (!existing || existing.jobCardId !== id) {
+          return notFound(res, 'Job card form not found')
+        }
+
+        const data = {}
+
+        if (body.status !== undefined) data.status = body.status
+        if (body.answers !== undefined) {
+          data.answers = Array.isArray(body.answers)
+            ? JSON.stringify(body.answers)
+            : body.answers
+        }
+        if (body.completedAt !== undefined) {
+          data.completedAt = body.completedAt ? new Date(body.completedAt) : null
+        }
+
+        const updated = await prisma.serviceFormInstance.update({
+          where: { id: formInstanceId },
+          data
+        })
+
+        return ok(res, {
+          form: {
+            ...updated,
+            answers: parseJson(updated.answers, [])
+          }
+        })
+      } catch (error) {
+        console.error('❌ Failed to update job card form:', error)
+        return serverError(res, 'Failed to update job card form', error.message)
+      }
+    }
+
+    return badRequest(res, 'Invalid job card forms endpoint')
   }
 
   return badRequest(res, 'Invalid job cards endpoint')

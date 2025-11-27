@@ -1131,19 +1131,20 @@ function doesOpportunityBelongToClient(opportunity, client) {
     // Drag and drop handlers - simplified to match TaskManagement pattern
     const handleDragStart = (event, item, type) => {
         if (event?.dataTransfer) {
-            // Match TaskManagement exactly - use single key with item ID
-            // Store type in state, not dataTransfer (simpler, more reliable)
+            // Match TaskManagement: use a single key for the ID, and ALSO store type for
+            // any consumers that rely only on dataTransfer (e.g. older handlers / list view)
             event.dataTransfer.setData('pipelineItemId', String(item.id));
+            event.dataTransfer.setData('pipelineItemType', String(type || item.type || ''));
             event.dataTransfer.effectAllowed = 'move';
         }
         console.log('🎯 Pipeline: dragStart', {
             id: item?.id,
-            type,
+            type: type || item?.type,
             stage: item?.stage,
             hasDataTransfer: !!event?.dataTransfer
         });
         setDraggedItem(item);
-        setDraggedType(type); // Store type in state for recovery
+        setDraggedType(type || item.type || null); // Store type in state for recovery
         setIsDragging(true);
     };
 
@@ -1302,74 +1303,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
         } catch (error) {
             console.error('❌ Pipeline: Failed to toggle star', error);
             alert('Failed to update favorite. Please try again.');
-        }
-    };
-
-    const handleDrop = async (e, targetStage) => {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        // Simple data retrieval like TaskManagement - this is the key!
-        const itemId = e.dataTransfer.getData('pipelineItemId');
-        const itemType = e.dataTransfer.getData('pipelineItemType');
-        
-        if (!itemId || itemId === '') {
-            return;
-        }
-
-        // Find the item from current data
-        const item = getPipelineItems().find(i => String(i.id) === String(itemId) && i.type === itemType);
-        
-        if (!item) {
-            return;
-        }
-
-        const currentStage = item.stage;
-        if (currentStage === targetStage) {
-            return; // Already in target stage
-        }
-
-        let didPersistRemotely = false;
-        try {
-            // Optimistic UI update
-            if (itemType === 'lead') {
-                updateLeadStageOptimistically(item.id, targetStage);
-            } else if (itemType === 'opportunity') {
-                updateOpportunityStageOptimistically(item.clientId, item.id, targetStage);
-            }
-
-            // Persist to database
-            if (itemType === 'lead') {
-                const updateFn = window.api?.updateLeadStage || window.DatabaseAPI?.updateLeadStage;
-                if (updateFn) {
-                    await updateFn(item.id, targetStage);
-                    didPersistRemotely = true;
-                }
-            } else if (itemType === 'opportunity') {
-                const updateFn = window.api?.updateOpportunityStage || window.DatabaseAPI?.updateOpportunityStage;
-                if (updateFn && item.clientId) {
-                    await updateFn(item.clientId, item.id, targetStage);
-                    didPersistRemotely = true;
-                }
-            }
-            
-            if (didPersistRemotely) {
-                schedulePipelineRefresh();
-            }
-        } catch (error) {
-            console.error('❌ Pipeline: Failed to update stage', error);
-            alert('Failed to update stage. Please try again.');
-            schedulePipelineRefresh(); // Revert by refreshing
-        } finally {
-            setDraggedItem(null);
-            setDraggedType(null);
-            setIsDragging(false);
-            setDraggedOverStage(null);
-            setTouchDragState(null);
-            setJustDragged(true);
-            setTimeout(() => {
-                setJustDragged(false);
-            }, 300);
         }
     };
 

@@ -2,6 +2,10 @@
 const ReactGlobal = (typeof window !== 'undefined' && window.React) || (typeof React !== 'undefined' && React) || {};
 const { useState, useEffect } = ReactGlobal;
 
+const PermissionGate =
+  (typeof window !== 'undefined' && window.PermissionGate) ||
+  (({ children }) => children);
+
 const ServiceAndMaintenance = () => {
   const { user } = window.useAuth();
   const [clients, setClients] = useState([]);
@@ -11,6 +15,7 @@ const ServiceAndMaintenance = () => {
   const [copyStatus, setCopyStatus] = useState('Copy share link');
   const [selectedJobCard, setSelectedJobCard] = useState(null);
   const [showJobCardDetail, setShowJobCardDetail] = useState(false);
+  const [showFormsManager, setShowFormsManager] = useState(false);
 
   // Load clients and users for JobCards
   useEffect(() => {
@@ -170,7 +175,7 @@ const ServiceAndMaintenance = () => {
   return (
     <div className="relative p-4 min-h-[calc(100vh-56px)]">
       <div className="flex flex-col gap-4 mb-6">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
               Service & Maintenance
@@ -253,6 +258,44 @@ const ServiceAndMaintenance = () => {
                   </span>
                 ) : null}
               </div>
+
+              {/* Admin-only: Service forms & checklists builder */}
+              <PermissionGate
+                permission={window.PERMISSIONS?.ACCESS_SERVICE_MAINTENANCE}
+              >
+                {(() => {
+                  const user = window.storage?.getUser?.();
+                  const isAdmin = user?.role?.toLowerCase?.() === 'admin';
+                  if (!isAdmin) return null;
+                  return (
+                    <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-3 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-200">
+                            <i className="fa-solid fa-list-check text-[11px]" />
+                          </span>
+                          <div>
+                            <div className="text-[11px] font-semibold uppercase tracking-wide">
+                              Forms &amp; checklists
+                            </div>
+                            <div className="text-[11px] text-slate-600 dark:text-slate-400">
+                              Design reusable service forms and attach them to job cards.
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowFormsManager(true)}
+                          className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-3 py-1.5 text-[11px] font-semibold text-primary-700 shadow-sm ring-1 ring-primary-100 hover:bg-primary-50 dark:bg-primary-900/40 dark:text-primary-100 dark:ring-primary-800/60 dark:hover:bg-primary-900/60"
+                        >
+                          <i className="fa-solid fa-pen-to-square text-[10px]" />
+                          Open form builder
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </PermissionGate>
             </div>
           </div>
 
@@ -731,6 +774,12 @@ const ServiceAndMaintenance = () => {
           </div>
         </div>
       )}
+      {showFormsManager && window.ServiceFormsManager ? (
+        <window.ServiceFormsManager
+          isOpen={showFormsManager}
+          onClose={() => setShowFormsManager(false)}
+        />
+      ) : null}
     </div>
   );
 };

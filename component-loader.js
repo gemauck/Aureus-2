@@ -170,6 +170,7 @@
         // Service and Maintenance
         'components/manufacturing/JobCards.jsx',
         'components/service-maintenance/ServiceAndMaintenance.jsx',
+        'components/service-maintenance/ServiceFormsManager.jsx',
         
         // Tools
         'components/tools/TankSizeCalculator.jsx',
@@ -198,11 +199,13 @@
     ];
     
     const offlineCapableComponents = [
-        'components/service-maintenance/ServiceAndMaintenance.jsx'
+        'components/service-maintenance/ServiceAndMaintenance.jsx',
+        'components/service-maintenance/ServiceFormsManager.jsx'
     ];
 
     const componentCacheVersions = {
-        'components/service-maintenance/ServiceAndMaintenance.jsx': 'service-maintenance-ui-v20251111'
+        'components/service-maintenance/ServiceAndMaintenance.jsx': 'service-maintenance-ui-v20251111',
+        'components/service-maintenance/ServiceFormsManager.jsx': 'service-forms-manager-v20251127'
     };
     
     function loadComponent(path) {
