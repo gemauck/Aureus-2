@@ -3560,16 +3560,34 @@ const Clients = React.memo(() => {
         }
         
         try {
-            if (window.DatabaseAPI && typeof window.DatabaseAPI.toggleStarClient === 'function') {
+            // Prefer the main API, fall back to DatabaseAPI for backwards compatibility
+            const toggleStarFn =
+                (window.api && typeof window.api.toggleStarClient === 'function'
+                    ? window.api.toggleStarClient
+                    : (window.DatabaseAPI && typeof window.DatabaseAPI.toggleStarClient === 'function'
+                        ? window.DatabaseAPI.toggleStarClient
+                        : null));
+
+            if (toggleStarFn) {
                 // Call API to persist the change (non-blocking)
-                window.DatabaseAPI.toggleStarClient(clientId).then(() => {
+                toggleStarFn(clientId).then(() => {
                     console.log(`⭐ Client/lead ${currentStarred ? 'unstarred' : 'starred'} successfully`);
                     // Clear cache but don't refetch - optimistic update is sufficient
                     if (window.DatabaseAPI?.clearCache) {
                         window.DatabaseAPI.clearCache('/clients');
                         window.DatabaseAPI.clearCache('/leads');
                     }
-                }).catch(error => {
+                    }
+                    // Also invalidate DataContext cache if available so lists re-hydrate with fresh data
+                    if (window.dataManager?.invalidate) {
+                        try {
+                            window.dataManager.invalidate('clients');
+                            window.dataManager.invalidate('leads');
+                        } catch (err) {
+                            console.warn('⚠️ Failed to invalidate DataContext cache after star toggle:', err);
+                        }
+                    }
+                }).catch((error) => {
                     console.error('❌ Failed to toggle star:', error);
                     // Revert optimistic update on error
                     if (isLead) {

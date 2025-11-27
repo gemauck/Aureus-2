@@ -43,6 +43,7 @@ async function handler(req, res) {
     const stockUsed = parseJson(body.stockUsed, [])
     const materialsBought = parseJson(body.materialsBought, [])
     const photos = parseJson(body.photos, [])
+    const checklists = parseJson(body.checklists, [])
     
     const kmBefore = parseFloat(body.kmReadingBefore) || 0
     const kmAfter = parseFloat(body.kmReadingAfter) || 0
@@ -51,6 +52,28 @@ async function handler(req, res) {
     const totalMaterialsCost = materialsBought && materialsBought.length > 0
       ? materialsBought.reduce((sum, item) => sum + (parseFloat(item.cost) || 0), 0)
       : parseFloat(body.totalMaterialsCost) || 0
+
+    // Render checklists into a readable text block that can be stored with the job card
+    const checklistLines =
+      Array.isArray(checklists) && checklists.length > 0
+        ? [
+            '--- Checklists ---',
+            ...checklists.flatMap((cl) => {
+              const title = (cl && cl.title) || 'Checklist'
+              const items = Array.isArray(cl?.items) ? cl.items : []
+              const itemLines =
+                items.length > 0
+                  ? items.map((item) => {
+                      const label = (item && item.label) || 'Item'
+                      const done = !!(item && (item.done || item.checked))
+                      const status = done ? '[x]' : '[ ]'
+                      return `  ${status} ${label}`
+                    })
+                  : ['  [ ] (no items captured)']
+              return [`* ${title}`, ...itemLines]
+            }),
+          ]
+        : []
 
     // Create job card
     const jobCard = await prisma.jobCard.create({
@@ -84,8 +107,11 @@ async function handler(req, res) {
           body.customerName ? `Customer: ${body.customerName}` : '',
           body.customerPosition ? `Position: ${body.customerPosition}` : '',
           body.customerFeedback ? `Feedback: ${body.customerFeedback}` : '',
-          body.customerSignature ? `Signature: [Captured]` : ''
-        ].filter(Boolean).join('\n'),
+          body.customerSignature ? `Signature: [Captured]` : '',
+          ...checklistLines,
+        ]
+          .filter(Boolean)
+          .join('\n'),
         status: body.status || 'draft',
         submittedAt: body.submittedAt ? new Date(body.submittedAt) : new Date(),
         ownerId: null // Public form - no owner

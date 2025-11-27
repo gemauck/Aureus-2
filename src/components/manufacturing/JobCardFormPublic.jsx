@@ -109,6 +109,9 @@ const JobCardFormPublic = () => {
     stockUsed: [],
     materialsBought: [],
     photos: [],
+    // Simple, local checklists that become part of the wizard payload
+    // [{ id, title, items: [{ id, label, done }] }]
+    checklists: [],
     status: 'draft',
     customerName: '',
     customerTitle: '',
@@ -133,6 +136,8 @@ const JobCardFormPublic = () => {
   const [stepError, setStepError] = useState('');
   const [hasSignature, setHasSignature] = useState(false);
   const [shareStatus, setShareStatus] = useState('Copy share link');
+  // Inline checklist builder state for the Work Notes step
+  const [activeChecklistId, setActiveChecklistId] = useState(null);
 
   const signatureCanvasRef = useRef(null);
   const signatureWrapperRef = useRef(null);
@@ -979,6 +984,112 @@ const JobCardFormPublic = () => {
     }));
   };
 
+  // --- Work step checklists -------------------------------------------------
+
+  const ensureChecklistArray = (prev) => Array.isArray(prev.checklists) ? prev.checklists : [];
+
+  const handleAddChecklist = () => {
+    const id = `cl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    setFormData(prev => {
+      const existing = ensureChecklistArray(prev);
+      return {
+        ...prev,
+        checklists: [
+          ...existing,
+          {
+            id,
+            title: '',
+            items: [
+              {
+                id: `${id}_item_1`,
+                label: '',
+                done: false
+              }
+            ]
+          }
+        ]
+      };
+    });
+    setActiveChecklistId(id);
+  };
+
+  const handleRemoveChecklist = (checklistId) => {
+    setFormData(prev => ({
+      ...prev,
+      checklists: ensureChecklistArray(prev).filter(cl => cl.id !== checklistId)
+    }));
+    if (activeChecklistId === checklistId) {
+      setActiveChecklistId(null);
+    }
+  };
+
+  const handleChecklistTitleChange = (checklistId, title) => {
+    setFormData(prev => ({
+      ...prev,
+      checklists: ensureChecklistArray(prev).map(cl =>
+        cl.id === checklistId ? { ...cl, title } : cl
+      )
+    }));
+  };
+
+  const handleAddChecklistItemRow = (checklistId) => {
+    setFormData(prev => ({
+      ...prev,
+      checklists: ensureChecklistArray(prev).map(cl => {
+        if (cl.id !== checklistId) return cl;
+        const baseItems = Array.isArray(cl.items) ? cl.items : [];
+        const newItemId = `${checklistId}_item_${baseItems.length + 1}_${Math.random()
+          .toString(36)
+          .slice(2, 5)}`;
+        return {
+          ...cl,
+          items: [
+            ...baseItems,
+            {
+              id: newItemId,
+              label: '',
+              done: false
+            }
+          ]
+        };
+      })
+    }));
+  };
+
+  const handleChecklistItemChange = (checklistId, itemId, changes) => {
+    setFormData(prev => ({
+      ...prev,
+      checklists: ensureChecklistArray(prev).map(cl => {
+        if (cl.id !== checklistId) return cl;
+        const baseItems = Array.isArray(cl.items) ? cl.items : [];
+        return {
+          ...cl,
+          items: baseItems.map(item =>
+            item.id === itemId ? { ...item, ...changes } : item
+          )
+        };
+      })
+    }));
+  };
+
+  const handleRemoveChecklistItemRow = (checklistId, itemId) => {
+    setFormData(prev => ({
+      ...prev,
+      checklists: ensureChecklistArray(prev).map(cl => {
+        if (cl.id !== checklistId) return cl;
+        const baseItems = Array.isArray(cl.items) ? cl.items : [];
+        return {
+          ...cl,
+          items: baseItems.filter(item => item.id !== itemId)
+        };
+      })
+    }));
+  };
+
+  const handleToggleChecklistItem = (checklistId, itemId, done) => {
+    handleChecklistItemChange(checklistId, itemId, { done });
+  };
+
   const persistStockMovement = async (movementData) => {
             const cachedMovements = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
             cachedMovements.push({
@@ -1045,16 +1156,18 @@ const JobCardFormPublic = () => {
         reasonForVisit: '',
         diagnosis: '',
         actionsTaken: '',
-      otherComments: '',
+        otherComments: '',
         stockUsed: [],
         materialsBought: [],
         photos: [],
-      status: 'draft',
-      customerName: '',
-      customerTitle: '',
-      customerFeedback: '',
-      customerSignDate: '',
-      customerSignature: ''
+        // Reset local checklists
+        checklists: [],
+        status: 'draft',
+        customerName: '',
+        customerTitle: '',
+        customerFeedback: '',
+        customerSignDate: '',
+        customerSignature: ''
       });
       setSelectedPhotos([]);
       setTechnicianInput('');
@@ -1546,9 +1659,27 @@ const JobCardFormPublic = () => {
       </section>
 
       <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
-        <header className="mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Actions Taken</h2>
-          <p className="text-sm text-gray-500 mt-1">Detail the corrective actions and resolution steps.</p>
+        <header className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Actions Taken</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Detail the corrective actions and resolution steps.
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <button
+              type="button"
+              onClick={handleAddChecklist}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500"
+            >
+              <i className="fa-solid fa-list-check text-xs" />
+              <span>Add a Checklist</span>
+            </button>
+            <p className="text-[11px] text-gray-400 max-w-xs text-right">
+              Create a quick checklist for this job so you can tick items off while
+              completing the work.
+            </p>
+          </div>
         </header>
             <textarea
               name="actionsTaken"
@@ -1576,6 +1707,119 @@ const JobCardFormPublic = () => {
           style={{ fontSize: '16px' }}
         />
       </section>
+
+      {/* Inline checklists for this job card */}
+      {Array.isArray(formData.checklists) && formData.checklists.length > 0 && (
+        <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+          <header className="mb-3">
+            <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                <i className="fa-solid fa-list-check text-xs" />
+              </span>
+              Job Checklists
+            </h3>
+            <p className="text-sm text-gray-500 mt-1">
+              Use these mini checklists to capture step-by-step actions or quality checks.
+            </p>
+          </header>
+
+          <div className="space-y-4">
+            {formData.checklists.map((checklist) => {
+              const items = Array.isArray(checklist.items) ? checklist.items : [];
+              return (
+                <div
+                  key={checklist.id}
+                  className="border border-gray-200 rounded-lg p-3 sm:p-4 bg-gray-50"
+                >
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="flex-1 space-y-1">
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        Checklist title
+                      </label>
+                      <input
+                        type="text"
+                        value={checklist.title || ''}
+                        onChange={(e) =>
+                          handleChecklistTitleChange(checklist.id, e.target.value)
+                        }
+                        placeholder="e.g., Pump start-up checks"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveChecklist(checklist.id)}
+                      className="inline-flex items-center justify-center h-8 w-8 rounded-full border border-gray-200 text-gray-400 hover:text-red-600 hover:border-red-200"
+                      aria-label="Remove checklist"
+                    >
+                      <i className="fa-solid fa-trash text-xs" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {items.length === 0 && (
+                      <p className="text-xs text-gray-500">
+                        Start by adding a few checklist items below.
+                      </p>
+                    )}
+                    {items.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-start gap-2 bg-white rounded-md border border-gray-200 px-2 py-1.5"
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded"
+                          checked={!!item.done}
+                          onChange={(e) =>
+                            handleToggleChecklistItem(
+                              checklist.id,
+                              item.id,
+                              e.target.checked
+                            )
+                          }
+                        />
+                        <input
+                          type="text"
+                          value={item.label || ''}
+                          onChange={(e) =>
+                            handleChecklistItemChange(checklist.id, item.id, {
+                              label: e.target.value
+                            })
+                          }
+                          placeholder="Checklist item"
+                          className="flex-1 px-2 py-1 text-xs sm:text-sm border-0 focus:ring-0 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleRemoveChecklistItemRow(checklist.id, item.id)
+                          }
+                          className="inline-flex items-center justify-center h-7 w-7 rounded-full text-gray-400 hover:text-red-600"
+                          aria-label="Remove item"
+                        >
+                          <i className="fa-solid fa-xmark text-xs" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-3">
+                    <button
+                      type="button"
+                      onClick={() => handleAddChecklistItemRow(checklist.id)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100"
+                    >
+                      <i className="fa-solid fa-plus text-[10px]" />
+                      Add item
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
       {renderNavigationButtons()}
     </div>
   );
