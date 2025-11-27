@@ -153,6 +153,57 @@
         .hover\:bg-primary-600:hover { background-color: var(--primary-600); }
         .hover\:bg-primary-700:hover { background-color: var(--primary-700); }
     </style>
+    
+    <!-- Simple in-app version checker & reload banner -->
+    <style>
+        .app-version-banner {
+            position: fixed;
+            inset-inline: 0;
+            bottom: 0;
+            z-index: 9999;
+            display: none;
+            background: #0f172a;
+            color: #e5e7eb;
+            padding: 0.75rem 1rem;
+            box-shadow: 0 -4px 10px rgba(15, 23, 42, 0.6);
+            font-size: 0.875rem;
+        }
+        .app-version-banner__content {
+            max-width: 960px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+        .app-version-banner__button {
+            border-radius: 9999px;
+            border: none;
+            padding: 0.4rem 0.9rem;
+            background: #22c55e;
+            color: #022c22;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .app-version-banner__button:hover {
+            background: #16a34a;
+        }
+        .app-version-banner__button--secondary {
+            background: transparent;
+            color: #9ca3af;
+            border: 1px solid rgba(148, 163, 184, 0.5);
+        }
+        .app-version-banner__button--secondary:hover {
+            background: rgba(15, 23, 42, 0.9);
+        }
+        @media (max-width: 640px) {
+            .app-version-banner__content {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+    </style>
     <style>
         /* Force login brand white regardless of dark mode overrides */
         .login-brand { color: #ffffff !important; }
@@ -322,6 +373,31 @@
 <body class="bg-gray-50 login-page">
     <div id="root"></div>
 
+    <!-- Version checker: detects new deployments and prompts user to reload -->
+    <div id="app-version-banner" class="app-version-banner" aria-live="polite" aria-atomic="true">
+        <div class="app-version-banner__content">
+            <span id="app-version-banner-text">
+                A new version of Abcotronics ERP is available.
+            </span>
+            <div style="display: flex; gap: 0.5rem;">
+                <button
+                    type="button"
+                    class="app-version-banner__button"
+                    id="app-version-reload"
+                >
+                    Reload now
+                </button>
+                <button
+                    type="button"
+                    class="app-version-banner__button app-version-banner__button--secondary"
+                    id="app-version-dismiss"
+                >
+                    Later
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- React Production Builds - Much faster than development -->
     <link rel="preconnect" href="https://unpkg.com" crossorigin>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; console.log('✅ React loaded'); }" onerror="console.error('❌ Failed to load React from CDN');"></script>
@@ -483,6 +559,103 @@
         });
         
         console.log('✅ Global error handlers registered');
+    </script>
+    
+    <!-- Version polling logic: checks /version and shows reload banner when version changes -->
+    <script>
+        (function() {
+            const VERSION_STORAGE_KEY = 'abcotronics_app_version';
+            const VERSION_CHECK_INTERVAL_MS = 60 * 1000; // 60 seconds
+            const VERSION_ENDPOINT = '/version';
+
+            function getStoredVersion() {
+                try {
+                    return localStorage.getItem(VERSION_STORAGE_KEY) || null;
+                } catch {
+                    return null;
+                }
+            }
+
+            function setStoredVersion(version) {
+                try {
+                    if (version) {
+                        localStorage.setItem(VERSION_STORAGE_KEY, version);
+                    }
+                } catch {
+                    // Ignore storage errors (private mode, etc.)
+                }
+            }
+
+            async function fetchCurrentVersion() {
+                try {
+                    const res = await fetch(VERSION_ENDPOINT, {
+                        cache: 'no-store',
+                        headers: {
+                            'Accept': 'application/json',
+                        },
+                    });
+                    if (!res.ok) return null;
+                    const data = await res.json().catch(() => null);
+                    return data && typeof data.version === 'string' ? data.version : null;
+                } catch {
+                    return null;
+                }
+            }
+
+            function showBanner() {
+                const banner = document.getElementById('app-version-banner');
+                if (!banner) return;
+                banner.style.display = 'block';
+
+                const reloadBtn = document.getElementById('app-version-reload');
+                const dismissBtn = document.getElementById('app-version-dismiss');
+
+                if (reloadBtn) {
+                    reloadBtn.onclick = function() {
+                        // Normal reload is enough because HTML is served with no-cache headers
+                        window.location.reload();
+                    };
+                }
+
+                if (dismissBtn) {
+                    dismissBtn.onclick = function() {
+                        banner.style.display = 'none';
+                    };
+                }
+            }
+
+            async function initializeVersionWatcher() {
+                const initialVersion = await fetchCurrentVersion();
+                if (initialVersion) {
+                    const stored = getStoredVersion();
+                    if (!stored) {
+                        setStoredVersion(initialVersion);
+                    } else if (stored !== initialVersion) {
+                        // If user opens a tab on an older version and server is already on a newer version
+                        // we immediately prompt for reload
+                        showBanner();
+                        setStoredVersion(initialVersion);
+                    }
+                }
+
+                // Poll periodically for changes
+                setInterval(async () => {
+                    const currentStored = getStoredVersion();
+                    const latest = await fetchCurrentVersion();
+                    if (!latest) return;
+                    if (currentStored && currentStored !== latest) {
+                        showBanner();
+                    }
+                    setStoredVersion(latest);
+                }, VERSION_CHECK_INTERVAL_MS);
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initializeVersionWatcher);
+            } else {
+                initializeVersionWatcher();
+            }
+        })();
     </script>
     
     <!-- Lazy load heavy libraries when needed -->

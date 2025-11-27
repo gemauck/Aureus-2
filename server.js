@@ -22,6 +22,7 @@ import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import path from 'path'
 import fs from 'fs'
+import pkg from './package.json' assert { type: 'json' }
 
 // Ensure critical environment variables are set
 // Allow relaxed requirements in local dev when DEV_LOCAL_NO_DB=true
@@ -170,6 +171,10 @@ async function loadHandler(handlerPath) {
 const app = express()
 const PORT = process.env.PORT || 3000
 
+// Application version info for cache-busting and client refresh prompts
+const APP_VERSION = process.env.APP_VERSION || pkg.version || '0.0.0'
+const APP_BUILD_TIME = process.env.APP_BUILD_TIME || new Date().toISOString()
+
 // Trust proxy to work behind Nginx
 app.set('trust proxy', 1)
 
@@ -230,6 +235,18 @@ app.use(compression({ threshold: 0 }))
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 app.use(cookieParser())
+
+// Lightweight version endpoint for clients to detect new deployments
+app.get('/version', (req, res) => {
+  // Ensure clients always revalidate this endpoint
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+  res.setHeader('Pragma', 'no-cache')
+  res.setHeader('Expires', '0')
+  res.json({
+    version: APP_VERSION,
+    buildTime: APP_BUILD_TIME,
+  })
+})
 
 // Instruct search engines not to index the site
 app.use((req, res, next) => {
@@ -1054,7 +1071,7 @@ app.get('/health', (req, res) => {
     status: 'ok', 
     timestamp: new Date().toISOString(),
     platform: 'railway',
-    version: '1.0.0'
+    version: APP_VERSION
   })
 })
 

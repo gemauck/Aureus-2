@@ -25,6 +25,7 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
     const [technicianInput, setTechnicianInput] = useState('');
     const [selectedPhotos, setSelectedPhotos] = useState([]);
     const [availableSites, setAvailableSites] = useState([]);
+    const [saving, setSaving] = useState(false);
 
     // Get current user name for auto-population
     useEffect(() => {
@@ -151,18 +152,54 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
         setFormData(prev => ({ ...prev, photos: newPhotos.map(p => typeof p === 'string' ? p : p.url) }));
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        
-        const jobCardData = {
-            ...formData,
-            id: jobCard?.id || Date.now().toString(),
-            createdAt: jobCard?.createdAt || new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        };
 
-        onSave(jobCardData);
-        onClose();
+        // If marking as completed, ensure all attached service forms are completed
+        if (jobCard && formData.status === 'completed') {
+            try {
+                const token = window.storage?.getToken?.();
+                if (token && jobCard.id) {
+                    const res = await fetch(`/api/jobcards/${encodeURIComponent(jobCard.id)}/forms`, {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        const forms = Array.isArray(data.forms) ? data.forms : [];
+                        const incomplete = forms.filter(
+                            (f) => (f.status || '').toString().toLowerCase() !== 'completed'
+                        );
+                        if (forms.length > 0 && incomplete.length > 0) {
+                            alert(
+                                'This job card still has service forms/checklists that are not completed. Please complete all attached forms before marking the job as completed.'
+                            );
+                            return;
+                        }
+                    }
+                }
+            } catch (error) {
+                console.warn('JobCardModal: Failed to verify service forms before completion', error);
+                // If verification fails, allow completion to avoid blocking users unexpectedly
+            }
+        }
+
+        try {
+            setSaving(true);
+            const jobCardData = {
+                ...formData,
+                id: jobCard?.id || Date.now().toString(),
+                createdAt: jobCard?.createdAt || new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+
+            await onSave(jobCardData);
+            onClose();
+        } finally {
+            setSaving(false);
+        }
     };
 
     if (!isOpen) return null;
@@ -503,9 +540,10 @@ const JobCardModal = ({ isOpen, onClose, jobCard, onSave, clients }) => {
                         </button>
                         <button
                             type="submit"
-                            className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm"
+                            disabled={saving}
+                            className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                            {jobCard ? 'Update Job Card' : 'Create Job Card'}
+                            {saving ? 'Saving…' : jobCard ? 'Update Job Card' : 'Create Job Card'}
                         </button>
                     </div>
                 </form>

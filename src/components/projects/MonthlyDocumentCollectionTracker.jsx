@@ -1623,15 +1623,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-1 ml-3">
-                                                    <button
-                                                        onClick={() => {
-                                                            setEditingTemplate(template);
-                                                            setShowTemplateList(false);
-                                                        }}
-                                                        className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded"
-                                                    >
-                                                        <i className="fas fa-edit"></i>
-                                                    </button>
+                                                    {!template.isDefault && (
+                                                        <button
+                                                            onClick={() => {
+                                                                setEditingTemplate(template);
+                                                                setShowTemplateList(false);
+                                                            }}
+                                                            className="px-2 py-1 text-xs text-blue-600 hover:bg-blue-50 rounded"
+                                                            title="Edit template"
+                                                        >
+                                                            <i className="fas fa-edit"></i>
+                                                        </button>
+                                                    )}
                                                     {!template.isDefault && (
                                                         <button
                                                             onClick={(e) => {
@@ -1647,8 +1650,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                         </button>
                                                     )}
                                                     {template.isDefault && (
-                                                        <span className="px-2 py-1 text-xs text-gray-400" title="Default template">
+                                                        <span
+                                                            className="px-2 py-1 text-xs text-gray-400 flex items-center gap-1"
+                                                            title="Default templates are read-only. Create a new template to customize."
+                                                        >
                                                             <i className="fas fa-lock"></i>
+                                                            <span>Default</span>
                                                         </span>
                                                     )}
                                                 </div>

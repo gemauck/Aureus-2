@@ -16,6 +16,9 @@ const ServiceAndMaintenance = () => {
   const [selectedJobCard, setSelectedJobCard] = useState(null);
   const [showJobCardDetail, setShowJobCardDetail] = useState(false);
   const [showFormsManager, setShowFormsManager] = useState(false);
+  const [formsManagerReady, setFormsManagerReady] = useState(
+    typeof window !== 'undefined' && !!window.ServiceFormsManager
+  );
 
   // Load clients and users for JobCards
   useEffect(() => {
@@ -68,6 +71,38 @@ const ServiceAndMaintenance = () => {
 
     return undefined;
   }, [jobCardsReady]);
+
+  // Poll for ServiceFormsManager registration so the "Open form builder"
+  // button never appears to do nothing if the script loads slightly later.
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    if (formsManagerReady) {
+      return;
+    }
+
+    let cancelled = false;
+    const checkFormsManager = () => {
+      if (!cancelled && window.ServiceFormsManager) {
+        setFormsManagerReady(true);
+      }
+    };
+
+    // Initial check in case it became available between render and effect
+    checkFormsManager();
+
+    if (!formsManagerReady) {
+      const interval = setInterval(checkFormsManager, 200);
+      return () => {
+        cancelled = true;
+        clearInterval(interval);
+      };
+    }
+
+    return undefined;
+  }, [formsManagerReady]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -144,6 +179,435 @@ const ServiceAndMaintenance = () => {
     if (Number.isNaN(date.getTime())) return '';
     return date.toLocaleString();
   };
+
+// Job card forms & checklists section (attached dynamic forms)
+const JobCardFormsSection = ({ jobCard }) => {
+  if (!useState || !useEffect || !jobCard || !jobCard.id) {
+    return null;
+  }
+
+  const [forms, setForms] = useState([]);
+  const [templates, setTemplates] = useState([]);
+  const [loadingForms, setLoadingForms] = useState(false);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [savingFormId, setSavingFormId] = useState(null);
+  const [attachTemplateId, setAttachTemplateId] = useState('');
+  const [answersByForm, setAnswersByForm] = useState({});
+
+  const user = window.storage?.getUser?.();
+  const isAdmin = user?.role?.toLowerCase?.() === 'admin';
+
+  const token = window.storage?.getToken?.();
+
+  const syncAnswersState = (instances) => {
+    const next = {};
+    (instances || []).forEach((inst) => {
+      const answersArray = Array.isArray(inst.answers) ? inst.answers : [];
+      const map = {};
+      answersArray.forEach((a) => {
+        if (a && a.fieldId != null) {
+          map[a.fieldId] = a.value;
+        }
+      });
+      next[inst.id] = map;
+    });
+    setAnswersByForm(next);
+  };
+
+  useEffect(() => {
+    if (!token || !jobCard.id) return;
+    let cancelled = false;
+
+    const loadForms = async () => {
+      try {
+        setLoadingForms(true);
+        const res = await fetch(`/api/jobcards/${encodeURIComponent(jobCard.id)}/forms`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          console.error('JobCardFormsSection: Failed to load forms', res.status, text);
+          return;
+        }
+        const data = await res.json();
+        if (!cancelled) {
+          const instances = Array.isArray(data.forms) ? data.forms : [];
+          setForms(instances);
+          syncAnswersState(instances);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('JobCardFormsSection: Error loading forms', error);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingForms(false);
+        }
+      }
+    };
+
+    loadForms();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobCard.id, token]);
+
+  useEffect(() => {
+    if (!token) return;
+    if (!isAdmin) return;
+    let cancelled = false;
+
+    const loadTemplates = async () => {
+      try {
+        setLoadingTemplates(true);
+        const res = await fetch('/api/service-forms', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          console.error('JobCardFormsSection: Failed to load templates', res.status, text);
+          return;
+        }
+        const data = await res.json();
+        if (!cancelled) {
+          setTemplates(Array.isArray(data.templates) ? data.templates : []);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('JobCardFormsSection: Error loading templates', error);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingTemplates(false);
+        }
+      }
+    };
+
+    loadTemplates();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, isAdmin]);
+
+  const handleAttachTemplate = async () => {
+    if (!attachTemplateId || !token) return;
+    try {
+      const res = await fetch(
+        `/api/jobcards/${encodeURIComponent(jobCard.id)}/forms`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ templateId: attachTemplateId }),
+        }
+      );
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('JobCardFormsSection: Failed to attach form', res.status, text);
+        alert('Failed to attach form. Please try again.');
+        return;
+      }
+      const data = await res.json();
+      const created = data.form;
+      const nextForms = [...forms, created];
+      setForms(nextForms);
+      syncAnswersState(nextForms);
+      setAttachTemplateId('');
+    } catch (error) {
+      console.error('JobCardFormsSection: Error attaching form', error);
+      alert(error.message || 'Failed to attach form.');
+    }
+  };
+
+  const handleAnswerChange = (formId, fieldId, value) => {
+    setAnswersByForm((prev) => {
+      const existing = prev[formId] || {};
+      return {
+        ...prev,
+        [formId]: {
+          ...existing,
+          [fieldId]: value,
+        },
+      };
+    });
+  };
+
+  const handleSaveForm = async (form, markComplete) => {
+    if (!token) return;
+    const tpl = templates.find((t) => t.id === form.templateId);
+    const fields = Array.isArray(tpl?.fields) ? tpl.fields : [];
+    const current = answersByForm[form.id] || {};
+    const answers = fields.map((f, idx) => ({
+      fieldId: f.id || `field_${idx}`,
+      value: current[f.id] ?? '',
+    }));
+
+    try {
+      setSavingFormId(form.id);
+      const res = await fetch(
+        `/api/jobcards/${encodeURIComponent(jobCard.id)}/forms/${encodeURIComponent(form.id)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            answers,
+            status: markComplete ? 'completed' : 'in_progress',
+            completedAt: markComplete ? new Date().toISOString() : null,
+          }),
+        }
+      );
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('JobCardFormsSection: Failed to save form', res.status, text);
+        alert('Failed to save form. Please try again.');
+        return;
+      }
+      const data = await res.json();
+      const updated = data.form;
+      const nextForms = forms.map((f) => (f.id === updated.id ? updated : f));
+      setForms(nextForms);
+      syncAnswersState(nextForms);
+    } catch (error) {
+      console.error('JobCardFormsSection: Error saving form', error);
+      alert(error.message || 'Failed to save form.');
+    } finally {
+      setSavingFormId(null);
+    }
+  };
+
+  const overallCount = forms.length;
+  const completedCount = forms.filter(
+    (f) => (f.status || '').toString().toLowerCase() === 'completed'
+  ).length;
+
+  return (
+    <section className="rounded-2xl border border-slate-800 bg-slate-900/80 p-5 space-y-4">
+      <header className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary-500/10 text-primary-300">
+            <i className="fa-solid fa-list-check text-sm" />
+          </span>
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Forms &amp; checklists
+            </div>
+            <div className="text-sm text-slate-100">
+              {overallCount === 0
+                ? 'No forms attached'
+                : `${completedCount}/${overallCount} forms completed`}
+            </div>
+          </div>
+        </div>
+        {isAdmin && (
+          <div className="flex items-center gap-2 text-[11px]">
+            <select
+              className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              value={attachTemplateId}
+              disabled={loadingTemplates}
+              onChange={(e) => setAttachTemplateId(e.target.value)}
+            >
+              <option value="">
+                {loadingTemplates ? 'Loading templates…' : 'Attach form'}
+              </option>
+              {(templates || []).map((tpl) => (
+                <option key={tpl.id} value={tpl.id}>
+                  {tpl.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleAttachTemplate}
+              disabled={!attachTemplateId}
+              className="inline-flex items-center gap-1 rounded-full bg-primary-500 px-3 py-1 text-[11px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <i className="fa-solid fa-plus text-[9px]" />
+              Add
+            </button>
+          </div>
+        )}
+      </header>
+
+      {loadingForms && (
+        <div className="flex items-center gap-2 text-xs text-slate-300">
+          <span className="h-4 w-4 animate-spin rounded-full border-b-2 border-primary-400" />
+          <span>Loading forms for this job card…</span>
+        </div>
+      )}
+
+      {!loadingForms && forms.length === 0 && (
+        <p className="text-xs text-slate-300">
+          No forms have been attached to this job card yet.
+        </p>
+      )}
+
+      <div className="space-y-3">
+        {forms.map((form) => {
+          const tpl = templates.find((t) => t.id === form.templateId) || {};
+          const fields = Array.isArray(tpl.fields) ? tpl.fields : [];
+          const answers = answersByForm[form.id] || {};
+          const status = (form.status || 'not_started').toString().toLowerCase();
+
+          const statusClasses =
+            status === 'completed'
+              ? 'bg-emerald-500/10 text-emerald-300 border-emerald-400/40'
+              : status === 'in_progress'
+              ? 'bg-sky-500/10 text-sky-300 border-sky-400/40'
+              : 'bg-slate-700/60 text-slate-100 border-slate-600';
+
+          return (
+            <div
+              key={form.id}
+              className="rounded-xl border border-slate-700 bg-slate-950/40 p-3 text-xs text-slate-100"
+            >
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <div className="font-semibold">
+                      {form.templateName || tpl.name || 'Form'}
+                    </div>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${statusClasses}`}
+                    >
+                      <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                      {status === 'completed'
+                        ? 'Completed'
+                        : status === 'in_progress'
+                        ? 'In progress'
+                        : 'Not started'}
+                    </span>
+                  </div>
+                  {(tpl.description || '').trim() && (
+                    <div className="mt-0.5 text-[11px] text-slate-300">
+                      {tpl.description}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleSaveForm(form, false)}
+                    disabled={savingFormId === form.id}
+                    className="inline-flex items-center gap-1 rounded-full border border-slate-600 px-3 py-1 text-[11px] font-medium text-slate-100 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {savingFormId === form.id && (
+                      <span className="h-3 w-3 animate-spin rounded-full border-b-2 border-white" />
+                    )}
+                    <span>Save</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveForm(form, true)}
+                    disabled={savingFormId === form.id}
+                    className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-3 py-1 text-[11px] font-medium text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <i className="fa-solid fa-check text-[9px]" />
+                    <span>Mark complete</span>
+                  </button>
+                </div>
+              </div>
+
+              {fields.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-700 px-3 py-2 text-[11px] text-slate-300">
+                  This form has no visible fields configured yet.
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {fields.map((field, idx) => {
+                    const fieldId = field.id || `field_${idx}`;
+                    const value = answers[fieldId] ?? '';
+                    const commonProps = {
+                      id: `${form.id}_${fieldId}`,
+                      value,
+                      onChange: (e) =>
+                        handleAnswerChange(form.id, fieldId, e.target.value),
+                      className:
+                        'w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-100 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500',
+                    };
+
+                    return (
+                      <div key={fieldId} className="space-y-1">
+                        <label
+                          htmlFor={commonProps.id}
+                          className="flex items-center justify-between gap-2 text-[11px] font-medium text-slate-200"
+                        >
+                          <span>{field.label || 'Field'}</span>
+                          {field.required && (
+                            <span className="text-[10px] font-semibold text-rose-300">
+                              Required
+                            </span>
+                          )}
+                        </label>
+                        {field.type === 'textarea' ? (
+                          <textarea
+                            rows={3}
+                            {...commonProps}
+                          />
+                        ) : field.type === 'number' ? (
+                          <input
+                            type="number"
+                            {...commonProps}
+                          />
+                        ) : field.type === 'checkbox' ? (
+                          <select
+                            {...commonProps}
+                          >
+                            <option value="">Select…</option>
+                            <option value="yes">Yes</option>
+                            <option value="no">No</option>
+                          </select>
+                        ) : field.type === 'select' ? (
+                          <select
+                            {...commonProps}
+                          >
+                            <option value="">Select…</option>
+                            {Array.isArray(field.options)
+                              ? field.options
+                                  .filter(Boolean)
+                                  .map((opt) => (
+                                    <option key={opt} value={opt}>
+                                      {opt}
+                                    </option>
+                                  ))
+                              : null}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            {...commonProps}
+                          />
+                        )}
+                        {field.helpText && (
+                          <p className="text-[10px] text-slate-400">
+                            {field.helpText}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+};
 
   const handleOpenClassic = () => {
     try {
@@ -285,7 +749,81 @@ const ServiceAndMaintenance = () => {
                         </div>
                         <button
                           type="button"
-                          onClick={() => setShowFormsManager(true)}
+                          onClick={() => {
+                            try {
+                              const hasManager = !!window.ServiceFormsManager;
+                              console.log('🧩 ServiceAndMaintenance: Open form builder clicked', {
+                                hasManager,
+                              });
+
+                              // If the manager script has not been registered yet, try to load it
+                              if (!hasManager) {
+                                const isProduction =
+                                  typeof window.USE_PRODUCTION_BUILD !== 'undefined'
+                                    ? window.USE_PRODUCTION_BUILD === true
+                                    : true;
+                                const baseDir = isProduction ? '/dist/src/' : '/src/';
+                                const path = 'components/service-maintenance/ServiceFormsManager.jsx';
+                                const finalPath = isProduction
+                                  ? `${baseDir}${path}`.replace('.jsx', '.js')
+                                  : `${baseDir}${path}`;
+
+                                const existingScript = document.querySelector(
+                                  'script[data-component-path="components/service-maintenance/ServiceFormsManager.jsx"]'
+                                );
+                                if (!existingScript) {
+                                  const script = document.createElement('script');
+                                  if (isProduction) {
+                                    script.src = finalPath;
+                                    script.defer = true;
+                                  } else {
+                                    script.type = 'text/babel';
+                                    script.src = finalPath;
+                                  }
+                                  script.dataset.componentPath =
+                                    'components/service-maintenance/ServiceFormsManager.jsx';
+                                  script.onerror = () => {
+                                    console.error(
+                                      '❌ ServiceAndMaintenance: Failed to load ServiceFormsManager script',
+                                      finalPath
+                                    );
+                                  };
+                                  document.body.appendChild(script);
+                                  console.log(
+                                    '🧩 ServiceAndMaintenance: Injected ServiceFormsManager script',
+                                    finalPath
+                                  );
+                                } else {
+                                  console.log(
+                                    '🧩 ServiceAndMaintenance: ServiceFormsManager script tag already present'
+                                  );
+                                }
+
+                                // Give the loader a moment to register the component
+                                setTimeout(() => {
+                                  if (window.ServiceFormsManager) {
+                                    setFormsManagerReady(true);
+                                  } else {
+                                    console.warn(
+                                      '⚠️ ServiceAndMaintenance: ServiceFormsManager still not available after script injection'
+                                    );
+                                  }
+                                }, 500);
+                              } else {
+                                setFormsManagerReady(true);
+                              }
+
+                              setShowFormsManager(true);
+                            } catch (error) {
+                              console.error(
+                                '❌ ServiceAndMaintenance: Error handling Open form builder click',
+                                error
+                              );
+                              alert(
+                                'Unable to open the form builder right now. Please check the console for details or try again.'
+                              );
+                            }
+                          }}
                           className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-3 py-1.5 text-[11px] font-semibold text-primary-700 shadow-sm ring-1 ring-primary-100 hover:bg-primary-50 dark:bg-primary-900/40 dark:text-primary-100 dark:ring-primary-800/60 dark:hover:bg-primary-900/60"
                         >
                           <i className="fa-solid fa-pen-to-square text-[10px]" />
@@ -590,6 +1128,9 @@ const ServiceAndMaintenance = () => {
                     </div>
                   </div>
                 </section>
+
+                {/* Forms & checklists attached to this job card */}
+                <JobCardFormsSection jobCard={selectedJobCard} />
               </div>
 
               {/* Right column: map + photos */}
@@ -774,11 +1315,19 @@ const ServiceAndMaintenance = () => {
           </div>
         </div>
       )}
-      {showFormsManager && window.ServiceFormsManager ? (
-        <window.ServiceFormsManager
-          isOpen={showFormsManager}
-          onClose={() => setShowFormsManager(false)}
-        />
+      {showFormsManager ? (
+        formsManagerReady && window.ServiceFormsManager ? (
+          <window.ServiceFormsManager
+            isOpen={showFormsManager}
+            onClose={() => setShowFormsManager(false)}
+          />
+        ) : (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
+            <div className="rounded-xl bg-slate-900 px-4 py-3 text-sm text-slate-100 shadow-lg">
+              Loading form builder&hellip;
+            </div>
+          </div>
+        )
       ) : null}
     </div>
   );
