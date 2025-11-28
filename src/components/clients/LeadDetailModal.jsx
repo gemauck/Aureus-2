@@ -103,6 +103,7 @@ const LeadDetailModal = ({
         stage: 'Awareness',
         value: 0,
         notes: '',
+        website: '',
         contacts: [],
         followUps: [],
         projectIds: [],
@@ -185,37 +186,45 @@ const LeadDetailModal = ({
         }
     }, [showIndustryModal, isAdmin]);
     
+    // Load industries function
+    const loadIndustries = useCallback(async () => {
+        try {
+            setIsLoadingIndustries(true);
+            const token = window.storage?.getToken?.();
+            if (!token) return;
+            
+            const response = await fetch('/api/industries', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                const industriesList = data?.data?.industries || data?.industries || [];
+                setIndustries(industriesList);
+            }
+        } catch (error) {
+            console.error('Error loading industries:', error);
+        } finally {
+            setIsLoadingIndustries(false);
+        }
+    }, []);
+    
     // Fetch industries on mount
     useEffect(() => {
-        const loadIndustries = async () => {
-            try {
-                setIsLoadingIndustries(true);
-                const token = window.storage?.getToken?.();
-                if (!token) return;
-                
-                const response = await fetch('/api/industries', {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    credentials: 'include'
-                });
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    const industriesList = data?.data?.industries || data?.industries || [];
-                    setIndustries(industriesList);
-                }
-            } catch (error) {
-                console.error('Error loading industries:', error);
-            } finally {
-                setIsLoadingIndustries(false);
-            }
-        };
-        
         loadIndustries();
-    }, []);
+    }, [loadIndustries]);
+    
+    // Reload industries when modal opens
+    useEffect(() => {
+        if (showIndustryModal) {
+            loadIndustries();
+        }
+    }, [showIndustryModal, loadIndustries]);
     
     // Add new industry
     const handleAddIndustry = useCallback(async () => {
@@ -242,13 +251,9 @@ const LeadDetailModal = ({
             });
             
             if (response.ok) {
-                const data = await response.json();
-                const newIndustry = data?.data?.industry || data?.industry;
-                if (newIndustry) {
-                    setIndustries(prev => [...prev, newIndustry].sort((a, b) => a.name.localeCompare(b.name)));
-                    setNewIndustryName('');
-                    alert('Industry added successfully');
-                }
+                setNewIndustryName('');
+                await loadIndustries(); // Reload industries list
+                alert('Industry added successfully');
             } else {
                 const errorData = await response.json().catch(() => ({}));
                 alert(errorData?.error || 'Failed to add industry');
@@ -257,7 +262,44 @@ const LeadDetailModal = ({
             console.error('Error adding industry:', error);
             alert('Error adding industry: ' + error.message);
         }
-    }, [newIndustryName, setIndustries, setNewIndustryName]);
+    }, [newIndustryName, loadIndustries]);
+    
+    // Edit industry
+    const handleEditIndustry = useCallback(async (industryId, newName) => {
+        if (!newName || !newName.trim()) {
+            alert('Please enter an industry name');
+            return;
+        }
+        
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                alert('Authentication required');
+                return;
+            }
+            
+            const response = await fetch(`/api/industries/${industryId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify({ name: newName.trim() })
+            });
+            
+            if (response.ok) {
+                await loadIndustries(); // Reload industries list
+                alert('Industry updated successfully');
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                alert(errorData?.error || 'Failed to update industry');
+            }
+        } catch (error) {
+            console.error('Error updating industry:', error);
+            alert('Error updating industry: ' + error.message);
+        }
+    }, [loadIndustries]);
     
     // Delete industry - define before useEffect that uses it
     const handleDeleteIndustry = useCallback(async (industryId) => {
@@ -282,7 +324,7 @@ const LeadDetailModal = ({
             });
             
             if (response.ok) {
-                setIndustries(prev => prev.filter(ind => ind.id !== industryId));
+                await loadIndustries(); // Reload industries list
                 alert('Industry deleted successfully');
             } else {
                 const errorData = await response.json().catch(() => ({}));
@@ -292,16 +334,18 @@ const LeadDetailModal = ({
             console.error('Error deleting industry:', error);
             alert('Error deleting industry: ' + error.message);
         }
-    }, [setIndustries]);
+    }, [loadIndustries]);
     
     // Store functions in refs to prevent useEffect re-runs
     const handleAddIndustryRef = useRef(handleAddIndustry);
     const handleDeleteIndustryRef = useRef(handleDeleteIndustry);
+    const handleEditIndustryRef = useRef(handleEditIndustry);
     
     useEffect(() => {
         handleAddIndustryRef.current = handleAddIndustry;
         handleDeleteIndustryRef.current = handleDeleteIndustry;
-    }, [handleAddIndustry, handleDeleteIndustry]);
+        handleEditIndustryRef.current = handleEditIndustry;
+    }, [handleAddIndustry, handleDeleteIndustry, handleEditIndustry]);
     
     // Render modal to document.body using useEffect - MUST be after handleAddIndustry and handleDeleteIndustry
     useEffect(() => {
@@ -412,17 +456,117 @@ const LeadDetailModal = ({
             industries.forEach((industry) => {
                 const industryItem = document.createElement('div');
                 industryItem.className = 'flex items-center justify-between p-3 rounded-lg bg-white hover:bg-gray-100';
+                industryItem.setAttribute('data-industry-id', industry.id);
+                
+                // Industry name display/edit
+                const nameContainer = document.createElement('div');
+                nameContainer.className = 'flex-1';
                 const industryName = document.createElement('span');
                 industryName.className = 'font-medium text-gray-900';
                 industryName.textContent = industry.name;
-                industryItem.appendChild(industryName);
+                industryName.setAttribute('data-display-name', industry.id);
+                nameContainer.appendChild(industryName);
+                
+                // Edit input (hidden initially)
+                const editInput = document.createElement('input');
+                editInput.type = 'text';
+                editInput.value = industry.name;
+                editInput.className = 'hidden w-full px-2 py-1 border border-blue-500 rounded text-sm';
+                editInput.setAttribute('data-edit-input', industry.id);
+                nameContainer.appendChild(editInput);
+                industryItem.appendChild(nameContainer);
+                
+                // Action buttons container
+                const actionsContainer = document.createElement('div');
+                actionsContainer.className = 'flex gap-2 items-center';
+                actionsContainer.setAttribute('data-actions', industry.id);
+                
+                // Edit button with proper closure
+                const editBtn = document.createElement('button');
+                editBtn.className = 'px-3 py-1.5 text-sm rounded-lg transition-colors bg-blue-100 hover:bg-blue-200 text-blue-700';
+                editBtn.setAttribute('data-edit-btn', industry.id);
+                editBtn.innerHTML = '<i class="fas fa-edit mr-1"></i>Edit';
+                
+                let isEditing = false;
+                let cancelBtn = null;
+                
+                const startEdit = () => {
+                    if (isEditing) return;
+                    isEditing = true;
+                    displayName.classList.add('hidden');
+                    editInput.classList.remove('hidden');
+                    editInput.focus();
+                    editInput.select();
+                    
+                    // Change edit button to save
+                    editBtn.innerHTML = '<i class="fas fa-check mr-1"></i>Save';
+                    
+                    // Add cancel button
+                    cancelBtn = document.createElement('button');
+                    cancelBtn.className = 'px-3 py-1.5 text-sm rounded-lg transition-colors bg-gray-100 hover:bg-gray-200 text-gray-700';
+                    cancelBtn.innerHTML = '<i class="fas fa-times mr-1"></i>Cancel';
+                    cancelBtn.onclick = () => {
+                        editInput.value = industry.name;
+                        displayName.classList.remove('hidden');
+                        editInput.classList.add('hidden');
+                        editBtn.innerHTML = '<i class="fas fa-edit mr-1"></i>Edit';
+                        if (cancelBtn && cancelBtn.parentNode) {
+                            cancelBtn.remove();
+                        }
+                        isEditing = false;
+                    };
+                    actionsContainer.insertBefore(cancelBtn, deleteBtn);
+                    
+                    // Handle Enter/Escape keys
+                    const handleKeyDown = (e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            saveEdit();
+                        } else if (e.key === 'Escape') {
+                            e.preventDefault();
+                            cancelBtn.click();
+                        }
+                    };
+                    editInput.onkeydown = handleKeyDown;
+                };
+                
+                const saveEdit = () => {
+                    const newName = editInput.value.trim();
+                    if (newName && newName !== industry.name) {
+                        handleEditIndustryRef.current(industry.id, newName);
+                    }
+                    // Reset UI
+                    editInput.value = industry.name;
+                    displayName.classList.remove('hidden');
+                    editInput.classList.add('hidden');
+                    editBtn.innerHTML = '<i class="fas fa-edit mr-1"></i>Edit';
+                    if (cancelBtn && cancelBtn.parentNode) {
+                        cancelBtn.remove();
+                    }
+                    isEditing = false;
+                };
+                
+                editBtn.onclick = () => {
+                    if (isEditing) {
+                        saveEdit();
+                    } else {
+                        startEdit();
+                    }
+                };
+                
+                actionsContainer.appendChild(editBtn);
+                
+                // Delete button
                 const deleteBtn = document.createElement('button');
                 deleteBtn.className = 'px-3 py-1.5 text-sm rounded-lg transition-colors bg-red-100 hover:bg-red-200 text-red-700';
+                deleteBtn.setAttribute('data-delete-btn', industry.id);
                 deleteBtn.setAttribute('data-industry-id', industry.id);
                 deleteBtn.setAttribute('data-action', 'delete-industry');
                 deleteBtn.onclick = () => handleDeleteIndustryRef.current(industry.id);
                 deleteBtn.innerHTML = '<i class="fas fa-trash mr-1"></i>Delete';
-                industryItem.appendChild(deleteBtn);
+                actionsContainer.appendChild(deleteBtn);
+                
+                industryItem.appendChild(actionsContainer);
                 industriesList.appendChild(industryItem);
             });
             listSection.appendChild(industriesList);
@@ -468,14 +612,21 @@ const LeadDetailModal = ({
                 console.log('🔧 LeadDetailModal: Cleanup function called but modal should stay open, skipping removal');
             }
         };
-    }, [showIndustryModal, industries, isLoadingIndustries, newIndustryName]);
+    }, [showIndustryModal, industries, isLoadingIndustries]);
 
     // Update input value when newIndustryName changes (separate effect to avoid recreating modal)
+    // Only update if the input value differs and preserve cursor position
     useEffect(() => {
         if (showIndustryModal) {
             const input = document.querySelector('#industry-management-modal-container input[type="text"]');
             if (input && input.value !== newIndustryName) {
+                // Preserve cursor position
+                const cursorPosition = input.selectionStart;
                 input.value = newIndustryName;
+                // Restore cursor position if it was within the old value length
+                if (cursorPosition !== null && cursorPosition <= newIndustryName.length) {
+                    input.setSelectionRange(cursorPosition, cursorPosition);
+                }
             }
         }
     }, [newIndustryName, showIndustryModal]);
@@ -2289,6 +2440,44 @@ const LeadDetailModal = ({
                                             }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
                                             required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Website</label>
+                                        <input 
+                                            type="url" 
+                                            value={formData.website || ''}
+                                            onFocus={() => {
+                                                isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
+                                                notifyEditingChange(true);
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                            }}
+                                            onChange={(e) => {
+                                                isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
+                                                userEditedFieldsRef.current.add('website'); // Track that user has edited this field
+                                                notifyEditingChange(true);
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                editingTimeoutRef.current = setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                    notifyEditingChange(false);
+                                                }, 5000); // Clear editing flag 5 seconds after user stops typing
+                                                setFormData(prev => {
+                                                    const updated = {...prev, website: e.target.value};
+                                                    // CRITICAL: Sync formDataRef IMMEDIATELY so guards can check current value
+                                                    formDataRef.current = updated;
+                                                    return updated;
+                                                });
+                                            }}
+                                            onBlur={() => {
+                                                setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                    notifyEditingChange(false);
+                                                }, 500);
+                                            }}
+                                            placeholder="https://example.com"
+                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
                                         />
                                     </div>
                                 </div>
