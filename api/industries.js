@@ -26,69 +26,113 @@ async function handler(req, res) {
       return unauthorized(res, 'Admin access required')
     }
 
-    // Helper function to sync industries from existing clients/leads
-    async function syncIndustriesFromClients() {
+    // Cache for sync status to avoid repeated syncs
+    let lastSyncTime = 0
+    const SYNC_INTERVAL = 5 * 60 * 1000 // Sync at most once every 5 minutes
+    let syncInProgress = false
+
+    // Helper function to sync industries from existing clients/leads (optimized)
+    async function syncIndustriesFromClients(forceSync = false) {
+      // Skip if sync is already in progress or recently completed
+      const now = Date.now()
+      if (!forceSync && (syncInProgress || (now - lastSyncTime < SYNC_INTERVAL))) {
+        return 0
+      }
+
+      // Mark sync as in progress
+      syncInProgress = true
+      
       try {
-        // Get all unique industry values from Client table (both clients and leads)
-        const clients = await prisma.client.findMany({
-          select: { industry: true },
-          where: {
-            industry: { not: null, not: '' }
-          }
+        // Use a single query with DISTINCT to get unique industries efficiently
+        const uniqueIndustriesResult = await prisma.$queryRaw`
+          SELECT DISTINCT industry as name
+          FROM "Client"
+          WHERE industry IS NOT NULL 
+            AND industry != ''
+            AND TRIM(industry) != ''
+        `
+        
+        const uniqueIndustries = uniqueIndustriesResult
+          .map(row => row.name?.trim())
+          .filter(Boolean)
+        
+        if (uniqueIndustries.length === 0) {
+          lastSyncTime = now
+          syncInProgress = false
+          return 0
+        }
+        
+        // Get all existing industries in one query
+        const existingIndustries = await prisma.industry.findMany({
+          select: { name: true, id: true, isActive: true }
         })
+        const existingIndustryMap = new Map(
+          existingIndustries.map(ind => [ind.name.toLowerCase(), ind])
+        )
         
-        // Extract unique industry names
-        const uniqueIndustries = [...new Set(
-          clients
-            .map(c => c.industry?.trim())
-            .filter(Boolean)
-        )]
+        // Batch create missing industries
+        const industriesToCreate = uniqueIndustries.filter(
+          name => !existingIndustryMap.has(name.toLowerCase())
+        )
         
-        console.log(`📊 Found ${uniqueIndustries.length} unique industries from clients/leads`)
-        
-        // For each unique industry, ensure it exists in Industry table
         let syncedCount = 0
-        for (const industryName of uniqueIndustries) {
+        
+        if (industriesToCreate.length > 0) {
+          // Use createMany for batch insert (more efficient)
           try {
-            // Check if industry already exists
-            const existing = await prisma.industry.findUnique({
-              where: { name: industryName }
+            await prisma.industry.createMany({
+              data: industriesToCreate.map(name => ({
+                name,
+                isActive: true
+              })),
+              skipDuplicates: true
             })
-            
-            if (!existing) {
-              // Create the industry if it doesn't exist
-              await prisma.industry.create({
-                data: {
-                  name: industryName,
-                  isActive: true
+            syncedCount = industriesToCreate.length
+            console.log(`✅ Batch synced ${syncedCount} new industries from clients/leads`)
+          } catch (batchError) {
+            // Fallback to individual creates if batch fails
+            console.warn('⚠️ Batch create failed, falling back to individual creates:', batchError.message)
+            for (const industryName of industriesToCreate) {
+              try {
+                await prisma.industry.create({
+                  data: { name: industryName, isActive: true }
+                })
+                syncedCount++
+              } catch (createError) {
+                if (createError.code !== 'P2002') {
+                  console.warn(`⚠️ Error creating industry "${industryName}":`, createError.message)
                 }
-              })
-              syncedCount++
-              console.log(`✅ Synced industry from clients: "${industryName}"`)
-            } else if (!existing.isActive) {
-              // Reactivate if it was deactivated
-              await prisma.industry.update({
-                where: { id: existing.id },
-                data: { isActive: true }
-              })
-              console.log(`✅ Reactivated industry: "${industryName}"`)
-            }
-          } catch (syncError) {
-            // Skip if there's a unique constraint violation (race condition)
-            if (!syncError.message.includes('Unique constraint') && syncError.code !== 'P2002') {
-              console.warn(`⚠️ Error syncing industry "${industryName}":`, syncError.message)
+              }
             }
           }
         }
         
-        if (syncedCount > 0) {
-          console.log(`✅ Synced ${syncedCount} new industries from existing clients/leads`)
+        // Reactivate deactivated industries that are still in use
+        const deactivatedToReactivate = uniqueIndustries
+          .map(name => existingIndustryMap.get(name.toLowerCase()))
+          .filter(ind => ind && !ind.isActive)
+        
+        if (deactivatedToReactivate.length > 0) {
+          await Promise.all(
+            deactivatedToReactivate.map(ind =>
+              prisma.industry.update({
+                where: { id: ind.id },
+                data: { isActive: true }
+              }).catch(err => {
+                console.warn(`⚠️ Error reactivating industry "${ind.name}":`, err.message)
+              })
+            )
+          )
+          console.log(`✅ Reactivated ${deactivatedToReactivate.length} industries`)
         }
         
+        lastSyncTime = now
         return syncedCount
       } catch (error) {
         console.warn('⚠️ Error syncing industries from clients:', error.message)
         return 0
+      } finally {
+        syncInProgress = false
       }
     }
 
@@ -119,13 +163,18 @@ async function handler(req, res) {
           }
         }
         
-        // Sync industries from existing clients/leads before returning
-        await syncIndustriesFromClients()
-        
+        // Get industries first (non-blocking)
         const industries = await prisma.industry.findMany({
           where: { isActive: true },
           orderBy: { name: 'asc' }
         })
+        
+        // Sync industries asynchronously (don't block the response)
+        // Only sync if it's been more than 5 minutes since last sync
+        syncIndustriesFromClients().catch(err => {
+          console.warn('⚠️ Background industry sync failed:', err.message)
+        })
+        
         console.log('✅ Industries retrieved successfully:', industries.length)
         return ok(res, { industries })
       } catch (dbError) {

@@ -2889,6 +2889,70 @@ const Clients = React.memo(() => {
                             console.log('🗑️ Cleared API cache for leads');
                         }
                         
+                        // CRITICAL: Refresh from database after save to ensure persistence
+                        // Wait a short moment for database to commit, then fetch fresh data
+                        setTimeout(async () => {
+                            try {
+                                console.log('🔄 Refreshing lead from database after save...');
+                                const token = window.storage?.getToken?.();
+                                if (!token) return;
+                                
+                                const response = await fetch(`/api/leads/${savedLead.id}`, {
+                                    method: 'GET',
+                                    headers: {
+                                        'Authorization': `Bearer ${token}`,
+                                        'Content-Type': 'application/json'
+                                    },
+                                    credentials: 'include'
+                                });
+                                
+                                if (response.ok) {
+                                    const refreshedLead = await response.json();
+                                    const freshLead = refreshedLead?.data?.lead || refreshedLead?.lead;
+                                    if (freshLead) {
+                                    // Parse JSON fields
+                                    const parseField = (val, defaultVal) => {
+                                        if (Array.isArray(val)) return val;
+                                        if (typeof val === 'string' && val.trim()) {
+                                            try { return JSON.parse(val); } catch { return defaultVal; }
+                                        }
+                                        return val || defaultVal;
+                                    };
+                                    const parsedLead = {
+                                        ...freshLead,
+                                        contacts: parseField(freshLead.contacts, []),
+                                        followUps: parseField(freshLead.followUps, []),
+                                        comments: parseField(freshLead.comments, []),
+                                        proposals: parseField(freshLead.proposals, []),
+                                        services: parseField(freshLead.services, [])
+                                    };
+                                    
+                                    // Update state with fresh data from database
+                                    const refreshedLeads = leads.map(l => 
+                                        l.id === parsedLead.id ? parsedLead : l
+                                    );
+                                    setLeads(refreshedLeads);
+                                    selectedLeadRef.current = parsedLead;
+                                    
+                                    // Update localStorage with fresh data
+                                    if (window.storage?.setLeads) {
+                                        window.storage.setLeads(refreshedLeads);
+                                    }
+                                    
+                                        console.log('✅ Refreshed lead from database - data persisted:', {
+                                            id: parsedLead.id,
+                                            status: parsedLead.status,
+                                            stage: parsedLead.stage,
+                                            industry: parsedLead.industry
+                                        });
+                                    }
+                                }
+                            } catch (refreshError) {
+                                console.warn('⚠️ Failed to refresh lead from database:', refreshError.message);
+                                // Not critical - data was already saved
+                            }
+                        }, 500); // Wait 500ms for database commit
+                        
                         console.log('✅ Saved lead data from API:', {
                             contacts: Array.isArray(savedLead.contacts) ? savedLead.contacts.length : 'not array',
                             followUps: Array.isArray(savedLead.followUps) ? savedLead.followUps.length : 'not array',
