@@ -4,6 +4,7 @@ const { useState, useRef, useEffect } = React;
 const RichTextEditor = ({ 
     value = '', 
     onChange, 
+    onBlur,
     placeholder = 'Type your text...', 
     rows = 4,
     isDark = false,
@@ -153,6 +154,11 @@ const RichTextEditor = ({
                 ref={editorRef}
                 contentEditable
                 onInput={handleInput}
+                onBlur={(e) => {
+                    if (onBlur && editorRef.current) {
+                        onBlur(editorRef.current.innerHTML);
+                    }
+                }}
                 onKeyDown={(e) => {
                     // Prevent form submission on Enter (unless in a list)
                     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {

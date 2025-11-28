@@ -1218,31 +1218,29 @@ const ManagementMeetingNotes = () => {
         }
     };
 
-    // Auto-save function with debounce for direct editing
-    const handleFieldChange = (departmentNotesId, field, value) => {
+    // Auto-save function - saves immediately on typing
+    const handleFieldChange = async (departmentNotesId, field, value) => {
         // Update local state immediately for responsive UI
         const monthlyId = currentMonthlyNotes?.id || null;
         updateDepartmentNotesLocal(departmentNotesId, field, value, monthlyId);
         
-        // Clear existing timer for this field
+        // Clear any pending timer for this field (in case blur handler was queued)
         const fieldKey = getFieldKey(departmentNotesId, field);
         if (autoSaveTimers.current[fieldKey]) {
             clearTimeout(autoSaveTimers.current[fieldKey]);
+            delete autoSaveTimers.current[fieldKey];
         }
         
-        // Set new timer for auto-save (500ms debounce)
-        autoSaveTimers.current[fieldKey] = setTimeout(async () => {
-            try {
-                await window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value });
-            } catch (error) {
-                console.error('Error auto-saving department notes:', error);
-                // Reload to revert local changes on error
-                if (selectedMonth) {
-                    await reloadMonthlyNotes(selectedMonth);
-                }
+        // Save immediately on every change
+        try {
+            await window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value });
+        } catch (error) {
+            console.error('Error auto-saving department notes:', error);
+            // Reload to revert local changes on error
+            if (selectedMonth) {
+                await reloadMonthlyNotes(selectedMonth);
             }
-            delete autoSaveTimers.current[fieldKey];
-        }, 500);
+        }
     };
     
     // Force save on blur (immediate save without debounce)
@@ -2504,6 +2502,7 @@ const ManagementMeetingNotes = () => {
                                                                 <window.RichTextEditor
                                                                     value={deptNote.successes || ''}
                                                                     onChange={(html) => handleFieldChange(deptNote.id, 'successes', html)}
+                                                                    onBlur={(html) => handleFieldBlur(deptNote.id, 'successes', html)}
                                 placeholder="What went well during the week? (Use formatting toolbar for bullets, bold, etc.)"
                                                                     rows={4}
                                                                     isDark={isDark}
@@ -2529,6 +2528,7 @@ const ManagementMeetingNotes = () => {
                                                                 <window.RichTextEditor
                                                                     value={deptNote.weekToFollow || ''}
                                                                     onChange={(html) => handleFieldChange(deptNote.id, 'weekToFollow', html)}
+                                                                    onBlur={(html) => handleFieldBlur(deptNote.id, 'weekToFollow', html)}
                                                                     placeholder="What's planned for the upcoming week? (Use formatting toolbar for bullets, bold, etc.)"
                                                                     rows={4}
                                                                     isDark={isDark}
@@ -2554,6 +2554,7 @@ const ManagementMeetingNotes = () => {
                                                                 <window.RichTextEditor
                                                                     value={deptNote.frustrations || ''}
                                                                     onChange={(html) => handleFieldChange(deptNote.id, 'frustrations', html)}
+                                                                    onBlur={(html) => handleFieldBlur(deptNote.id, 'frustrations', html)}
                                                                     placeholder="What challenges or blockers are we facing? (Use formatting toolbar for bullets, bold, etc.)"
                                                                     rows={4}
                                                                     isDark={isDark}
