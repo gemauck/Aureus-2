@@ -27,7 +27,7 @@ const CRITICAL_COMPONENT_SCRIPTS = {
     ClientDetailModal: './dist/src/components/clients/ClientDetailModal.js?v=permanent-block-1762361500',
     LeadDetailModal: './dist/src/components/clients/LeadDetailModal.js?v=lead-fix-1736162400',
     OpportunityDetailModal: './dist/src/components/clients/OpportunityDetailModal.js',
-    Pipeline: './dist/src/components/clients/Pipeline.js?v=pipeline-list-view-20251111-hotfix'
+    Pipeline: './dist/src/components/clients/Pipeline.js?v=remove-aida-stage-1735569600'
 };
 
 const useEnsureGlobalComponent = (globalName) => {
@@ -5457,6 +5457,14 @@ const Clients = React.memo(() => {
                                 onClick={(e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
+                                    
+                                    // Prevent multiple rapid clicks
+                                    if (isOpeningIndustryModalRef.current || showIndustryModal) {
+                                        console.log('🔧 Clients: Ignoring duplicate click');
+                                        return;
+                                    }
+                                    
+                                    isOpeningIndustryModalRef.current = true;
                                     console.log('🔧 Industry management button clicked');
                                     console.log('🔧 Current showIndustryModal state:', showIndustryModal);
                                     console.log('🔧 isAdmin:', isAdmin);

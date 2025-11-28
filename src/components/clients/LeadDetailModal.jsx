@@ -173,11 +173,16 @@ const LeadDetailModal = ({
     const [showIndustryModal, setShowIndustryModal] = useState(false);
     const [newIndustryName, setNewIndustryName] = useState('');
     const [isLoadingIndustries, setIsLoadingIndustries] = useState(false);
+    const isOpeningIndustryModalRef = useRef(false); // Prevent multiple rapid clicks
     
     // Debug modal state
     useEffect(() => {
         console.log('🔍 LeadDetailModal: showIndustryModal changed to:', showIndustryModal);
         console.log('🔍 LeadDetailModal: isAdmin:', isAdmin);
+        // Reset the ref when modal state changes
+        if (!showIndustryModal) {
+            isOpeningIndustryModalRef.current = false;
+        }
     }, [showIndustryModal, isAdmin]);
     
     // Fetch industries on mount
@@ -787,9 +792,6 @@ const LeadDetailModal = ({
     const [newNoteTags, setNewNoteTags] = useState([]);
     const [newNoteAttachments, setNewNoteAttachments] = useState([]);
     const [notesTagFilter, setNotesTagFilter] = useState(null);
-    const [thumbnailPreview, setThumbnailPreview] = useState(null);
-    const [showThumbnailPreview, setShowThumbnailPreview] = useState(false);
-    const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
     
     // Proposal workflow state
     const [allUsers, setAllUsers] = useState([]);
@@ -1131,99 +1133,6 @@ const LeadDetailModal = ({
             alert('Failed to create tag: ' + error.message);
         }
     };
-
-    // Handle thumbnail upload
-    const handleThumbnailUpload = async (event) => {
-        const file = event.target.files[0];
-        if (!file) return;
-
-        // Validate image type
-        if (!file.type.startsWith('image/')) {
-            alert('Please select an image file');
-            return;
-        }
-
-        // Validate file size (max 5MB)
-        if (file.size > 5 * 1024 * 1024) {
-            alert('Image size must be less than 5MB');
-            return;
-        }
-
-        setUploadingThumbnail(true);
-        try {
-            // Convert to base64
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                const dataUrl = e.target.result;
-                setThumbnailPreview(dataUrl);
-
-                // Upload to server
-                const token = window.storage?.getToken?.();
-                if (!token) {
-                    alert('Please log in to upload images');
-                    setUploadingThumbnail(false);
-                    return;
-                }
-
-                try {
-                    const response = await fetch('/api/files', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}`
-                        },
-                        body: JSON.stringify({
-                            folder: 'thumbnails',
-                            name: file.name,
-                            dataUrl: dataUrl
-                        })
-                    });
-
-                    if (!response.ok) {
-                        throw new Error('Upload failed');
-                    }
-
-                    const result = await response.json();
-                    setFormData({ ...formData, thumbnail: result.url });
-                    setUploadingThumbnail(false);
-                } catch (error) {
-                    console.error('Thumbnail upload error:', error);
-                    alert('Failed to upload thumbnail: ' + error.message);
-                    setUploadingThumbnail(false);
-                }
-            };
-            reader.readAsDataURL(file);
-        } catch (error) {
-            console.error('Thumbnail read error:', error);
-            alert('Failed to read image file');
-            setUploadingThumbnail(false);
-        }
-    };
-
-    const handleRemoveThumbnail = () => {
-        setFormData({ ...formData, thumbnail: '' });
-        setThumbnailPreview(null);
-    };
-
-    // Load thumbnail preview when formData changes
-    // CRITICAL FIX: Cannot use formData in dependency array as it causes TDZ error
-    // Track thumbnail in state to avoid accessing formData directly in dependency array
-    const [thumbnailValue, setThumbnailValue] = useState('');
-    
-    // Sync thumbnail state when formData changes
-    useEffect(() => {
-        const currentFormData = formDataRef.current || defaultFormData;
-        const thumbnail = currentFormData.thumbnail || '';
-        if (thumbnail !== thumbnailValue) {
-            setThumbnailValue(thumbnail);
-        }
-    }); // Run on every render to sync with formDataRef
-    
-    useEffect(() => {
-        if (thumbnailValue) {
-            setThumbnailPreview(thumbnailValue);
-        }
-    }, [thumbnailValue]);
 
     const handleAddTagFromInput = () => {
         const raw = (newNoteTagsInput || '').trim();
@@ -1937,31 +1846,6 @@ const LeadDetailModal = ({
         );
     }
 
-    // Thumbnail Preview Modal Component - defined before use
-    const ThumbnailPreviewModal = () => (
-        showThumbnailPreview && (thumbnailPreview || formData.thumbnail) && (
-            <div 
-                className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[9999]"
-                onClick={() => setShowThumbnailPreview(false)}
-            >
-                <div className="relative max-w-4xl max-h-[90vh] p-4">
-                    <button
-                        onClick={() => setShowThumbnailPreview(false)}
-                        className="absolute top-2 right-2 bg-white rounded-full w-10 h-10 flex items-center justify-center text-gray-700 hover:bg-gray-100 shadow-lg z-10"
-                    >
-                        <i className="fas fa-times"></i>
-                    </button>
-                    <img 
-                        src={thumbnailPreview || formData.thumbnail} 
-                        alt="Thumbnail full view" 
-                        className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
-                        onClick={(e) => e.stopPropagation()}
-                    />
-                </div>
-            </div>
-        )
-    );
-
     // Show loading state
     if (isLoading) {
         return (
@@ -2067,70 +1951,6 @@ const LeadDetailModal = ({
                         {/* Overview Tab */}
                         {activeTab === 'overview' && (
                             <div className="space-y-4">
-                                {/* Thumbnail Upload Section */}
-                                <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Thumbnail Image
-                                    </label>
-                                    <div className="flex items-center gap-4">
-                                        {thumbnailPreview || formData.thumbnail ? (
-                                            <div className="relative">
-                                                <img 
-                                                    src={thumbnailPreview || formData.thumbnail} 
-                                                    alt="Thumbnail preview" 
-                                                    className="w-24 h-24 object-cover rounded-lg border border-gray-300 cursor-pointer hover:opacity-80 transition"
-                                                    onClick={() => setShowThumbnailPreview(true)}
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={handleRemoveThumbnail}
-                                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
-                                                    title="Remove thumbnail"
-                                                >
-                                                    <i className="fas fa-times"></i>
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <div className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-white">
-                                                <i className="fas fa-image text-gray-400 text-2xl"></i>
-                                            </div>
-                                        )}
-                                        <div className="flex-1">
-                                            <input
-                                                type="file"
-                                                accept="image/*"
-                                                onChange={handleThumbnailUpload}
-                                                className="hidden"
-                                                id="thumbnail-upload"
-                                                disabled={uploadingThumbnail}
-                                            />
-                                            <label
-                                                htmlFor="thumbnail-upload"
-                                                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 cursor-pointer transition ${
-                                                    uploadingThumbnail 
-                                                        ? 'bg-gray-200 cursor-not-allowed' 
-                                                        : 'bg-white hover:bg-gray-50'
-                                                }`}
-                                            >
-                                                {uploadingThumbnail ? (
-                                                    <>
-                                                        <i className="fas fa-spinner fa-spin text-gray-500"></i>
-                                                        <span className="text-sm text-gray-600">Uploading...</span>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <i className="fas fa-upload text-gray-600"></i>
-                                                        <span className="text-sm text-gray-700">
-                                                            {thumbnailPreview || formData.thumbnail ? 'Change' : 'Upload'} Thumbnail
-                                                        </span>
-                                                    </>
-                                                )}
-                                            </label>
-                                            <p className="text-xs text-gray-500 mt-1">Click thumbnail to view full size</p>
-                                        </div>
-                                    </div>
-                                </div>
-
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -2234,6 +2054,14 @@ const LeadDetailModal = ({
                                                 onClick={(e) => {
                                                     e.preventDefault();
                                                     e.stopPropagation();
+                                                    
+                                                    // Prevent multiple rapid clicks
+                                                    if (isOpeningIndustryModalRef.current || showIndustryModal) {
+                                                        console.log('🔧 LeadDetailModal: Ignoring duplicate click');
+                                                        return;
+                                                    }
+                                                    
+                                                    isOpeningIndustryModalRef.current = true;
                                                     console.log('🔧 LeadDetailModal: Industry management button clicked');
                                                     console.log('🔧 Current showIndustryModal:', showIndustryModal);
                                                     setShowIndustryModal(true);
@@ -4602,7 +4430,6 @@ const LeadDetailModal = ({
                     </form>
                 </div>
             </div>
-            <ThumbnailPreviewModal />
             </>
         );
     }
@@ -4650,62 +4477,6 @@ const LeadDetailModal = ({
                         ),
                         React.createElement('div', { className: 'flex-1 p-6' },
                             activeTab === 'overview' && React.createElement('div', { className: 'space-y-6' },
-                                React.createElement('div', { className: 'border border-gray-200 rounded-lg p-4 bg-gray-50' },
-                                    React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'Thumbnail Image'),
-                                    React.createElement('div', { className: 'flex items-center gap-4' },
-                                        (thumbnailPreview || formData.thumbnail) ? (
-                                            React.createElement('div', { className: 'relative' },
-                                                React.createElement('img', {
-                                                    src: thumbnailPreview || formData.thumbnail,
-                                                    alt: 'Thumbnail preview',
-                                                    className: 'w-24 h-24 object-cover rounded-lg border border-gray-300 cursor-pointer hover:opacity-80 transition',
-                                                    onClick: () => setShowThumbnailPreview(true)
-                                                }),
-                                                React.createElement('button', {
-                                                    type: 'button',
-                                                    onClick: handleRemoveThumbnail,
-                                                    className: 'absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600',
-                                                    title: 'Remove thumbnail'
-                                                }, React.createElement('i', { className: 'fas fa-times' }))
-                                            )
-                                        ) : (
-                                            React.createElement('div', { className: 'w-24 h-24 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-white' },
-                                                React.createElement('i', { className: 'fas fa-image text-gray-400 text-2xl' })
-                                            )
-                                        ),
-                                        React.createElement('div', { className: 'flex-1' },
-                                            React.createElement('input', {
-                                                type: 'file',
-                                                accept: 'image/*',
-                                                onChange: handleThumbnailUpload,
-                                                className: 'hidden',
-                                                id: 'thumbnail-upload-modal',
-                                                disabled: uploadingThumbnail
-                                            }),
-                                            React.createElement('label', {
-                                                htmlFor: 'thumbnail-upload-modal',
-                                                className: `inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 cursor-pointer transition ${
-                                                    uploadingThumbnail ? 'bg-gray-200 cursor-not-allowed' : 'bg-white hover:bg-gray-50'
-                                                }`
-                                            },
-                                                uploadingThumbnail ? (
-                                                    React.createElement(React.Fragment, null,
-                                                        React.createElement('i', { className: 'fas fa-spinner fa-spin text-gray-500' }),
-                                                        React.createElement('span', { className: 'text-sm text-gray-600' }, 'Uploading...')
-                                                    )
-                                                ) : (
-                                                    React.createElement(React.Fragment, null,
-                                                        React.createElement('i', { className: 'fas fa-upload text-gray-600' }),
-                                                        React.createElement('span', { className: 'text-sm text-gray-700' },
-                                                            (thumbnailPreview || formData.thumbnail) ? 'Change' : 'Upload', ' Thumbnail'
-                                                        )
-                                                    )
-                                                )
-                                            ),
-                                            React.createElement('p', { className: 'text-xs text-gray-500 mt-1' }, 'Click thumbnail to view full size')
-                                        )
-                                    )
-                                ),
                                 React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-6' },
                                     React.createElement('div', null,
                                         React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'Entity Name'),
@@ -4972,9 +4743,8 @@ const LeadDetailModal = ({
                 )
             )
         ),
-        React.createElement(ThumbnailPreviewModal),
-        // Industry Management Modal - Use portal to render at body level
-        showIndustryModal && (ReactDOM && ReactDOM.createPortal ? ReactDOM.createPortal(
+        // Industry Management Modal - Use portal to render at body level  
+        showIndustryModal ? (ReactDOM && ReactDOM.createPortal ? ReactDOM.createPortal(
             React.createElement('div', {
                 key: 'industry-modal',
                 className: 'fixed inset-0 flex items-center justify-center',
@@ -5069,7 +4839,7 @@ const LeadDetailModal = ({
                 )
             ),
             document.body
-        ) : showIndustryModal ? React.createElement('div', {
+        ) : React.createElement('div', {
             key: 'industry-modal-fallback',
             className: 'fixed inset-0 flex items-center justify-center',
             onClick: (e) => {
@@ -5161,99 +4931,7 @@ const LeadDetailModal = ({
                     }, 'Close')
                 )
             )
-        ) : null)
-            key: 'industry-modal-fallback',
-            className: 'fixed inset-0 flex items-center justify-center',
-            onClick: (e) => {
-                if (e.target === e.currentTarget) {
-                    console.log('🔧 LeadDetailModal: Closing modal via backdrop (fallback)');
-                    setShowIndustryModal(false);
-                }
-            },
-            style: { 
-                position: 'fixed', 
-                top: 0, 
-                left: 0, 
-                right: 0, 
-                bottom: 0, 
-                zIndex: 99999,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: 'rgba(0, 0, 0, 0.5)'
-            }
-        },
-            React.createElement('div', {
-                className: 'bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col',
-                onClick: (e) => e.stopPropagation(),
-                style: { zIndex: 100000, position: 'relative' }
-            },
-                React.createElement('div', { className: 'px-6 py-4 border-b border-gray-200 flex items-center justify-between' },
-                    React.createElement('h2', { className: 'text-xl font-semibold text-gray-900' }, 'Manage Industries'),
-                    React.createElement('button', {
-                        onClick: () => setShowIndustryModal(false),
-                        className: 'text-gray-400 hover:text-gray-600'
-                    }, React.createElement('i', { className: 'fas fa-times text-xl' }))
-                ),
-                React.createElement('div', { className: 'flex-1 overflow-y-auto p-6' },
-                    React.createElement('div', { className: 'mb-6' },
-                        React.createElement('label', { className: 'block text-sm font-medium mb-2 text-gray-700' }, 'Add New Industry'),
-                        React.createElement('div', { className: 'flex gap-2' },
-                            React.createElement('input', {
-                                type: 'text',
-                                value: newIndustryName,
-                                onChange: (e) => setNewIndustryName(e.target.value),
-                                onKeyDown: (e) => {
-                                    if (e.key === 'Enter') {
-                                        handleAddIndustry();
-                                    }
-                                },
-                                placeholder: 'Enter industry name',
-                                className: 'flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                            }),
-                            React.createElement('button', {
-                                onClick: handleAddIndustry,
-                                className: 'px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors'
-                            },
-                                React.createElement('i', { className: 'fas fa-plus mr-2' }),
-                                'Add'
-                            )
-                        )
-                    ),
-                    React.createElement('div', null,
-                        React.createElement('label', { className: 'block text-sm font-medium mb-2 text-gray-700' },
-                            `Existing Industries (${industries.length})`
-                        ),
-                        isLoadingIndustries ? React.createElement('div', { className: 'text-center py-8 text-gray-500' },
-                            React.createElement('i', { className: 'fas fa-spinner fa-spin text-2xl mb-2' }),
-                            React.createElement('p', null, 'Loading industries...')
-                        ) : industries.length === 0 ? React.createElement('div', { className: 'text-center py-8 text-gray-500' },
-                            React.createElement('p', null, 'No industries found. Add one above to get started.')
-                        ) : React.createElement('div', { className: 'space-y-2 bg-gray-50 rounded-lg p-4' },
-                            industries.map((industry) => React.createElement('div', {
-                                key: industry.id,
-                                className: 'flex items-center justify-between p-3 rounded-lg bg-white hover:bg-gray-100'
-                            },
-                                React.createElement('span', { className: 'font-medium text-gray-900' }, industry.name),
-                                React.createElement('button', {
-                                    onClick: () => handleDeleteIndustry(industry.id),
-                                    className: 'px-3 py-1.5 text-sm rounded-lg transition-colors bg-red-100 hover:bg-red-200 text-red-700'
-                                },
-                                    React.createElement('i', { className: 'fas fa-trash mr-1' }),
-                                    'Delete'
-                                )
-                            ))
-                        )
-                    )
-                ),
-                React.createElement('div', { className: 'px-6 py-4 border-t border-gray-200 flex justify-end' },
-                    React.createElement('button', {
-                        onClick: () => setShowIndustryModal(false),
-                        className: 'px-4 py-2 rounded-lg transition-colors bg-gray-100 hover:bg-gray-200 text-gray-700'
-                    }, 'Close')
-                )
-            )
-        ))
+        ) : null
     );
 };
 
