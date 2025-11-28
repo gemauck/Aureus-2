@@ -2,7 +2,7 @@
 import 'dotenv/config'
 // Load .env.local for local development (overrides .env)
 import dotenv from 'dotenv'
-import { existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 
@@ -22,7 +22,9 @@ import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import path from 'path'
 import fs from 'fs'
-import pkg from './package.json' assert { type: 'json' }
+
+// Load package.json (Node.js v22 compatible)
+const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8'))
 
 // Ensure critical environment variables are set
 // Allow relaxed requirements in local dev when DEV_LOCAL_NO_DB=true
