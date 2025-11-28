@@ -2222,16 +2222,22 @@ const LeadDetailModal = ({
                                                     </>
                                                 )}
                                             </select>
-                                            {isAdmin && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setShowIndustryModal(true)}
-                                                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium transition-colors hover:bg-gray-100"
-                                                    title="Manage Industries"
-                                                >
-                                                    <i className="fas fa-cog"></i>
-                                                </button>
-                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    console.log('🔧 LeadDetailModal: Industry management button clicked');
+                                                    console.log('🔧 Current showIndustryModal:', showIndustryModal);
+                                                    setShowIndustryModal(true);
+                                                    console.log('🔧 Set showIndustryModal to true');
+                                                }}
+                                                className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium transition-colors hover:bg-gray-100 cursor-pointer"
+                                                title={isAdmin ? "Manage Industries" : "Admin Only - Manage Industries"}
+                                                style={{ opacity: isAdmin ? 1 : 0.5 }}
+                                            >
+                                                <i className="fas fa-cog"></i>
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -4962,8 +4968,14 @@ const LeadDetailModal = ({
         React.createElement(ThumbnailPreviewModal),
         // Industry Management Modal
         showIndustryModal && React.createElement('div', {
-            className: 'fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50',
-            onClick: () => setShowIndustryModal(false)
+            className: 'fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-50',
+            onClick: (e) => {
+                if (e.target === e.currentTarget) {
+                    console.log('🔧 LeadDetailModal: Closing modal via backdrop');
+                    setShowIndustryModal(false);
+                }
+            },
+            style: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 }
         },
             React.createElement('div', {
                 className: 'bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col',
