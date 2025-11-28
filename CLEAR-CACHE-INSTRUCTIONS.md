@@ -1,73 +1,49 @@
-# Clear Browser Cache - Sidebar Fix Deployment
+# Clear Browser Cache - See New AIDA Status Column
 
-## ✅ Deployment Status
-The code has been successfully deployed to the server:
-- ✅ Latest commit deployed: `48ead16`
-- ✅ File updated: `src/components/layout/MainLayout.jsx`
-- ✅ Server restarted: PM2 process refreshed
-- ✅ Nginx reloaded: Cache cleared
+The changes are compiled and ready! You just need to clear your browser cache.
 
-## 🔄 Clear Your Browser Cache
+## Quick Fix (Try This First):
 
-The changes are live, but your browser may have cached the old version. **Please do a hard refresh:**
+1. **Open your browser DevTools** (F12 or Cmd+Option+I on Mac)
+2. **Right-click the refresh button** in your browser
+3. **Select "Empty Cache and Hard Reload"**
 
-### Option 1: Hard Refresh (Recommended)
-- **Windows/Linux:** `Ctrl + Shift + R` or `Ctrl + F5`
-- **Mac:** `Cmd + Shift + R`
-- **Or:** Open Developer Tools (F12) → Right-click refresh button → "Empty Cache and Hard Reload"
+## Or Manually:
 
-### Option 2: Incognito/Private Window
-- Open a new Incognito/Private window
-- Navigate to: https://abcoafrica.co.za
-- This bypasses all cache
-
-### Option 3: Clear Site Data
-1. Open Developer Tools (F12)
-2. Go to **Application** tab (Chrome) or **Storage** tab (Firefox)
-3. Click **Clear site data**
-4. Refresh the page
-
-### Option 4: Browser Settings
-**Chrome/Edge:**
-- Settings → Privacy → Clear browsing data
+### Chrome/Edge:
+- Press `Cmd + Shift + Delete` (Mac) or `Ctrl + Shift + Delete` (Windows)
 - Select "Cached images and files"
-- Time range: "Last hour"
+- Time range: "All time"
 - Click "Clear data"
+- Hard refresh: `Cmd + Shift + R` or `Ctrl + Shift + R`
 
-**Firefox:**
-- Settings → Privacy & Security → Cookies and Site Data
-- Click "Clear Data"
-- Check "Cached Web Content"
+### Firefox:
+- Press `Cmd + Shift + Delete` (Mac) or `Ctrl + Shift + Delete` (Windows)
+- Select "Cache"
+- Time range: "Everything"
+- Click "Clear Now"
+- Hard refresh: `Cmd + Shift + R` or `Ctrl + F5`
 
-## ✅ What to Expect After Cache Clear
+### Safari:
+- Press `Cmd + Option + E` to clear cache
+- Hard refresh: `Cmd + Shift + R`
+
+## Verify Changes:
 
 After clearing cache, you should see:
-- ✅ Sidebar **always visible** at all screen sizes (including 300px)
-- ✅ Sidebar starts **open by default**
-- ✅ Hamburger button toggles expand/collapse
-- ✅ Responsive width adjustments:
-  - 300px+: 48px collapsed / 192px expanded
-  - 640px+: 224px expanded
-  - 768px+: 256px expanded
-  - 1024px+: 192px expanded
+- ✅ **Stage** column showing the actual stage (Awareness, Interest, Desire, Action)
+- ✅ **AIDA Status** column showing status (Potential, Active, Disinterested)
+- ✅ Both columns are sortable
 
-## 🧪 Test It
+## If Still Not Working:
 
-1. Open https://abcoafrica.co.za
-2. Do a hard refresh (`Ctrl+Shift+R` or `Cmd+Shift+R`)
-3. Resize browser to 300px width
-4. **Verify:** Sidebar should be visible (48px collapsed or expanded)
+1. **Check DevTools Console** - Look for any JavaScript errors
+2. **Check Network Tab** - Make sure it's loading the new files from `/dist/src/components/clients/`
+3. **Restart your dev server** - Stop and restart `npm run dev`
 
-## 📊 Server Status
+## Changes Made:
 
-If issues persist after clearing cache:
-```bash
-# Check if deployment is live
-curl -I https://abcoafrica.co.za/src/components/layout/MainLayout.jsx
-
-# Check server logs
-ssh root@165.22.127.196 'pm2 logs abcotronics-erp --lines 50'
-```
-
-The deployment is **100% complete** - just need to clear your browser cache! 🎉
-
+- Updated `Clients.jsx` - Stage column now uses `lead.stage`
+- Updated `Clients.jsx` - Added new "AIDA Status" column using `lead.status`
+- Updated `ClientsCached.jsx` - Same changes for cached version
+- Both files compiled successfully to `dist/` directory
