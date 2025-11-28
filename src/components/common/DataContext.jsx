@@ -65,6 +65,46 @@ const DataProvider = ({ children }) => {
         return status;
     }, [cache, isCacheValid]);
 
+    // Helper to wait for DatabaseAPI if needed
+    const waitForDatabaseAPI = useCallback(async (maxWait = 10000) => {
+        if (window.DatabaseAPI) {
+            return true;
+        }
+        
+        // Listen for corebundle:ready event as a signal that DatabaseAPI might be available
+        const bundleReadyPromise = new Promise((resolve) => {
+            const handler = () => {
+                window.removeEventListener('corebundle:ready', handler);
+                resolve(window.DatabaseAPI ? true : false);
+            };
+            window.addEventListener('corebundle:ready', handler, { once: true });
+        });
+        
+        // Also poll for DatabaseAPI
+        const pollPromise = new Promise((resolve) => {
+            const startTime = Date.now();
+            const checkInterval = setInterval(() => {
+                if (window.DatabaseAPI) {
+                    clearInterval(checkInterval);
+                    resolve(true);
+                } else if (Date.now() - startTime >= maxWait) {
+                    clearInterval(checkInterval);
+                    resolve(false);
+                }
+            }, 100);
+        });
+        
+        // Wait for either the bundle to be ready or DatabaseAPI to appear
+        const result = await Promise.race([bundleReadyPromise, pollPromise]);
+        
+        // If bundle was ready but DatabaseAPI still not available, wait a bit more
+        if (!result && window.DatabaseAPI) {
+            return true;
+        }
+        
+        return result;
+    }, []);
+
     // Fetch data with cache awareness
     const fetchData = useCallback(async (key, force = false) => {
         // Check if already fetching
@@ -111,23 +151,52 @@ const DataProvider = ({ children }) => {
                     break;
                     
                 case 'projects':
-                    response = await window.DatabaseAPI?.getProjects() || await window.api.getProjects();
+                    // Wait for DatabaseAPI to be available before fetching projects
+                    await waitForDatabaseAPI();
+                    if (window.DatabaseAPI?.getProjects) {
+                        response = await window.DatabaseAPI.getProjects();
+                    } else if (window.api?.getProjects) {
+                        response = await window.api.getProjects();
+                    } else {
+                        throw new Error('Neither DatabaseAPI.getProjects nor api.getProjects is available');
+                    }
                     data = response?.data?.projects || response?.projects || response?.data || [];
                     break;
                     
                 case 'timeEntries':
-                    response = await window.DatabaseAPI?.getTimeEntries() || await window.api.getTimeEntries();
+                    await waitForDatabaseAPI();
+                    if (window.DatabaseAPI?.getTimeEntries) {
+                        response = await window.DatabaseAPI.getTimeEntries();
+                    } else if (window.api?.getTimeEntries) {
+                        response = await window.api.getTimeEntries();
+                    } else {
+                        throw new Error('Neither DatabaseAPI.getTimeEntries nor api.getTimeEntries is available');
+                    }
                     data = response?.data || response || [];
                     break;
                     
                 case 'invoices':
-                    response = await window.DatabaseAPI?.getInvoices() || await window.api.getInvoices();
+                    await waitForDatabaseAPI();
+                    if (window.DatabaseAPI?.getInvoices) {
+                        response = await window.DatabaseAPI.getInvoices();
+                    } else if (window.api?.getInvoices) {
+                        response = await window.api.getInvoices();
+                    } else {
+                        throw new Error('Neither DatabaseAPI.getInvoices nor api.getInvoices is available');
+                    }
                     data = response?.data || response || [];
                     break;
                     
                 case 'employees':
                 case 'users':
-                    response = await window.DatabaseAPI?.getUsers() || await window.api.getUsers();
+                    await waitForDatabaseAPI();
+                    if (window.DatabaseAPI?.getUsers) {
+                        response = await window.DatabaseAPI.getUsers();
+                    } else if (window.api?.getUsers) {
+                        response = await window.api.getUsers();
+                    } else {
+                        throw new Error('Neither DatabaseAPI.getUsers nor api.getUsers is available');
+                    }
                     data = response?.data?.users || response?.users || response?.data || [];
                     break;
                     
@@ -194,7 +263,7 @@ const DataProvider = ({ children }) => {
             // Remove from fetching set
             fetchingRef.current.delete(key);
         }
-    }, [cache, isCacheValid]);
+    }, [cache, isCacheValid, waitForDatabaseAPI]);
 
     // Update cache without refetching (optimistic updates)
     const updateCache = useCallback((key, updater) => {

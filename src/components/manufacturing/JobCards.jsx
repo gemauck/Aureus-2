@@ -40,8 +40,6 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
   const pageSize = 25;
 
   const reloadJobCards = async (targetPage) => {
-    let cancelled = false;
-
     const pageToLoad = targetPage || page || 1;
 
     try {
@@ -51,6 +49,7 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
       const token = window.storage?.getToken?.();
       if (!token) {
         setError('You must be logged in to view job cards.');
+        setLoading(false);
         return;
       }
 
@@ -67,32 +66,52 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
       if (!response.ok) {
         const text = await response.text();
         console.error('❌ JobCards: Failed to reload job cards', response.status, text);
-        throw new Error('Failed to load job cards.');
+        
+        // Try to parse error message from response
+        let errorMessage = 'Failed to load job cards.';
+        try {
+          const errorData = JSON.parse(text);
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch {
+          // If response is not JSON, use status-based messages
+          if (response.status === 401) {
+            errorMessage = 'Authentication required. Please log in again.';
+          } else if (response.status === 403) {
+            errorMessage = 'You do not have permission to view job cards.';
+          } else if (response.status === 500) {
+            errorMessage = 'Server error. Please try again later.';
+          } else if (response.status >= 400) {
+            errorMessage = `Failed to load job cards (${response.status}). Please try again.`;
+          }
+        }
+        
+        throw new Error(errorMessage);
       }
       
       const raw = await response.json();
       const data =
         (raw && (raw.jobCards || raw.data?.jobCards || raw.data)) || [];
       
-      if (!cancelled) {
-        setJobCards(Array.isArray(data) ? data : []);
-        setPagination(raw.pagination || null);
-      }
+      setJobCards(Array.isArray(data) ? data : []);
+      setPagination(raw.pagination || null);
     } catch (e) {
-      if (!cancelled) {
-        console.error('❌ JobCards: Error reloading job cards', e);
-        setError(e.message || 'Unable to load job cards.');
-        setJobCards([]);
+      console.error('❌ JobCards: Error reloading job cards', e);
+      
+      // Provide more helpful error messages
+      let errorMessage = e.message || 'Unable to load job cards.';
+      
+      // Handle network errors
+      if (e.name === 'TypeError' && e.message.includes('fetch')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else if (e.message.includes('JSON')) {
+        errorMessage = 'Invalid response from server. Please try again.';
       }
+      
+      setError(errorMessage);
+      setJobCards([]);
     } finally {
-      if (!cancelled) {
-        setLoading(false);
-      }
+      setLoading(false);
     }
-    
-    return () => {
-      cancelled = true;
-    };
   };
 
   useEffect(() => {
@@ -121,7 +140,26 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
       if (!response.ok) {
         const text = await response.text();
         console.error('❌ JobCards: Failed to reload job cards', response.status, text);
-        throw new Error('Failed to load job cards.');
+        
+        // Try to parse error message from response
+        let errorMessage = 'Failed to load job cards.';
+        try {
+          const errorData = JSON.parse(text);
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch {
+          // If response is not JSON, use status-based messages
+          if (response.status === 401) {
+            errorMessage = 'Authentication required. Please log in again.';
+          } else if (response.status === 403) {
+            errorMessage = 'You do not have permission to view job cards.';
+          } else if (response.status === 500) {
+            errorMessage = 'Server error. Please try again later.';
+          } else if (response.status >= 400) {
+            errorMessage = `Failed to load job cards (${response.status}). Please try again.`;
+          }
+        }
+        
+        throw new Error(errorMessage);
       }
 
         const raw = await response.json();
@@ -137,7 +175,18 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
       } catch (e) {
         if (!cancelled) {
           console.error('❌ JobCards: Error loading job cards', e);
-          setError(e.message || 'Unable to load job cards.');
+          
+          // Provide more helpful error messages
+          let errorMessage = e.message || 'Unable to load job cards.';
+          
+          // Handle network errors
+          if (e.name === 'TypeError' && e.message.includes('fetch')) {
+            errorMessage = 'Network error. Please check your connection and try again.';
+          } else if (e.message.includes('JSON')) {
+            errorMessage = 'Invalid response from server. Please try again.';
+          }
+          
+          setError(errorMessage);
           setJobCards([]);
         }
       } finally {
@@ -428,8 +477,25 @@ const JobCards = ({ clients = [], users = [], onOpenDetail }) => {
         </div>
       ) : error ? (
         <div className="px-4 py-4 sm:px-6 sm:py-5">
-          <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            {error}
+          <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-600 dark:bg-amber-900/20 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex-1">
+                <div className="font-semibold mb-1">Failed to load job cards</div>
+                <div>{error}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  reloadJobCards();
+                }}
+                disabled={loading}
+                className="inline-flex items-center gap-1 rounded-full border border-amber-400 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <i className="fa-solid fa-arrow-rotate-right text-[10px]" />
+                Retry
+              </button>
+            </div>
           </div>
         </div>
       ) : filteredJobCards.length === 0 ? (
