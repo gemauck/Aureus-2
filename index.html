@@ -689,7 +689,7 @@
     </script>
     
     <!-- Core bundle: critical modules -->
-    <script defer src="/dist/core-bundle.js?v=20251125-045120"></script>
+    <script defer src="/dist/core-bundle.js?v=20251127-1"></script>
 
     <script>
         window.addEventListener('corebundle:ready', () => {
@@ -812,7 +812,7 @@
                 // Check if script already exists - remove old ones with timestamp cache busting
                 const existingScripts = document.querySelectorAll('script[src*="projects-module.js"]');
                 // CACHE BUST VERSION: bump when deploying new Vite projects bundle
-                const VITE_PROJECTS_VERSION = '20251126-1';
+                const VITE_PROJECTS_VERSION = '20251127-1';
                 console.log('🔍 Checking for existing scripts. Found:', existingScripts.length);
                 existingScripts.forEach(oldScript => {
                     const src = oldScript.src || oldScript.getAttribute('src') || '';
@@ -919,8 +919,8 @@
         });
     </script>
     
-    <!-- Lazy loader - CACHE BUST 20251126-1 -->
-    <script defer src="/lazy-load-components.js?v=20251126-1"></script>
+    <!-- Lazy loader - CACHE BUST 20251127-1 -->
+    <script defer src="/lazy-load-components.js?v=20251127-1"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>
