@@ -5447,34 +5447,29 @@ const Clients = React.memo(() => {
                                     </>
                                 )}
                             </select>
-                            {isAdmin ? (
-                                <button
-                                    type="button"
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        console.log('🔧 Industry management button clicked, current state:', showIndustryModal);
-                                        console.log('🔧 Setting showIndustryModal to true');
-                                        setShowIndustryModal(true);
-                                        console.log('🔧 After setState, showIndustryModal should be true');
-                                    }}
-                                    onMouseDown={(e) => {
-                                        e.preventDefault();
-                                        console.log('🔧 Button mouse down event');
-                                    }}
-                                    className={`px-4 py-3 border rounded-lg text-sm font-medium transition-colors cursor-pointer ${
-                                        isDark
-                                            ? 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600'
-                                            : 'bg-gray-50 border-gray-300 text-gray-900 hover:bg-gray-100'
-                                    }`}
-                                    title="Manage Industries"
-                                    style={{ zIndex: 10 }}
-                                >
-                                    <i className="fas fa-cog"></i>
-                                </button>
-                            ) : (
-                                console.log('⚠️ Admin button not shown - isAdmin:', isAdmin, 'user:', currentUser)
-                            )}
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    console.log('🔧 Industry management button clicked');
+                                    console.log('🔧 Current showIndustryModal state:', showIndustryModal);
+                                    console.log('🔧 isAdmin:', isAdmin);
+                                    setShowIndustryModal(true);
+                                    setTimeout(() => {
+                                        console.log('🔧 After setState, showIndustryModal:', showIndustryModal);
+                                    }, 0);
+                                }}
+                                className={`px-4 py-3 border rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+                                    isDark
+                                        ? 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600'
+                                        : 'bg-gray-50 border-gray-300 text-gray-900 hover:bg-gray-100'
+                                }`}
+                                title={isAdmin ? "Manage Industries" : "Admin Only - Manage Industries"}
+                                style={{ zIndex: 10, opacity: isAdmin ? 1 : 0.5 }}
+                            >
+                                <i className="fas fa-cog"></i>
+                            </button>
                         </div>
                         <div>
                             <select
@@ -5610,7 +5605,7 @@ const Clients = React.memo(() => {
             )}
             
             {/* Industry Management Modal */}
-            {showIndustryModal ? (
+            {showIndustryModal && (
                 <div 
                     className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-50" 
                     onClick={(e) => {
@@ -5619,12 +5614,15 @@ const Clients = React.memo(() => {
                             setShowIndustryModal(false);
                         }
                     }}
-                    style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+                    style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 }}
                 >
                     <div 
                         className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col`} 
-                        onClick={(e) => e.stopPropagation()}
-                        style={{ zIndex: 10000 }}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            console.log('🔧 Modal content clicked');
+                        }}
+                        style={{ zIndex: 10000, position: 'relative' }}
                     >
                         <div className={`px-6 py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} flex items-center justify-between`}>
                             <h2 className={`text-xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
@@ -5729,8 +5727,6 @@ const Clients = React.memo(() => {
                         </div>
                     </div>
                 </div>
-            ) : (
-                console.log('⚠️ Modal not rendering - showIndustryModal:', showIndustryModal)
             )}
             </div>
         </div>
