@@ -1154,13 +1154,26 @@ app.use('/api', async (req, res) => {
   } catch (error) {
     if (timeout) clearTimeout(timeout)
     
+    // Enhanced error logging with database connection detection
+    const isDbError = error.code === 'P1001' || error.code === 'P1002' || error.code === 'P1008' || 
+                      error.code === 'P1017' || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED' ||
+                      error.code === 'ENOTFOUND' || error.code === 'EAI_AGAIN' ||
+                      error.name === 'PrismaClientInitializationError' ||
+                      error.message?.includes("Can't reach database server") ||
+                      error.message?.includes("Can't reach database")
+    
+    if (isDbError) {
+      console.error('🔌 Database connection error detected in catch-all handler')
+    }
+    
     console.error('❌ Railway API Error:', {
       method: req.method,
       url: req.url,
       error: error.message,
       errorName: error.name,
       errorCode: error.code,
-      stack: error.stack,
+      isDbError,
+      stack: error.stack?.substring(0, 1000), // Limit stack trace length
       timestamp: new Date().toISOString(),
       headersSent: res.headersSent,
       writableEnded: res.writableEnded
@@ -1168,13 +1181,21 @@ app.use('/api', async (req, res) => {
     
     // Don't expose internal errors in production
     const isDevelopment = process.env.NODE_ENV === 'development'
+    
     if (!res.headersSent && !res.writableEnded) {
-      res.status(500).json({ 
-        error: 'Internal server error', 
-        details: isDevelopment ? error.message : 'Contact support if this persists',
-        errorCode: error.code,
+      const errorResponse = {
+        error: isDbError ? 'DATABASE_CONNECTION_ERROR' : 'Internal server error',
+        message: isDbError 
+          ? 'Database connection failed. The database server is unreachable.'
+          : (isDevelopment ? error.message : 'Contact support if this persists'),
         timestamp: new Date().toISOString()
-      })
+      }
+      
+      if (isDevelopment && error.code) {
+        errorResponse.errorCode = error.code
+      }
+      
+      res.status(500).json(errorResponse)
     } else {
       console.error('⚠️ Cannot send error response - headers already sent or response ended')
     }
