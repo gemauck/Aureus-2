@@ -24,9 +24,9 @@
           crossorigin=""/>
     
     <!-- Tailwind CSS - Production Build -->
-    <!-- CACHE BUST: 20251128-044754 -->
-    <link rel="preload" href="/dist/styles.css?v=20251128-044754" as="style">
-    <link rel="stylesheet" href="/dist/styles.css?v=20251128-044754">
+    <!-- CACHE BUST: 20251128-045230 -->
+    <link rel="preload" href="/dist/styles.css?v=20251128-045230" as="style">
+    <link rel="stylesheet" href="/dist/styles.css?v=20251128-045230">
     
     <!-- Resource hints for faster loading -->
     <link rel="dns-prefetch" href="https://unpkg.com">
@@ -118,16 +118,16 @@
     </script>
     
     <!-- Mobile Responsive CSS - Single clean mobile stylesheet -->
-    <link rel="stylesheet" href="/mobile-responsive.css?v=20251128-044754">
+    <link rel="stylesheet" href="/mobile-responsive.css?v=20251128-045230">
     
     <!-- Mobile Helper JavaScript - Dynamic mobile enhancements -->
-    <script defer src="/mobile-helper.js?v=20251128-044754"></script>
+    <script defer src="/mobile-helper.js?v=20251128-045230"></script>
     
     <!-- Dark Mode Fixes CSS -->
     <link rel="stylesheet" href="/dark-mode-fixes.css">
     
     <!-- Public Job Card Mobile Overrides -->
-    <link rel="stylesheet" href="/job-card-public-mobile.css?v=20251128-044754">
+    <link rel="stylesheet" href="/job-card-public-mobile.css?v=20251128-045230">
     
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -689,7 +689,7 @@
     </script>
     
     <!-- Core bundle: critical modules -->
-    <script defer src="/dist/core-bundle.js?v=20251128-044754"></script>
+    <script defer src="/dist/core-bundle.js?v=20251128-045230"></script>
 
     <script>
         window.addEventListener('corebundle:ready', () => {
@@ -812,7 +812,7 @@
                 // Check if script already exists - remove old ones with timestamp cache busting
                 const existingScripts = document.querySelectorAll('script[src*="projects-module.js"]');
                 // CACHE BUST VERSION: bump when deploying new Vite projects bundle
-                const VITE_PROJECTS_VERSION = '20251128-044754';
+                const VITE_PROJECTS_VERSION = '20251128-045230';
                 console.log('🔍 Checking for existing scripts. Found:', existingScripts.length);
                 existingScripts.forEach(oldScript => {
                     const src = oldScript.src || oldScript.getAttribute('src') || '';
@@ -919,8 +919,8 @@
         });
     </script>
     
-    <!-- Lazy loader - CACHE BUST 20251128-044754 -->
-    <script defer src="/lazy-load-components.js?v=20251128-044754"></script>
+    <!-- Lazy loader - CACHE BUST 20251128-045230 -->
+    <script defer src="/lazy-load-components.js?v=20251128-045230"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>
