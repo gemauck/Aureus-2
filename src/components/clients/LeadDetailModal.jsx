@@ -318,24 +318,6 @@ const LeadDetailModal = ({
             }
         };
 
-        // Cleanup function
-        return () => {
-            if (modalContainer && modalContainer.parentNode) {
-                modalContainer.remove();
-            }
-        };
-    }, [showIndustryModal, industries, isLoadingIndustries, newIndustryName, handleAddIndustry, handleDeleteIndustry]);
-
-    // Update input value when newIndustryName changes (separate effect to avoid recreating modal)
-    useEffect(() => {
-        if (showIndustryModal) {
-            const input = document.querySelector('#industry-management-modal-container input[type="text"]');
-            if (input && input.value !== newIndustryName) {
-                input.value = newIndustryName;
-            }
-        }
-    }, [newIndustryName, showIndustryModal]);
-    
     // Fetch industries on mount
     useEffect(() => {
         const loadIndustries = async () => {
@@ -369,7 +351,7 @@ const LeadDetailModal = ({
     }, []);
     
     // Add new industry
-    const handleAddIndustry = async () => {
+    const handleAddIndustry = useCallback(async () => {
         if (!newIndustryName.trim()) {
             alert('Please enter an industry name');
             return;
@@ -408,10 +390,10 @@ const LeadDetailModal = ({
             console.error('Error adding industry:', error);
             alert('Error adding industry: ' + error.message);
         }
-    };
+    }, [newIndustryName, setIndustries, setNewIndustryName]);
     
-    // Delete industry
-    const handleDeleteIndustry = async (industryId) => {
+    // Delete industry - define before useEffect that uses it
+    const handleDeleteIndustry = useCallback(async (industryId) => {
         if (!confirm('Are you sure you want to delete this industry?')) {
             return;
         }
@@ -443,7 +425,157 @@ const LeadDetailModal = ({
             console.error('Error deleting industry:', error);
             alert('Error deleting industry: ' + error.message);
         }
-    };
+    }, [setIndustries]);
+    
+    // Render modal to document.body using useEffect - MUST be after handleAddIndustry and handleDeleteIndustry
+    useEffect(() => {
+        if (!showIndustryModal) {
+            // Remove modal if it exists
+            const existingModal = document.getElementById('industry-management-modal-container');
+            if (existingModal) {
+                existingModal.remove();
+            }
+            return;
+        }
+
+        console.log('🔧 LeadDetailModal: Creating modal in document.body');
+        
+        // Create modal container
+        const modalContainer = document.createElement('div');
+        modalContainer.id = 'industry-management-modal-container';
+        modalContainer.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; background-color: rgba(0, 0, 0, 0.5);';
+        document.body.appendChild(modalContainer);
+
+        // Create modal content
+        const modalContent = document.createElement('div');
+        modalContent.className = 'bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col';
+        modalContent.style.cssText = 'z-index: 100000; position: relative;';
+        modalContent.onclick = (e) => e.stopPropagation();
+        modalContainer.appendChild(modalContent);
+
+        // Create header
+        const header = document.createElement('div');
+        header.className = 'px-6 py-4 border-b border-gray-200 flex items-center justify-between';
+        const headerTitle = document.createElement('h2');
+        headerTitle.className = 'text-xl font-semibold text-gray-900';
+        headerTitle.textContent = 'Manage Industries';
+        header.appendChild(headerTitle);
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'text-gray-400 hover:text-gray-600';
+        closeBtn.onclick = () => setShowIndustryModal(false);
+        closeBtn.innerHTML = '<i class="fas fa-times text-xl"></i>';
+        header.appendChild(closeBtn);
+        modalContent.appendChild(header);
+
+        // Create body
+        const body = document.createElement('div');
+        body.className = 'flex-1 overflow-y-auto p-6';
+        
+        // Add new industry section
+        const addSection = document.createElement('div');
+        addSection.className = 'mb-6';
+        const addLabel = document.createElement('label');
+        addLabel.className = 'block text-sm font-medium mb-2 text-gray-700';
+        addLabel.textContent = 'Add New Industry';
+        addSection.appendChild(addLabel);
+        const addInputGroup = document.createElement('div');
+        addInputGroup.className = 'flex gap-2';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = newIndustryName;
+        input.placeholder = 'Enter industry name';
+        input.className = 'flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent';
+        input.oninput = (e) => setNewIndustryName(e.target.value);
+        input.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                handleAddIndustry();
+            }
+        };
+        addInputGroup.appendChild(input);
+        const addBtn = document.createElement('button');
+        addBtn.className = 'px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors';
+        addBtn.onclick = handleAddIndustry;
+        addBtn.innerHTML = '<i class="fas fa-plus mr-2"></i>Add';
+        addInputGroup.appendChild(addBtn);
+        addSection.appendChild(addInputGroup);
+        body.appendChild(addSection);
+
+        // Industries list
+        const listSection = document.createElement('div');
+        const listLabel = document.createElement('label');
+        listLabel.className = 'block text-sm font-medium mb-2 text-gray-700';
+        listLabel.textContent = `Existing Industries (${industries.length})`;
+        listSection.appendChild(listLabel);
+        
+        if (isLoadingIndustries) {
+            const loadingDiv = document.createElement('div');
+            loadingDiv.className = 'text-center py-8 text-gray-500';
+            loadingDiv.innerHTML = '<i class="fas fa-spinner fa-spin text-2xl mb-2"></i><p>Loading industries...</p>';
+            listSection.appendChild(loadingDiv);
+        } else if (industries.length === 0) {
+            const emptyDiv = document.createElement('div');
+            emptyDiv.className = 'text-center py-8 text-gray-500';
+            emptyDiv.innerHTML = '<p>No industries found. Add one above to get started.</p>';
+            listSection.appendChild(emptyDiv);
+        } else {
+            const industriesList = document.createElement('div');
+            industriesList.className = 'space-y-2 bg-gray-50 rounded-lg p-4';
+            industries.forEach((industry) => {
+                const industryItem = document.createElement('div');
+                industryItem.className = 'flex items-center justify-between p-3 rounded-lg bg-white hover:bg-gray-100';
+                const industryName = document.createElement('span');
+                industryName.className = 'font-medium text-gray-900';
+                industryName.textContent = industry.name;
+                industryItem.appendChild(industryName);
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'px-3 py-1.5 text-sm rounded-lg transition-colors bg-red-100 hover:bg-red-200 text-red-700';
+                deleteBtn.setAttribute('data-industry-id', industry.id);
+                deleteBtn.setAttribute('data-action', 'delete-industry');
+                deleteBtn.onclick = () => handleDeleteIndustry(industry.id);
+                deleteBtn.innerHTML = '<i class="fas fa-trash mr-1"></i>Delete';
+                industryItem.appendChild(deleteBtn);
+                industriesList.appendChild(industryItem);
+            });
+            listSection.appendChild(industriesList);
+        }
+        body.appendChild(listSection);
+        modalContent.appendChild(body);
+
+        // Footer
+        const footer = document.createElement('div');
+        footer.className = 'px-6 py-4 border-t border-gray-200 flex justify-end';
+        const closeFooterBtn = document.createElement('button');
+        closeFooterBtn.className = 'px-4 py-2 rounded-lg transition-colors bg-gray-100 hover:bg-gray-200 text-gray-700';
+        closeFooterBtn.textContent = 'Close';
+        closeFooterBtn.onclick = () => setShowIndustryModal(false);
+        footer.appendChild(closeFooterBtn);
+        modalContent.appendChild(footer);
+
+        // Handle backdrop click
+        modalContainer.onclick = (e) => {
+            if (e.target === modalContainer) {
+                console.log('🔧 LeadDetailModal: Closing modal via backdrop');
+                setShowIndustryModal(false);
+            }
+        };
+
+        // Cleanup function
+        return () => {
+            if (modalContainer && modalContainer.parentNode) {
+                modalContainer.remove();
+            }
+        };
+    }, [showIndustryModal, industries, isLoadingIndustries, newIndustryName, handleAddIndustry, handleDeleteIndustry]);
+
+    // Update input value when newIndustryName changes (separate effect to avoid recreating modal)
+    useEffect(() => {
+        if (showIndustryModal) {
+            const input = document.querySelector('#industry-management-modal-container input[type="text"]');
+            if (input && input.value !== newIndustryName) {
+                input.value = newIndustryName;
+            }
+        }
+    }, [newIndustryName, showIndustryModal]);
     
     // Update the flag when lead changes from null to having an ID (after first save)
     useEffect(() => {
