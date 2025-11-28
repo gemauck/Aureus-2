@@ -697,6 +697,16 @@ const Clients = React.memo(() => {
     const currentUser = window.storage?.getUser?.();
     const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
     
+    // Debug logging
+    useEffect(() => {
+        console.log('🔍 Clients component - Admin check:', {
+            currentUser: currentUser?.email,
+            role: currentUser?.role,
+            isAdmin: isAdmin,
+            showIndustryModal: showIndustryModal
+        });
+    }, [currentUser, isAdmin, showIndustryModal]);
+    
     // Fetch industries from API
     const loadIndustries = useCallback(async () => {
         try {
@@ -4610,7 +4620,6 @@ const Clients = React.memo(() => {
                             <tr>
                                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">Name</th>
                                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">Type</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">Stage</th>
                                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">Value</th>
                                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">Organisation</th>
                                 <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide">Owner</th>
@@ -4620,7 +4629,7 @@ const Clients = React.memo(() => {
                         <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
                             {sortedItems.length === 0 ? (
                                 <tr>
-                                    <td colSpan="7" className="px-6 py-16 text-center">
+                                    <td colSpan="6" className="px-6 py-16 text-center">
                                         <div className={`mx-auto w-14 h-14 rounded-full flex items-center justify-center ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-500'}`}>
                                             <i className="fas fa-stream text-xl"></i>
                                         </div>
@@ -4646,11 +4655,6 @@ const Clients = React.memo(() => {
                                         <td className="px-6 py-4">
                                             <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${typeBadgeClasses(item.type)}`}>
                                                 {item.type === 'lead' ? 'Lead' : 'Opportunity'}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${getStageBadgeClasses(item.stage)}`}>
-                                                {item.stage}
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
@@ -4897,6 +4901,17 @@ const Clients = React.memo(() => {
                             </th>
                             <th 
                                 className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                onClick={() => handleLeadSort('status')}
+                            >
+                                <div className="flex items-center">
+                                    Stage
+                                    {leadSortField === 'status' && (
+                                        <i className={`fas fa-sort-${leadSortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
+                                    )}
+                                </div>
+                            </th>
+                            <th 
+                                className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
                                 onClick={() => handleLeadSort('stage')}
                             >
                                 <div className="flex items-center">
@@ -4922,7 +4937,7 @@ const Clients = React.memo(() => {
                     <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
                         {paginatedLeads.length === 0 ? (
                             <tr>
-                                <td colSpan="4" className={`px-6 py-12 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <td colSpan="5" className={`px-6 py-12 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                     <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
                                         <i className="fas fa-user-plus text-2xl text-gray-400"></i>
                                     </div>
@@ -4957,6 +4972,18 @@ const Clients = React.memo(() => {
                                         </div>
                                     </td>
                                     <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.industry}</td>
+                                    <td className="px-6 py-2 whitespace-nowrap">
+                                        <span className={`px-3 py-1 text-xs font-medium rounded-full ${
+                                            lead.status === 'Active' || lead.status === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
+                                            lead.status === 'Potential' || lead.status === 'potential' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
+                                            lead.status === 'Proposal' || lead.status === 'proposal' ? (isDark ? 'bg-purple-900 text-purple-200' : 'bg-purple-100 text-purple-800') :
+                                            lead.status === 'Tender' || lead.status === 'tender' ? (isDark ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800') :
+                                            lead.status === 'Disinterested' || lead.status === 'disinterested' ? (isDark ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-800') :
+                                            (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800')
+                                        }`}>
+                                            {lead.status || 'Potential'}
+                                        </span>
+                                    </td>
                                     <td className="px-6 py-2 whitespace-nowrap">
                                         <span className={`px-3 py-1 text-xs font-medium rounded-full ${
                                             lead.stage === 'Awareness' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
@@ -5420,24 +5447,33 @@ const Clients = React.memo(() => {
                                     </>
                                 )}
                             </select>
-                            {isAdmin && (
+                            {isAdmin ? (
                                 <button
                                     type="button"
                                     onClick={(e) => {
                                         e.preventDefault();
                                         e.stopPropagation();
-                                        console.log('🔧 Industry management button clicked');
+                                        console.log('🔧 Industry management button clicked, current state:', showIndustryModal);
+                                        console.log('🔧 Setting showIndustryModal to true');
                                         setShowIndustryModal(true);
+                                        console.log('🔧 After setState, showIndustryModal should be true');
                                     }}
-                                    className={`px-4 py-3 border rounded-lg text-sm font-medium transition-colors ${
+                                    onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        console.log('🔧 Button mouse down event');
+                                    }}
+                                    className={`px-4 py-3 border rounded-lg text-sm font-medium transition-colors cursor-pointer ${
                                         isDark
                                             ? 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600'
                                             : 'bg-gray-50 border-gray-300 text-gray-900 hover:bg-gray-100'
                                     }`}
                                     title="Manage Industries"
+                                    style={{ zIndex: 10 }}
                                 >
                                     <i className="fas fa-cog"></i>
                                 </button>
+                            ) : (
+                                console.log('⚠️ Admin button not shown - isAdmin:', isAdmin, 'user:', currentUser)
                             )}
                         </div>
                         <div>
@@ -5574,14 +5610,16 @@ const Clients = React.memo(() => {
             )}
             
             {/* Industry Management Modal */}
-            {showIndustryModal && (
+            {showIndustryModal ? (
                 <div 
                     className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-50" 
                     onClick={(e) => {
                         if (e.target === e.currentTarget) {
+                            console.log('🔧 Closing modal via backdrop click');
                             setShowIndustryModal(false);
                         }
                     }}
+                    style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
                 >
                     <div 
                         className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col`} 
@@ -5691,6 +5729,8 @@ const Clients = React.memo(() => {
                         </div>
                     </div>
                 </div>
+            ) : (
+                console.log('⚠️ Modal not rendering - showIndustryModal:', showIndustryModal)
             )}
             </div>
         </div>
