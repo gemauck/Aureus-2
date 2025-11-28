@@ -29,6 +29,30 @@ async function handler(req, res) {
     // List All Industries (GET /api/industries)
     if (req.method === 'GET' && pathSegments[pathSegments.length - 1] === 'industries') {
       try {
+        // Try to create table if it doesn't exist (idempotent)
+        try {
+          await prisma.$executeRaw`
+            CREATE TABLE IF NOT EXISTS "Industry" (
+              id TEXT PRIMARY KEY,
+              name TEXT UNIQUE NOT NULL,
+              "isActive" BOOLEAN DEFAULT true,
+              "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+          `
+          await prisma.$executeRaw`
+            CREATE INDEX IF NOT EXISTS "Industry_name_idx" ON "Industry"(name);
+          `
+          await prisma.$executeRaw`
+            CREATE INDEX IF NOT EXISTS "Industry_isActive_idx" ON "Industry"("isActive");
+          `
+        } catch (createError) {
+          // Table might already exist, ignore error
+          if (!createError.message.includes('already exists') && createError.code !== '42P07') {
+            console.warn('⚠️ Could not ensure Industry table exists:', createError.message)
+          }
+        }
+        
         const industries = await prisma.industry.findMany({
           where: { isActive: true },
           orderBy: { name: 'asc' }
