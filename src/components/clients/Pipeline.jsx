@@ -2093,13 +2093,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                     {renderSortableHeader('Company', 'company')}
                                     {renderSortableHeader('Type', 'type')}
                                     {renderSortableHeader('Status', 'status')}
-                                    {renderSortableHeader('Stage', 'stage')}
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {items.length === 0 ? (
                                     <tr>
-                                        <td colSpan="5" className="px-4 py-12 text-center text-sm text-gray-500">
+                                        <td colSpan="4" className="px-4 py-12 text-center text-sm text-gray-500">
                                             <i className="fas fa-list-ul text-3xl text-gray-300 mb-3"></i>
                                             <p>No leads or opportunities match your filters.</p>
                                             <p className="text-xs text-gray-400 mt-1">Adjust filters to see more results.</p>
@@ -2150,9 +2149,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                     <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${getLifecycleBadgeColor(item.status || 'Potential')}`}>
                                                         {item.status || 'Potential'}
                                                     </span>
-                                                </td>
-                                                <td className="px-6 py-2">
-                                                    <span className="text-sm font-medium text-gray-900">{item.stage || 'Awareness'}</span>
                                                 </td>
                                             </tr>
                                         );

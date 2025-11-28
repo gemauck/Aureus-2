@@ -1,6 +1,6 @@
 {
   "name": "abcotronics-erp-modular",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Abcotronics - Fuel Management Services",
   "type": "module",
   "main": "server.js",
