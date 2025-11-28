@@ -4973,8 +4973,9 @@ const LeadDetailModal = ({
             )
         ),
         React.createElement(ThumbnailPreviewModal),
-        // Industry Management Modal
-        showIndustryModal && React.createElement('div', {
+        // Industry Management Modal - Use portal to render at body level
+        showIndustryModal && (ReactDOM && ReactDOM.createPortal ? ReactDOM.createPortal(
+            React.createElement('div', {
                 key: 'industry-modal',
                 className: 'fixed inset-0 flex items-center justify-center',
                 onClick: (e) => {
@@ -5066,8 +5067,101 @@ const LeadDetailModal = ({
                         className: 'px-4 py-2 rounded-lg transition-colors bg-gray-100 hover:bg-gray-200 text-gray-700'
                     }, 'Close')
                 )
+            ),
+            document.body
+        ) : React.createElement('div', {
+            key: 'industry-modal-fallback',
+            className: 'fixed inset-0 flex items-center justify-center',
+            onClick: (e) => {
+                if (e.target === e.currentTarget) {
+                    console.log('🔧 LeadDetailModal: Closing modal via backdrop (fallback)');
+                    setShowIndustryModal(false);
+                }
+            },
+            style: { 
+                position: 'fixed', 
+                top: 0, 
+                left: 0, 
+                right: 0, 
+                bottom: 0, 
+                zIndex: 99999,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'rgba(0, 0, 0, 0.5)'
+            }
+        },
+            React.createElement('div', {
+                className: 'bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col',
+                onClick: (e) => e.stopPropagation(),
+                style: { zIndex: 100000, position: 'relative' }
+            },
+                React.createElement('div', { className: 'px-6 py-4 border-b border-gray-200 flex items-center justify-between' },
+                    React.createElement('h2', { className: 'text-xl font-semibold text-gray-900' }, 'Manage Industries'),
+                    React.createElement('button', {
+                        onClick: () => setShowIndustryModal(false),
+                        className: 'text-gray-400 hover:text-gray-600'
+                    }, React.createElement('i', { className: 'fas fa-times text-xl' }))
+                ),
+                React.createElement('div', { className: 'flex-1 overflow-y-auto p-6' },
+                    React.createElement('div', { className: 'mb-6' },
+                        React.createElement('label', { className: 'block text-sm font-medium mb-2 text-gray-700' }, 'Add New Industry'),
+                        React.createElement('div', { className: 'flex gap-2' },
+                            React.createElement('input', {
+                                type: 'text',
+                                value: newIndustryName,
+                                onChange: (e) => setNewIndustryName(e.target.value),
+                                onKeyDown: (e) => {
+                                    if (e.key === 'Enter') {
+                                        handleAddIndustry();
+                                    }
+                                },
+                                placeholder: 'Enter industry name',
+                                className: 'flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                            }),
+                            React.createElement('button', {
+                                onClick: handleAddIndustry,
+                                className: 'px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors'
+                            },
+                                React.createElement('i', { className: 'fas fa-plus mr-2' }),
+                                'Add'
+                            )
+                        )
+                    ),
+                    React.createElement('div', null,
+                        React.createElement('label', { className: 'block text-sm font-medium mb-2 text-gray-700' },
+                            `Existing Industries (${industries.length})`
+                        ),
+                        isLoadingIndustries ? React.createElement('div', { className: 'text-center py-8 text-gray-500' },
+                            React.createElement('i', { className: 'fas fa-spinner fa-spin text-2xl mb-2' }),
+                            React.createElement('p', null, 'Loading industries...')
+                        ) : industries.length === 0 ? React.createElement('div', { className: 'text-center py-8 text-gray-500' },
+                            React.createElement('p', null, 'No industries found. Add one above to get started.')
+                        ) : React.createElement('div', { className: 'space-y-2 bg-gray-50 rounded-lg p-4' },
+                            industries.map((industry) => React.createElement('div', {
+                                key: industry.id,
+                                className: 'flex items-center justify-between p-3 rounded-lg bg-white hover:bg-gray-100'
+                            },
+                                React.createElement('span', { className: 'font-medium text-gray-900' }, industry.name),
+                                React.createElement('button', {
+                                    onClick: () => handleDeleteIndustry(industry.id),
+                                    className: 'px-3 py-1.5 text-sm rounded-lg transition-colors bg-red-100 hover:bg-red-200 text-red-700'
+                                },
+                                    React.createElement('i', { className: 'fas fa-trash mr-1' }),
+                                    'Delete'
+                                )
+                            ))
+                        )
+                    )
+                ),
+                React.createElement('div', { className: 'px-6 py-4 border-t border-gray-200 flex justify-end' },
+                    React.createElement('button', {
+                        onClick: () => setShowIndustryModal(false),
+                        className: 'px-4 py-2 rounded-lg transition-colors bg-gray-100 hover:bg-gray-200 text-gray-700'
+                    }, 'Close')
+                )
             )
-        )
+        ))
     );
 };
 
