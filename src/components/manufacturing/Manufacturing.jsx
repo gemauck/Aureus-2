@@ -8617,22 +8617,32 @@ const Manufacturing = () => {
           {(() => {
             const itemMovements = itemMovementsForDetail;
 
+            // Helper function to normalize quantity based on movement type
+            // This ensures consistent handling across balance calculation and display
+            const normalizeQuantity = (movement) => {
+              let qty = parseFloat(movement.quantity) || 0;
+              // Normalize quantity based on type
+              if (movement.type === 'receipt' || movement.type === 'production') {
+                qty = Math.abs(qty); // Always positive
+              } else if (movement.type === 'consumption' || movement.type === 'sale') {
+                qty = -Math.abs(qty); // Always negative
+              }
+              // Adjustments keep their sign as-is (can be positive or negative)
+              // This is critical - adjustments are stored with their actual sign in the database
+              return qty;
+            };
+
             // Calculate starting balance from current quantity and movements
             // This ensures closing balance matches current quantity
             let runningBalance = item.quantity || 0;
             
             if (itemMovements.length > 0) {
-              // Subtract all movements to get the opening balance (which we won't display)
+              // Calculate the net effect of all movements using the same normalization
               const totalMovementQty = itemMovements.reduce((sum, m) => {
-                let qty = parseFloat(m.quantity) || 0;
-                // Normalize quantity based on type
-                if (m.type === 'receipt' || m.type === 'production') {
-                  qty = Math.abs(qty);
-                } else if (m.type === 'consumption' || m.type === 'sale') {
-                  qty = -Math.abs(qty);
-                }
-                return sum + qty;
+                return sum + normalizeQuantity(m);
               }, 0);
+              // Starting balance = current quantity - sum of all movements
+              // This works because: startingBalance + totalMovementQty = currentQuantity
               runningBalance = (item.quantity || 0) - totalMovementQty;
             }
 
@@ -8660,16 +8670,8 @@ const Manufacturing = () => {
                     <tbody className="divide-y divide-gray-200">
                       {/* Transaction Rows */}
                       {itemMovements.map((movement, index) => {
-                        let qty = parseFloat(movement.quantity) || 0;
-                        
-                        // Normalize quantity based on type for display
-                        // Receipts should always be positive, consumption should always be negative
-                        if (movement.type === 'receipt' || movement.type === 'production') {
-                          qty = Math.abs(qty); // Ensure positive
-                        } else if (movement.type === 'consumption' || movement.type === 'sale') {
-                          qty = -Math.abs(qty); // Ensure negative
-                        }
-                        // Adjustments keep their sign as-is
+                        // Use the same normalization function for consistency
+                        const qty = normalizeQuantity(movement);
                         
                         const isIncrease = qty > 0;
                         const isDecrease = qty < 0;
