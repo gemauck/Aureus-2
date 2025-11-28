@@ -294,12 +294,22 @@ const LeadDetailModal = ({
         }
     }, [setIndustries]);
     
+    // Store functions in refs to prevent useEffect re-runs
+    const handleAddIndustryRef = useRef(handleAddIndustry);
+    const handleDeleteIndustryRef = useRef(handleDeleteIndustry);
+    
+    useEffect(() => {
+        handleAddIndustryRef.current = handleAddIndustry;
+        handleDeleteIndustryRef.current = handleDeleteIndustry;
+    }, [handleAddIndustry, handleDeleteIndustry]);
+    
     // Render modal to document.body using useEffect - MUST be after handleAddIndustry and handleDeleteIndustry
     useEffect(() => {
         if (!showIndustryModal) {
             // Remove modal if it exists
             const existingModal = document.getElementById('industry-management-modal-container');
             if (existingModal) {
+                console.log('🔧 LeadDetailModal: Removing modal (showIndustryModal is false)');
                 existingModal.remove();
             }
             return;
@@ -310,7 +320,7 @@ const LeadDetailModal = ({
         // Remove any existing modal first
         const existingModal = document.getElementById('industry-management-modal-container');
         if (existingModal) {
-            console.log('🔧 LeadDetailModal: Removing existing modal');
+            console.log('🔧 LeadDetailModal: Removing existing modal before creating new one');
             existingModal.remove();
         }
         
@@ -367,13 +377,13 @@ const LeadDetailModal = ({
         input.oninput = (e) => setNewIndustryName(e.target.value);
         input.onkeydown = (e) => {
             if (e.key === 'Enter') {
-                handleAddIndustry();
+                handleAddIndustryRef.current();
             }
         };
         addInputGroup.appendChild(input);
         const addBtn = document.createElement('button');
         addBtn.className = 'px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors';
-        addBtn.onclick = handleAddIndustry;
+        addBtn.onclick = () => handleAddIndustryRef.current();
         addBtn.innerHTML = '<i class="fas fa-plus mr-2"></i>Add';
         addInputGroup.appendChild(addBtn);
         addSection.appendChild(addInputGroup);
@@ -410,7 +420,7 @@ const LeadDetailModal = ({
                 deleteBtn.className = 'px-3 py-1.5 text-sm rounded-lg transition-colors bg-red-100 hover:bg-red-200 text-red-700';
                 deleteBtn.setAttribute('data-industry-id', industry.id);
                 deleteBtn.setAttribute('data-action', 'delete-industry');
-                deleteBtn.onclick = () => handleDeleteIndustry(industry.id);
+                deleteBtn.onclick = () => handleDeleteIndustryRef.current(industry.id);
                 deleteBtn.innerHTML = '<i class="fas fa-trash mr-1"></i>Delete';
                 industryItem.appendChild(deleteBtn);
                 industriesList.appendChild(industryItem);
@@ -444,15 +454,21 @@ const LeadDetailModal = ({
             isLoading: isLoadingIndustries
         });
 
-        // Cleanup function
+        // Cleanup function - only remove if showIndustryModal becomes false
         return () => {
-            console.log('🔧 LeadDetailModal: Cleanup function called, removing modal');
-            const modalToRemove = document.getElementById('industry-management-modal-container');
-            if (modalToRemove && modalToRemove.parentNode) {
-                modalToRemove.remove();
+            // Only remove if showIndustryModal is false (checked at start of effect)
+            // This prevents removal when dependencies change but modal should stay open
+            if (!showIndustryModal) {
+                console.log('🔧 LeadDetailModal: Cleanup function called, removing modal (showIndustryModal is false)');
+                const modalToRemove = document.getElementById('industry-management-modal-container');
+                if (modalToRemove && modalToRemove.parentNode) {
+                    modalToRemove.remove();
+                }
+            } else {
+                console.log('🔧 LeadDetailModal: Cleanup function called but modal should stay open, skipping removal');
             }
         };
-    }, [showIndustryModal, industries, isLoadingIndustries, newIndustryName, handleAddIndustry, handleDeleteIndustry]);
+    }, [showIndustryModal, industries, isLoadingIndustries, newIndustryName]);
 
     // Update input value when newIndustryName changes (separate effect to avoid recreating modal)
     useEffect(() => {
