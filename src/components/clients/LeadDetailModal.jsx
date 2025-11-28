@@ -4974,8 +4974,9 @@ const LeadDetailModal = ({
         ),
         React.createElement(ThumbnailPreviewModal),
         // Industry Management Modal - Use portal to render at body level
-        showIndustryModal && (ReactDOM && ReactDOM.createPortal ? ReactDOM.createPortal(
-            React.createElement('div', {
+        showIndustryModal && (() => {
+            console.log('🔧 LeadDetailModal: Rendering industry modal, ReactDOM available:', !!ReactDOM, 'createPortal available:', !!(ReactDOM && ReactDOM.createPortal));
+            const modalContent = React.createElement('div', {
                 key: 'industry-modal',
                 className: 'fixed inset-0 flex items-center justify-center',
                 onClick: (e) => {
@@ -5067,9 +5068,15 @@ const LeadDetailModal = ({
                         className: 'px-4 py-2 rounded-lg transition-colors bg-gray-100 hover:bg-gray-200 text-gray-700'
                     }, 'Close')
                 )
-            ),
-            document.body
-        ) : React.createElement('div', {
+            );
+            if (ReactDOM && ReactDOM.createPortal) {
+                console.log('🔧 LeadDetailModal: Using ReactDOM.createPortal to render modal');
+                return ReactDOM.createPortal(modalContent, document.body);
+            } else {
+                console.log('🔧 LeadDetailModal: ReactDOM.createPortal not available, rendering inline');
+                return modalContent;
+            }
+        })()
             key: 'industry-modal-fallback',
             className: 'fixed inset-0 flex items-center justify-center',
             onClick: (e) => {
