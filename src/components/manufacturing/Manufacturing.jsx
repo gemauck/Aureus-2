@@ -8,7 +8,11 @@ console.log('🏭 useAuth available:', typeof window.useAuth !== 'undefined');
 // doesn't crash before we can register a fallback component.
 const ReactGlobal = window.React || {};
 const { useState, useEffect, useCallback, useMemo, useRef } = ReactGlobal;
-const { useAuth } = window;
+// Safely access useAuth - don't destructure if undefined
+const useAuth = window.useAuth || (() => {
+  console.error('❌ Manufacturing: useAuth is not available');
+  return { user: null };
+});
 
 const MANUFACTURING_TABS = ['dashboard', 'inventory', 'bom', 'production', 'sales', 'purchase', 'movements', 'suppliers', 'locations'];
 const normalizeManufacturingTab = (value = 'dashboard') => {
@@ -8966,6 +8970,26 @@ try {
         window.Manufacturing = Manufacturing;
         console.log('✅ Manufacturing component registered on window.Manufacturing', typeof window.Manufacturing);
         console.log('✅ window.Manufacturing now equals:', window.Manufacturing);
+        
+        // Dispatch ready event
+        if (typeof window.dispatchEvent === 'function') {
+            try {
+                window.dispatchEvent(new CustomEvent('manufacturingComponentReady'));
+                console.log('📢 Dispatched manufacturingComponentReady event');
+                
+                // Also dispatch after a small delay in case listeners weren't ready
+                setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('manufacturingComponentReady'));
+                }, 100);
+                
+                // One more delayed dispatch for safety
+                setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('manufacturingComponentReady'));
+                }, 500);
+            } catch (e) {
+                console.warn('⚠️ Could not dispatch manufacturingComponentReady event:', e);
+            }
+        }
     } else {
         console.error('❌ Manufacturing.jsx: Manufacturing function is undefined!');
         console.error('❌ This means there was a JavaScript error before the component definition.');
@@ -8992,5 +9016,14 @@ setTimeout(() => {
         console.warn('⚠️ Manufacturing not registered initially, trying delayed registration...');
         window.Manufacturing = Manufacturing;
         console.log('✅ Manufacturing component registered on window.Manufacturing (delayed)', typeof window.Manufacturing);
+        
+        // Dispatch event after delayed registration
+        if (typeof window.dispatchEvent === 'function') {
+            try {
+                window.dispatchEvent(new CustomEvent('manufacturingComponentReady'));
+            } catch (e) {
+                console.warn('⚠️ Could not dispatch manufacturingComponentReady event:', e);
+            }
+        }
     }
 }, 1000);

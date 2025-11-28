@@ -98,6 +98,12 @@ async function handler(req, res) {
             } catch (userQueryError) {
                 console.error('❌ Users endpoint: Failed to query users:', userQueryError)
                 console.error('❌ Users endpoint: Error stack:', userQueryError.stack)
+                
+                // Check if it's a database connection error
+                if (isConnectionError(userQueryError)) {
+                    return serverError(res, `Database connection failed: ${userQueryError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+                }
+                
                 throw new Error(`Database query failed: ${userQueryError.message}`)
             }
 

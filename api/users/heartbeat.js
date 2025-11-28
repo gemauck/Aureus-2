@@ -4,6 +4,7 @@ import { prisma } from '../_lib/prisma.js'
 import { ok, serverError, badRequest, unauthorized, notFound } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
+import { isConnectionError } from '../_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -40,34 +41,18 @@ async function handler(req, res) {
   } catch (error) {
     console.error('Heartbeat error:', error)
     
-    // Check if it's a database connection error - comprehensive list including PrismaClientInitializationError
-    const errorName = error.name || ''
-    const errorMessage = error.message || String(error)
-    const errorCode = error.code || ''
-    
-    const isConnectionError = 
-      errorName === 'PrismaClientInitializationError' ||
-      errorMessage.includes("Can't reach database server") ||
-      errorMessage.includes("Can't reach database") ||
-      (errorMessage.includes("connection") && (errorMessage.includes("timeout") || errorMessage.includes("refused") || errorMessage.includes("unreachable"))) ||
-      errorCode === 'P1001' || // Can't reach database server
-      errorCode === 'P1002' || // The database server is not reachable
-      errorCode === 'P1008' || // Operations timed out
-      errorCode === 'P1017' || // Server has closed the connection
-      errorCode === 'ETIMEDOUT' ||
-      errorCode === 'ECONNREFUSED' ||
-      errorCode === 'ENOTFOUND' ||
-      errorCode === 'EAI_AGAIN'
+    // Check if it's a database connection error using utility
+    if (isConnectionError(error)) {
+      return serverError(res, `Database connection failed: ${error.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+    }
     
     // Check if it's a Prisma "record not found" error
+    const errorCode = error.code || ''
+    const errorMessage = error.message || String(error)
     const isRecordNotFound = 
       errorCode === 'P2025' || // Record not found
       errorMessage.includes('Record to update does not exist') ||
       errorMessage.includes('No User found')
-    
-    if (isConnectionError) {
-      return serverError(res, `Database connection failed: ${errorMessage}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
-    }
     
     if (isRecordNotFound) {
       console.warn(`⚠️ Heartbeat: User not found (${req.user?.sub || 'unknown'})`)
@@ -76,7 +61,7 @@ async function handler(req, res) {
     
     // For other errors, return 500 but log the full error
     console.error('❌ Heartbeat: Unexpected error:', {
-      name: errorName,
+      name: error.name,
       message: errorMessage,
       code: errorCode,
       stack: error.stack

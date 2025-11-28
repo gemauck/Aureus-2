@@ -3,6 +3,7 @@ import { prisma } from './_lib/prisma.js'
 import { ok, serverError, unauthorized } from './_lib/response.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { isConnectionError } from './_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
   if (req.method !== 'GET') return unauthorized(res, 'Invalid method')
@@ -66,24 +67,8 @@ async function handler(req, res) {
       console.error('❌ Me endpoint: Database query failed:', dbError)
       console.error('❌ Me endpoint: Error stack:', dbError.stack)
       
-      // Check if it's a connection error - including PrismaClientInitializationError
-      const errorName = dbError.name || ''
-      const errorMessage = dbError.message || ''
-      const isConnectionError = 
-        errorName === 'PrismaClientInitializationError' ||
-        errorMessage.includes("Can't reach database server") ||
-        errorMessage.includes("Can't reach database") ||
-        (errorMessage.includes("connection") && (errorMessage.includes("timeout") || errorMessage.includes("refused") || errorMessage.includes("unreachable"))) ||
-        dbError.code === 'P1001' || // Can't reach database server
-        dbError.code === 'P1002' || // The database server is not reachable
-        dbError.code === 'P1008' || // Operations timed out
-        dbError.code === 'P1017' || // Server has closed the connection
-        dbError.code === 'ETIMEDOUT' ||
-        dbError.code === 'ECONNREFUSED' ||
-        dbError.code === 'ENOTFOUND' ||
-        dbError.code === 'EAI_AGAIN'
-      
-      if (isConnectionError) {
+      // Check if it's a connection error using utility
+      if (isConnectionError(dbError)) {
         return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
       }
       

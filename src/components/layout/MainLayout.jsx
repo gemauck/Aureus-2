@@ -441,6 +441,13 @@ const MainLayout = () => {
         
         if (checkUsers()) return;
         
+        const handleUsersAvailable = () => {
+            if (checkUsers()) {
+                window.removeEventListener('usersComponentReady', handleUsersAvailable);
+            }
+        };
+        window.addEventListener('usersComponentReady', handleUsersAvailable);
+        
         const interval = setInterval(() => {
             if (!usersComponentReady) {
                 checkUsers();
@@ -451,6 +458,7 @@ const MainLayout = () => {
         
         const timeout = setTimeout(() => {
             clearInterval(interval);
+            window.removeEventListener('usersComponentReady', handleUsersAvailable);
             if (!usersComponentReady) {
                 console.warn('⚠️ MainLayout: Users component not loaded after 20 seconds');
             }
@@ -459,6 +467,7 @@ const MainLayout = () => {
         return () => {
             clearInterval(interval);
             clearTimeout(timeout);
+            window.removeEventListener('usersComponentReady', handleUsersAvailable);
         };
     }, [usersComponentReady]);
     
@@ -481,6 +490,13 @@ const MainLayout = () => {
         
         if (checkManufacturing()) return;
         
+        const handleManufacturingAvailable = () => {
+            if (checkManufacturing()) {
+                window.removeEventListener('manufacturingComponentReady', handleManufacturingAvailable);
+            }
+        };
+        window.addEventListener('manufacturingComponentReady', handleManufacturingAvailable);
+        
         const interval = setInterval(() => {
             if (!manufacturingComponentReady) {
                 checkManufacturing();
@@ -491,6 +507,7 @@ const MainLayout = () => {
         
         const timeout = setTimeout(() => {
             clearInterval(interval);
+            window.removeEventListener('manufacturingComponentReady', handleManufacturingAvailable);
             if (!manufacturingComponentReady) {
                 console.warn('⚠️ MainLayout: Manufacturing component not loaded after 20 seconds');
             }
@@ -499,6 +516,7 @@ const MainLayout = () => {
         return () => {
             clearInterval(interval);
             clearTimeout(timeout);
+            window.removeEventListener('manufacturingComponentReady', handleManufacturingAvailable);
         };
     }, [manufacturingComponentReady]);
     

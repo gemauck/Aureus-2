@@ -2306,6 +2306,26 @@ const UserManagement = () => {
 try {
     window.UserManagement = UserManagement;
     console.log('✅ UserManagement.jsx loaded and registered on window.UserManagement', typeof window.UserManagement);
+    
+    // Dispatch ready event
+    if (typeof window.dispatchEvent === 'function') {
+        try {
+            window.dispatchEvent(new CustomEvent('usersComponentReady'));
+            console.log('📢 Dispatched usersComponentReady event');
+            
+            // Also dispatch after a small delay in case listeners weren't ready
+            setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('usersComponentReady'));
+            }, 100);
+            
+            // One more delayed dispatch for safety
+            setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('usersComponentReady'));
+            }, 500);
+        } catch (e) {
+            console.warn('⚠️ Could not dispatch usersComponentReady event:', e);
+        }
+    }
 } catch (error) {
     console.error('❌ UserManagement.jsx: Error registering component:', error, error.stack);
 }

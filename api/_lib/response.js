@@ -1,6 +1,4 @@
 export function ok(res, data) {
-  res.setHeader('Content-Type', 'application/json')
-  res.statusCode = 200
   // Serialize Dates to ISO strings and handle undefined values
   const serialized = JSON.stringify({ data }, (key, value) => {
     if (value instanceof Date) {
@@ -9,49 +7,71 @@ export function ok(res, data) {
     return value
   })
   console.log('📤 ok() response:', serialized.substring(0, 150))
+  
+  // Set status code first, then headers, then send response (HTTP/2 compatible)
+  res.statusCode = 200
+  res.setHeader('Content-Type', 'application/json')
+  res.setHeader('Content-Length', Buffer.byteLength(serialized, 'utf8'))
   res.end(serialized)
 }
 
 export function created(res, data) {
-  res.setHeader('Content-Type', 'application/json')
-  res.statusCode = 201
   // Serialize Dates to ISO strings and handle undefined values
-  res.end(JSON.stringify({ data }, (key, value) => {
+  const serialized = JSON.stringify({ data }, (key, value) => {
     if (value instanceof Date) {
       return value.toISOString()
     }
     return value
-  }))
+  })
+  
+  // Set status code first, then headers, then send response (HTTP/2 compatible)
+  res.statusCode = 201
+  res.setHeader('Content-Type', 'application/json')
+  res.setHeader('Content-Length', Buffer.byteLength(serialized, 'utf8'))
+  res.end(serialized)
 }
 
 export function badRequest(res, message, details) {
-  res.setHeader('Content-Type', 'application/json')
+  const serialized = JSON.stringify({ error: { code: 'BAD_REQUEST', message, details } })
+  
+  // Set status code first, then headers, then send response (HTTP/2 compatible)
   res.statusCode = 400
-  res.end(JSON.stringify({ error: { code: 'BAD_REQUEST', message, details } }))
+  res.setHeader('Content-Type', 'application/json')
+  res.setHeader('Content-Length', Buffer.byteLength(serialized, 'utf8'))
+  res.end(serialized)
 }
 
 export function unauthorized(res, message = 'Unauthorized') {
-  res.setHeader('Content-Type', 'application/json')
+  const serialized = JSON.stringify({ error: { code: 'UNAUTHORIZED', message } })
+  
+  // Set status code first, then headers, then send response (HTTP/2 compatible)
   res.statusCode = 401
-  res.end(JSON.stringify({ error: { code: 'UNAUTHORIZED', message } }))
+  res.setHeader('Content-Type', 'application/json')
+  res.setHeader('Content-Length', Buffer.byteLength(serialized, 'utf8'))
+  res.end(serialized)
 }
 
 export function forbidden(res, message = 'Forbidden') {
-  res.setHeader('Content-Type', 'application/json')
+  const serialized = JSON.stringify({ error: { code: 'FORBIDDEN', message } })
+  
+  // Set status code first, then headers, then send response (HTTP/2 compatible)
   res.statusCode = 403
-  res.end(JSON.stringify({ error: { code: 'FORBIDDEN', message } }))
+  res.setHeader('Content-Type', 'application/json')
+  res.setHeader('Content-Length', Buffer.byteLength(serialized, 'utf8'))
+  res.end(serialized)
 }
 
 export function notFound(res, message = 'Not found') {
-  res.setHeader('Content-Type', 'application/json')
+  const serialized = JSON.stringify({ error: { code: 'NOT_FOUND', message } })
+  
+  // Set status code first, then headers, then send response (HTTP/2 compatible)
   res.statusCode = 404
-  res.end(JSON.stringify({ error: { code: 'NOT_FOUND', message } }))
+  res.setHeader('Content-Type', 'application/json')
+  res.setHeader('Content-Length', Buffer.byteLength(serialized, 'utf8'))
+  res.end(serialized)
 }
 
 export function serverError(res, message = 'Server error', details) {
-  res.setHeader('Content-Type', 'application/json')
-  res.statusCode = 500
-  
   // Detect database connection errors and provide better error messages
   let errorCode = 'SERVER_ERROR'
   let errorMessage = message
@@ -90,6 +110,12 @@ export function serverError(res, message = 'Server error', details) {
     response.error.fullDetails = details
   }
   
-  res.end(JSON.stringify(response))
+  const serialized = JSON.stringify(response)
+  
+  // Set status code first, then headers, then send response (HTTP/2 compatible)
+  res.statusCode = 500
+  res.setHeader('Content-Type', 'application/json')
+  res.setHeader('Content-Length', Buffer.byteLength(serialized, 'utf8'))
+  res.end(serialized)
 }
 

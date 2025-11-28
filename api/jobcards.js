@@ -415,6 +415,12 @@ async function handler(req, res) {
         console.error('❌ Failed to delete job card:', error);
         console.error('❌ Error code:', error.code);
         console.error('❌ Error message:', error.message);
+        
+        // Check if it's a database connection error
+        if (isConnectionError(error)) {
+          return serverError(res, `Database connection failed: ${error.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
+        
         if (error.code === 'P2025') {
           return notFound(res, 'Job card not found')
         }

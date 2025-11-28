@@ -5,6 +5,7 @@ import { badRequest, created, ok, serverError, notFound } from './_lib/response.
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { isConnectionError } from './_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
   try {
@@ -139,24 +140,8 @@ async function handler(req, res) {
           stack: dbError.stack?.substring(0, 500)
         })
         
-        // Check if it's a connection error - comprehensive list including PrismaClientInitializationError
-        const errorName = dbError.name || ''
-        const errorMessage = dbError.message || ''
-        const isConnectionError = 
-          errorName === 'PrismaClientInitializationError' ||
-          errorMessage.includes("Can't reach database server") ||
-          errorMessage.includes("Can't reach database") ||
-          (errorMessage.includes("connection") && (errorMessage.includes("timeout") || errorMessage.includes("refused") || errorMessage.includes("unreachable"))) ||
-          dbError.code === 'P1001' || // Can't reach database server
-          dbError.code === 'P1002' || // The database server is not reachable
-          dbError.code === 'P1008' || // Operations timed out
-          dbError.code === 'P1017' || // Server has closed the connection
-          dbError.code === 'ETIMEDOUT' ||
-          dbError.code === 'ECONNREFUSED' ||
-          dbError.code === 'ENOTFOUND' ||
-          dbError.code === 'EAI_AGAIN'
-        
-        if (isConnectionError) {
+        // Check if it's a connection error using utility
+        if (isConnectionError(dbError)) {
           console.error('🔌 Database connection issue detected - server may be unreachable')
           // Pass the error message to serverError which will format it as DATABASE_CONNECTION_ERROR
           return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
