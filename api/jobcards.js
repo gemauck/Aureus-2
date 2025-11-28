@@ -1,6 +1,7 @@
 import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
 import { ok, created, badRequest, notFound, serverError } from './_lib/response.js'
+import { isConnectionError } from './_lib/dbErrorHandler.js'
 
 // Some deployments may not yet have the optional service form tables used by
 // the job card forms feature. When those tables are missing, Prisma throws
@@ -133,6 +134,12 @@ async function handler(req, res) {
         })
       } catch (error) {
         console.error('❌ Failed to list job cards:', error)
+        
+        // Check if it's a database connection error
+        if (isConnectionError(error)) {
+          return serverError(res, `Database connection failed: ${error.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
+        
         return serverError(res, 'Failed to list job cards', error.message)
       }
     }
@@ -166,6 +173,12 @@ async function handler(req, res) {
         })
       } catch (error) {
         console.error('❌ Failed to get job card:', error)
+        
+        // Check if it's a database connection error
+        if (isConnectionError(error)) {
+          return serverError(res, `Database connection failed: ${error.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
+        
         return serverError(res, 'Failed to get job card', error.message)
       }
     }
@@ -264,6 +277,12 @@ async function handler(req, res) {
         })
       } catch (error) {
         console.error('❌ Failed to create job card:', error)
+        
+        // Check if it's a database connection error
+        if (isConnectionError(error)) {
+          return serverError(res, `Database connection failed: ${error.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
+        
         return serverError(res, 'Failed to create job card', error.message)
       }
     }
@@ -359,6 +378,12 @@ async function handler(req, res) {
         })
       } catch (error) {
         console.error('❌ Failed to update job card:', error)
+        
+        // Check if it's a database connection error
+        if (isConnectionError(error)) {
+          return serverError(res, `Database connection failed: ${error.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
+        
         if (error.code === 'P2025') {
           return notFound(res, 'Job card not found')
         }

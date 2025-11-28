@@ -6,6 +6,7 @@ import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { sendNotificationEmail } from './_lib/email.js'
 import { getAppUrl } from './_lib/getAppUrl.js'
+import { isConnectionError } from './_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
     if (req.method === 'GET') {
