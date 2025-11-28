@@ -665,12 +665,28 @@ async function handler(req, res) {
           }
 
           if (type === 'sale' || type === 'adjustment') {
-            const locationId = body.fromLocationId || body.locationId
+            // For adjustments, default to item's location or main warehouse if not specified
+            let locationId = body.fromLocationId || body.locationId
+            if (!locationId && type === 'adjustment' && master) {
+              locationId = master.locationId
+            }
+            if (!locationId && type === 'adjustment') {
+              // Default to main warehouse for adjustments if no location specified
+              const mainWarehouse = await tx.stockLocation.findFirst({ 
+                where: { code: 'LOC001' } 
+              })
+              if (mainWarehouse) {
+                locationId = mainWarehouse.id
+              }
+            }
             if (!locationId) return badRequest(res, 'locationId required for sale/adjustment')
             const fromLi = await upsertLocationSku(locationId)
-            const delta = type === 'sale' ? -qty : (parseFloat(body.delta) || -qty)
+            // For adjustments, use quantity directly (can be positive or negative)
+            // For sales, always make it negative
+            const delta = type === 'sale' ? -qty : (parseFloat(body.delta) !== undefined ? parseFloat(body.delta) : qty)
             const newQty = (fromLi.quantity || 0) + delta
-            if (newQty < 0) throw new Error('Resulting quantity cannot be negative')
+            if (newQty < 0 && type === 'sale') throw new Error('Resulting quantity cannot be negative')
+            // Allow negative for adjustments (user corrections)
             await tx.locationInventory.update({ where: { id: fromLi.id }, data: {
               quantity: newQty,
               status: newQty > fromLi.reorderPoint ? 'in_stock' : (newQty > 0 ? 'low_stock' : 'out_of_stock')
@@ -3267,7 +3283,19 @@ async function handler(req, res) {
             }
             
             // Update LocationInventory for adjustment
-            const locationId = fromLocationId || toLocationId || item?.locationId
+            // Default to item's location or main warehouse if no location specified
+            let locationId = fromLocationId || toLocationId || item?.locationId
+            if (!locationId) {
+              // Default to main warehouse for adjustments if no location specified
+              const mainWarehouse = await tx.stockLocation.findFirst({ 
+                where: { code: 'LOC001' } 
+              })
+              if (mainWarehouse) {
+                locationId = mainWarehouse.id
+              }
+            }
+            
+            // Always update LocationInventory for adjustments (required for proper aggregation)
             if (locationId) {
               await upsertLocationInventory(
                 locationId,
@@ -3278,7 +3306,7 @@ async function handler(req, res) {
                 parseFloat(body.reorderPoint) || undefined
               )
               
-              // Recalculate master aggregate
+              // Recalculate master aggregate from all locations
               const totalAtLocations = await tx.locationInventory.aggregate({ 
                 _sum: { quantity: true }, 
                 where: { sku: body.sku } 
@@ -3292,6 +3320,24 @@ async function handler(req, res) {
                     quantity: aggQty,
                     totalValue: aggQty * (item.unitCost || 0),
                     status: aggQty > (item.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
+                  }
+                })
+              }
+            } else {
+              // If no location exists at all, update master inventory directly (fallback)
+              // This should rarely happen, but ensures adjustments still work
+              console.warn('⚠️ No location found for adjustment, updating master inventory directly')
+              if (item) {
+                newQuantity = (item.quantity || 0) + quantity
+                const totalValue = newQuantity * (item.unitCost || 0)
+                const reorderPoint = item.reorderPoint || 0
+                const status = newQuantity > reorderPoint ? 'in_stock' : (newQuantity > 0 ? 'low_stock' : 'out_of_stock')
+                item = await tx.inventoryItem.update({
+                  where: { id: item.id },
+                  data: {
+                    quantity: newQuantity,
+                    totalValue,
+                    status
                   }
                 })
               }
