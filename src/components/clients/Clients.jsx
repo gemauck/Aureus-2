@@ -3198,6 +3198,13 @@ const Clients = React.memo(() => {
     // PERFORMANCE FIX: Memoize sort functions to prevent recreation on every render
     const sortClients = useCallback((clients) => {
         return [...clients].sort((a, b) => {
+            // Prioritize starred items at the top
+            const aStarred = resolveStarredState(a);
+            const bStarred = resolveStarredState(b);
+            if (aStarred !== bStarred) {
+                return bStarred ? 1 : -1; // Starred items come first
+            }
+            
             let aValue = a[sortField];
             let bValue = b[sortField];
             
@@ -3222,6 +3229,13 @@ const Clients = React.memo(() => {
     // PERFORMANCE FIX: Memoize sort function for leads
     const sortLeads = useCallback((leads) => {
         return [...leads].sort((a, b) => {
+            // Prioritize starred items at the top
+            const aStarred = resolveStarredState(a);
+            const bStarred = resolveStarredState(b);
+            if (aStarred !== bStarred) {
+                return bStarred ? 1 : -1; // Starred items come first
+            }
+            
             let aValue = a[leadSortField];
             let bValue = b[leadSortField];
             
@@ -5272,6 +5286,7 @@ const Clients = React.memo(() => {
                             >
                                 <option value="All Industries">All Industries</option>
                                 <option value="Mining">Mining</option>
+                                <option value="Mining Contractor">Mining Contractor</option>
                                 <option value="Forestry">Forestry</option>
                                 <option value="Agriculture">Agriculture</option>
                                 <option value="Diesel Supply">Diesel Supply</option>

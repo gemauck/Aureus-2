@@ -843,6 +843,17 @@ app.all('/api/public/locations', async (req, res, next) => {
   }
 })
 
+app.all('/api/public/service-forms', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'public', 'service-forms.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Public service-forms API error:', e)
+    return next(e)
+  }
+})
+
 // Public API endpoint for job card submission (no authentication required)
 app.all('/api/public/jobcards', async (req, res, next) => {
   try {

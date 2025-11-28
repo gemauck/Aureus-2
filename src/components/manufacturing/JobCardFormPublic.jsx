@@ -1011,17 +1011,31 @@ const JobCardFormPublic = () => {
         });
 
         if (!response.ok) {
-          console.warn('⚠️ JobCardFormPublic: Failed to load form templates', response.status);
+          console.warn('⚠️ JobCardFormPublic: Failed to load form templates', {
+            status: response.status,
+            statusText: response.statusText
+          });
           // Try cache as fallback
           const cached = JSON.parse(localStorage.getItem('service_form_templates') || '[]');
           if (cached.length > 0 && !cancelled) {
+            console.log('📦 JobCardFormPublic: Using cached templates:', cached.length);
             setFormTemplates(cached);
           }
           return;
         }
 
         const data = await response.json();
-        const templates = Array.isArray(data.templates) ? data.templates : [];
+        // The API wraps responses in { data: ... }, so templates are at data.data.templates
+        const templates = Array.isArray(data.data?.templates) 
+          ? data.data.templates 
+          : Array.isArray(data.templates) 
+            ? data.templates 
+            : [];
+        
+        console.log('📋 JobCardFormPublic: Loaded form templates:', {
+          templateCount: templates.length,
+          templates: templates.map(t => ({ id: t.id, name: t.name }))
+        });
         
         if (!cancelled) {
           setFormTemplates(templates);

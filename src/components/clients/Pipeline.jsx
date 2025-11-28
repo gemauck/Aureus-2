@@ -2273,6 +2273,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     >
                         <option value="All">All Industries</option>
                         <option value="Mining">Mining</option>
+                        <option value="Mining Contractor">Mining Contractor</option>
                         <option value="Forestry">Forestry</option>
                         <option value="Agriculture">Agriculture</option>
                         <option value="Diesel Supply">Diesel Supply</option>

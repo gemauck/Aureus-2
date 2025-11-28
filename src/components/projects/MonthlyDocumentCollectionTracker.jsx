@@ -325,8 +325,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
     }, [project?.documentSections, project?.id]);
     
-    const refreshFromDatabase = useCallback(async () => {
+    const refreshFromDatabase = useCallback(async (forceUpdate = false) => {
         if (!project?.id || !apiRef.current) return;
+        
+        // Don't refresh if a save is in progress to avoid race conditions
+        if (isSavingRef.current && !forceUpdate) {
+            return;
+        }
         
         try {
             const freshProject = await apiRef.current.fetchProject(project.id);
@@ -355,10 +360,30 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
             }
             
+            // Update from database if data has changed
+            // Check if we have unsaved local changes
+            const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
+            
             if (freshSnapshot !== currentSnapshot) {
-                console.log('🔄 Updating sections map from fresh database data. Years:', yearKeys);
-                setSectionsByYear(normalized);
-                lastSavedSnapshotRef.current = freshSnapshot;
+                // Update if:
+                // 1. No unsaved local changes (safe to update), OR
+                // 2. Database matches what we last saved (database hasn't changed, safe to update), OR
+                // 3. Force update requested
+                if (!hasUnsavedChanges || freshSnapshot === lastSavedSnapshotRef.current || forceUpdate) {
+                    console.log('🔄 Updating sections map from fresh database data. Years:', yearKeys);
+                    setSectionsByYear(normalized);
+                    // Update snapshot reference to match database state
+                    if (freshSnapshot === lastSavedSnapshotRef.current || !hasUnsavedChanges) {
+                        lastSavedSnapshotRef.current = freshSnapshot;
+                    }
+                } else {
+                    console.log('⏸️ Skipping database update: unsaved local changes detected. Will retry after save.');
+                }
+            } else {
+                // Data matches, update snapshot reference if needed
+                if (hasUnsavedChanges && freshSnapshot === lastSavedSnapshotRef.current) {
+                    lastSavedSnapshotRef.current = freshSnapshot;
+                }
             }
         } catch (error) {
             console.error('❌ Error fetching fresh project data:', error);
@@ -384,6 +409,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         refreshFromDatabase();
     }, [project?.id, project?.documentSections, loadFromProjectProp, refreshFromDatabase]);
+    
+    // ============================================================
+    // POLLING - Regularly refresh from database to get updates
+    // ============================================================
+    useEffect(() => {
+        if (!project?.id || !apiRef.current) return;
+        
+        // Poll every 5 seconds to check for database updates
+        const pollInterval = setInterval(() => {
+            refreshFromDatabase(false);
+        }, 5000);
+        
+        return () => {
+            clearInterval(pollInterval);
+        };
+    }, [project?.id, refreshFromDatabase]);
     
     // ============================================================
     // SIMPLE AUTO-SAVE - Debounced, saves entire state
@@ -478,6 +519,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
             }
             console.log('✅ Save successful');
+            
+            // Refresh from database after save to get any concurrent updates
+            // Use a small delay to ensure the save has been fully committed
+            setTimeout(() => {
+                refreshFromDatabase(true);
+            }, 500);
         } catch (error) {
             console.error('❌ Error saving to database:', error);
             // Don't throw - allow user to continue working; auto‑save will retry on next change

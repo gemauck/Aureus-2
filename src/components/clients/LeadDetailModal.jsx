@@ -2089,6 +2089,7 @@ const LeadDetailModal = ({
                                         >
                                             <option value="">Select Industry</option>
                                             <option>Mining</option>
+                                            <option>Mining Contractor</option>
                                             <option>Forestry</option>
                                             <option>Agriculture</option>
                                             <option>Diesel Supply</option>
