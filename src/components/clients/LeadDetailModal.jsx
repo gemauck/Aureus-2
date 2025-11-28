@@ -173,6 +173,12 @@ const LeadDetailModal = ({
     const [newIndustryName, setNewIndustryName] = useState('');
     const [isLoadingIndustries, setIsLoadingIndustries] = useState(false);
     
+    // Debug modal state
+    useEffect(() => {
+        console.log('🔍 LeadDetailModal: showIndustryModal changed to:', showIndustryModal);
+        console.log('🔍 LeadDetailModal: isAdmin:', isAdmin);
+    }, [showIndustryModal, isAdmin]);
+    
     // Fetch industries on mount
     useEffect(() => {
         const loadIndustries = async () => {
