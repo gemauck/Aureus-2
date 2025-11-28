@@ -26,6 +26,72 @@ async function handler(req, res) {
       return unauthorized(res, 'Admin access required')
     }
 
+    // Helper function to sync industries from existing clients/leads
+    async function syncIndustriesFromClients() {
+      try {
+        // Get all unique industry values from Client table (both clients and leads)
+        const clients = await prisma.client.findMany({
+          select: { industry: true },
+          where: {
+            industry: { not: null, not: '' }
+          }
+        })
+        
+        // Extract unique industry names
+        const uniqueIndustries = [...new Set(
+          clients
+            .map(c => c.industry?.trim())
+            .filter(Boolean)
+        )]
+        
+        console.log(`📊 Found ${uniqueIndustries.length} unique industries from clients/leads`)
+        
+        // For each unique industry, ensure it exists in Industry table
+        let syncedCount = 0
+        for (const industryName of uniqueIndustries) {
+          try {
+            // Check if industry already exists
+            const existing = await prisma.industry.findUnique({
+              where: { name: industryName }
+            })
+            
+            if (!existing) {
+              // Create the industry if it doesn't exist
+              await prisma.industry.create({
+                data: {
+                  name: industryName,
+                  isActive: true
+                }
+              })
+              syncedCount++
+              console.log(`✅ Synced industry from clients: "${industryName}"`)
+            } else if (!existing.isActive) {
+              // Reactivate if it was deactivated
+              await prisma.industry.update({
+                where: { id: existing.id },
+                data: { isActive: true }
+              })
+              console.log(`✅ Reactivated industry: "${industryName}"`)
+            }
+          } catch (syncError) {
+            // Skip if there's a unique constraint violation (race condition)
+            if (!syncError.message.includes('Unique constraint') && syncError.code !== 'P2002') {
+              console.warn(`⚠️ Error syncing industry "${industryName}":`, syncError.message)
+            }
+          }
+        }
+        
+        if (syncedCount > 0) {
+          console.log(`✅ Synced ${syncedCount} new industries from existing clients/leads`)
+        }
+        
+        return syncedCount
+      } catch (error) {
+        console.warn('⚠️ Error syncing industries from clients:', error.message)
+        return 0
+      }
+    }
+
     // List All Industries (GET /api/industries)
     if (req.method === 'GET' && pathSegments[pathSegments.length - 1] === 'industries') {
       try {
@@ -52,6 +118,9 @@ async function handler(req, res) {
             console.warn('⚠️ Could not ensure Industry table exists:', createError.message)
           }
         }
+        
+        // Sync industries from existing clients/leads before returning
+        await syncIndustriesFromClients()
         
         const industries = await prisma.industry.findMany({
           where: { isActive: true },

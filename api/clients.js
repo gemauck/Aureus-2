@@ -355,6 +355,45 @@ async function handler(req, res) {
       console.log(`🔍 Creating client for user: ${userEmail} (${userId})`)
       console.log(`🔍 Client data: name="${clientData.name}", type="${clientData.type}", ownerId="${ownerId || 'null'}"`)
       
+      // Ensure industry exists in Industry table before creating client
+      if (clientData.industry && clientData.industry.trim()) {
+        const industryName = clientData.industry.trim()
+        try {
+          // Check if industry exists in Industry table
+          const existingIndustry = await prisma.industry.findUnique({
+            where: { name: industryName }
+          })
+          
+          if (!existingIndustry) {
+            // Create the industry if it doesn't exist
+            try {
+              await prisma.industry.create({
+                data: {
+                  name: industryName,
+                  isActive: true
+                }
+              })
+              console.log(`✅ Created industry "${industryName}" from client creation`)
+            } catch (createError) {
+              // Ignore unique constraint violations (race condition)
+              if (!createError.message.includes('Unique constraint') && createError.code !== 'P2002') {
+                console.warn(`⚠️ Could not create industry "${industryName}":`, createError.message)
+              }
+            }
+          } else if (!existingIndustry.isActive) {
+            // Reactivate if it was deactivated
+            await prisma.industry.update({
+              where: { id: existingIndustry.id },
+              data: { isActive: true }
+            })
+            console.log(`✅ Reactivated industry "${industryName}"`)
+          }
+        } catch (industryError) {
+          // Don't block the client creation if industry sync fails
+          console.warn('⚠️ Error syncing industry:', industryError.message)
+        }
+      }
+      
       try {
         const client = await prisma.client.create({
           data: {

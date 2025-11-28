@@ -434,6 +434,45 @@ async function handler(req, res) {
       console.log('🔍 Creating lead with data:', leadData)
       console.log('🔍 Lead data keys:', Object.keys(leadData))
       
+      // Ensure industry exists in Industry table before creating lead
+      if (leadData.industry && leadData.industry.trim()) {
+        const industryName = leadData.industry.trim()
+        try {
+          // Check if industry exists in Industry table
+          const existingIndustry = await prisma.industry.findUnique({
+            where: { name: industryName }
+          })
+          
+          if (!existingIndustry) {
+            // Create the industry if it doesn't exist
+            try {
+              await prisma.industry.create({
+                data: {
+                  name: industryName,
+                  isActive: true
+                }
+              })
+              console.log(`✅ Created industry "${industryName}" from lead creation`)
+            } catch (createError) {
+              // Ignore unique constraint violations (race condition)
+              if (!createError.message.includes('Unique constraint') && createError.code !== 'P2002') {
+                console.warn(`⚠️ Could not create industry "${industryName}":`, createError.message)
+              }
+            }
+          } else if (!existingIndustry.isActive) {
+            // Reactivate if it was deactivated
+            await prisma.industry.update({
+              where: { id: existingIndustry.id },
+              data: { isActive: true }
+            })
+            console.log(`✅ Reactivated industry "${industryName}"`)
+          }
+        } catch (industryError) {
+          // Don't block the lead creation if industry sync fails
+          console.warn('⚠️ Error syncing industry:', industryError.message)
+        }
+      }
+      
       try {
         const lead = await prisma.client.create({
           data: leadData

@@ -139,6 +139,45 @@ async function handler(req, res) {
           }
         }
         
+        // If industry is being updated, ensure it exists in Industry table
+        if (updateData.industry && updateData.industry.trim()) {
+          const industryName = updateData.industry.trim()
+          try {
+            // Check if industry exists in Industry table
+            const existingIndustry = await prisma.industry.findUnique({
+              where: { name: industryName }
+            })
+            
+            if (!existingIndustry) {
+              // Create the industry if it doesn't exist
+              try {
+                await prisma.industry.create({
+                  data: {
+                    name: industryName,
+                    isActive: true
+                  }
+                })
+                console.log(`✅ Created industry "${industryName}" from client update`)
+              } catch (createError) {
+                // Ignore unique constraint violations (race condition)
+                if (!createError.message.includes('Unique constraint') && createError.code !== 'P2002') {
+                  console.warn(`⚠️ Could not create industry "${industryName}":`, createError.message)
+                }
+              }
+            } else if (!existingIndustry.isActive) {
+              // Reactivate if it was deactivated
+              await prisma.industry.update({
+                where: { id: existingIndustry.id },
+                data: { isActive: true }
+              })
+              console.log(`✅ Reactivated industry "${industryName}"`)
+            }
+          } catch (industryError) {
+            // Don't block the client update if industry sync fails
+            console.warn('⚠️ Error syncing industry:', industryError.message)
+          }
+        }
+        
         console.log('🔍 Calling Prisma update with ID:', id)
         const client = await prisma.client.update({
           where: { id },

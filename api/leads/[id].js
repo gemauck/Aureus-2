@@ -5,6 +5,7 @@ import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { searchAndSaveNewsForClient } from '../client-news/search.js'
+import { logDatabaseError, isConnectionError } from '../_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
   try {
@@ -98,6 +99,10 @@ async function handler(req, res) {
         console.log('✅ Parsed proposals count:', Array.isArray(parsedLead.proposals) ? parsedLead.proposals.length : 'not an array')
         return ok(res, { lead: parsedLead })
       } catch (dbError) {
+        const isConnError = logDatabaseError(dbError, 'getting lead')
+        if (isConnError) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         console.error('❌ Database error getting lead:', dbError)
         return serverError(res, 'Failed to get lead', dbError.message)
       }
@@ -129,7 +134,8 @@ async function handler(req, res) {
         contracts: body.contracts !== undefined ? (typeof body.contracts === 'string' ? body.contracts : JSON.stringify(Array.isArray(body.contracts) ? body.contracts : [])) : undefined,
         activityLog: body.activityLog !== undefined ? (typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : [])) : undefined,
         billingTerms: body.billingTerms !== undefined ? (typeof body.billingTerms === 'string' ? body.billingTerms : JSON.stringify(body.billingTerms)) : undefined,
-        proposals: body.proposals !== undefined ? (typeof body.proposals === 'string' ? body.proposals : JSON.stringify(Array.isArray(body.proposals) ? body.proposals : [])) : undefined
+        proposals: body.proposals !== undefined ? (typeof body.proposals === 'string' ? body.proposals : JSON.stringify(Array.isArray(body.proposals) ? body.proposals : [])) : undefined,
+        services: body.services !== undefined ? (typeof body.services === 'string' ? body.services : JSON.stringify(Array.isArray(body.services) ? body.services : [])) : undefined
       }
 
       // Remove undefined values (but keep empty strings and empty arrays as JSON strings)
@@ -165,6 +171,45 @@ async function handler(req, res) {
         // Store old name and website for RSS feed update
         const oldName = existing.name
         const oldWebsite = existing.website
+        
+        // If industry is being updated, ensure it exists in Industry table
+        if (updateData.industry && updateData.industry.trim()) {
+          const industryName = updateData.industry.trim()
+          try {
+            // Check if industry exists in Industry table
+            const existingIndustry = await prisma.industry.findUnique({
+              where: { name: industryName }
+            })
+            
+            if (!existingIndustry) {
+              // Create the industry if it doesn't exist
+              try {
+                await prisma.industry.create({
+                  data: {
+                    name: industryName,
+                    isActive: true
+                  }
+                })
+                console.log(`✅ Created industry "${industryName}" from lead update`)
+              } catch (createError) {
+                // Ignore unique constraint violations (race condition)
+                if (!createError.message.includes('Unique constraint') && createError.code !== 'P2002') {
+                  console.warn(`⚠️ Could not create industry "${industryName}":`, createError.message)
+                }
+              }
+            } else if (!existingIndustry.isActive) {
+              // Reactivate if it was deactivated
+              await prisma.industry.update({
+                where: { id: existingIndustry.id },
+                data: { isActive: true }
+              })
+              console.log(`✅ Reactivated industry "${industryName}"`)
+            }
+          } catch (industryError) {
+            // Don't block the lead update if industry sync fails
+            console.warn('⚠️ Error syncing industry:', industryError.message)
+          }
+        }
         
         // Now update it
         const lead = await prisma.client.update({
@@ -205,6 +250,10 @@ async function handler(req, res) {
         
         return ok(res, { lead: parsedLead })
       } catch (dbError) {
+        const isConnError = logDatabaseError(dbError, 'updating lead')
+        if (isConnError) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         console.error('❌ Database error updating lead:', dbError)
         console.error('❌ Error code:', dbError.code, 'Meta:', dbError.meta)
         return serverError(res, 'Failed to update lead', dbError.message)
@@ -226,6 +275,10 @@ async function handler(req, res) {
         console.log('✅ Lead deleted successfully:', id)
         return ok(res, { message: 'Lead deleted successfully' })
       } catch (dbError) {
+        const isConnError = logDatabaseError(dbError, 'deleting lead')
+        if (isConnError) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         console.error('❌ Database error deleting lead:', dbError)
         return serverError(res, 'Failed to delete lead', dbError.message)
       }
