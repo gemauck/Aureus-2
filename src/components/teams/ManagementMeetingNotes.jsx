@@ -1218,49 +1218,50 @@ const ManagementMeetingNotes = () => {
         }
     };
 
-    // Auto-save function - saves immediately on typing
-    const handleFieldChange = async (departmentNotesId, field, value) => {
+    // Auto-save function - ultra-fast debounced save (100ms)
+    const handleFieldChange = (departmentNotesId, field, value) => {
         // Update local state immediately for responsive UI
         const monthlyId = currentMonthlyNotes?.id || null;
         updateDepartmentNotesLocal(departmentNotesId, field, value, monthlyId);
         
-        // Clear any pending timer for this field (in case blur handler was queued)
+        // Clear any pending timer for this field
         const fieldKey = getFieldKey(departmentNotesId, field);
         if (autoSaveTimers.current[fieldKey]) {
             clearTimeout(autoSaveTimers.current[fieldKey]);
-            delete autoSaveTimers.current[fieldKey];
         }
         
-        // Save immediately on every change
-        try {
-            await window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value });
-        } catch (error) {
-            console.error('Error auto-saving department notes:', error);
-            // Reload to revert local changes on error
-            if (selectedMonth) {
-                await reloadMonthlyNotes(selectedMonth);
-            }
-        }
+        // Fast debounce (100ms) - batches rapid keystrokes but feels instant
+        autoSaveTimers.current[fieldKey] = setTimeout(() => {
+            // Non-blocking save - fire and forget for maximum speed
+            window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value })
+                .catch(error => {
+                    console.error('Error auto-saving department notes:', error);
+                    // Only reload on error if user isn't actively typing
+                    if (selectedMonth && !autoSaveTimers.current[fieldKey]) {
+                        reloadMonthlyNotes(selectedMonth).catch(() => {});
+                    }
+                });
+            delete autoSaveTimers.current[fieldKey];
+        }, 100); // 100ms debounce - very fast but batches rapid typing
     };
     
     // Force save on blur (immediate save without debounce)
-    const handleFieldBlur = async (departmentNotesId, field, value) => {
+    const handleFieldBlur = (departmentNotesId, field, value) => {
         const fieldKey = getFieldKey(departmentNotesId, field);
-        // Clear any pending timer
+        // Clear any pending timer and save immediately
         if (autoSaveTimers.current[fieldKey]) {
             clearTimeout(autoSaveTimers.current[fieldKey]);
             delete autoSaveTimers.current[fieldKey];
         }
         
-        // Save immediately
-        try {
-            await window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value });
-        } catch (error) {
-            console.error('Error saving department notes on blur:', error);
-            if (selectedMonth) {
-                await reloadMonthlyNotes(selectedMonth);
-            }
-        }
+        // Non-blocking immediate save on blur
+        window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value })
+            .catch(error => {
+                console.error('Error saving department notes on blur:', error);
+                if (selectedMonth) {
+                    reloadMonthlyNotes(selectedMonth).catch(() => {});
+                }
+            });
     };
 
     // Track temp IDs to prevent duplicates when server responds
