@@ -1,6 +1,6 @@
 // Get React hooks from window
 // FIX: formData initialization order fixed - moved to top to prevent TDZ errors (v2)
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect, useRef, useCallback } = React;
 const ReactDOM = window.ReactDOM || (window.React && window.React.DOM) || null;
 
 const LeadDetailModal = ({
@@ -185,6 +185,7 @@ const LeadDetailModal = ({
         }
     }, [showIndustryModal, isAdmin]);
 
+
     // Render modal to document.body using useEffect
     useEffect(() => {
         if (!showIndustryModal) {
@@ -287,6 +288,8 @@ const LeadDetailModal = ({
                 industryItem.appendChild(industryName);
                 const deleteBtn = document.createElement('button');
                 deleteBtn.className = 'px-3 py-1.5 text-sm rounded-lg transition-colors bg-red-100 hover:bg-red-200 text-red-700';
+                deleteBtn.setAttribute('data-industry-id', industry.id);
+                deleteBtn.setAttribute('data-action', 'delete-industry');
                 deleteBtn.onclick = () => handleDeleteIndustry(industry.id);
                 deleteBtn.innerHTML = '<i class="fas fa-trash mr-1"></i>Delete';
                 industryItem.appendChild(deleteBtn);
@@ -321,7 +324,7 @@ const LeadDetailModal = ({
                 modalContainer.remove();
             }
         };
-    }, [showIndustryModal, industries, isLoadingIndustries, handleAddIndustry, handleDeleteIndustry]);
+    }, [showIndustryModal, industries, isLoadingIndustries, newIndustryName, handleAddIndustry, handleDeleteIndustry]);
 
     // Update input value when newIndustryName changes (separate effect to avoid recreating modal)
     useEffect(() => {
@@ -2145,41 +2148,41 @@ const LeadDetailModal = ({
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Industry</label>
                                         <div className="flex gap-2">
-                                            <select
-                                                ref={industrySelectRef}
-                                                value={formData.industry || ''}
-                                                onFocus={() => {
-                                                    isEditingRef.current = true;
-                                                    userHasStartedTypingRef.current = true;
-                                                    notifyEditingChange(true);
-                                                    if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
-                                                }}
-                                                onChange={(e) => {
-                                                    isEditingRef.current = true;
-                                                    userHasStartedTypingRef.current = true;
-                                                    userEditedFieldsRef.current.add('industry'); // Track that user has edited this field
-                                                    notifyEditingChange(true);
-                                                    if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
-                                                    editingTimeoutRef.current = setTimeout(() => {
-                                                        isEditingRef.current = false;
-                                                        notifyEditingChange(false);
-                                                    }, 5000); // Clear editing flag 5 seconds after user stops typing
-                                                    setFormData(prev => {
-                                                        const updated = {...prev, industry: e.target.value};
-                                                        // CRITICAL: Sync formDataRef IMMEDIATELY so guards can check current value
-                                                        formDataRef.current = updated;
-                                                        return updated;
-                                                    });
-                                                }}
-                                                onBlur={() => {
-                                                    setTimeout(() => {
-                                                        isEditingRef.current = false;
-                                                        notifyEditingChange(false);
-                                                    }, 500);
-                                                }}
+                                        <select
+                                            ref={industrySelectRef}
+                                            value={formData.industry || ''}
+                                            onFocus={() => {
+                                                isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
+                                                notifyEditingChange(true);
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                            }}
+                                            onChange={(e) => {
+                                                isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
+                                                userEditedFieldsRef.current.add('industry'); // Track that user has edited this field
+                                                notifyEditingChange(true);
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                editingTimeoutRef.current = setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                    notifyEditingChange(false);
+                                                }, 5000); // Clear editing flag 5 seconds after user stops typing
+                                                setFormData(prev => {
+                                                    const updated = {...prev, industry: e.target.value};
+                                                    // CRITICAL: Sync formDataRef IMMEDIATELY so guards can check current value
+                                                    formDataRef.current = updated;
+                                                    return updated;
+                                                });
+                                            }}
+                                            onBlur={() => {
+                                                setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                    notifyEditingChange(false);
+                                                }, 500);
+                                            }}
                                                 className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                            >
-                                                <option value="">Select Industry</option>
+                                        >
+                                            <option value="">Select Industry</option>
                                                 {industries.map((industry) => (
                                                     <option key={industry.id} value={industry.name}>
                                                         {industry.name}
@@ -2187,16 +2190,16 @@ const LeadDetailModal = ({
                                                 ))}
                                                 {industries.length === 0 && (
                                                     <>
-                                                        <option>Mining</option>
-                                                        <option>Mining Contractor</option>
-                                                        <option>Forestry</option>
-                                                        <option>Agriculture</option>
-                                                        <option>Diesel Supply</option>
-                                                        <option>Logistics</option>
-                                                        <option>Other</option>
+                                            <option>Mining</option>
+                                            <option>Mining Contractor</option>
+                                            <option>Forestry</option>
+                                            <option>Agriculture</option>
+                                            <option>Diesel Supply</option>
+                                            <option>Logistics</option>
+                                            <option>Other</option>
                                                     </>
                                                 )}
-                                            </select>
+                                        </select>
                                             <button
                                                 type="button"
                                                 onClick={(e) => {
