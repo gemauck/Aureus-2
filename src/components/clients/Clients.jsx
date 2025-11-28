@@ -4853,6 +4853,18 @@ const Clients = React.memo(() => {
                                         </span>
                                     </td>
                                     <td className="px-6 py-2 whitespace-nowrap">
+                                        <span className={`px-3 py-1 text-xs font-medium rounded-full ${
+                                            lead.status === 'Active' || lead.status === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
+                                            lead.status === 'Potential' || lead.status === 'potential' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
+                                            lead.status === 'Proposal' || lead.status === 'proposal' ? (isDark ? 'bg-purple-900 text-purple-200' : 'bg-purple-100 text-purple-800') :
+                                            lead.status === 'Tender' || lead.status === 'tender' ? (isDark ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800') :
+                                            lead.status === 'Disinterested' || lead.status === 'disinterested' ? (isDark ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-800') :
+                                            (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800')
+                                        }`}>
+                                            {lead.status || 'Potential'}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-2 whitespace-nowrap">
                                         <div className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
                                             {getTimeSinceFirstContact(lead.firstContactDate)}
                                         </div>
