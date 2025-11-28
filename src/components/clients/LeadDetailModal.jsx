@@ -4839,7 +4839,7 @@ const LeadDetailModal = ({
                 )
             ),
             document.body
-        ) : React.createElement('div', {
+        )) : React.createElement('div', {
             key: 'industry-modal-fallback',
             className: 'fixed inset-0 flex items-center justify-center',
             onClick: (e) => {
@@ -4931,7 +4931,7 @@ const LeadDetailModal = ({
                     }, 'Close')
                 )
             )
-        ) : null
+        )) : null
     );
 };
 
