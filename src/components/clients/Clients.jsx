@@ -707,6 +707,11 @@ const Clients = React.memo(() => {
         });
     }, [currentUser, isAdmin, showIndustryModal]);
     
+    // Debug modal state changes
+    useEffect(() => {
+        console.log('🔍 showIndustryModal state changed to:', showIndustryModal);
+    }, [showIndustryModal]);
+    
     // Fetch industries from API
     const loadIndustries = useCallback(async () => {
         try {
