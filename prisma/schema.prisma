@@ -1,7 +1,7 @@
 generator client {
   provider      = "prisma-client-js"
-  engineType    = "binary"
   binaryTargets = ["native", "linux-musl", "linux-musl-openssl-3.0.x"]
+  engineType    = "binary"
 }
 
 datasource db {
@@ -10,87 +10,84 @@ datasource db {
 }
 
 model User {
-  id                   String    @id @default(cuid())
-  email                String    @unique
-  name                 String?
-  passwordHash         String?
-  provider             String    @default("local")
-  role                 String    @default("user") // admin, manager, user, guest (Admin > Manager > User > Guest hierarchy)
-  permissions          String    @default("[]") // JSON array of custom permissions that override role permissions
-  accessibleProjectIds String    @default("[]") // JSON array of project IDs that guest users can access
-  status               String    @default("active") // active, suspended, inactive
-  department           String    @default("")
-  jobTitle             String    @default("")
-  phone                String    @default("")
-  avatar               String    @default("")
-  invitedBy            String?
-  mustChangePassword   Boolean   @default(false)
-  lastLoginAt          DateTime?
-  lastSeenAt           DateTime?
-
-  // HR/Employee Fields
-  employeeNumber   String?   @unique
-  position         String    @default("")
-  employmentDate   DateTime?
-  idNumber         String    @default("")
-  taxNumber        String?
-  bankName         String?
-  accountNumber    String?
-  branchCode       String?
-  salary           Float     @default(0)
-  employmentStatus String    @default("Active") // Active, On Leave, Suspended, Resigned
-  address          String    @default("")
-  emergencyContact String    @default("")
-
-  memberships               Membership[]
-  ownedClients              Client[]                @relation("ClientOwner")
-  ownedProjects             Project[]               @relation("ProjectOwner")
-  tasks                     Task[]                  @relation("TaskAssignee")
-  auditLogs                 AuditLog[]              @relation("AuditActor")
-  feedback                  Feedback[]              @relation("UserFeedback")
-  feedbackReplies           FeedbackReply[]         @relation("FeedbackReplyAuthor")
-  sentMessages              Message[]               @relation("MessageSender")
-  passwordResets            PasswordReset[]
-  calendarNotes             CalendarNote[]
-  sessions                  Session[]
-  twoFactor                 TwoFactor?
-  securityEvents            SecurityEvent[]
-  passwordHistory           PasswordHistory[]
-  notifications             Notification[]          @relation("NotificationRecipient")
-  notificationSettings      NotificationSetting?
-  starredClients            StarredClient[]
-  starredOpportunities      StarredOpportunity[]
-  leaveApplications         LeaveApplication[]      @relation("LeaveApplications")
-  approvedLeaveApplications LeaveApplication[]      @relation("ApprovedLeaveApplications")
-  rejectedLeaveApplications LeaveApplication[]      @relation("RejectedLeaveApplications")
-  leaveBalances             LeaveBalance[]          @relation("LeaveBalances")
-  leaveApprovers            LeaveApprover[]         @relation("LeaveApprovers")
-  birthday                  Birthday?               @relation("Birthdays")
-  meetingComments           MeetingComment[]        @relation("MeetingCommentAuthor")
-  meetingAllocations        MeetingUserAllocation[] @relation("MeetingUserAllocations")
-  departmentNotesAssigned   DepartmentNotes[]       @relation("DepartmentNotesAssignee")
-  actionItemsAssigned       MeetingActionItem[]     @relation("ActionItemAssignee")
-  userTasks                 UserTask[]              @relation("UserTaskOwner")
-  userTaskTags              UserTaskTag[]           @relation("UserTaskTagOwner")
-  serviceFormTemplates      ServiceFormTemplate[]
+  id                        String                  @id @default(cuid())
+  email                     String                  @unique
+  name                      String?
+  passwordHash              String?
+  provider                  String                  @default("local")
+  role                      String                  @default("user")
+  status                    String                  @default("active")
+  department                String                  @default("")
+  jobTitle                  String                  @default("")
+  phone                     String                  @default("")
+  avatar                    String                  @default("")
+  invitedBy                 String?
+  mustChangePassword        Boolean                 @default(false)
+  lastLoginAt               DateTime?
+  employeeNumber            String?                 @unique
+  position                  String                  @default("")
+  employmentDate            DateTime?
+  idNumber                  String                  @default("")
+  taxNumber                 String?
+  bankName                  String?
+  accountNumber             String?
+  branchCode                String?
+  salary                    Float                   @default(0)
+  employmentStatus          String                  @default("Active")
+  address                   String                  @default("")
+  emergencyContact          String                  @default("")
   createdAt                 DateTime                @default(now())
   updatedAt                 DateTime                @updatedAt
+  lastSeenAt                DateTime?
+  permissions               String                  @default("[]")
+  accessibleProjectIds      String                  @default("[]")
+  auditLogs                 AuditLog[]              @relation("AuditActor")
+  birthday                  Birthday?               @relation("Birthdays")
+  calendarNotes             CalendarNote[]
+  ownedClients              Client[]                @relation("ClientOwner")
+  departmentNotesAssigned   DepartmentNotes[]       @relation("DepartmentNotesAssignee")
+  feedback                  Feedback[]              @relation("UserFeedback")
+  feedbackReplies           FeedbackReply[]         @relation("FeedbackReplyAuthor")
+  approvedLeaveApplications LeaveApplication[]      @relation("ApprovedLeaveApplications")
+  rejectedLeaveApplications LeaveApplication[]      @relation("RejectedLeaveApplications")
+  leaveApplications         LeaveApplication[]      @relation("LeaveApplications")
+  leaveApprovers            LeaveApprover[]         @relation("LeaveApprovers")
+  leaveBalances             LeaveBalance[]          @relation("LeaveBalances")
+  actionItemsAssigned       MeetingActionItem[]     @relation("ActionItemAssignee")
+  meetingComments           MeetingComment[]        @relation("MeetingCommentAuthor")
+  meetingAllocations        MeetingUserAllocation[] @relation("MeetingUserAllocations")
+  memberships               Membership[]
+  sentMessages              Message[]               @relation("MessageSender")
+  notifications             Notification[]          @relation("NotificationRecipient")
+  notificationSettings      NotificationSetting?
+  passwordHistory           PasswordHistory[]
+  passwordResets            PasswordReset[]
+  ownedProjects             Project[]               @relation("ProjectOwner")
+  securityEvents            SecurityEvent[]
+  serviceFormTemplates      ServiceFormTemplate[]
+  sessions                  Session[]
+  starredClients            StarredClient[]
+  starredOpportunities      StarredOpportunity[]
+  tasks                     Task[]                  @relation("TaskAssignee")
+  twoFactor                 TwoFactor?
+  userTasks                 UserTask[]              @relation("UserTaskOwner")
+  userTaskTags              UserTaskTag[]           @relation("UserTaskTagOwner")
 }
 
 model Team {
   id          String       @id @default(cuid())
   name        String
-  memberships Membership[]
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
+  memberships Membership[]
 }
 
 model Membership {
   userId String
   teamId String
   role   String @default("user")
-  user   User   @relation(fields: [userId], references: [id])
   team   Team   @relation(fields: [teamId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
 
   @@id([userId, teamId])
 }
@@ -98,10 +95,10 @@ model Membership {
 model Client {
   id            String          @id @default(cuid())
   name          String
-  type          String // "client" or "lead"
+  type          String
   industry      String          @default("Other")
-  status        String          @default("Potential") // "Potential", "Active", "Disinterested" for leads; "active", "inactive" for clients
-  stage         String          @default("Awareness") // AIDIA stage for leads
+  status        String          @default("Potential")
+  stage         String          @default("Awareness")
   revenue       Float           @default(0)
   value         Float           @default(0)
   probability   Int             @default(0)
@@ -117,21 +114,21 @@ model Client {
   contracts     String          @default("[]")
   activityLog   String          @default("[]")
   billingTerms  String          @default("{\"paymentTerms\":\"Net 30\",\"billingFrequency\":\"Monthly\",\"currency\":\"ZAR\",\"retainerAmount\":0,\"taxExempt\":false,\"notes\":\"\"}")
-  proposals     String          @default("[]")
-  services      String          @default("[]") // JSON array of service level tags
-  thumbnail     String          @default("") // Image URL for client/lead thumbnail
-  rssSubscribed Boolean         @default(true) // RSS news feed subscription status
   ownerId       String?
-  owner         User?           @relation("ClientOwner", fields: [ownerId], references: [id])
-  projects      Project[]
-  invoices      Invoice[]
-  opportunities Opportunity[]
-  salesOrders   SalesOrder[]
-  tags          ClientTag[]
-  newsArticles  ClientNews[]
-  starredBy     StarredClient[]
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
+  proposals     String          @default("[]")
+  thumbnail     String          @default("")
+  services      String          @default("[]")
+  rssSubscribed Boolean         @default(true)
+  owner         User?           @relation("ClientOwner", fields: [ownerId], references: [id])
+  newsArticles  ClientNews[]
+  tags          ClientTag[]
+  invoices      Invoice[]
+  opportunities Opportunity[]
+  projects      Project[]
+  salesOrders   SalesOrder[]
+  starredBy     StarredClient[]
 
   @@index([createdAt])
   @@index([type])
@@ -142,7 +139,7 @@ model Client {
 model Tag {
   id          String      @id @default(cuid())
   name        String      @unique
-  color       String      @default("#3B82F6") // Default blue color
+  color       String      @default("#3B82F6")
   description String      @default("")
   ownerId     String?
   createdAt   DateTime    @default(now())
@@ -157,54 +154,60 @@ model ClientTag {
   id        String   @id @default(cuid())
   clientId  String
   tagId     String
+  createdAt DateTime @default(now())
   client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
 
   @@unique([clientId, tagId])
   @@index([clientId])
   @@index([tagId])
 }
 
+model Industry {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@index([isActive])
+}
+
 model Project {
-  id          String    @id @default(cuid())
-  clientId    String?
-  name        String
-  description String    @default("")
-  clientName  String    @default("")
-  status      String    @default("Planning")
-  startDate   DateTime  @default(now())
-  dueDate     DateTime?
-  budget      Float     @default(0)
-  actualCost  Float     @default(0)
-  progress    Int       @default(0)
-  priority    String    @default("Medium")
-  type        String    @default("Project")
-  assignedTo  String    @default("")
-
-  // JSON fields for complex data
-  tasksList              String @default("[]")
-  taskLists              String @default("[]")
-  customFieldDefinitions String @default("[]")
-  documents              String @default("[]")
-  comments               String @default("[]")
-  activityLog            String @default("[]")
-  team                   String @default("[]")
-  notes                  String @default("")
-
-  // Document Collection Process fields
-  hasDocumentCollectionProcess Boolean @default(false)
-  documentSections             String  @default("[]")
-  monthlyProgress              String  @default("{}")
-
-  ownerId     String?
-  owner       User?       @relation("ProjectOwner", fields: [ownerId], references: [id])
-  client      Client?     @relation(fields: [clientId], references: [id])
-  tasks       Task[]
-  invoices    Invoice[]
-  timeEntries TimeEntry[]
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id                           String      @id @default(cuid())
+  clientId                     String?
+  name                         String
+  description                  String      @default("")
+  clientName                   String      @default("")
+  status                       String      @default("Planning")
+  startDate                    DateTime    @default(now())
+  dueDate                      DateTime?
+  budget                       Float       @default(0)
+  actualCost                   Float       @default(0)
+  progress                     Int         @default(0)
+  priority                     String      @default("Medium")
+  type                         String      @default("Project")
+  assignedTo                   String      @default("")
+  tasksList                    String      @default("[]")
+  taskLists                    String      @default("[]")
+  customFieldDefinitions       String      @default("[]")
+  documents                    String      @default("[]")
+  comments                     String      @default("[]")
+  activityLog                  String      @default("[]")
+  team                         String      @default("[]")
+  notes                        String      @default("")
+  hasDocumentCollectionProcess Boolean     @default(false)
+  documentSections             String      @default("[]")
+  ownerId                      String?
+  createdAt                    DateTime    @default(now())
+  updatedAt                    DateTime    @updatedAt
+  monthlyProgress              String      @default("{}")
+  invoices                     Invoice[]
+  client                       Client?     @relation(fields: [clientId], references: [id])
+  owner                        User?       @relation("ProjectOwner", fields: [ownerId], references: [id])
+  tasks                        Task[]
+  timeEntries                  TimeEntry[]
 
   @@index([clientId])
   @@index([status])
@@ -213,43 +216,43 @@ model Project {
 }
 
 model Opportunity {
-  id        String   @id @default(cuid())
+  id        String               @id @default(cuid())
   clientId  String
   title     String
-  stage     String   @default("Awareness") // AIDA pipeline stage
-  status    String   @default("Potential") // Lifecycle stage: Active, Potential, Proposal, Disinterested
-  value     Float    @default(0)
-  proposals String   @default("[]") // JSON array of proposals
+  stage     String               @default("Awareness")
+  value     Float                @default(0)
   ownerId   String?
-  client    Client   @relation(fields: [clientId], references: [id])
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  proposals String               @default("[]")
+  status    String               @default("Potential")
+  client    Client               @relation(fields: [clientId], references: [id])
   starredBy StarredOpportunity[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }
 
 model SalesOrder {
   id              String    @id @default(cuid())
-  orderNumber     String    @unique // Auto-generated: SO0001, SO0002, etc.
+  orderNumber     String    @unique
   clientId        String?
   clientName      String    @default("")
-  opportunityId   String? // Link to originating opportunity
-  status          String    @default("draft") // draft, confirmed, in_production, completed, shipped, cancelled
-  priority        String    @default("normal") // low, normal, high, urgent
+  opportunityId   String?
+  status          String    @default("draft")
+  priority        String    @default("normal")
   orderDate       DateTime  @default(now())
   requiredDate    DateTime?
   shippedDate     DateTime?
   subtotal        Float     @default(0)
   tax             Float     @default(0)
   total           Float     @default(0)
-  items           String    @default("[]") // JSON array of order items: [{sku, name, quantity, unitPrice, total}]
+  items           String    @default("[]")
   shippingAddress String    @default("")
   shippingMethod  String    @default("")
   notes           String    @default("")
   internalNotes   String    @default("")
   ownerId         String?
-  client          Client?   @relation(fields: [clientId], references: [id])
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  client          Client?   @relation(fields: [clientId], references: [id])
 
   @@index([clientId])
   @@index([status])
@@ -273,10 +276,10 @@ model Invoice {
   items         String    @default("[]")
   notes         String    @default("")
   ownerId       String?
-  client        Client?   @relation(fields: [clientId], references: [id])
-  project       Project?  @relation(fields: [projectId], references: [id])
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  client        Client?   @relation(fields: [clientId], references: [id])
+  project       Project?  @relation(fields: [projectId], references: [id])
 }
 
 model Task {
@@ -287,12 +290,12 @@ model Task {
   status       String    @default("todo")
   assigneeId   String?
   dueDate      DateTime?
-  project      Project   @relation(fields: [projectId], references: [id])
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
   assignee     User?     @relation("TaskAssignee", fields: [assigneeId], references: [id])
   parentTask   Task?     @relation("Subtasks", fields: [parentTaskId], references: [id])
   subtasks     Task[]    @relation("Subtasks")
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  project      Project   @relation(fields: [projectId], references: [id])
 }
 
 model TimeEntry {
@@ -307,9 +310,9 @@ model TimeEntry {
   billable    Boolean  @default(true)
   rate        Float    @default(0)
   ownerId     String?
-  project     Project? @relation(fields: [projectId], references: [id])
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  project     Project? @relation(fields: [projectId], references: [id])
 }
 
 model AuditLog {
@@ -319,38 +322,37 @@ model AuditLog {
   entity    String
   entityId  String
   diff      String?
-  actor     User     @relation("AuditActor", fields: [actorId], references: [id])
   createdAt DateTime @default(now())
+  actor     User     @relation("AuditActor", fields: [actorId], references: [id])
 }
 
 model Invitation {
   id                   String    @id @default(cuid())
   email                String    @unique
   name                 String
-  role                 String    @default("user") // admin, manager, user, guest (Admin > Manager > User > Guest hierarchy)
-  accessibleProjectIds String    @default("[]") // JSON array of project IDs that guest users can access
+  role                 String    @default("user")
   token                String    @unique
-  status               String    @default("pending") // pending, accepted, expired, cancelled
+  status               String    @default("pending")
   invitedBy            String?
   expiresAt            DateTime
   acceptedAt           DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
+  accessibleProjectIds String    @default("[]")
 }
 
-// User feedback on pages/sections for product/dev
 model Feedback {
-  id        String   @id @default(cuid())
+  id        String          @id @default(cuid())
   userId    String?
   pageUrl   String
-  section   String   @default("")
+  section   String          @default("")
   message   String
-  type      String   @default("feedback") // feedback | bug | idea
-  severity  String   @default("medium") // low | medium | high
+  type      String          @default("feedback")
+  severity  String          @default("medium")
   meta      String?
-  user      User?    @relation("UserFeedback", fields: [userId], references: [id])
+  createdAt DateTime        @default(now())
+  user      User?           @relation("UserFeedback", fields: [userId], references: [id])
   replies   FeedbackReply[]
-  createdAt DateTime @default(now())
 
   @@index([pageUrl])
   @@index([section])
@@ -363,25 +365,24 @@ model FeedbackReply {
   feedbackId String
   userId     String?
   message    String
+  createdAt  DateTime @default(now())
   feedback   Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
   user       User?    @relation("FeedbackReplyAuthor", fields: [userId], references: [id])
-  createdAt  DateTime @default(now())
 
   @@index([feedbackId])
   @@index([userId])
   @@index([createdAt])
 }
 
-// Teams Knowledge Hub Models
 model TeamDocument {
   id          String   @id @default(cuid())
-  team        String // Team ID (management, technical, etc.)
+  team        String
   title       String
   category    String   @default("General")
   description String   @default("")
   content     String   @default("")
   version     String   @default("1.0")
-  status      String   @default("Draft") // Draft, Published, Archived
+  status      String   @default("Draft")
   tags        String   @default("[]")
   attachments String   @default("[]")
   createdBy   String   @default("")
@@ -392,10 +393,10 @@ model TeamDocument {
 
 model TeamWorkflow {
   id          String   @id @default(cuid())
-  team        String // Team ID
+  team        String
   title       String
   description String   @default("")
-  status      String   @default("Draft") // Draft, Active, Archived
+  status      String   @default("Draft")
   steps       String   @default("[]")
   tags        String   @default("[]")
   ownerId     String?
@@ -405,11 +406,11 @@ model TeamWorkflow {
 
 model TeamChecklist {
   id          String   @id @default(cuid())
-  team        String // Team ID
+  team        String
   title       String
   description String   @default("")
   category    String   @default("General")
-  frequency   String   @default("One-time") // One-time, Daily, Weekly, Monthly
+  frequency   String   @default("One-time")
   items       String   @default("[]")
   ownerId     String?
   createdAt   DateTime @default(now())
@@ -418,10 +419,10 @@ model TeamChecklist {
 
 model TeamNotice {
   id        String   @id @default(cuid())
-  team      String // Team ID
+  team      String
   title     String
   content   String
-  priority  String   @default("Normal") // Low, Normal, Medium, High, Critical
+  priority  String   @default("Normal")
   author    String   @default("")
   date      DateTime @default(now())
   ownerId   String?
@@ -433,12 +434,12 @@ model WorkflowExecution {
   id             String   @id @default(cuid())
   workflowId     String
   workflowTitle  String
-  team           String // Team ID
+  team           String
   completedSteps String   @default("[]")
   notes          String   @default("")
   executedBy     String   @default("")
   executionDate  DateTime @default(now())
-  status         String   @default("Completed") // In Progress, Completed, Failed
+  status         String   @default("Completed")
   ownerId        String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -446,11 +447,11 @@ model WorkflowExecution {
 
 model TeamTask {
   id          String    @id @default(cuid())
-  team        String // Team ID (management, technical, etc.)
+  team        String
   title       String
   description String    @default("")
-  status      String    @default("todo") // todo, in-progress, completed, blocked
-  priority    String    @default("Medium") // Low, Medium, High, Critical
+  status      String    @default("todo")
+  priority    String    @default("Medium")
   assigneeId  String?
   dueDate     DateTime?
   tags        String    @default("[]")
@@ -460,38 +461,35 @@ model TeamTask {
   updatedAt   DateTime  @updatedAt
 }
 
-// Manufacturing Models
 model InventoryItem {
   id                      String         @id @default(cuid())
   sku                     String
   name                    String
-  thumbnail               String         @default("")
-  category                String         @default("components") // components, packaging, accessories, finished_goods, work_in_progress
-  type                    String         @default("component") // component, final_product
+  category                String         @default("components")
+  type                    String         @default("component")
   quantity                Float          @default(0)
-  allocatedQuantity       Float          @default(0) // Quantity reserved/allocated to production orders
-  inProductionQuantity    Float          @default(0) // For final_product type: units currently in production
-  completedQuantity       Float          @default(0) // For final_product type: units completed and ready
   unit                    String         @default("pcs")
   reorderPoint            Float          @default(0)
   reorderQty              Float          @default(0)
   location                String         @default("")
-  locationId              String? // Link to StockLocation - each location has its own inventory
-  stockLocation           StockLocation? @relation(fields: [locationId], references: [id])
   unitCost                Float          @default(0)
   totalValue              Float          @default(0)
   supplier                String         @default("")
-  supplierPartNumbers     String         @default("[]") // JSON array of {supplier: string, partNumber: string}
-  manufacturingPartNumber String         @default("")
-  legacyPartNumber        String         @default("")
-  status                  String         @default("in_stock") // in_stock, low_stock, out_of_stock, in_production
+  status                  String         @default("in_stock")
   lastRestocked           DateTime?
   ownerId                 String?
   createdAt               DateTime       @default(now())
   updatedAt               DateTime       @updatedAt
-
-  // Relation: BOMs that produce this finished product
-  boms BOM[] @relation("BOMFinishedProduct")
+  thumbnail               String         @default("")
+  legacyPartNumber        String         @default("")
+  supplierPartNumbers     String         @default("[]")
+  allocatedQuantity       Float          @default(0)
+  completedQuantity       Float          @default(0)
+  inProductionQuantity    Float          @default(0)
+  locationId              String?
+  manufacturingPartNumber String         @default("")
+  boms                    BOM[]          @relation("BOMFinishedProduct")
+  stockLocation           StockLocation? @relation(fields: [locationId], references: [id])
 
   @@index([sku])
   @@index([category])
@@ -504,23 +502,23 @@ model BOM {
   id                String         @id @default(cuid())
   productSku        String
   productName       String
-  inventoryItemId   String? // Required: links BOM to the finished product inventory item
-  inventoryItem     InventoryItem? @relation("BOMFinishedProduct", fields: [inventoryItemId], references: [id])
   version           String         @default("1.0")
-  status            String         @default("active") // active, draft
+  status            String         @default("active")
   effectiveDate     DateTime       @default(now())
   laborCost         Float          @default(0)
   overheadCost      Float          @default(0)
   totalMaterialCost Float          @default(0)
   totalCost         Float          @default(0)
   estimatedTime     Int            @default(0)
-  components        String         @default("[]") // JSON array of components
+  components        String         @default("[]")
   notes             String         @default("")
-  thumbnail         String         @default("") // Product thumbnail image URL or data URL
-  instructions      String         @default("") // Product instructions file URL or data URL
   ownerId           String?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
+  instructions      String         @default("")
+  thumbnail         String         @default("")
+  inventoryItemId   String?
+  inventoryItem     InventoryItem? @relation("BOMFinishedProduct", fields: [inventoryItemId], references: [id])
 
   @@index([productSku])
   @@index([status])
@@ -535,21 +533,21 @@ model ProductionOrder {
   productName      String
   quantity         Int       @default(0)
   quantityProduced Int       @default(0)
-  status           String    @default("requested") // requested, in_production, completed, cancelled
-  priority         String    @default("normal") // low, normal, high
+  status           String    @default("requested")
+  priority         String    @default("normal")
   startDate        DateTime  @default(now())
   targetDate       DateTime?
   completedDate    DateTime?
   assignedTo       String    @default("")
   totalCost        Float     @default(0)
   notes            String    @default("")
-  workOrderNumber  String    @default("") // Auto-generated production order number (WO0001, WO0002, etc.)
-  clientId         String? // Client allocation - null means allocated to stock
-  allocationType   String    @default("stock") // "client" or "stock"
   createdBy        String    @default("")
   ownerId          String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+  workOrderNumber  String    @default("")
+  allocationType   String    @default("stock")
+  clientId         String?
 
   @@index([status])
   @@index([bomId])
@@ -559,15 +557,15 @@ model ProductionOrder {
 
 model StockMovement {
   id           String   @id @default(cuid())
-  movementId   String // Human-readable ID like "MOV001"
+  movementId   String
   date         DateTime @default(now())
-  type         String // consumption, receipt, production, transfer, adjustment
+  type         String
   itemName     String
   sku          String
   quantity     Float
   fromLocation String   @default("")
   toLocation   String   @default("")
-  reference    String   @default("") // Reference to order, production, etc.
+  reference    String   @default("")
   performedBy  String   @default("")
   notes        String   @default("")
   ownerId      String?
@@ -580,42 +578,38 @@ model StockMovement {
   @@index([ownerId])
 }
 
-// Physical stock locations (warehouses, vehicles, stores)
 model StockLocation {
-  id            String   @id @default(cuid())
-  code          String   @unique
-  name          String
-  type          String   @default("warehouse") // warehouse, vehicle, store, site
-  status        String   @default("active")
-  address       String   @default("")
-  contactPerson String   @default("")
-  contactPhone  String   @default("")
-  meta          String   @default("{}")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
+  id             String              @id @default(cuid())
+  code           String              @unique
+  name           String
+  type           String              @default("warehouse")
+  status         String              @default("active")
+  address        String              @default("")
+  contactPerson  String              @default("")
+  contactPhone   String              @default("")
+  meta           String              @default("{}")
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  inventoryItems InventoryItem[]
   inventory      LocationInventory[]
-  inventoryItems InventoryItem[] // Inventory items specific to this location
 
   @@index([type])
   @@index([status])
 }
 
-// Inventory quantity per location by SKU
 model LocationInventory {
-  id            String    @id @default(cuid())
+  id            String        @id @default(cuid())
   locationId    String
   sku           String
   itemName      String
-  quantity      Float     @default(0)
-  unitCost      Float     @default(0)
-  reorderPoint  Float     @default(0)
+  quantity      Float         @default(0)
+  unitCost      Float         @default(0)
+  reorderPoint  Float         @default(0)
   lastRestocked DateTime?
-  status        String    @default("in_stock")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  location StockLocation @relation(fields: [locationId], references: [id])
+  status        String        @default("in_stock")
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  location      StockLocation @relation(fields: [locationId], references: [id])
 
   @@unique([locationId, sku])
   @@index([sku])
@@ -632,12 +626,12 @@ model Supplier {
   website        String          @default("")
   address        String          @default("")
   paymentTerms   String          @default("Net 30")
-  status         String          @default("active") // active, inactive
+  status         String          @default("active")
   notes          String          @default("")
   ownerId        String?
-  purchaseOrders PurchaseOrder[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
+  purchaseOrders PurchaseOrder[]
 
   @@index([name])
   @@index([status])
@@ -646,19 +640,18 @@ model Supplier {
 
 model PurchaseOrder {
   id              String    @id @default(cuid())
-  orderNumber     String    @unique // Auto-generated: PO0001, PO0002, etc.
+  orderNumber     String    @unique
   supplierId      String
   supplierName    String    @default("")
-  supplier        Supplier  @relation(fields: [supplierId], references: [id])
-  status          String    @default("draft") // draft, sent, confirmed, received, cancelled
-  priority        String    @default("normal") // low, normal, high, urgent
+  status          String    @default("draft")
+  priority        String    @default("normal")
   orderDate       DateTime  @default(now())
   expectedDate    DateTime?
   receivedDate    DateTime?
   subtotal        Float     @default(0)
   tax             Float     @default(0)
   total           Float     @default(0)
-  items           String    @default("[]") // JSON array of order items: [{sku, name, quantity, unitPrice, total}]
+  items           String    @default("[]")
   shippingAddress String    @default("")
   shippingMethod  String    @default("")
   notes           String    @default("")
@@ -666,177 +659,168 @@ model PurchaseOrder {
   ownerId         String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  supplier        Supplier  @relation(fields: [supplierId], references: [id])
 
   @@index([supplierId])
   @@index([status])
   @@index([ownerId])
 }
 
-// Employee Chat Messages
 model Message {
   id        String   @id @default(cuid())
   senderId  String
-  sender    User     @relation("MessageSender", fields: [senderId], references: [id])
   content   String
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  sender    User     @relation("MessageSender", fields: [senderId], references: [id])
 
   @@index([senderId])
   @@index([createdAt])
   @@index([read])
 }
 
-// Password reset tokens for forgot-password flow
 model PasswordReset {
   id        String    @id @default(cuid())
   userId    String
-  user      User      @relation(fields: [userId], references: [id])
   token     String    @unique
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([expiresAt])
 }
 
-// Calendar Notes - User-specific daily notes
 model CalendarNote {
   id        String   @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  date      DateTime // Date of the note (date only, no time)
+  date      DateTime
   note      String   @default("")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
 
-  @@unique([userId, date]) // One note per user per date
+  @@unique([userId, date])
   @@index([userId])
   @@index([date])
 }
 
-// Session Management - Track all user sessions
 model Session {
   id           String   @id @default(cuid())
   userId       String
-  user         User     @relation(fields: [userId], references: [id])
   token        String   @unique
-  deviceInfo   String? // Device type, browser, OS info
+  deviceInfo   String?
   ipAddress    String?
   userAgent    String?
-  location     String? // IP-based location
+  location     String?
   lastActiveAt DateTime @default(now())
   createdAt    DateTime @default(now())
   expiresAt    DateTime
+  user         User     @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([token])
   @@index([expiresAt])
 }
 
-// Two-Factor Authentication
 model TwoFactor {
   id          String   @id @default(cuid())
   userId      String   @unique
-  user        User     @relation(fields: [userId], references: [id])
-  secret      String // TOTP secret
-  backupCodes String // JSON array of backup codes
+  secret      String
+  backupCodes String
   enabled     Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id])
 
   @@index([userId])
 }
 
-// Security Events - Audit log for security-related events
 model SecurityEvent {
   id        String   @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  eventType String // login_success, login_failed, 2fa_enabled, password_changed, session_revoked, etc.
+  eventType String
   ipAddress String?
   userAgent String?
-  details   String? // JSON string with additional details
+  details   String?
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([eventType])
   @@index([createdAt])
 }
 
-// Password History - Prevent password reuse
 model PasswordHistory {
   id           String   @id @default(cuid())
   userId       String
-  user         User     @relation(fields: [userId], references: [id])
   passwordHash String
   createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([createdAt])
 }
 
-// Vehicles - Company vehicles for job cards
 model Vehicle {
-  id          String   @id @default(cuid())
-  name        String // Vehicle name/identifier
-  model       String   @default("") // Vehicle model
-  type        String   @default("") // Vehicle type (van, truck, car, etc.)
-  reg         String   @unique // Registration number
-  assetNumber String   @default("") // Asset number
-  status      String   @default("active") // active, inactive, maintenance
-  notes       String   @default("")
+  id          String    @id @default(cuid())
+  name        String
+  model       String    @default("")
+  type        String    @default("")
+  reg         String    @unique
+  assetNumber String    @default("")
+  status      String    @default("active")
+  notes       String    @default("")
   ownerId     String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  jobCards JobCard[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  jobCards    JobCard[]
 
   @@index([status])
   @@index([ownerId])
   @@index([reg])
 }
 
-// Field Agent Job Cards
 model JobCard {
-  id                  String    @id @default(cuid())
-  jobCardNumber       String    @unique // Auto-generated: JC0001, JC0002, etc.
-  agentName           String    @default("") // Name of agent filling out the form
-  otherTechnicians    String    @default("[]") // JSON array of technician names
-  clientId            String? // Reference to client
-  clientName          String    @default("") // Client name
-  siteId              String    @default("") // Site/location ID
-  siteName            String    @default("") // Site name
-  location            String    @default("") // Specific location details
-  locationLatitude    String    @default("") // GPS latitude
-  locationLongitude   String    @default("") // GPS longitude
-  vehicleId           String? // Reference to Vehicle
-  vehicleUsed         String    @default("") // Vehicle information (legacy/fallback)
-  vehicle             Vehicle?  @relation(fields: [vehicleId], references: [id])
-  timeOfDeparture     DateTime? // When agent left office
-  timeOfArrival       DateTime? // When agent arrived at site
-  departureFromSite   DateTime? // When agent left site
-  arrivalBackAtOffice DateTime? // When agent arrived back at office
-  totalTimeMinutes    Int       @default(0) // Calculated total time in minutes
-  kmReadingBefore     Float     @default(0) // Odometer reading before
-  kmReadingAfter      Float     @default(0) // Odometer reading after
-  travelKilometers    Float     @default(0) // Calculated distance
-  reasonForVisit      String    @default("") // Why requested to come out
-  diagnosis           String    @default("") // Notes and comments about diagnosis
-  actionsTaken        String    @default("") // Actions taken to resolve the issue
-  stockUsed           String    @default("[]") // JSON array of stock items used
-  materialsBought     String    @default("[]") // JSON array of materials purchased
-  totalMaterialsCost  Float     @default(0) // Total cost of materials bought
-  otherComments       String    @default("") // Additional comments
-  photos              String    @default("[]") // JSON array of photo URLs
-  status              String    @default("draft") // draft, submitted, completed
+  id                  String                @id @default(cuid())
+  jobCardNumber       String                @unique
+  agentName           String                @default("")
+  otherTechnicians    String                @default("[]")
+  clientId            String?
+  clientName          String                @default("")
+  siteId              String                @default("")
+  siteName            String                @default("")
+  location            String                @default("")
+  timeOfDeparture     DateTime?
+  timeOfArrival       DateTime?
+  vehicleUsed         String                @default("")
+  kmReadingBefore     Float                 @default(0)
+  kmReadingAfter      Float                 @default(0)
+  travelKilometers    Float                 @default(0)
+  reasonForVisit      String                @default("")
+  diagnosis           String                @default("")
+  otherComments       String                @default("")
+  photos              String                @default("[]")
+  status              String                @default("draft")
   submittedAt         DateTime?
   completedAt         DateTime?
-  ownerId             String? // User who created the job card
+  ownerId             String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  actionsTaken        String                @default("")
+  materialsBought     String                @default("[]")
+  stockUsed           String                @default("[]")
+  totalMaterialsCost  Float                 @default(0)
+  arrivalBackAtOffice DateTime?
+  departureFromSite   DateTime?
+  locationLatitude    String                @default("")
+  locationLongitude   String                @default("")
+  totalTimeMinutes    Int                   @default(0)
+  vehicleId           String?
+  vehicle             Vehicle?              @relation(fields: [vehicleId], references: [id])
   serviceForms        ServiceFormInstance[]
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
 
   @@index([clientId])
   @@index([ownerId])
@@ -845,21 +829,19 @@ model JobCard {
   @@index([vehicleId])
 }
 
-// Service & Maintenance - Dynamic Forms / Checklists
 model ServiceFormTemplate {
-  id          String   @id @default(cuid())
+  id          String                @id @default(cuid())
   name        String
-  description String   @default("")
-  category    String   @default("General")
-  isActive    Boolean  @default(true)
-  version     Int      @default(1)
-  fields      String   @default("[]") // JSON array of field definitions [{id, label, type, required, options, helpText, defaultValue, order}]
+  description String                @default("")
+  category    String                @default("General")
+  isActive    Boolean               @default(true)
+  version     Int                   @default(1)
+  fields      String                @default("[]")
   createdById String?
-  createdBy   User?    @relation(fields: [createdById], references: [id])
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  instances ServiceFormInstance[]
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  instances   ServiceFormInstance[]
+  createdBy   User?                 @relation(fields: [createdById], references: [id])
 
   @@index([category])
   @@index([isActive])
@@ -867,19 +849,18 @@ model ServiceFormTemplate {
 }
 
 model ServiceFormInstance {
-  id             String   @id @default(cuid())
-  jobCardId      String
-  templateId     String
-  templateName   String   @default("")
-  templateVersion Int     @default(1)
-  status         String   @default("not_started") // not_started, in_progress, completed
-  answers        String   @default("[]") // JSON array of answers [{fieldId, value}]
-  completedAt    DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  jobCard  JobCard            @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
-  template ServiceFormTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  id              String              @id @default(cuid())
+  jobCardId       String
+  templateId      String
+  templateName    String              @default("")
+  templateVersion Int                 @default(1)
+  status          String              @default("not_started")
+  answers         String              @default("[]")
+  completedAt     DateTime?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  jobCard         JobCard             @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+  template        ServiceFormTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
   @@index([jobCardId])
   @@index([templateId])
@@ -887,11 +868,9 @@ model ServiceFormInstance {
   @@index([createdAt])
 }
 
-// Client News Articles - Daily news search results
 model ClientNews {
   id          String   @id @default(cuid())
   clientId    String
-  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   title       String
   description String   @default("")
   url         String   @default("")
@@ -900,6 +879,7 @@ model ClientNews {
   isNew       Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@index([clientId])
   @@index([publishedAt])
@@ -907,19 +887,18 @@ model ClientNews {
   @@index([createdAt])
 }
 
-// Notification System
 model Notification {
   id        String   @id @default(cuid())
-  userId    String // Recipient user ID
-  user      User     @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
-  type      String // mention, comment, task_assigned, invoice_due, etc.
+  userId    String
+  type      String
   title     String
   message   String
-  link      String   @default("") // Optional link to relevant resource
+  link      String   @default("")
   read      Boolean  @default(false)
-  metadata  String   @default("{}") // JSON metadata for additional context
+  metadata  String   @default("{}")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  user      User     @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([read])
@@ -930,10 +909,9 @@ model Notification {
 model NotificationSetting {
   id            String   @id @default(cuid())
   userId        String   @unique
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   emailMentions Boolean  @default(true)
   emailComments Boolean  @default(true)
-  emailTasks    Boolean  @default(true)  // Changed to true - users should get task assignment emails by default
+  emailTasks    Boolean  @default(true)
   emailInvoices Boolean  @default(true)
   emailSystem   Boolean  @default(true)
   inAppMentions Boolean  @default(true)
@@ -943,18 +921,18 @@ model NotificationSetting {
   inAppSystem   Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
-// Starred Clients/Leads - Personal favorites for each user
 model StarredClient {
   id        String   @id @default(cuid())
   userId    String
   clientId  String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, clientId])
   @@index([userId])
@@ -962,21 +940,20 @@ model StarredClient {
 }
 
 model StarredOpportunity {
-  id            String       @id @default(cuid())
+  id            String      @id @default(cuid())
   userId        String
   opportunityId String
-  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  opportunity   Opportunity  @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
-  createdAt     DateTime     @default(now())
+  createdAt     DateTime    @default(now())
+  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, opportunityId])
   @@index([userId])
   @@index([opportunityId])
 }
 
-// System Settings - Global application configuration
 model SystemSettings {
-  id                    String   @id @default("system") // Single row for global settings
+  id                    String   @id @default("system")
   companyName           String   @default("Abcotronics")
   timezone              String   @default("Africa/Johannesburg")
   currency              String   @default("ZAR")
@@ -990,35 +967,34 @@ model SystemSettings {
   googleCalendar        Boolean  @default(false)
   quickbooks            Boolean  @default(false)
   slack                 Boolean  @default(false)
-  updatedBy             String? // User ID who last updated
+  updatedBy             String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
   @@index([updatedBy])
 }
 
-// Leave Platform Models
 model LeaveApplication {
   id              String    @id @default(cuid())
   userId          String
-  user            User      @relation("LeaveApplications", fields: [userId], references: [id])
-  leaveType       String // annual, sick, family, maternity, paternity, study, unpaid, compassionate, religious
+  leaveType       String
   startDate       DateTime
   endDate         DateTime
-  days            Int // Working days (excluding weekends and public holidays)
+  days            Int
   reason          String
   emergency       Boolean   @default(false)
-  status          String    @default("pending") // pending, approved, rejected, cancelled
+  status          String    @default("pending")
   appliedDate     DateTime  @default(now())
   approvedDate    DateTime?
   rejectedDate    DateTime?
   approvedById    String?
-  approvedBy      User?     @relation("ApprovedLeaveApplications", fields: [approvedById], references: [id])
   rejectedById    String?
-  rejectedBy      User?     @relation("RejectedLeaveApplications", fields: [rejectedById], references: [id])
   rejectionReason String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  approvedBy      User?     @relation("ApprovedLeaveApplications", fields: [approvedById], references: [id])
+  rejectedBy      User?     @relation("RejectedLeaveApplications", fields: [rejectedById], references: [id])
+  user            User      @relation("LeaveApplications", fields: [userId], references: [id])
 
   @@index([userId])
   @@index([status])
@@ -1030,15 +1006,15 @@ model LeaveApplication {
 model LeaveBalance {
   id        String   @id @default(cuid())
   userId    String
-  user      User     @relation("LeaveBalances", fields: [userId], references: [id])
-  leaveType String // annual, sick, family, maternity, paternity, study, unpaid, compassionate, religious
-  available Float    @default(0) // Days available
-  used      Float    @default(0) // Days used
-  balance   Float    @default(0) // Available - Used
-  year      Int // Year for this balance (e.g., 2025)
+  leaveType String
+  available Float    @default(0)
+  used      Float    @default(0)
+  balance   Float    @default(0)
+  year      Int
   notes     String   @default("")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  user      User     @relation("LeaveBalances", fields: [userId], references: [id])
 
   @@unique([userId, leaveType, year])
   @@index([userId])
@@ -1048,12 +1024,12 @@ model LeaveBalance {
 
 model LeaveApprover {
   id         String   @id @default(cuid())
-  department String // Department or team name
+  department String
   approverId String
-  approver   User     @relation("LeaveApprovers", fields: [approverId], references: [id])
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  approver   User     @relation("LeaveApprovers", fields: [approverId], references: [id])
 
   @@unique([department, approverId])
   @@index([department])
@@ -1062,32 +1038,29 @@ model LeaveApprover {
 
 model Birthday {
   id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation("Birthdays", fields: [userId], references: [id])
-  date      DateTime // Birthday date (month and day only, year can be ignored)
+  userId    String   @unique
+  date      DateTime
   notes     String   @default("")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  user      User     @relation("Birthdays", fields: [userId], references: [id])
 
-  @@unique([userId])
   @@index([userId])
   @@index([date])
 }
 
-// Management Meeting Notes Models
 model MonthlyMeetingNotes {
-  id           String   @id @default(cuid())
-  monthKey     String   @unique // Format: "YYYY-MM" (e.g., "2025-01")
-  monthlyGoals String   @default("")
-  status       String   @default("active") // active, archived
-  ownerId      String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  weeklyNotes     WeeklyMeetingNotes[]
+  id              String                  @id @default(cuid())
+  monthKey        String                  @unique
+  monthlyGoals    String                  @default("")
+  status          String                  @default("active")
+  ownerId         String?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
   actionItems     MeetingActionItem[]
   comments        MeetingComment[]
   userAllocations MeetingUserAllocation[]
+  weeklyNotes     WeeklyMeetingNotes[]
 
   @@index([monthKey])
   @@index([status])
@@ -1095,18 +1068,17 @@ model MonthlyMeetingNotes {
 }
 
 model WeeklyMeetingNotes {
-  id             String              @id @default(cuid())
-  monthlyNotesId String
-  monthlyNotes   MonthlyMeetingNotes @relation(fields: [monthlyNotesId], references: [id], onDelete: Cascade)
-  weekKey        String // Format: "YYYY-MM-DD" (week start date)
-  weekStart      DateTime
-  weekEnd        DateTime?
-  ownerId        String?
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-
+  id              String              @id @default(cuid())
+  monthlyNotesId  String
+  weekKey         String
+  weekStart       DateTime
+  weekEnd         DateTime?
+  ownerId         String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
   departmentNotes DepartmentNotes[]
   actionItems     MeetingActionItem[]
+  monthlyNotes    MonthlyMeetingNotes @relation(fields: [monthlyNotesId], references: [id], onDelete: Cascade)
 
   @@unique([monthlyNotesId, weekKey])
   @@index([monthlyNotesId])
@@ -1115,22 +1087,21 @@ model WeeklyMeetingNotes {
 }
 
 model DepartmentNotes {
-  id             String             @id @default(cuid())
+  id             String              @id @default(cuid())
   weeklyNotesId  String
-  weeklyNotes    WeeklyMeetingNotes @relation(fields: [weeklyNotesId], references: [id], onDelete: Cascade)
-  departmentId   String // management, compliance, finance, technical, data, support, commercial, business-development
-  successes      String             @default("") // Last week's successes
-  weekToFollow   String             @default("") // This week's plan
-  frustrations   String             @default("") // Frustrations/challenges
-  agendaPoints   String             @default("[]") // JSON array of agenda points
-  assignedUserId String? // User assigned to complete this department's notes
-  assignedUser   User?              @relation("DepartmentNotesAssignee", fields: [assignedUserId], references: [id])
+  departmentId   String
+  successes      String              @default("")
+  weekToFollow   String              @default("")
+  frustrations   String              @default("")
+  agendaPoints   String              @default("[]")
+  assignedUserId String?
   ownerId        String?
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-
-  comments    MeetingComment[]
-  actionItems MeetingActionItem[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  assignedUser   User?               @relation("DepartmentNotesAssignee", fields: [assignedUserId], references: [id])
+  weeklyNotes    WeeklyMeetingNotes  @relation(fields: [weeklyNotesId], references: [id], onDelete: Cascade)
+  actionItems    MeetingActionItem[]
+  comments       MeetingComment[]
 
   @@unique([weeklyNotesId, departmentId])
   @@index([weeklyNotesId])
@@ -1141,24 +1112,23 @@ model DepartmentNotes {
 model MeetingActionItem {
   id                String               @id @default(cuid())
   monthlyNotesId    String?
-  monthlyNotes      MonthlyMeetingNotes? @relation(fields: [monthlyNotesId], references: [id], onDelete: Cascade)
   weeklyNotesId     String?
-  weeklyNotes       WeeklyMeetingNotes?  @relation(fields: [weeklyNotesId], references: [id], onDelete: Cascade)
   departmentNotesId String?
-  departmentNotes   DepartmentNotes?     @relation(fields: [departmentNotesId], references: [id], onDelete: Cascade)
   title             String
   description       String               @default("")
-  status            String               @default("open") // open, in_progress, completed, cancelled
-  priority          String               @default("medium") // low, medium, high, critical
+  status            String               @default("open")
+  priority          String               @default("medium")
   assignedUserId    String?
-  assignedUser      User?                @relation("ActionItemAssignee", fields: [assignedUserId], references: [id])
   dueDate           DateTime?
   completedDate     DateTime?
   ownerId           String?
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
-
-  comments MeetingComment[]
+  assignedUser      User?                @relation("ActionItemAssignee", fields: [assignedUserId], references: [id])
+  departmentNotes   DepartmentNotes?     @relation(fields: [departmentNotesId], references: [id], onDelete: Cascade)
+  monthlyNotes      MonthlyMeetingNotes? @relation(fields: [monthlyNotesId], references: [id], onDelete: Cascade)
+  weeklyNotes       WeeklyMeetingNotes?  @relation(fields: [weeklyNotesId], references: [id], onDelete: Cascade)
+  comments          MeetingComment[]
 
   @@index([monthlyNotesId])
   @@index([weeklyNotesId])
@@ -1171,16 +1141,16 @@ model MeetingActionItem {
 model MeetingComment {
   id                String               @id @default(cuid())
   monthlyNotesId    String?
-  monthlyNotes      MonthlyMeetingNotes? @relation(fields: [monthlyNotesId], references: [id], onDelete: Cascade)
   departmentNotesId String?
-  departmentNotes   DepartmentNotes?     @relation(fields: [departmentNotesId], references: [id], onDelete: Cascade)
   actionItemId      String?
-  actionItem        MeetingActionItem?   @relation(fields: [actionItemId], references: [id], onDelete: Cascade)
   content           String
   authorId          String
-  author            User                 @relation("MeetingCommentAuthor", fields: [authorId], references: [id])
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
+  actionItem        MeetingActionItem?   @relation(fields: [actionItemId], references: [id], onDelete: Cascade)
+  author            User                 @relation("MeetingCommentAuthor", fields: [authorId], references: [id])
+  departmentNotes   DepartmentNotes?     @relation(fields: [departmentNotesId], references: [id], onDelete: Cascade)
+  monthlyNotes      MonthlyMeetingNotes? @relation(fields: [monthlyNotesId], references: [id], onDelete: Cascade)
 
   @@index([monthlyNotesId])
   @@index([departmentNotesId])
@@ -1192,13 +1162,13 @@ model MeetingComment {
 model MeetingUserAllocation {
   id             String              @id @default(cuid())
   monthlyNotesId String
-  monthlyNotes   MonthlyMeetingNotes @relation(fields: [monthlyNotesId], references: [id], onDelete: Cascade)
-  departmentId   String // management, compliance, finance, technical, data, support, commercial, business-development
+  departmentId   String
   userId         String
-  user           User                @relation("MeetingUserAllocations", fields: [userId], references: [id])
-  role           String              @default("contributor") // contributor, reviewer, owner
+  role           String              @default("contributor")
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
+  monthlyNotes   MonthlyMeetingNotes @relation(fields: [monthlyNotesId], references: [id], onDelete: Cascade)
+  user           User                @relation("MeetingUserAllocations", fields: [userId], references: [id])
 
   @@unique([monthlyNotesId, departmentId, userId])
   @@index([monthlyNotesId])
@@ -1206,28 +1176,27 @@ model MeetingUserAllocation {
   @@index([userId])
 }
 
-// User Task Management - Personal task tracking system
 model UserTask {
-  id              String                @id @default(cuid())
-  title           String
-  description     String                @default("")
-  status          String                @default("todo") // todo, in-progress, completed, cancelled
-  priority        String                @default("medium") // low, medium, high, urgent
-  category        String                @default("") // User-defined category
-  dueDate         DateTime?
-  completedDate   DateTime?
-  ownerId         String
-  owner           User                  @relation("UserTaskOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  clientId        String? // Optional link to client
-  projectId       String? // Optional link to project
-  checklist       String                @default("[]") // JSON array of {id, text, completed}
-  photos          String                @default("[]") // JSON array of photo URLs
-  files           String                @default("[]") // JSON array of file objects {name, url, size, type}
-  googleEventId   String? // Google Calendar event ID
-  googleEventUrl  String? // Google Calendar event URL
-  tags            UserTaskTagRelation[]
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
+  id             String                @id @default(cuid())
+  title          String
+  description    String                @default("")
+  status         String                @default("todo")
+  priority       String                @default("medium")
+  category       String                @default("")
+  dueDate        DateTime?
+  completedDate  DateTime?
+  ownerId        String
+  clientId       String?
+  projectId      String?
+  checklist      String                @default("[]")
+  photos         String                @default("[]")
+  files          String                @default("[]")
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  googleEventId  String?
+  googleEventUrl String?
+  owner          User                  @relation("UserTaskOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  tags           UserTaskTagRelation[]
 
   @@index([ownerId])
   @@index([status])
@@ -1238,42 +1207,39 @@ model UserTask {
   @@index([createdAt])
 }
 
-// Tags for user tasks (separate from client tags)
 model UserTaskTag {
   id        String                @id @default(cuid())
   name      String
   color     String                @default("#3B82F6")
   ownerId   String
-  owner     User                  @relation("UserTaskTagOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  tasks     UserTaskTagRelation[]
   createdAt DateTime              @default(now())
   updatedAt DateTime              @updatedAt
+  owner     User                  @relation("UserTaskTagOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  tasks     UserTaskTagRelation[]
 
   @@unique([ownerId, name])
   @@index([ownerId])
   @@index([name])
 }
 
-// Many-to-many relationship between UserTask and UserTaskTag
 model UserTaskTagRelation {
   id        String      @id @default(cuid())
   taskId    String
   tagId     String
-  task      UserTask    @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  tag       UserTaskTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
   createdAt DateTime    @default(now())
+  tag       UserTaskTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  task      UserTask    @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   @@unique([taskId, tagId])
   @@index([taskId])
   @@index([tagId])
 }
 
-// Document Collection Templates
 model DocumentCollectionTemplate {
   id          String   @id @default(cuid())
   name        String
   description String   @default("")
-  sections    String   @default("[]") // JSON array of sections with documents
+  sections    String   @default("[]")
   isDefault   Boolean  @default(false)
   ownerId     String?
   createdBy   String   @default("")

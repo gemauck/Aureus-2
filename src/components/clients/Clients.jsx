@@ -686,6 +686,132 @@ const Clients = React.memo(() => {
     const [clientsPage, setClientsPage] = useState(1);
     const [leadsPage, setLeadsPage] = useState(1);
     const ITEMS_PER_PAGE = 25;
+    
+    // Industry management state
+    const [industries, setIndustries] = useState([]);
+    const [showIndustryModal, setShowIndustryModal] = useState(false);
+    const [newIndustryName, setNewIndustryName] = useState('');
+    const [isLoadingIndustries, setIsLoadingIndustries] = useState(false);
+    
+    // Get current user and check if admin
+    const currentUser = window.storage?.getUser?.();
+    const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
+    
+    // Fetch industries from API
+    const loadIndustries = useCallback(async () => {
+        try {
+            setIsLoadingIndustries(true);
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                console.warn('No token available for fetching industries');
+                return;
+            }
+            
+            const response = await fetch('/api/industries', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                const industriesList = data?.data?.industries || data?.industries || [];
+                setIndustries(industriesList);
+            } else {
+                console.error('Failed to load industries:', response.statusText);
+            }
+        } catch (error) {
+            console.error('Error loading industries:', error);
+        } finally {
+            setIsLoadingIndustries(false);
+        }
+    }, []);
+    
+    // Add new industry
+    const handleAddIndustry = useCallback(async () => {
+        if (!newIndustryName.trim()) {
+            alert('Please enter an industry name');
+            return;
+        }
+        
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                alert('Authentication required');
+                return;
+            }
+            
+            const response = await fetch('/api/industries', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify({ name: newIndustryName.trim() })
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                const newIndustry = data?.data?.industry || data?.industry;
+                if (newIndustry) {
+                    setIndustries(prev => [...prev, newIndustry].sort((a, b) => a.name.localeCompare(b.name)));
+                    setNewIndustryName('');
+                    alert('Industry added successfully');
+                }
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                alert(errorData?.error || 'Failed to add industry');
+            }
+        } catch (error) {
+            console.error('Error adding industry:', error);
+            alert('Error adding industry: ' + error.message);
+        }
+    }, [newIndustryName]);
+    
+    // Delete industry
+    const handleDeleteIndustry = useCallback(async (industryId) => {
+        if (!confirm('Are you sure you want to delete this industry?')) {
+            return;
+        }
+        
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                alert('Authentication required');
+                return;
+            }
+            
+            const response = await fetch(`/api/industries/${industryId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
+            });
+            
+            if (response.ok) {
+                setIndustries(prev => prev.filter(ind => ind.id !== industryId));
+                alert('Industry deleted successfully');
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                alert(errorData?.error || 'Failed to delete industry');
+            }
+        } catch (error) {
+            console.error('Error deleting industry:', error);
+            alert('Error deleting industry: ' + error.message);
+        }
+    }, []);
+    
+    // Load industries on mount
+    useEffect(() => {
+        loadIndustries();
+    }, [loadIndustries]);
+    
     const pipelineStageOrder = useMemo(() => {
         const order = {};
         PIPELINE_STAGES.forEach((stage, index) => {
@@ -4771,22 +4897,22 @@ const Clients = React.memo(() => {
                             </th>
                             <th 
                                 className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
-                                onClick={() => handleLeadSort('stage')}
+                                onClick={() => handleLeadSort('status')}
                             >
                                 <div className="flex items-center">
                                     Stage
-                                    {leadSortField === 'stage' && (
+                                    {leadSortField === 'status' && (
                                         <i className={`fas fa-sort-${leadSortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
                                     )}
                                 </div>
                             </th>
                             <th 
                                 className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
-                                onClick={() => handleLeadSort('status')}
+                                onClick={() => handleLeadSort('stage')}
                             >
                                 <div className="flex items-center">
                                     AIDA Status
-                                    {leadSortField === 'status' && (
+                                    {leadSortField === 'stage' && (
                                         <i className={`fas fa-sort-${leadSortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
                                     )}
                                 </div>
@@ -4844,16 +4970,6 @@ const Clients = React.memo(() => {
                                     <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.industry}</td>
                                     <td className="px-6 py-2 whitespace-nowrap">
                                         <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                                            lead.stage === 'Awareness' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
-                                            lead.stage === 'Interest' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
-                                            lead.stage === 'Desire' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
-                                            (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
-                                        }`}>
-                                            {lead.stage || 'Awareness'}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-2 whitespace-nowrap">
-                                        <span className={`px-3 py-1 text-xs font-medium rounded-full ${
                                             lead.status === 'Active' || lead.status === 'active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800') :
                                             lead.status === 'Potential' || lead.status === 'potential' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
                                             lead.status === 'Proposal' || lead.status === 'proposal' ? (isDark ? 'bg-purple-900 text-purple-200' : 'bg-purple-100 text-purple-800') :
@@ -4862,6 +4978,16 @@ const Clients = React.memo(() => {
                                             (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800')
                                         }`}>
                                             {lead.status || 'Potential'}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-2 whitespace-nowrap">
+                                        <span className={`px-3 py-1 text-xs font-medium rounded-full ${
+                                            lead.stage === 'Awareness' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
+                                            lead.stage === 'Interest' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
+                                            lead.stage === 'Desire' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
+                                            (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
+                                        }`}>
+                                            {lead.stage || 'Awareness'}
                                         </span>
                                     </td>
                                     <td className="px-6 py-2 whitespace-nowrap">
@@ -5289,25 +5415,47 @@ const Clients = React.memo(() => {
                                 )}
                             </div>
                         </div>
-                        <div>
+                        <div className="flex gap-2">
                             <select
                                 value={filterIndustry}
                                 onChange={(e) => setFilterIndustry(e.target.value)}
-                                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
+                                className={`flex-1 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
                                     isDark 
                                         ? 'bg-gray-700 border-gray-600 text-gray-200 focus:bg-gray-700' 
                                         : 'bg-gray-50 border-gray-300 text-gray-900 focus:bg-white'
                                 }`}
                             >
                                 <option value="All Industries">All Industries</option>
-                                <option value="Mining">Mining</option>
-                                <option value="Mining Contractor">Mining Contractor</option>
-                                <option value="Forestry">Forestry</option>
-                                <option value="Agriculture">Agriculture</option>
-                                <option value="Diesel Supply">Diesel Supply</option>
-                                <option value="Logistics">Logistics</option>
-                                <option value="Other">Other</option>
+                                {industries.map((industry) => (
+                                    <option key={industry.id} value={industry.name}>
+                                        {industry.name}
+                                    </option>
+                                ))}
+                                {industries.length === 0 && (
+                                    <>
+                                        <option value="Mining">Mining</option>
+                                        <option value="Mining Contractor">Mining Contractor</option>
+                                        <option value="Forestry">Forestry</option>
+                                        <option value="Agriculture">Agriculture</option>
+                                        <option value="Diesel Supply">Diesel Supply</option>
+                                        <option value="Logistics">Logistics</option>
+                                        <option value="Other">Other</option>
+                                    </>
+                                )}
                             </select>
+                            {isAdmin && (
+                                <button
+                                    onClick={() => setShowIndustryModal(true)}
+                                    className={`px-4 py-3 border rounded-lg text-sm font-medium transition-colors ${
+                                        isDark
+                                            ? 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600'
+                                            : 'bg-gray-50 border-gray-300 text-gray-900 hover:bg-gray-100'
+                                    }`}
+                                    title="Manage Industries"
+                                >
+                                    <i className="fas fa-cog"></i>
+                                </button>
+                            )}
                         </div>
                         <div>
                             <select
@@ -5440,6 +5588,115 @@ const Clients = React.memo(() => {
                         }
                     }}
                 />
+            )}
+            
+            {/* Industry Management Modal */}
+            {showIndustryModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" onClick={() => setShowIndustryModal(false)}>
+                    <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col`} onClick={(e) => e.stopPropagation()}>
+                        <div className={`px-6 py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} flex items-center justify-between`}>
+                            <h2 className={`text-xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                Manage Industries
+                            </h2>
+                            <button
+                                onClick={() => setShowIndustryModal(false)}
+                                className={`text-gray-400 hover:text-gray-600 ${isDark ? 'hover:text-gray-200' : ''}`}
+                            >
+                                <i className="fas fa-times text-xl"></i>
+                            </button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto p-6">
+                            {/* Add New Industry */}
+                            <div className="mb-6">
+                                <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                                    Add New Industry
+                                </label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={newIndustryName}
+                                        onChange={(e) => setNewIndustryName(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                handleAddIndustry();
+                                            }
+                                        }}
+                                        placeholder="Enter industry name"
+                                        className={`flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                                            isDark
+                                                ? 'bg-gray-700 border-gray-600 text-gray-200 placeholder-gray-400'
+                                                : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+                                        }`}
+                                    />
+                                    <button
+                                        onClick={handleAddIndustry}
+                                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                    >
+                                        <i className="fas fa-plus mr-2"></i>
+                                        Add
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            {/* Industries List */}
+                            <div>
+                                <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                                    Existing Industries ({industries.length})
+                                </label>
+                                {isLoadingIndustries ? (
+                                    <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                        <i className="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                                        <p>Loading industries...</p>
+                                    </div>
+                                ) : industries.length === 0 ? (
+                                    <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                        <p>No industries found. Add one above to get started.</p>
+                                    </div>
+                                ) : (
+                                    <div className={`space-y-2 ${isDark ? 'bg-gray-700' : 'bg-gray-50'} rounded-lg p-4`}>
+                                        {industries.map((industry) => (
+                                            <div
+                                                key={industry.id}
+                                                className={`flex items-center justify-between p-3 rounded-lg ${
+                                                    isDark ? 'bg-gray-800 hover:bg-gray-750' : 'bg-white hover:bg-gray-100'
+                                                }`}
+                                            >
+                                                <span className={`font-medium ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
+                                                    {industry.name}
+                                                </span>
+                                                <button
+                                                    onClick={() => handleDeleteIndustry(industry.id)}
+                                                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                                                        isDark
+                                                            ? 'bg-red-600 hover:bg-red-700 text-white'
+                                                            : 'bg-red-100 hover:bg-red-200 text-red-700'
+                                                    }`}
+                                                >
+                                                    <i className="fas fa-trash mr-1"></i>
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        
+                        <div className={`px-6 py-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'} flex justify-end`}>
+                            <button
+                                onClick={() => setShowIndustryModal(false)}
+                                className={`px-4 py-2 rounded-lg transition-colors ${
+                                    isDark
+                                        ? 'bg-gray-700 hover:bg-gray-600 text-gray-200'
+                                        : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                                }`}
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
             </div>
         </div>

@@ -89,6 +89,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [optimisticContacts, setOptimisticContacts] = useState([]);
     const [optimisticSites, setOptimisticSites] = useState([]);
     
+    // Industries state
+    const [industries, setIndustries] = useState([]);
+    
     // Track if user has edited the form to prevent unwanted resets
     const hasUserEditedForm = useRef(false);
     const lastSavedClientId = useRef(client?.id);
@@ -2245,13 +2248,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         >
                                             <option value="">Select Industry</option>
-                                            <option>Mining</option>
-                                            <option>Mining Contractor</option>
-                                            <option>Forestry</option>
-                                            <option>Agriculture</option>
-                                            <option>Diesel Supply</option>
-                                            <option>Logistics</option>
-                                            <option>Other</option>
+                                            {industries.map((industry) => (
+                                                <option key={industry.id} value={industry.name}>
+                                                    {industry.name}
+                                                </option>
+                                            ))}
+                                            {industries.length === 0 && (
+                                                <>
+                                                    <option>Mining</option>
+                                                    <option>Mining Contractor</option>
+                                                    <option>Forestry</option>
+                                                    <option>Agriculture</option>
+                                                    <option>Diesel Supply</option>
+                                                    <option>Logistics</option>
+                                                    <option>Other</option>
+                                                </>
+                                            )}
                                         </select>
                                     </div>
                                 </div>
