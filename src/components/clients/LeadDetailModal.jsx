@@ -321,7 +321,17 @@ const LeadDetailModal = ({
                 modalContainer.remove();
             }
         };
-    }, [showIndustryModal, industries, isLoadingIndustries, newIndustryName, handleAddIndustry, handleDeleteIndustry]);
+    }, [showIndustryModal, industries, isLoadingIndustries, handleAddIndustry, handleDeleteIndustry]);
+
+    // Update input value when newIndustryName changes (separate effect to avoid recreating modal)
+    useEffect(() => {
+        if (showIndustryModal) {
+            const input = document.querySelector('#industry-management-modal-container input[type="text"]');
+            if (input && input.value !== newIndustryName) {
+                input.value = newIndustryName;
+            }
+        }
+    }, [newIndustryName, showIndustryModal]);
     
     // Fetch industries on mount
     useEffect(() => {
