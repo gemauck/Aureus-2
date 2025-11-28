@@ -5068,6 +5068,7 @@ const LeadDetailModal = ({
                 )
             )
         )
+    );
 };
 
 // Make available globally
