@@ -1,6 +1,7 @@
 // Get React hooks from window
 // FIX: formData initialization order fixed - moved to top to prevent TDZ errors (v2)
 const { useState, useEffect, useRef } = React;
+const ReactDOM = window.ReactDOM || (window.React && window.React.DOM) || null;
 
 const LeadDetailModal = ({
     leadId,
@@ -4972,8 +4973,8 @@ const LeadDetailModal = ({
             )
         ),
         React.createElement(ThumbnailPreviewModal),
-        // Industry Management Modal - Render using portal to body
-        showIndustryModal && ReactDOM.createPortal(
+        // Industry Management Modal - Render using portal to body if available, otherwise inline
+        showIndustryModal && (ReactDOM && ReactDOM.createPortal ? ReactDOM.createPortal(
             React.createElement('div', {
                 className: 'fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-50',
                 onClick: (e) => {
