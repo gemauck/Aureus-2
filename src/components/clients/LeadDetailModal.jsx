@@ -307,11 +307,23 @@ const LeadDetailModal = ({
 
         console.log('🔧 LeadDetailModal: Creating modal in document.body');
         
+        // Remove any existing modal first
+        const existingModal = document.getElementById('industry-management-modal-container');
+        if (existingModal) {
+            console.log('🔧 LeadDetailModal: Removing existing modal');
+            existingModal.remove();
+        }
+        
         // Create modal container
         const modalContainer = document.createElement('div');
         modalContainer.id = 'industry-management-modal-container';
         modalContainer.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; background-color: rgba(0, 0, 0, 0.5);';
         document.body.appendChild(modalContainer);
+        console.log('🔧 LeadDetailModal: Modal container appended to body', {
+            exists: !!document.getElementById('industry-management-modal-container'),
+            parent: modalContainer.parentNode?.tagName,
+            zIndex: window.getComputedStyle(modalContainer).zIndex
+        });
 
         // Create modal content
         const modalContent = document.createElement('div');
@@ -426,10 +438,18 @@ const LeadDetailModal = ({
             }
         };
 
+        console.log('🔧 LeadDetailModal: Modal fully created', {
+            containerExists: !!document.getElementById('industry-management-modal-container'),
+            industriesCount: industries.length,
+            isLoading: isLoadingIndustries
+        });
+
         // Cleanup function
         return () => {
-            if (modalContainer && modalContainer.parentNode) {
-                modalContainer.remove();
+            console.log('🔧 LeadDetailModal: Cleanup function called, removing modal');
+            const modalToRemove = document.getElementById('industry-management-modal-container');
+            if (modalToRemove && modalToRemove.parentNode) {
+                modalToRemove.remove();
             }
         };
     }, [showIndustryModal, industries, isLoadingIndustries, newIndustryName, handleAddIndustry, handleDeleteIndustry]);
