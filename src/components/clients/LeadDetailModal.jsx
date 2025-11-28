@@ -4974,9 +4974,7 @@ const LeadDetailModal = ({
         ),
         React.createElement(ThumbnailPreviewModal),
         // Industry Management Modal
-        showIndustryModal && (() => {
-            console.log('🔧 LeadDetailModal: Rendering industry modal, showIndustryModal:', showIndustryModal);
-            const modalElement = React.createElement('div', {
+        showIndustryModal && React.createElement('div', {
                 key: 'industry-modal',
                 className: 'fixed inset-0 flex items-center justify-center',
                 onClick: (e) => {
@@ -5070,7 +5068,6 @@ const LeadDetailModal = ({
                 )
             )
         )
-    );
 };
 
 // Make available globally
