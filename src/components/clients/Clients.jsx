@@ -4780,8 +4780,16 @@ const Clients = React.memo(() => {
                                     )}
                                 </div>
                             </th>
-                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
-                                Status
+                            <th 
+                                className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                onClick={() => handleLeadSort('status')}
+                            >
+                                <div className="flex items-center">
+                                    AIDA Status
+                                    {leadSortField === 'status' && (
+                                        <i className={`fas fa-sort-${leadSortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
+                                    )}
+                                </div>
                             </th>
                             <th 
                                 className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
@@ -4841,12 +4849,17 @@ const Clients = React.memo(() => {
                                             lead.stage === 'Desire' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
                                             (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
                                         }`}>
-                                            {lead.stage}
+                                            {lead.stage || 'Awareness'}
                                         </span>
                                     </td>
                                     <td className="px-6 py-2 whitespace-nowrap">
-                                        <span className={`px-2 py-1 text-xs font-medium rounded ${isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-700'}`}>
-                                            Active
+                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                            lead.status === 'Potential' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
+                                            lead.status === 'Active' ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-700') :
+                                            lead.status === 'Disinterested' ? (isDark ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-700') :
+                                            (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800')
+                                        }`}>
+                                            {lead.status || 'Potential'}
                                         </span>
                                     </td>
                                     <td className="px-6 py-2 whitespace-nowrap">

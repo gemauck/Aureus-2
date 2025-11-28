@@ -1025,6 +1025,14 @@ const JobCardFormPublic = () => {
         }
 
         const data = await response.json();
+        console.log('📋 JobCardFormPublic: Raw API response:', {
+          hasData: !!data.data,
+          hasTemplates: !!data.templates,
+          hasDataTemplates: !!data.data?.templates,
+          keys: Object.keys(data),
+          dataKeys: data.data ? Object.keys(data.data) : []
+        });
+        
         // The API wraps responses in { data: ... }, so templates are at data.data.templates
         const templates = Array.isArray(data.data?.templates) 
           ? data.data.templates 
