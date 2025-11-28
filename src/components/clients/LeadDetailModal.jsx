@@ -4972,17 +4972,28 @@ const LeadDetailModal = ({
             )
         ),
         React.createElement(ThumbnailPreviewModal),
-        // Industry Management Modal
-        showIndustryModal && React.createElement('div', {
-            className: 'fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-50',
-            onClick: (e) => {
-                if (e.target === e.currentTarget) {
-                    console.log('🔧 LeadDetailModal: Closing modal via backdrop');
-                    setShowIndustryModal(false);
+        // Industry Management Modal - Render using portal to body
+        showIndustryModal && ReactDOM.createPortal(
+            React.createElement('div', {
+                className: 'fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-50',
+                onClick: (e) => {
+                    if (e.target === e.currentTarget) {
+                        console.log('🔧 LeadDetailModal: Closing modal via backdrop');
+                        setShowIndustryModal(false);
+                    }
+                },
+                style: { 
+                    position: 'fixed', 
+                    top: 0, 
+                    left: 0, 
+                    right: 0, 
+                    bottom: 0, 
+                    zIndex: 99999,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
                 }
             },
-            style: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 }
-        },
             React.createElement('div', {
                 className: 'bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col',
                 onClick: (e) => e.stopPropagation()
