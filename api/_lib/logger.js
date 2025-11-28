@@ -14,7 +14,12 @@ export function withLogging(handler) {
       if (result && typeof result.then === 'function') {
         await result
       }
-      logger.info({ id, method: req.method, url: req.url, ms: Date.now() - start }, 'ok')
+      // Only log success if response was sent
+      if (res.headersSent || res.writableEnded) {
+        logger.info({ id, method: req.method, url: req.url, ms: Date.now() - start }, 'ok')
+      } else {
+        logger.warn({ id, method: req.method, url: req.url, ms: Date.now() - start }, 'handler did not send response')
+      }
     } catch (e) {
       logger.error({ 
         id, 
@@ -26,10 +31,30 @@ export function withLogging(handler) {
           name: e.name,
           code: e.code,
           stack: e.stack
-        }
+        },
+        headersSent: res.headersSent,
+        writableEnded: res.writableEnded
       }, 'error')
-      // Re-throw to be caught by outer handlers
-      throw e
+      
+      // If response hasn't been sent, try to send an error response
+      if (!res.headersSent && !res.writableEnded) {
+        try {
+          res.status(500).json({
+            error: 'Internal server error',
+            message: process.env.NODE_ENV === 'development' ? e.message : 'An error occurred processing your request',
+            requestId: id,
+            timestamp: new Date().toISOString()
+          })
+        } catch (sendError) {
+          // If we can't send the error response, log it
+          logger.error({ id, sendError: sendError.message }, 'failed to send error response')
+        }
+      }
+      
+      // Re-throw to be caught by outer handlers (but only if response wasn't sent)
+      if (!res.headersSent && !res.writableEnded) {
+        throw e
+      }
     }
   }
 }

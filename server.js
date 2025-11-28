@@ -584,9 +584,20 @@ app.all('/api/manufacturing/:resource/:id?', async (req, res, next) => {
 app.all('/api/sites/client/:clientId/:siteId?', async (req, res, next) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'sites.js'))
-    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    if (!handler) {
+      console.error('❌ Sites handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
     return handler(req, res)
   } catch (e) {
+    console.error('❌ Error in sites handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
     return next(e)
   }
 })
@@ -595,9 +606,20 @@ app.all('/api/sites/client/:clientId/:siteId?', async (req, res, next) => {
 app.all('/api/clients', async (req, res, next) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'clients.js'))
-    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    if (!handler) {
+      console.error('❌ Clients handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
     return handler(req, res)
   } catch (e) {
+    console.error('❌ Error in clients handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
     return next(e)
   }
 })
@@ -627,9 +649,20 @@ app.all('/api/clients/:id/rss-subscription', async (req, res, next) => {
 app.all('/api/tags/:id', async (req, res, next) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'tags.js'))
-    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    if (!handler) {
+      console.error('❌ Tags handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
     return handler(req, res)
   } catch (e) {
+    console.error('❌ Error in tags handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
     return next(e)
   }
 })
@@ -638,9 +671,20 @@ app.all('/api/tags/:id', async (req, res, next) => {
 app.all('/api/tags', async (req, res, next) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'tags.js'))
-    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    if (!handler) {
+      console.error('❌ Tags handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
     return handler(req, res)
   } catch (e) {
+    console.error('❌ Error in tags handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
     return next(e)
   }
 })
@@ -649,11 +693,22 @@ app.all('/api/tags', async (req, res, next) => {
 app.all('/api/clients/:id/tags', async (req, res, next) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'clients', '[id]', 'tags.js'))
-    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    if (!handler) {
+      console.error('❌ Client tags handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
     // Pass the client ID as a param
     req.params = req.params || {}
     return handler(req, res)
   } catch (e) {
+    console.error('❌ Error in client tags handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
     return next(e)
   }
 })
@@ -662,9 +717,20 @@ app.all('/api/clients/:id/tags', async (req, res, next) => {
 app.all('/api/clients/:id', async (req, res, next) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'clients', '[id].js'))
-    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    if (!handler) {
+      console.error('❌ Client [id] handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
     return handler(req, res)
   } catch (e) {
+    console.error('❌ Error in client [id] handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
     return next(e)
   }
 })
@@ -673,9 +739,21 @@ app.all('/api/clients/:id', async (req, res, next) => {
 app.all('/api/projects', async (req, res, next) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'projects.js'))
-    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    if (!handler) {
+      console.error('❌ Projects handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
     return handler(req, res)
   } catch (e) {
+    console.error('❌ Error in projects handler:', e)
+    // Ensure JSON is returned even on error
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
     return next(e)
   }
 })
@@ -684,9 +762,21 @@ app.all('/api/projects', async (req, res, next) => {
 app.all('/api/projects/:id', async (req, res, next) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'projects.js'))
-    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    if (!handler) {
+      console.error('❌ Projects handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
     return handler(req, res)
   } catch (e) {
+    console.error('❌ Error in projects handler:', e)
+    // Ensure JSON is returned even on error
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
     return next(e)
   }
 })
@@ -952,9 +1042,21 @@ app.all('/api/users/:id', async (req, res, next) => {
 app.all('/api/users', async (req, res, next) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'users.js'))
-    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    if (!handler) {
+      console.error('❌ Users handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
     return handler(req, res)
   } catch (e) {
+    console.error('❌ Error in users handler:', e)
+    // Ensure JSON is returned even on error
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
     return next(e)
   }
 })

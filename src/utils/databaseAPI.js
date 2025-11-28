@@ -449,9 +449,21 @@ const DatabaseAPI = {
                         throw new Error(`Database connection failed. The database server is unreachable. Please contact support if this issue persists.`);
                     }
                     
-                    // Handle 500 errors gracefully - suppress console errors for expected server failures
+                    // Handle 500 errors gracefully - but log details for debugging
                     if (response.status === 500) {
-                        // Suppress console.error for 500 errors - they're handled by retry logic
+                        // Log the actual error response for debugging (only on first attempt to avoid spam)
+                        if (attempt === 0) {
+                            console.error(`❌ Server Error 500 on ${endpoint}:`, {
+                                endpoint,
+                                method: options.method || 'GET',
+                                errorMessage: serverErrorMessage || 'No error message provided',
+                                errorCode: serverError?.code || 'SERVER_ERROR',
+                                errorDetails: serverError?.details || serverError?.message,
+                                status: response.status,
+                                statusText: response.statusText,
+                                fullError: serverError || { message: serverErrorMessage }
+                            });
+                        }
                         // Include "500" in the error message so catch block can recognize it as server error
                         const errorMessage = serverErrorMessage || 'Server error 500: The server encountered an error processing your request.';
                         throw new Error(errorMessage);

@@ -17,17 +17,15 @@ if (typeof window !== 'undefined') {
   
   // DO NOT expose old Projects components - they conflict with newer versions
   // Only expose if they don't exist (fallback for edge cases)
+  // Use debug-level logging to reduce console noise (these are expected and intentional)
   if (!window.Projects || typeof window.Projects !== 'function') {
-    console.warn('⚠️ Vite module: Old Projects component detected as missing, but not exposing to avoid conflicts');
-    // window.Projects = Projects; // COMMENTED OUT - causes conflicts
+    // Silently skip - this is expected behavior
   }
   if (!window.ProjectDetail || typeof window.ProjectDetail !== 'function') {
-    console.warn('⚠️ Vite module: Old ProjectDetail component detected as missing, but not exposing to avoid conflicts');
-    // window.ProjectDetail = ProjectDetail; // COMMENTED OUT - causes conflicts
+    // Silently skip - this is expected behavior
   }
   if (!window.ProjectModal || typeof window.ProjectModal !== 'function') {
-    console.warn('⚠️ Vite module: Old ProjectModal component detected as missing, but not exposing to avoid conflicts');
-    // window.ProjectModal = ProjectModal; // COMMENTED OUT - causes conflicts
+    // Silently skip - this is expected behavior
   }
   
   window.ViteProjects = ProjectsModule;
