@@ -70,6 +70,17 @@ const LeadDetailModal = ({
                 if (fetchedLead) {
                     console.log('✅ Lead fetched with proposals:', Array.isArray(fetchedLead.proposals) ? fetchedLead.proposals.length : 'not an array');
                     setLead(fetchedLead);
+                    
+                    // Initialize lastSavedDataRef with fetched lead data
+                    const parsedLead = {
+                        ...fetchedLead,
+                        contacts: typeof fetchedLead.contacts === 'string' ? JSON.parse(fetchedLead.contacts || '[]') : (fetchedLead.contacts || []),
+                        followUps: typeof fetchedLead.followUps === 'string' ? JSON.parse(fetchedLead.followUps || '[]') : (fetchedLead.followUps || []),
+                        comments: typeof fetchedLead.comments === 'string' ? JSON.parse(fetchedLead.comments || '[]') : (fetchedLead.comments || []),
+                        proposals: typeof fetchedLead.proposals === 'string' ? JSON.parse(fetchedLead.proposals || '[]') : (fetchedLead.proposals || []),
+                        projectIds: typeof fetchedLead.projectIds === 'string' ? JSON.parse(fetchedLead.projectIds || '[]') : (fetchedLead.projectIds || [])
+                    };
+                    lastSavedDataRef.current = parsedLead;
                 }
             } catch (error) {
                 console.error('Error fetching lead:', error);
@@ -81,6 +92,28 @@ const LeadDetailModal = ({
         
         fetchLead();
     }, [leadId, initialLead]);
+    
+    // Initialize lastSavedDataRef when formData is ready (for initial lead)
+    useEffect(() => {
+        if (lead && formData && formData.name && !lastSavedDataRef.current) {
+            // Initialize with current formData if not already set
+            lastSavedDataRef.current = {
+                ...formData,
+                notes: notesTextareaRef.current?.value || formData.notes || '',
+                projectIds: selectedProjectIds || formData.projectIds || []
+            };
+        }
+    }, [lead, formData, selectedProjectIds]);
+    
+    // Cleanup debounce timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (autoSaveDebounceTimeoutRef.current) {
+                clearTimeout(autoSaveDebounceTimeoutRef.current);
+                autoSaveDebounceTimeoutRef.current = null;
+            }
+        };
+    }, []);
     
     const normalizeLifecycleStage = (value) => {
         switch ((value || '').toLowerCase()) {
@@ -970,8 +1003,39 @@ const LeadDetailModal = ({
     //     }
     // }, [lead?.status, lead?.stage]);
     
+    // Helper function to compare if form data has actually changed
+    const hasFormDataChanged = (currentData, lastSavedData) => {
+        if (!lastSavedData) return true; // If nothing saved yet, consider it changed
+        
+        // Compare critical fields that matter for auto-save
+        const fieldsToCompare = [
+            'name', 'industry', 'source', 'status', 'stage', 'notes',
+            'contacts', 'followUps', 'comments', 'proposals'
+        ];
+        
+        for (const field of fieldsToCompare) {
+            const currentValue = currentData[field];
+            const lastValue = lastSavedData[field];
+            
+            // Deep comparison for arrays/objects
+            if (Array.isArray(currentValue) || Array.isArray(lastValue)) {
+                const currentStr = JSON.stringify(currentValue || []);
+                const lastStr = JSON.stringify(lastValue || []);
+                if (currentStr !== lastStr) return true;
+            } else if (typeof currentValue === 'object' && typeof lastValue === 'object') {
+                const currentStr = JSON.stringify(currentValue || {});
+                const lastStr = JSON.stringify(lastValue || {});
+                if (currentStr !== lastStr) return true;
+            } else if (currentValue !== lastValue) {
+                return true;
+            }
+        }
+        
+        return false;
+    };
+
     // Auto-save function that handles both new and existing leads
-    const handleAutoSave = async (currentFormData, skipIfNewLead = false) => {
+    const handleAutoSave = async (currentFormData, skipIfNewLead = false, skipChangeCheck = false) => {
         // Don't save if there's no name (required field)
         if (!currentFormData.name || currentFormData.name.trim() === '') {
             return false;
@@ -987,9 +1051,32 @@ const LeadDetailModal = ({
             return false;
         }
 
+        // Rate limiting: Don't auto-save if we just saved recently (within 2 seconds)
+        const now = Date.now();
+        const timeSinceLastSave = now - lastAutoSaveAttemptRef.current;
+        if (timeSinceLastSave < 2000 && !skipChangeCheck) {
+            return false; // Skip if we just attempted a save recently
+        }
+
+        // Check if data has actually changed before saving (unless skipChangeCheck is true)
+        if (!skipChangeCheck && lastSavedDataRef.current) {
+            const latestNotes = notesTextareaRef.current?.value || currentFormData.notes || '';
+            const dataToCompare = {
+                ...currentFormData,
+                notes: latestNotes,
+                projectIds: selectedProjectIds
+            };
+            
+            if (!hasFormDataChanged(dataToCompare, lastSavedDataRef.current)) {
+                // No changes detected, skip save
+                return false;
+            }
+        }
+
         try {
             isAutoSavingRef.current = true;
             setIsAutoSaving(true);
+            lastAutoSaveAttemptRef.current = now;
 
             // CRITICAL: Always read notes from textarea ref to ensure we have the latest value
             // This fixes the issue where notes typed in the textarea might not be saved on PC
@@ -1005,6 +1092,14 @@ const LeadDetailModal = ({
             // Use onSave prop if provided
             if (onSave && typeof onSave === 'function') {
                 await onSave(leadData, true); // true = stay in edit mode after save
+                
+                // Update last saved data reference after successful save
+                lastSavedDataRef.current = {
+                    ...leadData,
+                    notes: latestNotes,
+                    projectIds: selectedProjectIds
+                };
+                
                 console.log('✅ Auto-saved lead data when switching tabs');
                 setHasBeenSaved(true); // Mark as saved after successful save
                 return true;
@@ -1023,6 +1118,14 @@ const LeadDetailModal = ({
                         setFormData(prev => ({ ...prev, id: savedLead.id }));
                     }
                 }
+                
+                // Update last saved data reference after successful save
+                lastSavedDataRef.current = {
+                    ...leadData,
+                    notes: latestNotes,
+                    projectIds: selectedProjectIds
+                };
+                
                 setHasBeenSaved(true);
                 return true;
             }
@@ -1036,7 +1139,7 @@ const LeadDetailModal = ({
         }
     };
 
-    // Handle tab change with auto-save
+    // Handle tab change with auto-save (debounced to prevent rate limiting)
     const handleTabChange = async (tab) => {
         // Prevent accessing projects tab (removed)
         if (tab === 'projects') {
@@ -1047,39 +1150,50 @@ const LeadDetailModal = ({
             return;
         }
         
-        // Auto-save current form data before switching tabs
-        // Only save if there's actual data to save (name is required)
-        let currentFormData = formDataRef.current || formData;
-        
-        // CRITICAL FIX: Always sync notes from textarea ref before saving
-        // This ensures notes typed in the textarea are saved even if formData hasn't updated yet
-        if (notesTextareaRef.current) {
-            const latestNotes = notesTextareaRef.current.value || '';
-            currentFormData = {
-                ...currentFormData,
-                notes: latestNotes
-            };
-            // Update formDataRef immediately so it's in sync
-            formDataRef.current = currentFormData;
-        }
-        
-        // Auto-save logic:
-        // 1. For existing leads (leadId exists): Always save when switching tabs
-        // 2. For new leads (no leadId): Create lead when switching away from overview tab (if name exists)
-        if (currentFormData.name && currentFormData.name.trim() !== '') {
-            if (leadId) {
-                // Existing lead: Always save on tab change
-                await handleAutoSave(currentFormData, false);
-            } else if (tab !== 'overview') {
-                // New lead: Create when switching away from overview
-                await handleAutoSave(currentFormData, false);
-            }
-        }
-
+        // Switch tab immediately for better UX
         setActiveTab(tab);
         if (onTabChange) {
             onTabChange(tab);
         }
+        
+        // Clear any pending auto-save
+        if (autoSaveDebounceTimeoutRef.current) {
+            clearTimeout(autoSaveDebounceTimeoutRef.current);
+        }
+        
+        // Debounce auto-save to prevent rapid API calls when switching tabs quickly
+        autoSaveDebounceTimeoutRef.current = setTimeout(async () => {
+            // Auto-save current form data after tab switch (debounced)
+            // Only save if there's actual data to save (name is required)
+            let currentFormData = formDataRef.current || formData;
+            
+            // CRITICAL FIX: Always sync notes from textarea ref before saving
+            // This ensures notes typed in the textarea are saved even if formData hasn't updated yet
+            if (notesTextareaRef.current) {
+                const latestNotes = notesTextareaRef.current.value || '';
+                currentFormData = {
+                    ...currentFormData,
+                    notes: latestNotes
+                };
+                // Update formDataRef immediately so it's in sync
+                formDataRef.current = currentFormData;
+            }
+            
+            // Auto-save logic:
+            // 1. For existing leads (leadId exists): Save when switching tabs (only if changed)
+            // 2. For new leads (no leadId): Create lead when switching away from overview tab (if name exists)
+            if (currentFormData.name && currentFormData.name.trim() !== '') {
+                if (leadId) {
+                    // Existing lead: Save on tab change (with change detection)
+                    await handleAutoSave(currentFormData, false, false);
+                } else if (tab !== 'overview') {
+                    // New lead: Create when switching away from overview
+                    await handleAutoSave(currentFormData, false, false);
+                }
+            }
+            
+            autoSaveDebounceTimeoutRef.current = null;
+        }, 500); // 500ms debounce - wait for user to finish switching tabs
     };
     
     // Restore cursor position after formData.notes changes - use useLayoutEffect for synchronous restoration
