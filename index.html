@@ -561,12 +561,17 @@
         console.log('✅ Global error handlers registered');
     </script>
     
-    <!-- Version polling logic: checks /version and shows reload banner when version changes -->
+    <!-- Version polling logic: Best practice implementation for SPA version updates -->
+    <!-- Checks /version endpoint periodically and on visibility changes (when user returns to tab) -->
     <script>
         (function() {
             const VERSION_STORAGE_KEY = 'abcotronics_app_version';
-            const VERSION_CHECK_INTERVAL_MS = 60 * 1000; // 60 seconds
+            const VERSION_DISMISSED_KEY = 'abcotronics_version_dismissed';
+            const VERSION_CHECK_INTERVAL_MS = 60 * 1000; // 60 seconds - industry standard
             const VERSION_ENDPOINT = '/version';
+            let versionCheckTimer = null;
+            let lastCheckTime = 0;
+            const MIN_CHECK_INTERVAL = 15 * 1000; // Throttle: max once per 15 seconds
 
             function getStoredVersion() {
                 try {
@@ -583,6 +588,24 @@
                     }
                 } catch {
                     // Ignore storage errors (private mode, etc.)
+                }
+            }
+
+            function getDismissedVersion() {
+                try {
+                    return localStorage.getItem(VERSION_DISMISSED_KEY) || null;
+                } catch {
+                    return null;
+                }
+            }
+
+            function setDismissedVersion(version) {
+                try {
+                    if (version) {
+                        localStorage.setItem(VERSION_DISMISSED_KEY, version);
+                    }
+                } catch {
+                    // Ignore storage errors
                 }
             }
 
@@ -620,34 +643,73 @@
                 if (dismissBtn) {
                     dismissBtn.onclick = function() {
                         banner.style.display = 'none';
+                        // Store the dismissed version - banner won't reappear for this version
+                        const latest = getStoredVersion();
+                        if (latest) {
+                            setDismissedVersion(latest);
+                        }
                     };
                 }
             }
 
-            async function initializeVersionWatcher() {
-                const initialVersion = await fetchCurrentVersion();
-                if (initialVersion) {
-                    const stored = getStoredVersion();
-                    if (!stored) {
-                        setStoredVersion(initialVersion);
-                    } else if (stored !== initialVersion) {
-                        // If user opens a tab on an older version and server is already on a newer version
-                        // we immediately prompt for reload
+            async function checkVersion(forceShow = false) {
+                // Throttle checks to avoid excessive server requests
+                const now = Date.now();
+                if (!forceShow && (now - lastCheckTime) < MIN_CHECK_INTERVAL) {
+                    return;
+                }
+                lastCheckTime = now;
+
+                const latest = await fetchCurrentVersion();
+                if (!latest) return;
+
+                const stored = getStoredVersion();
+                const dismissed = getDismissedVersion();
+
+                // If version changed
+                if (stored && stored !== latest) {
+                    // Show banner if user hasn't dismissed this specific new version
+                    if (dismissed !== latest || forceShow) {
                         showBanner();
-                        setStoredVersion(initialVersion);
                     }
                 }
 
-                // Poll periodically for changes
-                setInterval(async () => {
-                    const currentStored = getStoredVersion();
-                    const latest = await fetchCurrentVersion();
-                    if (!latest) return;
-                    if (currentStored && currentStored !== latest) {
-                        showBanner();
-                    }
-                    setStoredVersion(latest);
+                // Always update stored version
+                setStoredVersion(latest);
+            }
+
+            function startPeriodicChecks() {
+                if (versionCheckTimer) {
+                    clearInterval(versionCheckTimer);
+                }
+                versionCheckTimer = setInterval(() => {
+                    checkVersion();
                 }, VERSION_CHECK_INTERVAL_MS);
+            }
+
+            async function initializeVersionWatcher() {
+                // Initial check on page load
+                await checkVersion(true);
+
+                // Start periodic polling (industry standard: 60-300 seconds)
+                startPeriodicChecks();
+
+                // BEST PRACTICE: Check when tab becomes visible (user returns to app)
+                // This is more reliable than 'focus' event and works better with mobile
+                document.addEventListener('visibilitychange', () => {
+                    if (!document.hidden) {
+                        // Tab became visible - check for updates
+                        checkVersion();
+                    }
+                });
+
+                // BEST PRACTICE: Also check on window focus as fallback
+                window.addEventListener('focus', () => {
+                    checkVersion();
+                }, { passive: true });
+
+                // Expose manual check function for debugging/admin use
+                window.checkAppVersion = () => checkVersion(true);
             }
 
             if (document.readyState === 'loading') {
