@@ -99,11 +99,17 @@ async function handler(req, res) {
         const owner = req.user?.sub
         
         // Build where clause for filtering
-        const whereClause = {}
+        // For clientName, use case-insensitive partial matching
+        let whereClause = {}
         if (clientId) {
           whereClause.clientId = clientId
         } else if (clientName) {
-          whereClause.clientName = clientName
+          // Use case-insensitive contains search for clientName to catch variations
+          // e.g., "AccuFarm" matches "AccuFarm (Pty) Ltd" and vice versa
+          whereClause.clientName = {
+            contains: clientName,
+            mode: 'insensitive'
+          }
         }
         
         // Limit the number of job cards returned and support simple pagination

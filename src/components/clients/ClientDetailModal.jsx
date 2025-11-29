@@ -571,21 +571,91 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 return;
             }
             
-            // Use clientId query parameter to filter on the server side
-            // This ensures we get all job cards for this client, not just the first page
-            const response = await fetch(`/api/jobcards?clientId=${encodeURIComponent(client.id)}&pageSize=1000`, {
+            // Normalize client name for comparison (case-insensitive, trimmed)
+            const normalizedClientName = (client.name || '').trim().toLowerCase();
+            const clientIdToMatch = client.id;
+            
+            console.log('🔍 Loading job cards for client:', {
+                clientId: clientIdToMatch,
+                clientName: client.name,
+                normalizedName: normalizedClientName
+            });
+            
+            // Try fetching by clientId first
+            let response = await fetch(`/api/jobcards?clientId=${encodeURIComponent(clientIdToMatch)}&pageSize=1000`, {
                 headers: { 
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 }
             });
             
+            let data = null;
             if (response.ok) {
-                const data = await response.json();
-                // API now filters by clientId, but also filter by name as fallback
-                const clientJobCards = (data.jobCards || []).filter(jc => 
-                    jc.clientId === client.id || jc.clientName === client.name
-                );
+                data = await response.json();
+                console.log(`📋 Job cards from clientId filter: ${(data.jobCards || []).length} found`);
+            } else {
+                console.warn('⚠️ Failed to fetch by clientId, trying by clientName:', response.statusText);
+            }
+            
+            // Also try fetching by clientName as fallback (case-insensitive search)
+            if (!data || (data.jobCards || []).length === 0) {
+                response = await fetch(`/api/jobcards?clientName=${encodeURIComponent(client.name)}&pageSize=1000`, {
+                    headers: { 
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    data = await response.json();
+                    console.log(`📋 Job cards from clientName filter: ${(data.jobCards || []).length} found`);
+                }
+            }
+            
+            if (response.ok && data) {
+                // Flexible filtering: match by clientId or case-insensitive clientName match
+                const allJobCards = data.jobCards || [];
+                console.log(`📋 Total job cards from API: ${allJobCards.length}`);
+                
+                // Filter with flexible matching
+                const clientJobCards = allJobCards.filter(jc => {
+                    // Exact clientId match
+                    if (jc.clientId === clientIdToMatch) {
+                        console.log('✅ Job card matched by clientId:', jc.jobCardNumber);
+                        return true;
+                    }
+                    
+                    // Case-insensitive clientName match
+                    const normalizedJobCardClientName = (jc.clientName || '').trim().toLowerCase();
+                    if (normalizedJobCardClientName && normalizedClientName && 
+                        normalizedJobCardClientName === normalizedClientName) {
+                        console.log('✅ Job card matched by clientName:', jc.jobCardNumber, '(', jc.clientName, ')');
+                        return true;
+                    }
+                    
+                    // Partial name match (for variations like "AccuFarm" vs "AccuFarm (Pty) Ltd")
+                    if (normalizedJobCardClientName && normalizedClientName) {
+                        if (normalizedJobCardClientName.includes(normalizedClientName) || 
+                            normalizedClientName.includes(normalizedJobCardClientName)) {
+                            console.log('✅ Job card matched by partial name:', jc.jobCardNumber, '(', jc.clientName, 'vs', client.name, ')');
+                            return true;
+                        }
+                    }
+                    
+                    return false;
+                });
+                
+                console.log(`✅ Filtered job cards for client: ${clientJobCards.length} found`);
+                if (clientJobCards.length === 0 && allJobCards.length > 0) {
+                    console.warn('⚠️ No job cards matched filter criteria. Sample job card:', {
+                        jobCardNumber: allJobCards[0].jobCardNumber,
+                        jobCardClientId: allJobCards[0].clientId,
+                        jobCardClientName: allJobCards[0].clientName,
+                        expectedClientId: clientIdToMatch,
+                        expectedClientName: client.name
+                    });
+                }
+                
                 setJobCards(clientJobCards);
             } else {
                 console.error('Failed to load job cards:', response.statusText);
