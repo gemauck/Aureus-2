@@ -870,13 +870,12 @@ const Clients = React.memo(() => {
                             <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Industry</th>
                             <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Stage</th>
                             <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>AIDA Status</th>
-                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Time Since Contact</th>
                         </tr>
                     </thead>
                     <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
                         {filteredLeads.length === 0 ? (
                             <tr>
-                                <td colSpan="6" className={`px-6 py-12 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <td colSpan="5" className={`px-6 py-12 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                     <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
                                         <i className="fas fa-user-plus text-2xl text-gray-400"></i>
                                     </div>
@@ -918,16 +917,6 @@ const Clients = React.memo(() => {
                                         }`}>
                                             {lead.status || 'Potential'}
                                         </span>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
-                                            {getTimeSinceFirstContact(lead.firstContactDate)}
-                                        </div>
-                                        {lead.firstContactDate && (
-                                            <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                {new Date(lead.firstContactDate).toLocaleDateString()}
-                                            </div>
-                                        )}
                                     </td>
                                 </tr>
                             ))
