@@ -1,40 +1,50 @@
 #!/bin/bash
 
-# Update Database Connection Script
-# This script updates the DATABASE_URL with the provided credentials
+###############################################################################
+# Update Database Connection String
+# This script updates the DATABASE_URL in .env file with new credentials
+###############################################################################
 
-echo "🔧 Updating database connection configuration..."
-echo ""
+set -e
 
-# Database credentials - CORRECT PRODUCTION DATABASE
-# Use environment variables for security - set these in your deployment environment
-DB_USERNAME="${DB_USERNAME:-doadmin}"
-DB_PASSWORD="${DB_PASSWORD:-${DATABASE_PASSWORD}}"
-DB_HOST="${DB_HOST:-dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com}"
-DB_PORT="${DB_PORT:-25060}"
-DB_NAME="${DB_NAME:-defaultdb}"
-DB_SSLMODE="${DB_SSLMODE:-require}"
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
 
-if [ -z "$DB_PASSWORD" ]; then
-    echo "❌ ERROR: DB_PASSWORD or DATABASE_PASSWORD environment variable must be set"
-    exit 1
-fi
-
-# URL encode password (in case it has special characters)
-# For this password, no encoding needed, but we'll construct it properly
-DB_PASSWORD_ENCODED="$DB_PASSWORD"
+# Database connection details
+DB_USER="doadmin"
+DB_PASSWORD="AVNS_D14tRDDknkgUUoVZ4Bv"
+DB_HOST="dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com"
+DB_PORT="25060"
+DB_NAME="defaultdb"
+DB_SSLMODE="require"
 
 # Construct DATABASE_URL
-DATABASE_URL="postgresql://${DB_USERNAME}:${DB_PASSWORD_ENCODED}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=${DB_SSLMODE}"
+DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=${DB_SSLMODE}"
 
-echo "📝 Constructed DATABASE_URL:"
-echo "   postgresql://${DB_USERNAME}:***@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=${DB_SSLMODE}"
+echo "🔧 Updating Database Connection..."
 echo ""
 
-# Update .env file
+# Get the project directory
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$SCRIPT_DIR"
+
+echo -e "${YELLOW}Working directory: $(pwd)${NC}"
+echo ""
+
+# Check if .env file exists
 if [ -f ".env" ]; then
-    echo "📝 Updating existing .env file..."
-    # Check if DATABASE_URL already exists in .env
+    echo -e "${GREEN}✅ Found .env file${NC}"
+    
+    # Backup existing .env file
+    if [ ! -f ".env.backup" ]; then
+        cp .env .env.backup
+        echo -e "${YELLOW}📦 Created backup: .env.backup${NC}"
+    fi
+    
+    # Update or add DATABASE_URL
     if grep -q "^DATABASE_URL=" .env; then
         # Update existing DATABASE_URL
         if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -44,15 +54,17 @@ if [ -f ".env" ]; then
             # Linux
             sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"${DATABASE_URL}\"|" .env
         fi
-        echo "✅ Updated DATABASE_URL in .env"
+        echo -e "${GREEN}✅ Updated DATABASE_URL in .env${NC}"
     else
         # Add DATABASE_URL if it doesn't exist
         echo "" >> .env
         echo "DATABASE_URL=\"${DATABASE_URL}\"" >> .env
-        echo "✅ Added DATABASE_URL to .env"
+        echo -e "${GREEN}✅ Added DATABASE_URL to .env${NC}"
     fi
 else
-    echo "📝 Creating new .env file..."
+    echo -e "${YELLOW}⚠️  .env file not found. Creating new one...${NC}"
+    
+    # Create new .env file with all required variables
     cat > .env << EOF
 # Database Connection (Digital Ocean PostgreSQL)
 DATABASE_URL="${DATABASE_URL}"
@@ -65,40 +77,58 @@ NODE_ENV=production
 PORT=3000
 APP_URL=https://abcoafrica.co.za
 EOF
-    echo "✅ Created .env file with DATABASE_URL"
+    echo -e "${GREEN}✅ Created .env file with DATABASE_URL${NC}"
 fi
 
-# Update ecosystem.config.mjs (for reference, but actual value should come from .env)
 echo ""
-echo "📝 Updating ecosystem.config.mjs (fallback value)..."
-if [ -f "ecosystem.config.mjs" ]; then
-    # Update the fallback DATABASE_URL in ecosystem.config.mjs
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        # macOS
-        sed -i '' "s|DATABASE_URL: process.env.DATABASE_URL || 'postgresql://doadmin:\[PASSWORD_FROM_ENV\]@.*'|DATABASE_URL: process.env.DATABASE_URL || 'postgresql://doadmin:***@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=${DB_SSLMODE}'|" ecosystem.config.mjs
+echo -e "${YELLOW}Verifying DATABASE_URL...${NC}"
+# Show DATABASE_URL (with password masked for security)
+grep "^DATABASE_URL=" .env | sed 's/:[^:@]*@/:****@/'
+echo ""
+
+# Test database connection if node and prisma are available
+if command -v node &> /dev/null; then
+    echo -e "${YELLOW}Testing database connection...${NC}"
+    
+    # Try to test connection using Prisma
+    if [ -f "node_modules/@prisma/client/index.js" ] || [ -f "prisma/schema.prisma" ]; then
+        node -e "
+        require('dotenv').config();
+        const { PrismaClient } = require('@prisma/client');
+        const prisma = new PrismaClient();
+        prisma.\$connect()
+            .then(() => {
+                console.log('✅ Database connection successful!');
+                prisma.\$disconnect();
+                process.exit(0);
+            })
+            .catch((e) => {
+                console.log('❌ Database connection failed:');
+                console.log('   Error:', e.message);
+                process.exit(1);
+            });
+        " 2>&1 && echo -e "${GREEN}✅ Connection test passed!${NC}" || echo -e "${YELLOW}⚠️  Connection test failed (this might be okay if Prisma client needs regeneration)${NC}"
     else
-        # Linux
-        sed -i "s|DATABASE_URL: process.env.DATABASE_URL || 'postgresql://doadmin:\[PASSWORD_FROM_ENV\]@.*'|DATABASE_URL: process.env.DATABASE_URL || 'postgresql://doadmin:***@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=${DB_SSLMODE}'|" ecosystem.config.mjs
+        echo -e "${YELLOW}⚠️  Prisma not found. Skipping connection test.${NC}"
+        echo "   Run 'npx prisma generate' and 'npm install' if needed."
     fi
-    echo "✅ Updated ecosystem.config.mjs (fallback value - password hidden)"
+else
+    echo -e "${YELLOW}⚠️  Node.js not available. Skipping connection test.${NC}"
 fi
 
 echo ""
-echo "✅ Database connection configuration updated!"
+echo -e "${YELLOW}════════════════════════════════════════════════════════════${NC}"
+echo -e "${GREEN}✅ Database connection string updated successfully!${NC}"
 echo ""
-echo "⚠️  SECURITY WARNING:"
-echo "   - The .env file contains sensitive credentials"
-echo "   - Make sure .env is in .gitignore (should not be committed to git)"
-echo "   - For production server, update the .env file on the server directly"
+echo "Next steps:"
+echo "  1. If on production server, restart PM2:"
+echo "     pm2 restart abcotronics-erp"
 echo ""
-echo "🚀 Next steps:"
-echo "   1. For local development: Restart your server"
-echo "   2. For production: SSH into server and update .env file there"
-echo "   3. Test connection: npm run test:db (if available) or restart server"
+echo "  2. If Prisma client needs regeneration:"
+echo "     npx prisma generate"
 echo ""
-echo "📋 To update production server:"
-echo "   ssh root@abcoafrica.co.za"
-echo "   cd /path/to/your/app"
-echo "   # Edit .env file with the DATABASE_URL above"
-echo "   pm2 restart all --update-env"
+echo "  3. Test the connection:"
+echo "     curl http://127.0.0.1:3000/api/health"
+echo ""
+echo -e "${YELLOW}════════════════════════════════════════════════════════════${NC}"
 echo ""

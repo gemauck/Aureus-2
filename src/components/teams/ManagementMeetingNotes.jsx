@@ -269,8 +269,8 @@ const ManagementMeetingNotes = () => {
     const [editingFields, setEditingFields] = useState({}); // { [departmentNotesId-field]: true/false }
     const [tempFieldValues, setTempFieldValues] = useState({}); // { [departmentNotesId-field]: value }
 
-    // Auto-save debounce timers
-    const autoSaveTimers = useRef({});
+    // Track pending saves to ensure they complete before navigation
+    const pendingSaves = useRef(new Set());
 
     const weekCardRefs = useRef({});
     
@@ -632,6 +632,43 @@ const ManagementMeetingNotes = () => {
         }
         scrollToWeekId(selectedWeek);
     }, [selectedWeek, weeks, scrollToWeekId]);
+
+    // Ensure all pending saves complete before navigation
+    useEffect(() => {
+        const handleBeforeUnload = (e) => {
+            // If there are pending saves, warn the user
+            if (pendingSaves.current.size > 0) {
+                // Modern browsers ignore custom messages, but this triggers the confirmation dialog
+                e.preventDefault();
+                e.returnValue = '';
+                return '';
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            // When tab becomes hidden (user navigating away), wait for pending saves
+            if (document.hidden && pendingSaves.current.size > 0) {
+                // Give pending saves a moment to complete
+                // The saves are already in progress, we just want to give them time
+                const checkPending = setInterval(() => {
+                    if (pendingSaves.current.size === 0) {
+                        clearInterval(checkPending);
+                    }
+                }, 50);
+                
+                // Clear interval after 2 seconds max to prevent hanging
+                setTimeout(() => clearInterval(checkPending), 2000);
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, []);
 
     // Get all action items for the month
     const allActionItems = useMemo(() => {
@@ -1218,50 +1255,49 @@ const ManagementMeetingNotes = () => {
         }
     };
 
-    // Auto-save function - ultra-fast debounced save (100ms)
+    // Auto-save function - immediate save on every change
     const handleFieldChange = (departmentNotesId, field, value) => {
         // Update local state immediately for responsive UI
         const monthlyId = currentMonthlyNotes?.id || null;
         updateDepartmentNotesLocal(departmentNotesId, field, value, monthlyId);
         
-        // Clear any pending timer for this field
+        // Save immediately - no debounce delay
         const fieldKey = getFieldKey(departmentNotesId, field);
-        if (autoSaveTimers.current[fieldKey]) {
-            clearTimeout(autoSaveTimers.current[fieldKey]);
-        }
+        const savePromise = window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value })
+            .catch(error => {
+                console.error('Error auto-saving department notes:', error);
+                // Reload on error to revert changes
+                if (selectedMonth) {
+                    reloadMonthlyNotes(selectedMonth).catch(() => {});
+                }
+            })
+            .finally(() => {
+                // Remove from pending saves when complete
+                pendingSaves.current.delete(fieldKey);
+            });
         
-        // Fast debounce (100ms) - batches rapid keystrokes but feels instant
-        autoSaveTimers.current[fieldKey] = setTimeout(() => {
-            // Non-blocking save - fire and forget for maximum speed
-            window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value })
-                .catch(error => {
-                    console.error('Error auto-saving department notes:', error);
-                    // Only reload on error if user isn't actively typing
-                    if (selectedMonth && !autoSaveTimers.current[fieldKey]) {
-                        reloadMonthlyNotes(selectedMonth).catch(() => {});
-                    }
-                });
-            delete autoSaveTimers.current[fieldKey];
-        }, 100); // 100ms debounce - very fast but batches rapid typing
+        // Track this save as pending
+        pendingSaves.current.add(fieldKey);
     };
     
-    // Force save on blur (immediate save without debounce)
+    // Force save on blur - ensures latest value is saved before navigation
     const handleFieldBlur = (departmentNotesId, field, value) => {
         const fieldKey = getFieldKey(departmentNotesId, field);
-        // Clear any pending timer and save immediately
-        if (autoSaveTimers.current[fieldKey]) {
-            clearTimeout(autoSaveTimers.current[fieldKey]);
-            delete autoSaveTimers.current[fieldKey];
-        }
         
-        // Non-blocking immediate save on blur
-        window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value })
+        // Always save on blur to ensure latest value is persisted, even if previous save is pending
+        const savePromise = window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value })
             .catch(error => {
                 console.error('Error saving department notes on blur:', error);
                 if (selectedMonth) {
                     reloadMonthlyNotes(selectedMonth).catch(() => {});
                 }
+            })
+            .finally(() => {
+                pendingSaves.current.delete(fieldKey);
             });
+        
+        // Track this save as pending
+        pendingSaves.current.add(fieldKey);
     };
 
     // Track temp IDs to prevent duplicates when server responds

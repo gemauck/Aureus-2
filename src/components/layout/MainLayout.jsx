@@ -141,18 +141,6 @@ const MainLayout = () => {
     const { user, logout } = window.useAuth();
     const { theme, toggleTheme, toggleSystemPreference, isFollowingSystem, systemPreference, isDark } = window.useTheme();
     
-    // Debug user object immediately
-    React.useEffect(() => {
-        console.error('🚨 DEBUG: MainLayout user object:', {
-            user,
-            userType: typeof user,
-            hasUser: !!user,
-            userId: user?.id,
-            userEmail: user?.email,
-            userName: user?.name,
-            userRole: user?.role,
-        });
-    }, [user]);
 
     // Update URL when page changes
     const navigateToPage = React.useCallback((page, options = {}) => {
