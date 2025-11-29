@@ -31,6 +31,10 @@ const LeadDetailModal = ({
         if (initialTab === 'proposals' && !isAdmin) {
             return 'overview';
         }
+        // If user tries to access projects tab (which no longer exists), default to overview
+        if (initialTab === 'projects') {
+            return 'overview';
+        }
         return initialTab;
     });
     const [hasBeenSaved, setHasBeenSaved] = useState(false); // Track if lead has been saved at least once
@@ -1027,6 +1031,10 @@ const LeadDetailModal = ({
 
     // Handle tab change with auto-save
     const handleTabChange = async (tab) => {
+        // Prevent accessing projects tab (removed)
+        if (tab === 'projects') {
+            return;
+        }
         // Prevent non-admins from accessing proposals tab
         if (tab === 'proposals' && !isAdmin) {
             return;
@@ -2059,12 +2067,6 @@ const LeadDetailModal = ({
         }
     };
 
-    const handleToggleProject = (projectId) => {
-        const newSelectedIds = selectedProjectIds.includes(projectId)
-            ? selectedProjectIds.filter(id => id !== projectId)
-            : [...selectedProjectIds, projectId];
-        setSelectedProjectIds(newSelectedIds);
-    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -2109,12 +2111,6 @@ const LeadDetailModal = ({
         }
     };
 
-    const leadProjects = allProjects?.filter(p => selectedProjectIds.includes(p.id)) || [];
-    // Only show available projects that belong to THIS lead (match by name)
-    const availableProjects = allProjects?.filter(p => 
-        !selectedProjectIds.includes(p.id) && 
-        p.client === formData.name
-    ) || [];
     const upcomingFollowUps = (Array.isArray(formData.followUps) ? formData.followUps : [])
         .filter(f => !f.completed)
         .sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -2198,7 +2194,7 @@ const LeadDetailModal = ({
                 {/* Tabs */}
                 <div className="border-b border-gray-200 px-3 sm:px-6">
                     <div className="flex flex-wrap gap-2 sm:gap-6">
-                        {['overview', 'contacts', 'calendar', 'projects', ...(isAdmin ? ['proposals'] : []), 'activity', 'notes'].map(tab => (
+                        {['overview', 'contacts', 'calendar', ...(isAdmin ? ['proposals'] : []), 'activity', 'notes'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => handleTabChange(tab)}
@@ -2213,7 +2209,6 @@ const LeadDetailModal = ({
                                     tab === 'overview' ? 'info-circle' :
                                     tab === 'contacts' ? 'users' :
                                     tab === 'calendar' ? 'calendar-alt' :
-                                    tab === 'projects' ? 'folder-open' :
                                     tab === 'proposals' ? 'file-contract' :
                                     tab === 'activity' ? 'history' :
                                     'comment-alt'
@@ -2222,11 +2217,6 @@ const LeadDetailModal = ({
                                 {tab === 'contacts' && Array.isArray(formData.contacts) && formData.contacts.length > 0 && (
                                     <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
                                         {formData.contacts.length}
-                                    </span>
-                                )}
-                                {tab === 'projects' && selectedProjectIds.length > 0 && (
-                                    <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
-                                        {selectedProjectIds.length}
                                     </span>
                                 )}
                                 {tab === 'proposals' && Array.isArray(formData.proposals) && formData.proposals.length > 0 && (
@@ -3285,92 +3275,6 @@ const LeadDetailModal = ({
                                                 </div>
                                             </div>
                                         ))}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Projects Tab */}
-                        {activeTab === 'projects' && (
-                            <div className="space-y-4">
-                                <div className="flex justify-between items-center">
-                                    <h3 className="text-lg font-semibold text-gray-900">Associated Projects</h3>
-                                    <div className="text-sm text-gray-600">
-                                        {selectedProjectIds.length} project{selectedProjectIds.length !== 1 ? 's' : ''} linked
-                                    </div>
-                                </div>
-
-                                {leadProjects.length > 0 && (
-                                    <div className="space-y-2">
-                                        <h4 className="font-medium text-gray-900 text-sm">Linked Projects</h4>
-                                        {leadProjects.map(project => (
-                                            <div key={project.id} className="bg-white border border-gray-200 rounded-lg p-3 hover:border-primary-300 transition">
-                                                <div className="flex justify-between items-start">
-                                                    <div className="flex-1">
-                                                        <div className="flex items-center gap-2 mb-1">
-                                                            <h4 className="font-semibold text-gray-900 text-sm">{project.name}</h4>
-                                                            <span className={`px-2 py-0.5 text-xs rounded font-medium ${
-                                                                project.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
-                                                                project.status === 'Review' ? 'bg-yellow-100 text-yellow-700' :
-                                                                project.status === 'Completed' ? 'bg-green-100 text-green-700' :
-                                                                'bg-gray-100 text-gray-700'
-                                                            }`}>
-                                                                {project.status}
-                                                            </span>
-                                                        </div>
-                                                        <div className="text-xs text-gray-600 space-y-0.5">
-                                                            <div><i className="fas fa-tag mr-1.5 w-4"></i>{project.type}</div>
-                                                            <div><i className="fas fa-calendar mr-1.5 w-4"></i>{project.startDate} - {project.dueDate}</div>
-                                                            {project.assignedTo && (
-                                                                <div><i className="fas fa-user mr-1.5 w-4"></i>{project.assignedTo}</div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleToggleProject(project.id)}
-                                                        className="text-red-600 hover:text-red-700 p-1"
-                                                        title="Unlink Project"
-                                                    >
-                                                        <i className="fas fa-unlink"></i>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {availableProjects.length > 0 && (
-                                    <div className="space-y-2">
-                                        <h4 className="font-medium text-gray-900 text-sm">Available Projects to Link</h4>
-                                        {availableProjects.map(project => (
-                                            <div key={project.id} className="bg-gray-50 border border-gray-200 rounded-lg p-3 hover:border-primary-300 transition">
-                                                <div className="flex justify-between items-start">
-                                                    <div className="flex-1">
-                                                        <h4 className="font-semibold text-gray-900 text-sm mb-1">{project.name}</h4>
-                                                        <div className="text-xs text-gray-600">
-                                                            {project.client && <span className="mr-2"><i className="fas fa-building mr-1"></i>{project.client}</span>}
-                                                            <span><i className="fas fa-tag mr-1"></i>{project.type}</span>
-                                                        </div>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleToggleProject(project.id)}
-                                                        className="text-primary-600 hover:text-primary-700 p-1"
-                                                        title="Link Project"
-                                                    >
-                                                        <i className="fas fa-link"></i>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-
-                                {availableProjects.length === 0 && leadProjects.length === 0 && (
-                                    <div className="text-center py-8 text-gray-500 text-sm">
-                                        <i className="fas fa-folder-open text-3xl mb-2"></i>
-                                        <p>No projects available</p>
                                     </div>
                                 )}
                             </div>
@@ -4783,7 +4687,7 @@ const LeadDetailModal = ({
                     React.createElement('form', { onSubmit: handleSubmit, className: 'h-full flex flex-col' },
                         React.createElement('div', { className: 'border-b border-gray-200 px-3 sm:px-6' },
                             React.createElement('div', { className: 'flex gap-2 sm:gap-6 overflow-x-auto scrollbar-hide', style: { scrollbarWidth: 'none', msOverflowStyle: 'none' } },
-                                ['overview', 'contacts', 'calendar', 'projects', 'proposals', 'activity', 'notes'].map(tab =>
+                                ['overview', 'contacts', 'calendar', ...(isAdmin ? ['proposals'] : []), 'activity', 'notes'].map(tab =>
                                     React.createElement('button', {
                                         key: tab,
                                         onClick: () => handleTabChange(tab),
