@@ -357,7 +357,7 @@ function processClientData(rawClients, cacheKey) {
                 return [];
             }
             // Extract tags from nested structure if needed: [{ tag: { id, name, color } }] -> [{ id, name, color }]
-            return c.tags
+            const processedTags = c.tags
                 .map(t => {
                     // If it's already a Tag object with id and name, use it
                     if (t && typeof t === 'object' && t.id && t.name) {
@@ -389,6 +389,13 @@ function processClientData(rawClients, cacheKey) {
                     return null;
                 })
                 .filter(Boolean);
+            
+            // Debug logging for first few clients with tags
+            if (processedTags.length > 0 && Math.random() < 0.1) {
+                console.log(`🏷️ Client ${c.name} (${c.id}) tags processed:`, processedTags);
+            }
+            
+            return processedTags;
         })(),
         ownerId: c.ownerId || null,
         isStarred,
@@ -647,7 +654,6 @@ const Clients = React.memo(() => {
     const [viewMode, setViewMode] = useState('clients');
     const [isPipelineLoading, setIsPipelineLoading] = useState(false);
     const isLoadingOpportunitiesRef = useRef(false); // Prevent concurrent opportunity loads
-    const [pipelineBoardView, setPipelineBoardView] = useState('list');
     const [pipelineTypeFilter, setPipelineTypeFilter] = useState('all');
     const PipelineComponent = useEnsureGlobalComponent('Pipeline');
     const isNewPipelineAvailable = Boolean(PipelineComponent);
@@ -1280,7 +1286,15 @@ const Clients = React.memo(() => {
                 console.log(`⚡ API call: ${(apiEndTime - apiStartTime).toFixed(1)}ms`);
                 // DatabaseAPI returns { data: { clients: [...] } }, while api.listClients might return { data: { clients: [...] } }
                 const apiClients = res?.data?.clients || res?.clients || [];
-                console.log(`🔍 Raw API clients received: ${apiClients.length}`, apiClients);
+                console.log(`🔍 Raw API clients received: ${apiClients.length}`);
+                
+                // Debug: Check if any clients have tags in API response
+                const clientsWithTags = apiClients.filter(c => c.tags && Array.isArray(c.tags) && c.tags.length > 0);
+                if (clientsWithTags.length > 0) {
+                    console.log(`🏷️ Found ${clientsWithTags.length} clients with tags in API response:`, clientsWithTags.slice(0, 3).map(c => ({ name: c.name, tags: c.tags })));
+                } else {
+                    console.log(`⚠️ No clients with tags found in API response. First client sample:`, apiClients[0] ? { name: apiClients[0].name, tags: apiClients[0].tags, tagsType: typeof apiClients[0].tags } : 'no clients');
+                }
                 
                 // If API returns no clients, use cached data
                 if (apiClients.length === 0 && cachedClients && cachedClients.length > 0) {
@@ -5423,6 +5437,19 @@ const Clients = React.memo(() => {
                     <span className="sm:hidden">Leads</span>
                 </button>
                 <button
+                    onClick={() => setViewMode('news-feed')}
+                    className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                        viewMode === 'news-feed' 
+                            ? 'bg-blue-600 text-white shadow-sm' 
+                            : isDark 
+                                ? 'text-gray-300 hover:text-gray-100 hover:bg-gray-700' 
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    }`}
+                >
+                    <i className="fas fa-newspaper mr-2"></i>
+                    News Feed
+                </button>
+                <button
                     onClick={() => {
                         setViewMode('pipeline');
                     }}
@@ -5436,19 +5463,6 @@ const Clients = React.memo(() => {
                 >
                     <i className="fas fa-stream mr-2"></i>
                     Pipeline
-                </button>
-                <button
-                    onClick={() => setViewMode('news-feed')}
-                    className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-                        viewMode === 'news-feed' 
-                            ? 'bg-blue-600 text-white shadow-sm' 
-                            : isDark 
-                                ? 'text-gray-300 hover:text-gray-100 hover:bg-gray-700' 
-                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                    }`}
-                >
-                    <i className="fas fa-newspaper mr-2"></i>
-                    News Feed
                 </button>
             </div>
 
