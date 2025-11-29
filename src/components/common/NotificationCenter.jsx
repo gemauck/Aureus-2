@@ -11,31 +11,10 @@ const NotificationCenter = () => {
     const consecutiveFailuresRef = useRef(0);
     const pollingIntervalRef = useRef(null);
     const isPollingPausedRef = useRef(false);
+    const pollingDelayRef = useRef(30000); // Start with 30 seconds, will increase on rate limits
     
-    useEffect(() => {
-        loadNotifications();
-        
-        // Poll for new notifications every 30 seconds
-        // Only poll if we haven't paused due to auth failures
-        const startPolling = () => {
-            if (pollingIntervalRef.current) {
-                clearInterval(pollingIntervalRef.current);
-            }
-            pollingIntervalRef.current = setInterval(() => {
-                if (!isPollingPausedRef.current) {
-                    loadNotifications();
-                }
-            }, 30000);
-        };
-        
-        startPolling();
-        
-        return () => {
-            if (pollingIntervalRef.current) {
-                clearInterval(pollingIntervalRef.current);
-            }
-        };
-    }, []);
+    // Helper function to restart polling - will be defined after loadNotifications
+    const restartPollingRef = useRef(null);
     
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -132,16 +111,39 @@ const NotificationCenter = () => {
                 // Reset failure counter on success
                 if (consecutiveFailuresRef.current > 0) {
                     consecutiveFailuresRef.current = 0;
+                    // Reset polling delay to normal (30 seconds)
+                    pollingDelayRef.current = 30000;
                     // Resume polling if it was paused
                     if (isPollingPausedRef.current) {
                         isPollingPausedRef.current = false;
                         console.log('✅ NotificationCenter: Resuming polling after successful authentication');
+                        // Restart polling with normal delay
+                        if (restartPollingRef.current) restartPollingRef.current();
+                    } else if (pollingDelayRef.current !== 30000) {
+                        // If delay was increased due to rate limiting, restart with normal delay
+                        if (restartPollingRef.current) restartPollingRef.current();
                     }
                 }
             } catch (error) {
                 // DatabaseAPI.makeRequest throws errors for failed requests
                 const errorMessage = error?.message || error?.toString() || 'Unknown error';
-                if (errorMessage.includes('401') || errorMessage.includes('Unauthorized') || errorMessage.includes('Authentication expired')) {
+                const isRateLimit = error?.status === 429 || errorMessage.includes('429') || errorMessage.includes('Too many requests') || errorMessage.includes('rate limit');
+                
+                if (isRateLimit) {
+                    consecutiveFailuresRef.current++;
+                    // Exponential backoff for rate limits: 30s -> 60s -> 120s -> 240s (max 4 minutes)
+                    const backoffDelays = [60000, 120000, 240000];
+                    const backoffIndex = Math.min(consecutiveFailuresRef.current - 1, backoffDelays.length - 1);
+                    pollingDelayRef.current = backoffDelays[backoffIndex] || 240000;
+                    
+                    console.warn(`⚠️ NotificationCenter: Rate limit hit. Increasing polling delay to ${pollingDelayRef.current / 1000}s`);
+                    
+                    // Restart polling with increased delay
+                    if (restartPollingRef.current) restartPollingRef.current();
+                    
+                    // Re-throw to be caught by outer catch
+                    throw error;
+                } else if (errorMessage.includes('401') || errorMessage.includes('Unauthorized') || errorMessage.includes('Authentication expired')) {
                     consecutiveFailuresRef.current++;
                     // Pause polling after 3 consecutive 401 errors
                     if (consecutiveFailuresRef.current >= 3) {
@@ -182,6 +184,33 @@ const NotificationCenter = () => {
             setLoading(false);
         }
     };
+    
+    // Initialize polling after loadNotifications is defined
+    useEffect(() => {
+        // Define restart polling function that calls loadNotifications
+        restartPollingRef.current = () => {
+            if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+            }
+            if (!isPollingPausedRef.current) {
+                pollingIntervalRef.current = setInterval(() => {
+                    if (!isPollingPausedRef.current) {
+                        loadNotifications();
+                    }
+                }, pollingDelayRef.current);
+            }
+        };
+        
+        // Load notifications immediately, then start polling
+        loadNotifications();
+        restartPollingRef.current();
+        
+        return () => {
+            if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+            }
+        };
+    }, []);
     
     const markAsRead = async (notificationIds) => {
         try {

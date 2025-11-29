@@ -615,72 +615,51 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 }
             }
             
-            // Strategy 3: Fallback to fetching ALL job cards and filtering client-side
-            if (!data || (data.jobCards || []).length === 0) {
-                response = await fetch(`/api/jobcards?pageSize=5000`, {
-                    headers: { 
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                if (response.ok) {
-                    data = await response.json();
-                    console.log(`📋 Fetched ALL job cards as fallback: ${(data.jobCards || []).length} found`);
+            // Strategy 3 removed: Expensive fallback with pageSize=5000 was causing rate limit (429) errors
+            
+            // Handle response errors (including rate limiting)
+            if (response && !response.ok) {
+                if (response.status === 429) {
+                    console.warn('⚠️ Rate limit exceeded while loading job cards. Please wait a moment and try again.');
+                    setError('Too many requests. Please wait a moment before refreshing.');
+                    setLoadingJobCards(false);
+                    return;
                 }
+                
+                // For other errors, check if we got any data from previous strategies
+                if (!data) {
+                    const errorText = await response.text().catch(() => 'Unknown error');
+                    console.error('❌ Failed to load job cards:', response.status, errorText);
+                    setError(`Failed to load job cards (${response.status}). Please try again.`);
+                    setLoadingJobCards(false);
+                    return;
+                }
+                // If we have data from a previous strategy, continue with that
             }
             
-            if (response && response.ok && data) {
-                // Flexible filtering: match by clientId or case-insensitive clientName match
-                const allJobCards = data.jobCards || [];
-                console.log(`📋 Total job cards from API: ${allJobCards.length}`);
-                
-                // Filter with flexible matching
-                const clientJobCards = allJobCards.filter(jc => {
-                    // Exact clientId match
-                    if (jc.clientId === clientIdToMatch) {
-                        console.log('✅ Job card matched by clientId:', jc.jobCardNumber);
-                        return true;
-                    }
-                    
-                    // Case-insensitive clientName match
-                    const normalizedJobCardClientName = (jc.clientName || '').trim().toLowerCase();
-                    if (normalizedJobCardClientName && normalizedClientName && 
-                        normalizedJobCardClientName === normalizedClientName) {
-                        console.log('✅ Job card matched by clientName:', jc.jobCardNumber, '(', jc.clientName, ')');
-                        return true;
-                    }
-                    
-                    // Partial name match (for variations like "AccuFarm" vs "AccuFarm (Pty) Ltd")
-                    if (normalizedJobCardClientName && normalizedClientName) {
-                        if (normalizedJobCardClientName.includes(normalizedClientName) || 
-                            normalizedClientName.includes(normalizedJobCardClientName)) {
-                            console.log('✅ Job card matched by partial name:', jc.jobCardNumber, '(', jc.clientName, 'vs', client.name, ')');
-                            return true;
-                        }
-                    }
-                    
-                    return false;
-                });
-                
-                console.log(`✅ Filtered job cards for client: ${clientJobCards.length} found`);
-                if (clientJobCards.length === 0 && allJobCards.length > 0) {
-                    console.warn('⚠️ No job cards matched filter criteria. Sample job card:', {
-                        jobCardNumber: allJobCards[0].jobCardNumber,
-                        jobCardClientId: allJobCards[0].clientId,
-                        jobCardClientName: allJobCards[0].clientName,
-                        expectedClientId: clientIdToMatch,
-                        expectedClientName: client.name
-                    });
-                }
-                
+            // If we successfully got data from either strategy, use it
+            if (data && data.jobCards) {
+                const clientJobCards = data.jobCards || [];
+                console.log(`✅ Job cards for client: ${clientJobCards.length} found`);
                 setJobCards(clientJobCards);
+            } else if (response && !response.ok) {
+                // No data and error response
+                console.error('❌ Failed to load job cards: No data received');
+                setError('Failed to load job cards. Please try again.');
+                setJobCards([]);
             } else {
-                console.error('Failed to load job cards:', response?.statusText || 'Unknown error');
+                // Response OK but no job cards found - this is valid (client may have no job cards)
+                console.log('ℹ️ No job cards found for this client');
                 setJobCards([]);
             }
         } catch (error) {
             console.error('Error loading job cards:', error);
+            // Handle rate limit errors in catch block as well
+            if (error?.status === 429 || error?.message?.includes('429')) {
+                setError('Too many requests. Please wait a moment before refreshing.');
+            } else {
+                setError('Failed to load job cards. Please try again.');
+            }
             setJobCards([]);
         } finally {
             setLoadingJobCards(false);
