@@ -23,6 +23,9 @@ yarn-error.log*
 .env.production.local
 .env.production.backup
 
+# Database credentials (server-side only, never commit)
+.db-credentials.sh
+
 # Build outputs
 dist/
 build/

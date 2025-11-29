@@ -68,12 +68,51 @@ if command -v npx &> /dev/null && [ -f prisma/schema.prisma ]; then
     npx prisma generate || echo "⚠️  Prisma generate failed, continuing anyway..."
 fi
 
+# Set correct DATABASE_URL - ALWAYS use production database credentials
+echo ""
+echo "🔧 Setting correct DATABASE_URL in .env..."
+# Load credentials from server-side file (created by setup-db-credentials-on-server.sh)
+CREDS_FILE=".db-credentials.sh"
+if [ -f "\$CREDS_FILE" ]; then
+    source "\$CREDS_FILE"
+    echo "✅ Loaded credentials from \$CREDS_FILE"
+else
+    echo "❌ ERROR: Credentials file not found: \$CREDS_FILE"
+    echo "   Please run setup-db-credentials-on-server.sh first to create credentials file"
+    exit 1
+fi
+
+DATABASE_URL="postgresql://\${DB_USERNAME}:\${DB_PASSWORD}@\${DB_HOST}:\${DB_PORT}/\${DB_NAME}?sslmode=\${DB_SSLMODE}"
+
+# Backup existing .env if it exists
+if [ -f ".env" ]; then
+    cp .env .env.backup.\$(date +%Y%m%d_%H%M%S) 2>/dev/null || true
+fi
+
+# Update or add DATABASE_URL
+if grep -q "^DATABASE_URL=" .env 2>/dev/null; then
+    # Update existing DATABASE_URL
+    sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"${DATABASE_URL}\"|" .env
+    echo "✅ Updated DATABASE_URL in .env"
+else
+    # Add DATABASE_URL if it doesn't exist
+    echo "DATABASE_URL=\"${DATABASE_URL}\"" >> .env
+    echo "✅ Added DATABASE_URL to .env"
+fi
+
+# Verify DATABASE_URL
+if grep -q "nov-3-backup5-do-user-28031752-0" .env; then
+    echo "✅ Database hostname is CORRECT"
+else
+    echo "⚠️  WARNING: Database hostname might be incorrect!"
+fi
+
 # Restart the application
 echo ""
 echo "🔄 Restarting application..."
 if command -v pm2 &> /dev/null; then
-    pm2 restart abcotronics-erp || pm2 restart all
-    echo "✅ Application restarted with PM2"
+    pm2 restart abcotronics-erp --update-env || pm2 restart all --update-env
+    echo "✅ Application restarted with PM2 (environment variables updated)"
     pm2 save || true
 elif command -v systemctl &> /dev/null; then
     systemctl restart abcotronics-erp || echo "⚠️  Systemd service not found, app may be running differently"

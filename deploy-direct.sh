@@ -40,8 +40,8 @@ rsync -avz --progress \
 echo "✅ Files copied"
 echo ""
 
-# Step 3: Install dependencies and restart on server
-echo "🔧 Installing dependencies and restarting..."
+# Step 3: Install dependencies, set database URL, and restart on server
+echo "🔧 Installing dependencies, setting database URL, and restarting..."
 ssh $SERVER << 'DEPLOY'
 set -e
 
@@ -53,14 +53,61 @@ npm install --production
 echo "🏗️  Generating Prisma client..."
 npx prisma generate || echo "⚠️  Prisma generate skipped"
 
-echo "🔍 Verifying DATABASE_URL is set in .env..."
-if grep -q "^DATABASE_URL=" .env 2>/dev/null; then
-    echo "✅ DATABASE_URL found in .env"
-    DB_PREVIEW=$(grep "^DATABASE_URL=" .env | sed 's/:[^@]*@/:***@/' | head -1)
-    echo "   $DB_PREVIEW"
+# Set correct DATABASE_URL - ALWAYS use production database credentials
+echo ""
+echo "🔧 Setting correct DATABASE_URL in .env..."
+# Load credentials from server-side file (created by setup-db-credentials-on-server.sh)
+CREDS_FILE=".db-credentials.sh"
+if [ -f "$CREDS_FILE" ]; then
+    source "$CREDS_FILE"
+    echo "✅ Loaded credentials from $CREDS_FILE"
 else
-    echo "⚠️  WARNING: DATABASE_URL not found in .env!"
-    echo "   Please set DATABASE_URL in .env file before restarting"
+    echo "❌ ERROR: Credentials file not found: $CREDS_FILE"
+    echo "   Please run setup-db-credentials-on-server.sh first to create credentials file"
+    echo "   Or create $CREDS_FILE manually with:"
+    echo "     export DB_USERNAME=\"doadmin\""
+    echo "     export DB_PASSWORD=\"[your-password]\""
+    echo "     export DB_HOST=\"dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com\""
+    echo "     export DB_PORT=\"25060\""
+    echo "     export DB_NAME=\"defaultdb\""
+    echo "     export DB_SSLMODE=\"require\""
+    exit 1
+fi
+
+DATABASE_URL="postgresql://${DB_USERNAME}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=${DB_SSLMODE}"
+
+# Backup existing .env if it exists
+if [ -f ".env" ]; then
+    cp .env .env.backup.$(date +%Y%m%d_%H%M%S) 2>/dev/null || true
+fi
+
+# Update or add DATABASE_URL
+if grep -q "^DATABASE_URL=" .env 2>/dev/null; then
+    # Update existing DATABASE_URL
+    sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"${DATABASE_URL}\"|" .env
+    echo "✅ Updated DATABASE_URL in .env"
+else
+    # Add DATABASE_URL if it doesn't exist
+    echo "DATABASE_URL=\"${DATABASE_URL}\"" >> .env
+    echo "✅ Added DATABASE_URL to .env"
+fi
+
+echo ""
+echo "🔍 Verifying DATABASE_URL is set correctly..."
+if grep -q "^DATABASE_URL=" .env; then
+    echo "✅ DATABASE_URL found in .env:"
+    grep "^DATABASE_URL=" .env | sed 's/:[^@]*@/:***@/' | head -1
+    
+    # Verify it has the correct hostname
+    if grep -q "nov-3-backup5-do-user-28031752-0" .env; then
+        echo "✅ Database hostname is CORRECT"
+    else
+        echo "⚠️  WARNING: Database hostname might be incorrect!"
+        exit 1
+    fi
+else
+    echo "❌ ERROR: DATABASE_URL not found in .env!"
+    exit 1
 fi
 
 echo ""
