@@ -4082,10 +4082,8 @@ const Clients = React.memo(() => {
     };
 
     // Legacy Pipeline View Component (fallback if new Pipeline module fails to load)
+    // Kanban view removed - only shows list view
     const LegacyPipelineView = () => {
-        const [draggedItem, setDraggedItem] = useState(null);
-        const [draggedType, setDraggedType] = useState(null);
-        const [didDrag, setDidDrag] = useState(false);
         
         // Listen for opportunity updates from ClientDetailModal
         useEffect(() => {
@@ -4215,71 +4213,7 @@ const Clients = React.memo(() => {
             });
         }, [clientOpportunities]);
 
-        const handleDragStart = (item, type) => {
-            setDidDrag(true);
-            setDraggedItem(item);
-            setDraggedType(type);
-        };
-
-        const handleDragOver = (e) => {
-            e.preventDefault();
-        };
-
-        const handleDrop = (e, targetStage) => {
-            e.preventDefault();
-            
-            if (!draggedItem || !draggedType || draggedItem.stage === targetStage) {
-                setDraggedItem(null);
-                setDraggedType(null);
-                return;
-            }
-
-            if (draggedType === 'lead') {
-                const updatedLeads = leads.map(lead => 
-                    lead.id === draggedItem.id ? { ...lead, stage: targetStage } : lead
-                );
-                setLeads(updatedLeads);
-                
-                // Save to API
-                const token = window.storage?.getToken?.();
-                if (token && window.DatabaseAPI) {
-                    window.DatabaseAPI.updateLead(draggedItem.id, { stage: targetStage })
-                        .catch(err => console.error('❌ Failed to update lead stage:', err));
-                }
-            } else if (draggedType === 'opportunity') {
-                const updatedClients = clients.map(client => {
-                    if (client.id === draggedItem.clientId) {
-                        const updatedOpportunities = client.opportunities.map(opp =>
-                            opp.id === draggedItem.id ? { ...opp, stage: targetStage } : opp
-                        );
-                        return { ...client, opportunities: updatedOpportunities };
-                    }
-                    return client;
-                });
-                setClients(updatedClients);
-                safeStorage.setClients(updatedClients);
-                
-                // Save opportunity update to API if opportunity has an ID
-                const token = window.storage?.getToken?.();
-                if (token && window.api && window.api.updateOpportunity && draggedItem.id) {
-                    window.api.updateOpportunity(draggedItem.id, { stage: targetStage })
-                        .catch(err => {
-                            console.error('❌ Failed to update opportunity stage via API:', err);
-                        });
-                }
-            }
-
-            setDraggedItem(null);
-            setDraggedType(null);
-            // Small delay to distinguish drag from click
-            setTimeout(() => setDidDrag(false), 50);
-            // No need to trigger full reload - state already updated and API call made
-        };
-
-        const handleDragEnd = () => {
-            setDraggedItem(null);
-            setDraggedType(null);
-        };
+        // Drag handlers removed - Kanban view no longer available
 
         return (
             <div className="space-y-6">
@@ -4297,144 +4231,69 @@ const Clients = React.memo(() => {
                     </div>
                 </div>
 
-                {/* Enhanced Pipeline Board */}
-                <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-6 -mx-3 sm:mx-0 px-3 sm:px-0" style={{ WebkitOverflowScrolling: 'touch' }}>
-                    {pipelineStages.map(stage => {
-                        const stageLeads = activeLeads.filter(lead => lead.stage === stage);
-                        const stageOpps = activeOpportunities.filter(opp => opp.stage === stage);
-                        const stageCount = stageLeads.length + stageOpps.length;
-                        const isDraggedOver = draggedItem && draggedItem.stage !== stage;
-                        
-                        const stageIcons = {
-                            'Awareness': 'fa-eye',
-                            'Interest': 'fa-search',
-                            'Desire': 'fa-heart',
-                            'Action': 'fa-rocket'
-                        };
-
-                        const stageColors = {
-                            'Awareness': 'from-gray-500 to-gray-600',
-                            'Interest': 'from-blue-500 to-blue-600',
-                            'Desire': 'from-yellow-500 to-yellow-600',
-                            'Action': 'from-green-500 to-green-600'
-                        };
-                        
-                        return (
-                            <div 
-                                key={stage} 
-                                data-pipeline-stage={stage}
-                                className={`flex-1 min-w-[280px] sm:min-w-[250px] ${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl shadow-lg border transition-all duration-300 ${
-                                    isDark ? 'border-gray-700' : 'border-gray-200'
-                                } ${
-                                    isDraggedOver ? `ring-2 ring-primary-500 ${isDark ? 'bg-primary-900' : 'bg-primary-50'} transform scale-105` : 'hover:shadow-xl'
-                                }`}
-                                onDragOver={handleDragOver}
-                                onDrop={(e) => handleDrop(e, stage)}
-                            >
-                                {/* Stage Header with Gradient */}
-                                <div className={`bg-gradient-to-r ${stageColors[stage]} rounded-t-xl p-3 mb-3 -mx-1 -mt-1`}>
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-6 h-6 bg-white/20 rounded-lg flex items-center justify-center">
-                                                <i className={`fas ${stageIcons[stage]} text-white text-xs`}></i>
-                                            </div>
-                                            <div>
-                                                <h3 className="text-white font-semibold text-sm">{stage}</h3>
-                                                <p className="text-white/80 text-xs">{stageCount} items</p>
-                                            </div>
-                                        </div>
-                                        <span className={`px-2 py-0.5 ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} rounded-full text-xs font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'} border`}>
-                                            {stageLeads.length + stageOpps.length}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2">
-                                    {stageLeads.length === 0 && stageOpps.length === 0 && (
-                                        <div className={`text-center py-12 rounded-xl border-2 border-dashed transition-all duration-300 ${
-                                            isDraggedOver ? `border-primary-400 ${isDark ? 'bg-primary-900' : 'bg-primary-50'} scale-105` : `${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-300 hover:border-gray-400'}`
-                                        }`}>
-                                            <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                                                <i className="fas fa-plus text-2xl text-gray-400"></i>
-                                            </div>
-                                            <p className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-1`}>No items yet</p>
-                                            <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Drag items here or add new ones</p>
-                                        </div>
-                                    )}
-                                    
-                                    {stageLeads.map(lead => (
-                                        <div 
-                                            key={`lead-${lead.id}-${stage}-${lead.name}`}
-                                            draggable
-                                            onDragStart={() => handleDragStart(lead, 'lead')}
-                                            onDragEnd={handleDragEnd}
-                                            onClick={() => handleOpenLead(lead)}
-                                            className={`${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'} rounded-lg p-2.5 border transition-all duration-300 cursor-move group ${
-                                                isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'
-                                            } ${
-                                                draggedItem?.id === lead.id ? 'opacity-50 transform scale-95' : 'hover:shadow-md hover:-translate-y-0.5'
-                                            }`}
-                                        >
-                                            <div className="flex items-start justify-between gap-2 mb-2">
-                                                <div className="flex-1">
-                                                    <h4 className={`font-semibold text-xs ${isDark ? 'text-gray-100' : 'text-gray-900'} line-clamp-2 mb-0.5 ${isDark ? 'group-hover:text-primary-400' : 'group-hover:text-primary-600'} transition-colors`}>{lead.name}</h4>
-                                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{lead.industry}</p>
-                                            </div>
-                                                <span className="px-2 py-0.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs rounded-full font-medium shrink-0 shadow-sm">LEAD</span>
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{lead.status}</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    
-                                    {stageOpps.map((opp, idx) => {
-                                        const client = clients.find(c => c.id === opp.clientId);
-                                        return (
-                                            <div 
-                                                key={`opp-${opp.id}-${idx}`}
-                                                draggable
-                                                onDragStart={() => handleDragStart(opp, 'opportunity')}
-                                                onDragEnd={handleDragEnd}
-                                                onClick={(e) => {
-                                                    if (didDrag) {
-                                                        e.preventDefault();
-                                                        return;
-                                                    }
+                {/* Pipeline List View - Kanban removed */}
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border`}>
+                    <div className="overflow-x-auto">
+                        <table className={`w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
+                            <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
+                                <tr>
+                                    <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Name</th>
+                                    <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Type</th>
+                                    <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Stage</th>
+                                    <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
+                                {[...activeLeads, ...activeOpportunities].length === 0 ? (
+                                    <tr>
+                                        <td colSpan="4" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                            <i className={`fas fa-inbox text-3xl ${isDark ? 'text-gray-600' : 'text-gray-300'} mb-2`}></i>
+                                            <p>No pipeline items found</p>
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    [...activeLeads, ...activeOpportunities].map((item) => (
+                                        <tr 
+                                            key={`${item.type}-${item.id}`}
+                                            onClick={() => {
+                                                if (item.type === 'lead') {
+                                                    handleOpenLead(item);
+                                                } else {
+                                                    const client = clients.find(c => c.id === item.clientId);
                                                     openOpportunityFromPipeline({
-                                                        opportunityId: opp.id,
-                                                        clientId: client?.id || opp.clientId,
-                                                        clientName: client?.name || opp.clientName,
-                                                        opportunity: opp
+                                                        opportunityId: item.id,
+                                                        clientId: client?.id || item.clientId,
+                                                        clientName: client?.name || item.clientName,
+                                                        opportunity: item
                                                     });
-                                                }}
-                                                className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} rounded-lg p-2.5 border shadow-sm hover:shadow-md cursor-move transition ${
-                                                    draggedItem?.id === opp.id ? 'opacity-50' : ''
-                                                }`}
-                                            >
-                                                <div className="flex items-start justify-between gap-2 mb-2">
-                                                    <div className={`font-medium text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'} line-clamp-2 flex-1`}>{opp.title || opp.name || 'Untitled Opportunity'}</div>
-                                                    <span className={`px-2 py-0.5 ${isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-700'} text-xs rounded-full font-medium shrink-0`}>OPP</span>
-                                                </div>
-                                                <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-2`}>
-                                                    <i className="fas fa-building mr-1"></i>
-                                                    {opp.clientName}
-                                                </div>
-                                                <div className="flex items-center justify-between">
-                                                    <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Existing client</span>
-                                                    {opp.value > 0 && (
-                                                        <span className={`text-xs font-medium ${isDark ? 'text-green-400' : 'text-green-600'}`}>
-                                                            R {opp.value.toLocaleString('en-ZA')}
+                                                }
+                                            }}
+                                            className={`${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'} cursor-pointer transition`}
+                                        >
+                                            <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                {item.name || item.title || 'Untitled'}
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                                    item.type === 'lead' 
+                                                        ? 'bg-blue-100 text-blue-700' 
+                                                        : 'bg-green-100 text-green-700'
+                                                }`}>
+                                                    {item.type === 'lead' ? 'Lead' : 'Opportunity'}
                                                         </span>
-                                                    )}
+                                            </td>
+                                            <td className={`px-6 py-4 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
+                                                {item.stage || 'Awareness'}
+                                            </td>
+                                            <td className={`px-6 py-4 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
+                                                {item.status || 'Active'}
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
                                                 </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        );
-                    })}
                 </div>
             </div>
         );
