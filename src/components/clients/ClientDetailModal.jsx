@@ -544,27 +544,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Job cards state
     const [jobCards, setJobCards] = useState([]);
     const [loadingJobCards, setLoadingJobCards] = useState(false);
-    
-    // Load tags when client changes
-    useEffect(() => {
-        if (client?.id) {
-            loadClientTags();
-            loadAllTags();
-            loadJobCards();
-        } else {
-            setJobCards([]);
-        }
-    }, [client?.id, loadJobCards]);
-
-    // Reload job cards when Service & Maintenance tab becomes active
-    useEffect(() => {
-        if (activeTab === 'service-maintenance' && client?.id) {
-            console.log('🔄 Service & Maintenance tab activated, reloading job cards...');
-            loadJobCards();
-        }
-    }, [activeTab, client?.id, loadJobCards]);
-    
-    // Load job cards for this client
+    // Load job cards for this client - MUST be defined before useEffect hooks that use it
     const loadJobCards = useCallback(async () => {
         if (!client?.id) {
             setJobCards([]);
@@ -673,6 +653,28 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             setLoadingJobCards(false);
         }
     }, [client?.id, client?.name]);
+    
+
+    // Load tags when client changes
+    useEffect(() => {
+        if (client?.id) {
+            loadClientTags();
+            loadAllTags();
+            loadJobCards();
+        } else {
+            setJobCards([]);
+        }
+    }, [client?.id, loadJobCards]);
+
+    // Reload job cards when Service & Maintenance tab becomes active
+    useEffect(() => {
+        if (activeTab === 'service-maintenance' && client?.id) {
+            console.log('🔄 Service & Maintenance tab activated, reloading job cards...');
+            loadJobCards();
+        }
+    }, [activeTab, client?.id, loadJobCards]);
+    
+    // Load client tags
     
     // Load client tags
     const loadClientTags = async () => {
