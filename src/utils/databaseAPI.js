@@ -29,11 +29,12 @@ const DatabaseAPI = {
     },
 
     // Request throttling / rate limiting safeguards
-    _maxConcurrentRequests: 4,
+    _maxConcurrentRequests: 2, // Reduced from 4 to prevent overwhelming the server
     _currentRequests: 0,
-    _minRequestInterval: 250, // Minimum gap between requests (ms)
+    _minRequestInterval: 500, // Increased from 250ms to 500ms to reduce request frequency
     _lastRequestTimestamp: 0,
     _rateLimitResumeAt: 0,
+    _rateLimitCount: 0, // Track consecutive rate limit errors
     
     // Clear old cache entries periodically
     _cleanCache() {
@@ -56,6 +57,16 @@ const DatabaseAPI = {
     async _acquireRequestSlot() {
         const tryAcquire = async (resolve) => {
             const now = Date.now();
+            
+            // Check if we're in a global rate limit backoff period
+            if (this._rateLimitResumeAt > now) {
+                const waitTime = this._rateLimitResumeAt - now;
+                const waitSeconds = Math.round(waitTime / 1000);
+                console.log(`⏸️ Global rate limit active. Waiting ${waitSeconds}s before allowing requests...`);
+                setTimeout(() => tryAcquire(resolve), Math.min(waitTime, 1000)); // Check every second
+                return;
+            }
+            
             const nextAllowedTime = Math.max(
                 this._lastRequestTimestamp + this._minRequestInterval,
                 this._rateLimitResumeAt
@@ -326,22 +337,44 @@ const DatabaseAPI = {
                     let response = await execute(token);
 
                 if (!response.ok && response.status === 429) {
+                    // Track rate limit occurrences
+                    this._rateLimitCount += 1;
+                    
                     const retryAfterHeader = response.headers.get('Retry-After');
                     let retryDelay = this._parseRetryAfter(retryAfterHeader);
+                    
+                    // If no Retry-After header, use exponential backoff with longer delays
                     if (!retryDelay || retryDelay <= 0) {
-                        retryDelay = baseDelay * Math.pow(2, attempt);
+                        // Start with longer base delay and increase exponentially
+                        // Also factor in consecutive rate limit errors
+                        const baseDelayMultiplier = Math.min(this._rateLimitCount, 5); // Cap at 5x
+                        retryDelay = baseDelay * Math.pow(2, attempt) * (1 + baseDelayMultiplier * 0.5);
                     }
-                    // Cap retry delay to 15 seconds to avoid excessively long waits
-                    retryDelay = Math.min(retryDelay, 15000);
+                    
+                    // Cap retry delay to 60 seconds (increased from 15s) to respect rate limits better
+                    retryDelay = Math.min(retryDelay, 60000);
+                    
+                    // Set global rate limit resume time to prevent other requests
                     this._rateLimitResumeAt = Date.now() + retryDelay;
+                    
                     const errorMessage = await this._readErrorMessage(response);
                     const finalMessage = errorMessage || 'Rate limit exceeded. Please try again shortly.';
-                    console.warn(`⏳ Rate limit encountered on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${retryDelay}ms...`, finalMessage);
+                    const retrySeconds = Math.round(retryDelay / 1000);
+                    console.warn(`⏳ Rate limit encountered on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}, consecutive: ${this._rateLimitCount}). Retrying in ${retrySeconds}s...`, finalMessage);
+                    
                     if (attempt < maxRetries) {
                         await this._sleep(retryDelay);
                         continue;
                     }
+                    
+                    // Reset rate limit count after max retries
+                    this._rateLimitCount = 0;
                     throw new Error(finalMessage);
+                }
+                
+                // Reset rate limit count on successful request
+                if (response.ok) {
+                    this._rateLimitCount = 0;
                 }
 
                     if (!response.ok && response.status === 401) {
@@ -1913,7 +1946,21 @@ const DatabaseAPI = {
     },
     
     // Clear all caches - useful for forcing fresh data loads
+    // Added throttling to prevent excessive cache clearing
+    _lastCacheClear: 0,
+    _cacheClearThrottle: 2000, // Minimum 2 seconds between cache clears
     clearCache() {
+        const now = Date.now();
+        const timeSinceLastClear = now - this._lastCacheClear;
+        
+        // Throttle cache clearing to prevent excessive API calls
+        if (timeSinceLastClear < this._cacheClearThrottle) {
+            const waitTime = Math.round((this._cacheClearThrottle - timeSinceLastClear) / 1000);
+            console.log(`⏸️ Cache clear throttled. Please wait ${waitTime}s before clearing again.`);
+            return 0;
+        }
+        
+        this._lastCacheClear = now;
         console.log('🧹 Clearing DatabaseAPI caches...');
         let cleared = 0;
         
@@ -1937,8 +1984,35 @@ const DatabaseAPI = {
     },
     
     // Clear cache for a specific endpoint
+    // Added throttling to prevent excessive endpoint cache clearing
     clearEndpointCache(endpoint, method = 'GET') {
+        const now = Date.now();
         const cacheKey = `${method.toUpperCase()}:${endpoint}`;
+        const throttleKey = `clear_${cacheKey}`;
+        
+        // Check if we recently cleared this endpoint
+        if (!this._endpointClearTimes) {
+            this._endpointClearTimes = new Map();
+        }
+        
+        const lastClear = this._endpointClearTimes.get(throttleKey) || 0;
+        const timeSinceLastClear = now - lastClear;
+        const endpointThrottle = 1000; // 1 second minimum between clears for same endpoint
+        
+        if (timeSinceLastClear < endpointThrottle) {
+            // Silently skip if throttled (don't spam console)
+            return 0;
+        }
+        
+        this._endpointClearTimes.set(throttleKey, now);
+        
+        // Clean up old throttle entries (keep only last 100)
+        if (this._endpointClearTimes.size > 100) {
+            const entries = Array.from(this._endpointClearTimes.entries());
+            entries.sort((a, b) => b[1] - a[1]); // Sort by timestamp, newest first
+            this._endpointClearTimes = new Map(entries.slice(0, 100));
+        }
+        
         let cleared = 0;
         
         if (this._responseCache?.has(cacheKey)) {
