@@ -1,4 +1,10 @@
 export function ok(res, data) {
+  // Prevent sending response if already sent
+  if (res.headersSent || res.writableEnded) {
+    console.warn('⚠️ ok: Response already sent, skipping response')
+    return
+  }
+  
   // Serialize Dates to ISO strings and handle undefined values
   const serialized = JSON.stringify({ data }, (key, value) => {
     if (value instanceof Date) {
@@ -16,6 +22,12 @@ export function ok(res, data) {
 }
 
 export function created(res, data) {
+  // Prevent sending response if already sent
+  if (res.headersSent || res.writableEnded) {
+    console.warn('⚠️ created: Response already sent, skipping response')
+    return
+  }
+  
   // Serialize Dates to ISO strings and handle undefined values
   const serialized = JSON.stringify({ data }, (key, value) => {
     if (value instanceof Date) {
@@ -32,6 +44,12 @@ export function created(res, data) {
 }
 
 export function badRequest(res, message, details) {
+  // Prevent sending response if already sent
+  if (res.headersSent || res.writableEnded) {
+    console.warn('⚠️ badRequest: Response already sent, skipping response')
+    return
+  }
+  
   const serialized = JSON.stringify({ error: { code: 'BAD_REQUEST', message, details } })
   
   // Set status code first, then headers, then send response (HTTP/2 compatible)
@@ -42,6 +60,12 @@ export function badRequest(res, message, details) {
 }
 
 export function unauthorized(res, message = 'Unauthorized') {
+  // Prevent sending response if already sent
+  if (res.headersSent || res.writableEnded) {
+    console.warn('⚠️ unauthorized: Response already sent, skipping response')
+    return
+  }
+  
   const serialized = JSON.stringify({ error: { code: 'UNAUTHORIZED', message } })
   
   // Set status code first, then headers, then send response (HTTP/2 compatible)
@@ -52,6 +76,12 @@ export function unauthorized(res, message = 'Unauthorized') {
 }
 
 export function forbidden(res, message = 'Forbidden') {
+  // Prevent sending response if already sent
+  if (res.headersSent || res.writableEnded) {
+    console.warn('⚠️ forbidden: Response already sent, skipping response')
+    return
+  }
+  
   const serialized = JSON.stringify({ error: { code: 'FORBIDDEN', message } })
   
   // Set status code first, then headers, then send response (HTTP/2 compatible)
@@ -62,6 +92,12 @@ export function forbidden(res, message = 'Forbidden') {
 }
 
 export function notFound(res, message = 'Not found') {
+  // Prevent sending response if already sent
+  if (res.headersSent || res.writableEnded) {
+    console.warn('⚠️ notFound: Response already sent, skipping response')
+    return
+  }
+  
   const serialized = JSON.stringify({ error: { code: 'NOT_FOUND', message } })
   
   // Set status code first, then headers, then send response (HTTP/2 compatible)
@@ -72,6 +108,12 @@ export function notFound(res, message = 'Not found') {
 }
 
 export function serverError(res, message = 'Server error', details) {
+  // Prevent sending response if already sent
+  if (res.headersSent || res.writableEnded) {
+    console.warn('⚠️ serverError: Response already sent, skipping error response')
+    return
+  }
+  
   // Detect database connection errors and provide better error messages
   let errorCode = 'SERVER_ERROR'
   let errorMessage = message

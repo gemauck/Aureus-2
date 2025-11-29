@@ -3,6 +3,7 @@ import { prisma } from './_lib/prisma.js'
 import { badRequest, created, ok, serverError, notFound } from './_lib/response.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { isConnectionError } from './_lib/dbErrorHandler.js'
 
 function getContactsArray(rawContacts) {
   if (typeof rawContacts === 'string') {
@@ -63,6 +64,9 @@ async function handler(req, res) {
         return ok(res, { contacts })
       } catch (dbError) {
         console.error('❌ Database error getting contacts:', dbError)
+        if (isConnectionError(dbError)) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to get contacts', dbError.message)
       }
     }
@@ -113,6 +117,9 @@ async function handler(req, res) {
         return created(res, { contact: newContact, contacts: updatedContacts })
       } catch (dbError) {
         console.error('❌ Database error adding contact:', dbError)
+        if (isConnectionError(dbError)) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to add contact', dbError.message)
       }
     }
@@ -154,6 +161,9 @@ async function handler(req, res) {
         return ok(res, { contact: contacts[contactIndex], contacts })
       } catch (dbError) {
         console.error('❌ Database error updating contact:', dbError)
+        if (isConnectionError(dbError)) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to update contact', dbError.message)
       }
     }
@@ -185,6 +195,9 @@ async function handler(req, res) {
         return ok(res, { deleted: true, contacts: updatedContacts })
       } catch (dbError) {
         console.error('❌ Database error deleting contact:', dbError)
+        if (isConnectionError(dbError)) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to delete contact', dbError.message)
       }
     }

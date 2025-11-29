@@ -104,7 +104,8 @@ async function handler(req, res) {
                     return serverError(res, `Database connection failed: ${userQueryError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
                 }
                 
-                throw new Error(`Database query failed: ${userQueryError.message}`)
+                // Return error instead of throwing to avoid double error handling
+                return serverError(res, 'Failed to query users', userQueryError.message)
             }
 
             return ok(res, {

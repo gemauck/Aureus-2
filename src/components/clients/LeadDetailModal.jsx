@@ -1882,44 +1882,6 @@ const LeadDetailModal = ({
     };
 
     // Google Calendar event handlers
-    const handleGoogleEventCreated = (followUpId, updatedFollowUp) => {
-        const followUps = Array.isArray(formData.followUps) ? formData.followUps : [];
-        const updatedFollowUps = followUps.map(f => 
-            f.id === followUpId ? { ...f, ...updatedFollowUp } : f
-        );
-        setFormData({
-            ...formData,
-            followUps: updatedFollowUps
-        });
-    };
-
-    const handleGoogleEventUpdated = (followUpId, updatedFollowUp) => {
-        const followUps = Array.isArray(formData.followUps) ? formData.followUps : [];
-        const updatedFollowUps = followUps.map(f => 
-            f.id === followUpId ? { ...f, ...updatedFollowUp } : f
-        );
-        setFormData({
-            ...formData,
-            followUps: updatedFollowUps
-        });
-    };
-
-    const handleGoogleEventDeleted = (followUpId, updatedFollowUp) => {
-        const followUps = Array.isArray(formData.followUps) ? formData.followUps : [];
-        const updatedFollowUps = followUps.map(f => 
-            f.id === followUpId ? { ...f, ...updatedFollowUp } : f
-        );
-        setFormData({
-            ...formData,
-            followUps: updatedFollowUps
-        });
-    };
-
-    const handleGoogleCalendarError = (error) => {
-        console.error('Google Calendar error:', error);
-        // You could show a toast notification here
-        alert(`Google Calendar Error: ${error}`);
-    };
 
     const handleAddComment = async () => {
         if (!newComment.trim()) return;
@@ -3271,21 +3233,6 @@ const LeadDetailModal = ({
                                                                 </span>
                                                             </div>
                                                             <p className="text-sm text-gray-600">{followUp.description}</p>
-                                                            
-                                                            {/* Google Calendar Sync Component */}
-                                                            <div className="mt-2">
-                                                                {window.GoogleCalendarSync && (
-                                                                    <GoogleCalendarSync
-                                                                        followUp={followUp}
-                                                                        clientName={formData.name}
-                                                                        clientId={formData.id}
-                                                                        onEventCreated={(updatedFollowUp) => handleGoogleEventCreated(followUp.id, updatedFollowUp)}
-                                                                        onEventUpdated={(updatedFollowUp) => handleGoogleEventUpdated(followUp.id, updatedFollowUp)}
-                                                                        onEventDeleted={(updatedFollowUp) => handleGoogleEventDeleted(followUp.id, updatedFollowUp)}
-                                                                        onError={(error) => handleGoogleCalendarError(error)}
-                                                                    />
-                                                                )}
-                                                            </div>
                                                         </div>
                                                     </div>
                                                     <button

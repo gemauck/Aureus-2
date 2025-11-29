@@ -3,6 +3,7 @@ import { prisma } from './_lib/prisma.js'
 import { badRequest, created, ok, serverError, notFound } from './_lib/response.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { isConnectionError } from './_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
   try {
@@ -50,6 +51,9 @@ async function handler(req, res) {
         return ok(res, { sites })
       } catch (dbError) {
         console.error('❌ Database error getting sites:', dbError)
+        if (isConnectionError(dbError)) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to get sites', dbError.message)
       }
     }
@@ -98,6 +102,9 @@ async function handler(req, res) {
         return created(res, { site: newSite, sites: updatedSites })
       } catch (dbError) {
         console.error('❌ Database error adding site:', dbError)
+        if (isConnectionError(dbError)) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to add site', dbError.message)
       }
     }
@@ -140,6 +147,9 @@ async function handler(req, res) {
         return ok(res, { site: sites[siteIndex], sites })
       } catch (dbError) {
         console.error('❌ Database error updating site:', dbError)
+        if (isConnectionError(dbError)) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to update site', dbError.message)
       }
     }
@@ -173,6 +183,9 @@ async function handler(req, res) {
         return ok(res, { deleted: true, sites: updatedSites })
       } catch (dbError) {
         console.error('❌ Database error deleting site:', dbError)
+        if (isConnectionError(dbError)) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to delete site', dbError.message)
       }
     }

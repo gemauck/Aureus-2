@@ -27,7 +27,7 @@ This folder contains the helper files for synchronising the Projects table witho
 
 4. **Run in production**
    ```sh
-   DATABASE_URL="postgresql://doadmin:******@dbaas-db-6934625-nov-3-backup-nov-3-backup4-nov-6-backup-do-use.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require" \
+   DATABASE_URL="postgresql://doadmin:******@dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require" \
    node scripts/sync-projects.js
    ```
 

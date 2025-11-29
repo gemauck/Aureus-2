@@ -22,9 +22,18 @@ function parseClientJsonFields(client) {
     const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
     const parsed = { ...client }
     
-    // Extract tags from ClientTag relations if present (only in detail views)
+    // Extract tags from ClientTag relations if present
     if (client.tags && Array.isArray(client.tags)) {
-      parsed.tags = client.tags.map(ct => ct.tag).filter(Boolean)
+      // client.tags is an array of ClientTag objects, each with a 'tag' property containing the Tag object
+      parsed.tags = client.tags
+        .map(ct => ct.tag) // Extract the Tag object from each ClientTag
+        .filter(Boolean) // Remove any null/undefined tags
+        .map(tag => ({
+          id: tag.id,
+          name: tag.name,
+          color: tag.color || '#3B82F6',
+          description: tag.description || ''
+        })) // Ensure consistent format with id, name, color
     } else {
       parsed.tags = []
     }

@@ -31,7 +31,7 @@ async function handler(req, res) {
   const subResource = pathSegments[2]
 
   // Helper to read pagination params from the query string
-  const getPagination = () => {
+  const getPagination = (allowLargePageSize = false) => {
     try {
       const url = new URL(req.url, 'http://localhost')
       const rawPage = parseInt(url.searchParams.get('page') || '1', 10)
@@ -39,9 +39,11 @@ async function handler(req, res) {
 
       const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1
       // Keep page size within a safe range to avoid overloading the dashboard
+      // Allow larger page sizes when filtering by clientId (for client detail views)
       let pageSize =
         Number.isFinite(rawPageSize) && rawPageSize > 0 ? rawPageSize : 50
-      pageSize = Math.max(10, Math.min(pageSize, 100))
+      const maxPageSize = allowLargePageSize ? 1000 : 100
+      pageSize = Math.max(10, Math.min(pageSize, maxPageSize))
 
       return { page, pageSize }
     } catch {
@@ -86,13 +88,30 @@ async function handler(req, res) {
     // LIST (GET /api/jobcards)
     if (req.method === 'GET' && !id) {
       try {
-        const { page, pageSize } = getPagination()
+        // Support filtering by clientId or clientName via query parameters
+        const url = new URL(req.url, 'http://localhost')
+        const clientId = url.searchParams.get('clientId')
+        const clientName = url.searchParams.get('clientName')
+        
+        // Allow larger page sizes when filtering by client (for client detail views)
+        const allowLargePageSize = !!(clientId || clientName)
+        const { page, pageSize } = getPagination(allowLargePageSize)
         const owner = req.user?.sub
+        
+        // Build where clause for filtering
+        const whereClause = {}
+        if (clientId) {
+          whereClause.clientId = clientId
+        } else if (clientName) {
+          whereClause.clientName = clientName
+        }
+        
         // Limit the number of job cards returned and support simple pagination
         // to keep the dashboard fast even as history grows.
         const [totalItems, jobCards] = await Promise.all([
-          prisma.jobCard.count(),
+          prisma.jobCard.count({ where: whereClause }),
           prisma.jobCard.findMany({
+            where: whereClause,
             orderBy: { createdAt: 'desc' },
             skip: (page - 1) * pageSize,
             take: pageSize
@@ -104,7 +123,8 @@ async function handler(req, res) {
           count: jobCards.length,
           page,
           pageSize,
-          totalItems
+          totalItems,
+          clientId: clientId || clientName || 'all'
         })
         
         // Format dates for response

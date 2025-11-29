@@ -4,6 +4,7 @@ import { badRequest, created, ok, serverError, notFound, unauthorized } from './
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { isConnectionError } from './_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
   try {
@@ -179,6 +180,9 @@ async function handler(req, res) {
         return ok(res, { industries })
       } catch (dbError) {
         console.error('❌ Database error getting industries:', dbError)
+        if (isConnectionError(dbError)) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to get industries', dbError.message)
       }
     }
@@ -194,6 +198,9 @@ async function handler(req, res) {
         return ok(res, { industry })
       } catch (dbError) {
         console.error('❌ Database error getting industry:', dbError)
+        if (isConnectionError(dbError)) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to get industry', dbError.message)
       }
     }
@@ -228,6 +235,9 @@ async function handler(req, res) {
         return created(res, { industry })
       } catch (dbError) {
         console.error('❌ Database error creating industry:', dbError)
+        if (isConnectionError(dbError)) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to create industry', dbError.message)
       }
     }
@@ -271,6 +281,9 @@ async function handler(req, res) {
         return ok(res, { industry })
       } catch (dbError) {
         console.error('❌ Database error updating industry:', dbError)
+        if (isConnectionError(dbError)) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to update industry', dbError.message)
       }
     }
@@ -305,6 +318,9 @@ async function handler(req, res) {
         return ok(res, { message: 'Industry deleted successfully' })
       } catch (dbError) {
         console.error('❌ Database error deleting industry:', dbError)
+        if (isConnectionError(dbError)) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to delete industry', dbError.message)
       }
     }

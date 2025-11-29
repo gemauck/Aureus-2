@@ -65,7 +65,19 @@ async function handler(req, res) {
         }
         
         // Parse tags from ClientTag relations
-        parsedClient.tags = client.tags ? client.tags.map(ct => ct.tag).filter(Boolean) : []
+        if (client.tags && Array.isArray(client.tags)) {
+          parsedClient.tags = client.tags
+            .map(ct => ct.tag)
+            .filter(Boolean)
+            .map(tag => ({
+              id: tag.id,
+              name: tag.name,
+              color: tag.color || '#3B82F6',
+              description: tag.description || ''
+            }))
+        } else {
+          parsedClient.tags = []
+        }
         
         console.log('✅ Client retrieved successfully:', client.id)
         console.log('✅ Parsed proposals count:', Array.isArray(parsedClient.proposals) ? parsedClient.proposals.length : 'not an array')

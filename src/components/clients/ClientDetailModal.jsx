@@ -4,7 +4,6 @@
 // FIX: Added useRef to prevent form reset when user is editing
 // FIX: formData initialization moved to top to prevent TDZ errors
 const { useState, useEffect, useRef } = React;
-const GoogleCalendarSync = window.GoogleCalendarSync;
 
 const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange, onPauseSync, onEditingChange, onOpenOpportunity }) => {
     // CRITICAL: Initialize formData FIRST, before any other hooks or refs that might reference it
@@ -80,6 +79,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         // If user tries to access contracts tab but is not admin, default to overview
         if (initialTab === 'contracts' && !isAdmin) {
             return 'overview';
+        }
+        // Redirect old 'service' or 'maintenance' tabs to combined 'service-maintenance' tab
+        if (initialTab === 'service' || initialTab === 'maintenance') {
+            return 'service-maintenance';
         }
         return initialTab;
     });
@@ -370,6 +373,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         if (tab === 'contracts' && !isAdmin) {
             return;
         }
+        // Redirect old 'service' or 'maintenance' tabs to combined 'service-maintenance' tab
+        if (tab === 'service' || tab === 'maintenance') {
+            tab = 'service-maintenance';
+        }
         setActiveTab(tab);
         if (onTabChange) {
             onTabChange(tab);
@@ -564,7 +571,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 return;
             }
             
-            const response = await fetch('/api/jobcards', {
+            // Use clientId query parameter to filter on the server side
+            // This ensures we get all job cards for this client, not just the first page
+            const response = await fetch(`/api/jobcards?clientId=${encodeURIComponent(client.id)}&pageSize=1000`, {
                 headers: { 
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
@@ -573,7 +582,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             
             if (response.ok) {
                 const data = await response.json();
-                // Filter job cards by clientId or clientName
+                // API now filters by clientId, but also filter by name as fallback
                 const clientJobCards = (data.jobCards || []).filter(jc => 
                     jc.clientId === client.id || jc.clientName === client.name
                 );
@@ -1351,42 +1360,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     };
 
-    // Google Calendar event handlers
-    const handleGoogleEventCreated = (followUpId, updatedFollowUp) => {
-        const updatedFollowUps = formData.followUps.map(f => 
-            f.id === followUpId ? { ...f, ...updatedFollowUp } : f
-        );
-        setFormData({
-            ...formData,
-            followUps: updatedFollowUps
-        });
-    };
-
-    const handleGoogleEventUpdated = (followUpId, updatedFollowUp) => {
-        const updatedFollowUps = formData.followUps.map(f => 
-            f.id === followUpId ? { ...f, ...updatedFollowUp } : f
-        );
-        setFormData({
-            ...formData,
-            followUps: updatedFollowUps
-        });
-    };
-
-    const handleGoogleEventDeleted = (followUpId, updatedFollowUp) => {
-        const updatedFollowUps = formData.followUps.map(f => 
-            f.id === followUpId ? { ...f, ...updatedFollowUp } : f
-        );
-        setFormData({
-            ...formData,
-            followUps: updatedFollowUps
-        });
-    };
-
-    const handleGoogleCalendarError = (error) => {
-        console.error('Google Calendar error:', error);
-        // You could show a toast notification here
-        alert(`Google Calendar Error: ${error}`);
-    };
 
     // Notes helpers: tags, attachments, simple markdown toggle
     const [newNoteTagsInput, setNewNoteTagsInput] = useState('');
@@ -2112,7 +2085,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 {/* Tabs */}
                 <div className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} px-3 sm:px-6`}>
                     <div className={`flex ${isFullPage ? 'gap-4 sm:gap-8' : 'gap-2 sm:gap-6'} overflow-x-auto scrollbar-hide`} style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                        {['overview', 'contacts', 'sites', 'opportunities', 'calendar', 'projects', 'service', 'maintenance', ...(isAdmin ? ['contracts'] : []), 'activity', 'notes'].map(tab => (
+                        {['overview', 'contacts', 'sites', 'opportunities', 'calendar', 'projects', 'service-maintenance', ...(isAdmin ? ['contracts'] : []), 'activity', 'notes'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => handleTabChange(tab)}
@@ -2132,14 +2105,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     tab === 'opportunities' ? 'bullseye' :
                                     tab === 'calendar' ? 'calendar-alt' :
                                     tab === 'projects' ? 'folder-open' :
-                                    tab === 'service' ? 'tools' :
-                                    tab === 'maintenance' ? 'wrench' :
+                                    tab === 'service-maintenance' ? 'wrench' :
                                     tab === 'contracts' ? 'file-contract' :
                                     tab === 'activity' ? 'history' :
                                     'comment-alt'
                                 } mr-1 sm:mr-2`}></i>
-                                <span className="hidden sm:inline">{tab.charAt(0).toUpperCase() + tab.slice(1)}</span>
-                                <span className="sm:hidden">{tab.charAt(0).toUpperCase()}</span>
+                                <span className="hidden sm:inline">{tab === 'service-maintenance' ? 'Service & Maintenance' : (tab.charAt(0).toUpperCase() + tab.slice(1).replace(/-/g, ' '))}</span>
+                                <span className="sm:hidden">{tab === 'service-maintenance' ? 'S&M' : tab.charAt(0).toUpperCase()}</span>
                                 {tab === 'contacts' && formData.contacts?.length > 0 && (
                                     <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
                                         {formData.contacts.length}
@@ -2160,13 +2132,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         {clientProjects.length}
                                     </span>
                                 )}
-                                {tab === 'service' && jobCards.length > 0 && (
+                                {tab === 'service-maintenance' && jobCards.length > 0 && (
                                     <span className="ml-1.5 px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded text-xs">
-                                        {jobCards.length}
-                                    </span>
-                                )}
-                                {tab === 'maintenance' && jobCards.length > 0 && (
-                                    <span className="ml-1.5 px-1.5 py-0.5 bg-orange-100 text-orange-600 rounded text-xs">
                                         {jobCards.length}
                                     </span>
                                 )}
@@ -3753,21 +3720,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                 </span>
                                                             </div>
                                                             <p className="text-sm text-gray-600">{followUp.description}</p>
-                                                            
-                                                            {/* Google Calendar Sync Component */}
-                                                            <div className="mt-2">
-                                                                {GoogleCalendarSync && (
-                                                                    <GoogleCalendarSync
-                                                                        followUp={followUp}
-                                                                        clientName={formData.name}
-                                                                        clientId={formData.id}
-                                                                        onEventCreated={(updatedFollowUp) => handleGoogleEventCreated(followUp.id, updatedFollowUp)}
-                                                                        onEventUpdated={(updatedFollowUp) => handleGoogleEventUpdated(followUp.id, updatedFollowUp)}
-                                                                        onEventDeleted={(updatedFollowUp) => handleGoogleEventDeleted(followUp.id, updatedFollowUp)}
-                                                                        onError={(error) => handleGoogleCalendarError(error)}
-                                                                    />
-                                                                )}
-                                                            </div>
                                                         </div>
                                                     </div>
                                                     <button
@@ -3902,11 +3854,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             </div>
                         )}
 
-                        {/* Service Tab */}
-                        {activeTab === 'service' && (
+                        {/* Service & Maintenance Tab */}
+                        {activeTab === 'service-maintenance' && (
                             <div className="space-y-4">
                                 <div className="flex justify-between items-center">
-                                    <h3 className="text-lg font-semibold text-gray-900">Service Job Cards</h3>
+                                    <h3 className="text-lg font-semibold text-gray-900">Service & Maintenance Job Cards</h3>
                                     <div className="text-sm text-gray-600">
                                         {jobCards.length} job card{jobCards.length !== 1 ? 's' : ''}
                                     </div>
@@ -3962,9 +3914,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     </div>
                                 ) : (
                                     <div className="text-center py-8 text-gray-500 text-sm">
-                                        <i className="fas fa-tools text-3xl mb-2"></i>
-                                        <p>No service job cards found for this client</p>
-                                        <p className="text-xs mt-1">Service job cards will appear here when created for this client</p>
+                                        <i className="fas fa-wrench text-3xl mb-2"></i>
+                                        <p>No job cards found for this client</p>
+                                        <p className="text-xs mt-1">Job cards will appear here when they are created for this client</p>
                                     </div>
                                 )}
 
@@ -3973,91 +3925,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     <div className="flex items-start">
                                         <i className="fas fa-info-circle text-blue-600 text-xs mt-0.5 mr-2"></i>
                                         <div>
-                                            <p className="text-xs font-medium text-blue-900 mb-1">Service Job Cards</p>
+                                            <p className="text-xs font-medium text-blue-900 mb-1">Service & Maintenance Job Cards</p>
                                             <p className="text-xs text-blue-800">
-                                                Service job cards are automatically shown here when they are created for this client. 
-                                                View the full Service & Maintenance module to create new job cards.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Maintenance Tab */}
-                        {activeTab === 'maintenance' && (
-                            <div className="space-y-4">
-                                <div className="flex justify-between items-center">
-                                    <h3 className="text-lg font-semibold text-gray-900">Maintenance Job Cards</h3>
-                                    <div className="text-sm text-gray-600">
-                                        {jobCards.length} job card{jobCards.length !== 1 ? 's' : ''}
-                                    </div>
-                                </div>
-
-                                {loadingJobCards ? (
-                                    <div className="text-center py-8 text-gray-500 text-sm">
-                                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mb-2"></div>
-                                        <p>Loading job cards...</p>
-                                    </div>
-                                ) : jobCards.length > 0 ? (
-                                    <div className="space-y-2">
-                                        {jobCards.map(jobCard => (
-                                            <div 
-                                                key={jobCard.id} 
-                                                className="bg-white border border-gray-200 rounded-lg p-3 hover:border-orange-300 hover:shadow-sm transition"
-                                            >
-                                                <div className="flex justify-between items-start">
-                                                    <div className="flex-1">
-                                                        <div className="flex items-center gap-2 mb-1">
-                                                            <h4 className="font-semibold text-gray-900 text-sm">
-                                                                {jobCard.jobCardNumber || `Job Card #${jobCard.id.slice(0, 8)}`}
-                                                            </h4>
-                                                            <span className={`px-2 py-0.5 text-xs rounded font-medium ${
-                                                                jobCard.status === 'completed' ? 'bg-green-100 text-green-700' :
-                                                                jobCard.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
-                                                                'bg-gray-100 text-gray-700'
-                                                            }`}>
-                                                                {jobCard.status || 'draft'}
-                                                            </span>
-                                                        </div>
-                                                        <div className="text-xs text-gray-600 space-y-0.5">
-                                                            {jobCard.reasonForVisit && (
-                                                                <div><i className="fas fa-info-circle mr-1.5 w-4"></i>{jobCard.reasonForVisit}</div>
-                                                            )}
-                                                            {jobCard.siteName && (
-                                                                <div><i className="fas fa-map-marker-alt mr-1.5 w-4"></i>{jobCard.siteName}</div>
-                                                            )}
-                                                            {jobCard.agentName && (
-                                                                <div><i className="fas fa-user mr-1.5 w-4"></i>{jobCard.agentName}</div>
-                                                            )}
-                                                            {jobCard.createdAt && (
-                                                                <div><i className="fas fa-calendar mr-1.5 w-4"></i>{new Date(jobCard.createdAt).toLocaleDateString()}</div>
-                                                            )}
-                                                            {jobCard.diagnosis && (
-                                                                <div className="mt-1 text-xs text-gray-500 italic">{jobCard.diagnosis.substring(0, 100)}{jobCard.diagnosis.length > 100 ? '...' : ''}</div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-8 text-gray-500 text-sm">
-                                        <i className="fas fa-wrench text-3xl mb-2"></i>
-                                        <p>No maintenance job cards found for this client</p>
-                                        <p className="text-xs mt-1">Maintenance job cards will appear here when created for this client</p>
-                                    </div>
-                                )}
-
-                                {/* Info box */}
-                                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-                                    <div className="flex items-start">
-                                        <i className="fas fa-info-circle text-orange-600 text-xs mt-0.5 mr-2"></i>
-                                        <div>
-                                            <p className="text-xs font-medium text-orange-900 mb-1">Maintenance Job Cards</p>
-                                            <p className="text-xs text-orange-800">
-                                                Maintenance job cards are automatically shown here when they are created for this client. 
+                                                Job cards are automatically shown here when they are created for this client. 
                                                 View the full Service & Maintenance module to create new job cards.
                                             </p>
                                         </div>

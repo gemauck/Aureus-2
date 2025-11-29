@@ -4,6 +4,7 @@ import { badRequest, created, ok, serverError, notFound } from './_lib/response.
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { isConnectionError } from './_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
   try {
@@ -28,6 +29,9 @@ async function handler(req, res) {
         return ok(res, { tags })
       } catch (dbError) {
         console.error('❌ Database error getting tags:', dbError)
+        if (isConnectionError(dbError)) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to get tags', dbError.message)
       }
     }
@@ -50,6 +54,9 @@ async function handler(req, res) {
         return ok(res, { tag })
       } catch (dbError) {
         console.error('❌ Database error getting tag:', dbError)
+        if (isConnectionError(dbError)) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to get tag', dbError.message)
       }
     }
@@ -86,6 +93,9 @@ async function handler(req, res) {
         return created(res, { tag })
       } catch (dbError) {
         console.error('❌ Database error creating tag:', dbError)
+        if (isConnectionError(dbError)) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to create tag', dbError.message)
       }
     }
@@ -130,6 +140,9 @@ async function handler(req, res) {
         return ok(res, { tag })
       } catch (dbError) {
         console.error('❌ Database error updating tag:', dbError)
+        if (isConnectionError(dbError)) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to update tag', dbError.message)
       }
     }
@@ -149,6 +162,9 @@ async function handler(req, res) {
         return ok(res, { message: 'Tag deleted successfully' })
       } catch (dbError) {
         console.error('❌ Database error deleting tag:', dbError)
+        if (isConnectionError(dbError)) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to delete tag', dbError.message)
       }
     }
