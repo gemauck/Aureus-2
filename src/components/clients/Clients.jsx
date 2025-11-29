@@ -2433,6 +2433,14 @@ const Clients = React.memo(() => {
             // Log count update for debugging
             console.log(`✅ Updated leads count for ${userEmail}: ${mappedLeads.length} leads (was ${leads.length})`);
             
+            // Debug: Check processed leads for tags
+            const processedLeadsWithTags = mappedLeads.filter(l => l.tags && Array.isArray(l.tags) && l.tags.length > 0);
+            if (processedLeadsWithTags.length > 0) {
+                console.log(`✅ After processing: ${processedLeadsWithTags.length} leads have tags:`, processedLeadsWithTags.slice(0, 3).map(l => ({ name: l.name, tagCount: l.tags.length, tags: l.tags.map(t => t.name || t) })));
+            } else {
+                console.log(`❌ After processing: NO leads have tags. Sample:`, mappedLeads.slice(0, 3).map(l => ({ name: l.name, tags: l.tags, tagsType: typeof l.tags, tagsLength: Array.isArray(l.tags) ? l.tags.length : 'N/A' })));
+            }
+            
             // Persist leads to localStorage for fast loading on next boot
             if (window.storage?.setLeads) {
                 try {
