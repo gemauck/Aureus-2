@@ -8,6 +8,10 @@ const RateLimitManager = {
   _rateLimitActive: false,
   _rateLimitResumeAt: 0,
   _consecutiveRateLimitErrors: 0,
+  _requestQueue: [],
+  _processingQueue: false,
+  _lastRequestTime: 0,
+  _minRequestInterval: 100, // Minimum 100ms between requests to prevent bursts
   
   isRateLimited() {
     if (!this._rateLimitActive) return false
@@ -40,12 +44,96 @@ const RateLimitManager = {
   clearRateLimit() {
     this._rateLimitActive = false
     this._rateLimitResumeAt = 0
+    // Process any queued requests when rate limit clears
+    this._processQueue()
   },
   
   getWaitTimeRemaining() {
     if (!this._rateLimitActive) return 0
     const remaining = Math.max(0, this._rateLimitResumeAt - Date.now())
     return Math.round(remaining / 1000) // Return seconds
+  },
+  
+  // Throttle requests to prevent bursts
+  async throttleRequest(requestFn, priority = 0) {
+    // If rate limited, queue the request
+    if (this.isRateLimited()) {
+      return new Promise((resolve, reject) => {
+        this._requestQueue.push({ requestFn, resolve, reject, priority })
+        // Sort queue by priority (higher priority first)
+        this._requestQueue.sort((a, b) => b.priority - a.priority)
+      })
+    }
+    
+    // Enforce minimum interval between requests
+    const now = Date.now()
+    const timeSinceLastRequest = now - this._lastRequestTime
+    if (timeSinceLastRequest < this._minRequestInterval) {
+      await new Promise(resolve => setTimeout(resolve, this._minRequestInterval - timeSinceLastRequest))
+    }
+    
+    this._lastRequestTime = Date.now()
+    
+    try {
+      const result = await requestFn()
+      // Process queue after successful request
+      this._processQueue()
+      return result
+    } catch (error) {
+      // If rate limited, queue the request for retry
+      if (error.status === 429 || error.code === 'RATE_LIMIT_EXCEEDED') {
+        return new Promise((resolve, reject) => {
+          this._requestQueue.push({ requestFn, resolve, reject, priority })
+          this._requestQueue.sort((a, b) => b.priority - a.priority)
+        })
+      }
+      throw error
+    }
+  },
+  
+  // Process queued requests when rate limit is not active
+  async _processQueue() {
+    if (this._processingQueue || this.isRateLimited() || this._requestQueue.length === 0) {
+      return
+    }
+    
+    this._processingQueue = true
+    
+    while (this._requestQueue.length > 0 && !this.isRateLimited()) {
+      const { requestFn, resolve, reject } = this._requestQueue.shift()
+      
+      // Enforce minimum interval
+      const now = Date.now()
+      const timeSinceLastRequest = now - this._lastRequestTime
+      if (timeSinceLastRequest < this._minRequestInterval) {
+        await new Promise(r => setTimeout(r, this._minRequestInterval - timeSinceLastRequest))
+      }
+      
+      this._lastRequestTime = Date.now()
+      
+      try {
+        const result = await requestFn()
+        resolve(result)
+      } catch (error) {
+        if (error.status === 429 || error.code === 'RATE_LIMIT_EXCEEDED') {
+          // Re-queue if rate limited again
+          this._requestQueue.unshift({ requestFn, resolve, reject, priority: 0 })
+          this._processingQueue = false
+          return
+        }
+        reject(error)
+      }
+    }
+    
+    this._processingQueue = false
+  },
+  
+  // Clear the request queue
+  clearQueue() {
+    this._requestQueue.forEach(({ reject }) => {
+      reject(new Error('Request queue cleared due to rate limit'))
+    })
+    this._requestQueue = []
   }
 }
 

@@ -64,8 +64,21 @@ const LeadDetailModal = ({
                 setIsLoading(true);
             }
             try {
-                // Use getLead for leads to ensure proper parsing of proposals and other lead-specific fields
-                const response = await window.api.getLead(leadId);
+                // Check rate limit before making request
+                if (window.RateLimitManager?.isRateLimited()) {
+                    const waitSeconds = window.RateLimitManager.getWaitTimeRemaining();
+                    const waitMinutes = Math.round(waitSeconds / 60);
+                    console.warn(`⏸️ Rate limit active. Skipping lead fetch. Please wait ${waitMinutes} minute(s).`);
+                    setIsLoading(false);
+                    return;
+                }
+                
+                // Use throttled request to prevent rate limiting
+                const response = await window.RateLimitManager?.throttleRequest?.(
+                    () => window.api.getLead(leadId),
+                    10 // High priority for fetching lead data
+                ) || await window.api.getLead(leadId);
+                
                 const fetchedLead = response?.data?.lead || response?.lead;
                 if (fetchedLead) {
                     console.log('✅ Lead fetched with proposals:', Array.isArray(fetchedLead.proposals) ? fetchedLead.proposals.length : 'not an array');
@@ -83,8 +96,13 @@ const LeadDetailModal = ({
                     lastSavedDataRef.current = parsedLead;
                 }
             } catch (error) {
-                console.error('Error fetching lead:', error);
-                alert('Error loading lead data');
+                // Don't show alert for rate limit errors - they're handled by RateLimitManager
+                if (error.status === 429 || error.code === 'RATE_LIMIT_EXCEEDED') {
+                    console.warn('⏸️ Rate limit active. Skipping lead fetch.');
+                } else {
+                    console.error('Error fetching lead:', error);
+                    alert('Error loading lead data');
+                }
             } finally {
                 setIsLoading(false);
             }
@@ -92,18 +110,6 @@ const LeadDetailModal = ({
         
         fetchLead();
     }, [leadId, initialLead]);
-    
-    // Initialize lastSavedDataRef when formData is ready (for initial lead)
-    useEffect(() => {
-        if (lead && formData && formData.name && !lastSavedDataRef.current) {
-            // Initialize with current formData if not already set
-            lastSavedDataRef.current = {
-                ...formData,
-                notes: notesTextareaRef.current?.value || formData.notes || '',
-                projectIds: selectedProjectIds || formData.projectIds || []
-            };
-        }
-    }, [lead, formData, selectedProjectIds]);
     
     // Cleanup debounce timeout on unmount
     useEffect(() => {
@@ -176,6 +182,20 @@ const LeadDetailModal = ({
     const formDataRef = useRef(null);
     const isAutoSavingRef = useRef(false);
     const lastSavedDataRef = useRef(null); // Track last saved state
+    
+    // Initialize lastSavedDataRef when formData is ready (for initial lead)
+    // Moved here after formData declaration to avoid TDZ error
+    // Note: selectedProjectIds is declared later, so we use formData.projectIds directly
+    useEffect(() => {
+        if (lead && formData && formData.name && !lastSavedDataRef.current) {
+            // Initialize with current formData if not already set
+            lastSavedDataRef.current = {
+                ...formData,
+                notes: notesTextareaRef.current?.value || formData.notes || '',
+                projectIds: formData.projectIds || []
+            };
+        }
+    }, [lead, formData]);
     const isSavingProposalsRef = useRef(false); // Track when proposals are being saved
     const isCreatingProposalRef = useRef(false); // Track when a proposal is being created (use ref for immediate updates)
     const isEditingRef = useRef(false); // Track when user is actively typing/editing
@@ -228,11 +248,29 @@ const LeadDetailModal = ({
     // Load industries function
     const loadIndustries = useCallback(async () => {
         try {
+            // Check rate limit before making request
+            if (window.RateLimitManager?.isRateLimited()) {
+                console.warn('⏸️ Rate limit active. Skipping industries load.');
+                setIsLoadingIndustries(false);
+                return;
+            }
+            
             setIsLoadingIndustries(true);
             const token = window.storage?.getToken?.();
             if (!token) return;
             
-            const response = await fetch('/api/industries', {
+            // Use throttled request
+            const response = await window.RateLimitManager?.throttleRequest?.(
+                () => fetch('/api/industries', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include'
+                }),
+                1 // Lowest priority
+            ) || await fetch('/api/industries', {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -247,7 +285,10 @@ const LeadDetailModal = ({
                 setIndustries(industriesList);
             }
         } catch (error) {
-            console.error('Error loading industries:', error);
+            // Don't log rate limit errors
+            if (error.status !== 429 && error.code !== 'RATE_LIMIT_EXCEEDED') {
+                console.error('Error loading industries:', error);
+            }
         } finally {
             setIsLoadingIndustries(false);
         }
@@ -1051,10 +1092,18 @@ const LeadDetailModal = ({
             return false;
         }
 
-        // Rate limiting: Don't auto-save if we just saved recently (within 2 seconds)
+        // Check rate limit before attempting save
+        if (window.RateLimitManager?.isRateLimited()) {
+            const waitSeconds = window.RateLimitManager.getWaitTimeRemaining();
+            const waitMinutes = Math.round(waitSeconds / 60);
+            console.warn(`⏸️ Rate limit active. Skipping auto-save. Please wait ${waitMinutes} minute(s).`);
+            return false;
+        }
+
+        // Rate limiting: Don't auto-save if we just saved recently (within 3 seconds - increased from 2)
         const now = Date.now();
         const timeSinceLastSave = now - lastAutoSaveAttemptRef.current;
-        if (timeSinceLastSave < 2000 && !skipChangeCheck) {
+        if (timeSinceLastSave < 3000 && !skipChangeCheck) {
             return false; // Skip if we just attempted a save recently
         }
 
@@ -1089,49 +1138,52 @@ const LeadDetailModal = ({
                 lastContact: new Date().toISOString().split('T')[0]
             };
 
-            // Use onSave prop if provided
-            if (onSave && typeof onSave === 'function') {
-                await onSave(leadData, true); // true = stay in edit mode after save
-                
-                // Update last saved data reference after successful save
-                lastSavedDataRef.current = {
-                    ...leadData,
-                    notes: latestNotes,
-                    projectIds: selectedProjectIds
-                };
-                
-                console.log('✅ Auto-saved lead data when switching tabs');
-                setHasBeenSaved(true); // Mark as saved after successful save
-                return true;
-            } else {
-                // Fallback to direct API calls if onSave is not provided
-                if (leadId) {
-                    await window.api.updateLead(leadId, leadData);
+            // Use throttled request wrapper for API calls
+            const performSave = async () => {
+                // Use onSave prop if provided
+                if (onSave && typeof onSave === 'function') {
+                    await onSave(leadData, true); // true = stay in edit mode after save
                 } else {
-                    const apiResponse = await window.api.createLead(leadData);
-                    const savedLead = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
-                    // Update leadId if we just created the lead
-                    if (savedLead && savedLead.id) {
-                        // Update the lead state so the modal recognizes it as existing
-                        setLead(savedLead);
-                        // Update formData with the saved lead ID
-                        setFormData(prev => ({ ...prev, id: savedLead.id }));
+                    // Fallback to direct API calls if onSave is not provided
+                    if (leadId) {
+                        await window.api.updateLead(leadId, leadData);
+                    } else {
+                        const apiResponse = await window.api.createLead(leadData);
+                        const savedLead = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
+                        // Update leadId if we just created the lead
+                        if (savedLead && savedLead.id) {
+                            // Update the lead state so the modal recognizes it as existing
+                            setLead(savedLead);
+                            // Update formData with the saved lead ID
+                            setFormData(prev => ({ ...prev, id: savedLead.id }));
+                        }
                     }
                 }
-                
-                // Update last saved data reference after successful save
-                lastSavedDataRef.current = {
-                    ...leadData,
-                    notes: latestNotes,
-                    projectIds: selectedProjectIds
-                };
-                
-                setHasBeenSaved(true);
-                return true;
-            }
+            };
+
+            // Use throttled request to prevent rate limiting
+            await window.RateLimitManager?.throttleRequest?.(
+                performSave,
+                8 // High priority for saves
+            ) || await performSave();
+            
+            // Update last saved data reference after successful save
+            lastSavedDataRef.current = {
+                ...leadData,
+                notes: latestNotes,
+                projectIds: selectedProjectIds
+            };
+            
+            console.log('✅ Auto-saved lead data when switching tabs');
+            setHasBeenSaved(true); // Mark as saved after successful save
+            return true;
         } catch (error) {
-            console.error('❌ Error auto-saving lead:', error);
-            // Don't show alert for auto-save errors to avoid interrupting user flow
+            // Don't show alert for rate limit or auto-save errors
+            if (error.status === 429 || error.code === 'RATE_LIMIT_EXCEEDED') {
+                console.warn('⏸️ Rate limit active. Auto-save skipped.');
+            } else {
+                console.error('❌ Error auto-saving lead:', error);
+            }
             return false;
         } finally {
             isAutoSavingRef.current = false;
@@ -1161,8 +1213,24 @@ const LeadDetailModal = ({
             clearTimeout(autoSaveDebounceTimeoutRef.current);
         }
         
+        // Check rate limit before proceeding with auto-save
+        if (window.RateLimitManager?.isRateLimited()) {
+            const waitSeconds = window.RateLimitManager.getWaitTimeRemaining();
+            const waitMinutes = Math.round(waitSeconds / 60);
+            console.warn(`⏸️ Rate limit active. Skipping auto-save on tab change. Please wait ${waitMinutes} minute(s).`);
+            return;
+        }
+        
         // Debounce auto-save to prevent rapid API calls when switching tabs quickly
+        // Increased debounce time to 1000ms to give more time between requests
         autoSaveDebounceTimeoutRef.current = setTimeout(async () => {
+            // Check rate limit again before executing (in case it changed during debounce)
+            if (window.RateLimitManager?.isRateLimited()) {
+                console.warn('⏸️ Rate limit active. Skipping auto-save on tab change.');
+                autoSaveDebounceTimeoutRef.current = null;
+                return;
+            }
+            
             // Auto-save current form data after tab switch (debounced)
             // Only save if there's actual data to save (name is required)
             let currentFormData = formDataRef.current || formData;
@@ -1193,7 +1261,7 @@ const LeadDetailModal = ({
             }
             
             autoSaveDebounceTimeoutRef.current = null;
-        }, 500); // 500ms debounce - wait for user to finish switching tabs
+        }, 1000); // Increased to 1000ms debounce - wait for user to finish switching tabs and prevent rapid requests
     };
     
     // Restore cursor position after formData.notes changes - use useLayoutEffect for synchronous restoration
@@ -1288,10 +1356,22 @@ const LeadDetailModal = ({
     useEffect(() => {
         const loadUsers = async () => {
             try {
+                // Check rate limit before making request
+                if (window.RateLimitManager?.isRateLimited()) {
+                    console.warn('⏸️ Rate limit active. Skipping users load.');
+                    return;
+                }
+                
                 const token = window.storage?.getToken?.();
                 if (!token) return;
                 
-                const response = await fetch('/api/users', {
+                // Use throttled request
+                const response = await window.RateLimitManager?.throttleRequest?.(
+                    () => fetch('/api/users', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    }),
+                    5 // Medium priority
+                ) || await fetch('/api/users', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 
@@ -1300,11 +1380,17 @@ const LeadDetailModal = ({
                     setAllUsers(data.data?.users || data.users || []);
                 }
             } catch (error) {
-                console.error('Error loading users:', error);
+                // Don't log rate limit errors
+                if (error.status !== 429 && error.code !== 'RATE_LIMIT_EXCEEDED') {
+                    console.error('Error loading users:', error);
+                }
             }
         };
         
-        loadUsers();
+        // Stagger the loadUsers call to prevent burst of requests
+        setTimeout(() => {
+            loadUsers();
+        }, 200);
         
         // Cleanup function to clear timeout on unmount
         return () => {
@@ -1461,11 +1547,14 @@ const LeadDetailModal = ({
     const [newTagName, setNewTagName] = useState('');
     const [newTagColor, setNewTagColor] = useState('#3B82F6');
     
-    // Load tags when lead changes
+    // Load tags when lead changes - stagger calls to prevent rate limiting
     useEffect(() => {
         if (lead?.id) {
+            // Stagger API calls to prevent burst of requests
             loadLeadTags();
-            loadAllTags();
+            setTimeout(() => {
+                loadAllTags();
+            }, 300);
         }
     }, [lead?.id]);
     
@@ -1473,10 +1562,22 @@ const LeadDetailModal = ({
     const loadLeadTags = async () => {
         if (!lead?.id) return;
         try {
+            // Check rate limit before making request
+            if (window.RateLimitManager?.isRateLimited()) {
+                console.warn('⏸️ Rate limit active. Skipping lead tags load.');
+                return;
+            }
+            
             const token = window.storage?.getToken?.();
             if (!token) return;
             
-            const response = await fetch(`/api/clients/${lead.id}/tags`, {
+            // Use throttled request
+            const response = await window.RateLimitManager?.throttleRequest?.(
+                () => fetch(`/api/clients/${lead.id}/tags`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }),
+                3 // Lower priority
+            ) || await fetch(`/api/clients/${lead.id}/tags`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             
@@ -1488,8 +1589,9 @@ const LeadDetailModal = ({
                 setLeadTags([]);
             }
         } catch (error) {
-            // Only log non-404 errors to avoid console spam
-            if (error.message && !error.message.includes('404')) {
+            // Don't log rate limit or 404 errors
+            if (error.status !== 429 && error.code !== 'RATE_LIMIT_EXCEEDED' && 
+                error.message && !error.message.includes('404')) {
                 console.error('Error loading lead tags:', error);
             }
             setLeadTags([]);
@@ -1499,10 +1601,22 @@ const LeadDetailModal = ({
     // Load all available tags
     const loadAllTags = async () => {
         try {
+            // Check rate limit before making request
+            if (window.RateLimitManager?.isRateLimited()) {
+                console.warn('⏸️ Rate limit active. Skipping all tags load.');
+                return;
+            }
+            
             const token = window.storage?.getToken?.();
             if (!token) return;
             
-            const response = await fetch('/api/tags', {
+            // Use throttled request
+            const response = await window.RateLimitManager?.throttleRequest?.(
+                () => fetch('/api/tags', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }),
+                2 // Lower priority
+            ) || await fetch('/api/tags', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             
@@ -1511,7 +1625,10 @@ const LeadDetailModal = ({
                 setAllTags(data.data?.tags || []);
             }
         } catch (error) {
-            console.error('Error loading tags:', error);
+            // Don't log rate limit errors
+            if (error.status !== 429 && error.code !== 'RATE_LIMIT_EXCEEDED') {
+                console.error('Error loading tags:', error);
+            }
         }
     };
     
