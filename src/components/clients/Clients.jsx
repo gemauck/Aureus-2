@@ -668,6 +668,7 @@ const Clients = React.memo(() => {
     const selectedClientRef = useRef(null); // Ref to track selected client
     const selectedLeadRef = useRef(null); // Ref to track selected lead
     const pipelineOpportunitiesLoadedRef = useRef(new Map());
+    const isOpeningIndustryModalRef = useRef(false); // Ref to prevent multiple rapid clicks when opening industry modal
     
     // PERFORMANCE FIX: Combine ref sync effects into one to reduce re-renders
     useEffect(() => {
@@ -675,6 +676,13 @@ const Clients = React.memo(() => {
         leadsRef.current = leads;
         viewModeRef.current = viewMode;
     }, [clients, leads, viewMode]);
+
+    // Reset industry modal ref when modal closes
+    useEffect(() => {
+        if (!showIndustryModal) {
+            isOpeningIndustryModalRef.current = false;
+        }
+    }, [showIndustryModal]);
 
 
     // Utility function to calculate time since first contact
