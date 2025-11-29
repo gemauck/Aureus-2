@@ -4894,12 +4894,15 @@ const Clients = React.memo(() => {
                                     )}
                                 </div>
                             </th>
+                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
+                                Tags
+                            </th>
                         </tr>
                     </thead>
                     <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
                         {paginatedLeads.length === 0 ? (
                             <tr>
-                                <td colSpan="4" className={`px-6 py-12 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <td colSpan="5" className={`px-6 py-12 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                     <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
                                         <i className="fas fa-user-plus text-2xl text-gray-400"></i>
                                     </div>
@@ -4955,6 +4958,41 @@ const Clients = React.memo(() => {
                                         }`}>
                                             {lead.stage || 'Awareness'}
                                         </span>
+                                    </td>
+                                    <td className="px-6 py-2">
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {lead.tags && Array.isArray(lead.tags) && lead.tags.length > 0 ? (
+                                                lead.tags.map((tag, index) => {
+                                                    // Handle both nested and flat tag structures
+                                                    const tagObj = tag && typeof tag === 'object' && tag.name
+                                                        ? tag // Already a tag object with name
+                                                        : (tag && typeof tag === 'object' && tag.tag && typeof tag.tag === 'object')
+                                                            ? tag.tag // Extract from nested structure
+                                                            : { id: index, name: String(tag || ''), color: '#3B82F6' }; // Fallback
+                                                    
+                                                    const tagName = tagObj?.name || String(tag || '');
+                                                    const tagColor = tagObj?.color || '#3B82F6';
+                                                    const tagId = tagObj?.id || index;
+                                                    
+                                                    return (
+                                                        <span
+                                                            key={tagId}
+                                                            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full border transition"
+                                                            style={{
+                                                                backgroundColor: `${tagColor}20`,
+                                                                color: tagColor,
+                                                                borderColor: tagColor
+                                                            }}
+                                                        >
+                                                            <i className="fas fa-tag text-[10px]"></i>
+                                                            {tagName}
+                                                        </span>
+                                                    );
+                                                })
+                                            ) : (
+                                                <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>—</span>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))
@@ -5309,19 +5347,6 @@ const Clients = React.memo(() => {
                     <span className="sm:hidden">Leads</span>
                 </button>
                 <button
-                    onClick={() => setViewMode('news-feed')}
-                    className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-                        viewMode === 'news-feed' 
-                            ? 'bg-blue-600 text-white shadow-sm' 
-                            : isDark 
-                                ? 'text-gray-300 hover:text-gray-100 hover:bg-gray-700' 
-                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                    }`}
-                >
-                    <i className="fas fa-newspaper mr-2"></i>
-                    News Feed
-                </button>
-                <button
                     onClick={() => {
                         setViewMode('pipeline');
                     }}
@@ -5335,6 +5360,19 @@ const Clients = React.memo(() => {
                 >
                     <i className="fas fa-stream mr-2"></i>
                     Pipeline
+                </button>
+                <button
+                    onClick={() => setViewMode('news-feed')}
+                    className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                        viewMode === 'news-feed' 
+                            ? 'bg-blue-600 text-white shadow-sm' 
+                            : isDark 
+                                ? 'text-gray-300 hover:text-gray-100 hover:bg-gray-700' 
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    }`}
+                >
+                    <i className="fas fa-newspaper mr-2"></i>
+                    News Feed
                 </button>
             </div>
 
