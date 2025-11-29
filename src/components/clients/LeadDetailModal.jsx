@@ -147,6 +147,8 @@ const LeadDetailModal = ({
     const isCreatingProposalRef = useRef(false); // Track when a proposal is being created (use ref for immediate updates)
     const isEditingRef = useRef(false); // Track when user is actively typing/editing
     const editingTimeoutRef = useRef(null); // Track timeout to clear editing flag
+    const autoSaveDebounceTimeoutRef = useRef(null); // Debounce auto-save to prevent rate limiting
+    const lastAutoSaveAttemptRef = useRef(0); // Track last auto-save attempt timestamp
     
     // Track which fields the user has actually entered data into - NEVER overwrite these
     const userEditedFieldsRef = useRef(new Set()); // Set of field names user has edited
@@ -989,8 +991,13 @@ const LeadDetailModal = ({
             isAutoSavingRef.current = true;
             setIsAutoSaving(true);
 
+            // CRITICAL: Always read notes from textarea ref to ensure we have the latest value
+            // This fixes the issue where notes typed in the textarea might not be saved on PC
+            const latestNotes = notesTextareaRef.current?.value || currentFormData.notes || '';
+            
             const leadData = {
                 ...currentFormData,
+                notes: latestNotes, // Always use the latest notes from textarea
                 projectIds: selectedProjectIds,
                 lastContact: new Date().toISOString().split('T')[0]
             };
@@ -1042,7 +1049,19 @@ const LeadDetailModal = ({
         
         // Auto-save current form data before switching tabs
         // Only save if there's actual data to save (name is required)
-        const currentFormData = formDataRef.current || formData;
+        let currentFormData = formDataRef.current || formData;
+        
+        // CRITICAL FIX: Always sync notes from textarea ref before saving
+        // This ensures notes typed in the textarea are saved even if formData hasn't updated yet
+        if (notesTextareaRef.current) {
+            const latestNotes = notesTextareaRef.current.value || '';
+            currentFormData = {
+                ...currentFormData,
+                notes: latestNotes
+            };
+            // Update formDataRef immediately so it's in sync
+            formDataRef.current = currentFormData;
+        }
         
         // Auto-save logic:
         // 1. For existing leads (leadId exists): Always save when switching tabs
@@ -2078,8 +2097,13 @@ const LeadDetailModal = ({
         
         setIsSaving(true);
         try {
+            // CRITICAL: Always read notes from textarea ref to ensure we have the latest value
+            // This fixes the issue where notes typed in the textarea might not be saved on PC
+            const latestNotes = notesTextareaRef.current?.value || formData.notes || '';
+            
             const leadData = {
                 ...formData,
+                notes: latestNotes, // Always use the latest notes from textarea
                 projectIds: selectedProjectIds,
                 lastContact: new Date().toISOString().split('T')[0]
             };
