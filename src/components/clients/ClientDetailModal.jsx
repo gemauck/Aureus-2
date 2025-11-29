@@ -581,24 +581,27 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 normalizedName: normalizedClientName
             });
             
-            // Fetch ALL job cards and filter client-side
-            let response = await fetch(`/api/jobcards?pageSize=5000`, {
-                headers: { 
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-            
+            // Strategy: Try clientId first (most reliable), then clientName, then fallback to all
+            let response = null;
             let data = null;
-            if (response.ok) {
-                data = await response.json();
-                console.log(`📋 Fetched ALL job cards: ${(data.jobCards || []).length} found`);
-            } else {
-                console.warn('⚠️ Failed to fetch by clientId, trying by clientName:', response.statusText);
+            
+            // Strategy 1: Fetch by clientId (most accurate)
+            if (clientIdToMatch) {
+                response = await fetch(`/api/jobcards?clientId=${encodeURIComponent(clientIdToMatch)}&pageSize=1000`, {
+                    headers: { 
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    data = await response.json();
+                    console.log(`📋 Job cards from clientId filter: ${(data.jobCards || []).length} found`);
+                }
             }
             
-            // Also try fetching by clientName as fallback (case-insensitive search)
-            if (!data || (data.jobCards || []).length === 0) {
+            // Strategy 2: If no results, try by clientName (case-insensitive partial match)
+            if ((!data || (data.jobCards || []).length === 0) && client.name) {
                 response = await fetch(`/api/jobcards?clientName=${encodeURIComponent(client.name)}&pageSize=1000`, {
                     headers: { 
                         'Authorization': `Bearer ${token}`,
@@ -612,7 +615,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 }
             }
             
-            if (response.ok && data) {
+            // Strategy 3: Fallback to fetching ALL job cards and filtering client-side
+            if (!data || (data.jobCards || []).length === 0) {
+                response = await fetch(`/api/jobcards?pageSize=5000`, {
+                    headers: { 
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    data = await response.json();
+                    console.log(`📋 Fetched ALL job cards as fallback: ${(data.jobCards || []).length} found`);
+                }
+            }
+            
+            if (response && response.ok && data) {
                 // Flexible filtering: match by clientId or case-insensitive clientName match
                 const allJobCards = data.jobCards || [];
                 console.log(`📋 Total job cards from API: ${allJobCards.length}`);
@@ -658,7 +676,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 
                 setJobCards(clientJobCards);
             } else {
-                console.error('Failed to load job cards:', response.statusText);
+                console.error('Failed to load job cards:', response?.statusText || 'Unknown error');
                 setJobCards([]);
             }
         } catch (error) {

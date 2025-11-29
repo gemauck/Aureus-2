@@ -3,7 +3,63 @@ const API_BASE = (() => {
     return window.location.origin + '/api'
 })()
 
+// Global rate limit state management to prevent cascade of requests
+const RateLimitManager = {
+  _rateLimitActive: false,
+  _rateLimitResumeAt: 0,
+  _consecutiveRateLimitErrors: 0,
+  
+  isRateLimited() {
+    if (!this._rateLimitActive) return false
+    if (Date.now() >= this._rateLimitResumeAt) {
+      this._rateLimitActive = false
+      this._consecutiveRateLimitErrors = 0
+      return false
+    }
+    return true
+  },
+  
+  setRateLimit(retryAfterSeconds) {
+    this._rateLimitActive = true
+    // Add buffer time - retry after the specified time plus a small buffer
+    const bufferSeconds = Math.min(retryAfterSeconds * 0.1, 60) // 10% buffer, max 60s
+    this._rateLimitResumeAt = Date.now() + (retryAfterSeconds + bufferSeconds) * 1000
+    this._consecutiveRateLimitErrors += 1
+    
+    const waitMinutes = Math.round((retryAfterSeconds + bufferSeconds) / 60)
+    console.warn(`🚫 Rate limit active. Waiting ${waitMinutes} minute(s) before allowing new requests...`)
+    
+    // If we've hit rate limits multiple times, extend the wait period
+    if (this._consecutiveRateLimitErrors >= 3) {
+      const extendedWait = retryAfterSeconds * 2 // Double the wait time
+      this._rateLimitResumeAt = Date.now() + extendedWait * 1000
+      console.warn(`⚠️ Multiple rate limit errors detected. Extending wait time to ${Math.round(extendedWait / 60)} minute(s).`)
+    }
+  },
+  
+  clearRateLimit() {
+    this._rateLimitActive = false
+    this._rateLimitResumeAt = 0
+  },
+  
+  getWaitTimeRemaining() {
+    if (!this._rateLimitActive) return 0
+    const remaining = Math.max(0, this._rateLimitResumeAt - Date.now())
+    return Math.round(remaining / 1000) // Return seconds
+  }
+}
+
 async function request(path, options = {}) {
+  // Check if we're currently rate limited before making any request
+  if (RateLimitManager.isRateLimited()) {
+    const waitSeconds = RateLimitManager.getWaitTimeRemaining()
+    const waitMinutes = Math.round(waitSeconds / 60)
+    const error = new Error(`Rate limit active. Please wait ${waitMinutes} minute(s) before trying again.`)
+    error.status = 429
+    error.code = 'RATE_LIMIT_EXCEEDED'
+    error.retryAfter = waitSeconds
+    throw error
+  }
   const token = window.storage?.getToken?.()
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) }
   if (token) headers['Authorization'] = `Bearer ${token}`
@@ -14,6 +70,32 @@ async function request(path, options = {}) {
   const execute = async () => {
     const res = await fetch(fullUrl, requestOptions)
     const text = await res.text()
+
+    // Handle 429 rate limit errors FIRST before trying to parse JSON
+    // Server returns plain text "Too many requests, please slow down..." which is not JSON
+    if (res.status === 429) {
+      const retryAfter = res.headers.get('Retry-After') || '900' // Default to 15 minutes
+      let errorMessage = 'Too many requests. Please wait before trying again.'
+      
+      // Try to parse as JSON, but fall back to plain text if it fails
+      try {
+        const jsonData = text ? JSON.parse(text) : {}
+        errorMessage = jsonData?.error?.message || jsonData?.message || errorMessage
+      } catch (_) {
+        // If parsing fails, use the plain text response (common for 429 errors)
+        errorMessage = text.trim() || errorMessage
+      }
+      
+      // Set global rate limit state to prevent other requests
+      const retryAfterSeconds = parseInt(retryAfter, 10)
+      RateLimitManager.setRateLimit(retryAfterSeconds)
+      
+      const rateLimitError = new Error(errorMessage)
+      rateLimitError.status = 429
+      rateLimitError.retryAfter = retryAfterSeconds
+      rateLimitError.code = 'RATE_LIMIT_EXCEEDED'
+      throw rateLimitError
+    }
 
     // Check for gateway errors (502, 503, 504) that return HTML
     if (!res.ok && (res.status === 502 || res.status === 503 || res.status === 504)) {
@@ -66,13 +148,18 @@ async function request(path, options = {}) {
     }
 
     if (!res.ok) {
-      // Handle rate limiting (429) specifically
+      // 429 errors are already handled in execute() function above
+      // This code path shouldn't be reached for 429 errors, but keeping for safety
       if (res.status === 429) {
         const retryAfter = res.headers.get('Retry-After') || data?.retryAfter || 900 // Default to 15 minutes
         const errorMessage = data?.error?.message || data?.message || 'Too many requests. Please wait before trying again.'
+        // Set global rate limit state to prevent other requests
+        const retryAfterSeconds = parseInt(retryAfter, 10)
+        RateLimitManager.setRateLimit(retryAfterSeconds)
+        
         const rateLimitError = new Error(errorMessage)
         rateLimitError.status = 429
-        rateLimitError.retryAfter = parseInt(retryAfter, 10)
+        rateLimitError.retryAfter = retryAfterSeconds
         rateLimitError.code = 'RATE_LIMIT_EXCEEDED'
         throw rateLimitError
       }
@@ -130,7 +217,7 @@ async function request(path, options = {}) {
 
     return data
   } catch (error) {
-    // Check if it's a database connection error or server error (500, 502, 503, 504) - suppress logs for these
+    // Check if it's a database connection error, server error, or rate limit error - suppress logs for these
     const errorMessage = error?.message || String(error);
     const isDatabaseError = errorMessage.includes('Database connection failed') ||
                           errorMessage.includes('unreachable') ||
@@ -140,6 +227,14 @@ async function request(path, options = {}) {
                          errorMessage.includes('502') || 
                          errorMessage.includes('503') || 
                          errorMessage.includes('504');
+    const isRateLimitError = error?.status === 429 || error?.code === 'RATE_LIMIT_EXCEEDED';
+    
+    // Handle rate limit errors - don't retry, just throw
+    if (isRateLimitError) {
+      // Rate limit errors are already logged by RateLimitManager.setRateLimit()
+      // Don't log again to avoid spam
+      throw error;
+    }
     
     // Suppress error logs for server errors and database errors (they're expected when backend/DB is down)
     if (!isDatabaseError && !isServerError) {
@@ -148,6 +243,9 @@ async function request(path, options = {}) {
     throw error;
   }
 }
+
+// Expose rate limit manager globally for debugging
+window.RateLimitManager = RateLimitManager;
 
 const api = {
   // Auth
