@@ -390,9 +390,9 @@ function processClientData(rawClients, cacheKey) {
                 })
                 .filter(Boolean);
             
-            // Debug logging for first few clients with tags
-            if (processedTags.length > 0 && Math.random() < 0.1) {
-                console.log(`🏷️ Client ${c.name} (${c.id}) tags processed:`, processedTags);
+            // Debug logging for clients with tags
+            if (processedTags.length > 0) {
+                console.log(`🏷️ Client "${c.name}" (${c.id}) - ${processedTags.length} tags processed:`, processedTags.map(t => t.name));
             }
             
             return processedTags;
@@ -1291,9 +1291,16 @@ const Clients = React.memo(() => {
                 // Debug: Check if any clients have tags in API response
                 const clientsWithTags = apiClients.filter(c => c.tags && Array.isArray(c.tags) && c.tags.length > 0);
                 if (clientsWithTags.length > 0) {
-                    console.log(`🏷️ Found ${clientsWithTags.length} clients with tags in API response:`, clientsWithTags.slice(0, 3).map(c => ({ name: c.name, tags: c.tags })));
+                    console.log(`🏷️ Found ${clientsWithTags.length} clients with tags in API response:`, clientsWithTags.slice(0, 3).map(c => ({ name: c.name, tags: c.tags, tagsLength: c.tags?.length })));
                 } else {
-                    console.log(`⚠️ No clients with tags found in API response. First client sample:`, apiClients[0] ? { name: apiClients[0].name, tags: apiClients[0].tags, tagsType: typeof apiClients[0].tags } : 'no clients');
+                    console.log(`⚠️ No clients with tags found in API response. Sample clients:`, apiClients.slice(0, 3).map(c => ({ 
+                        name: c.name, 
+                        hasTags: !!c.tags,
+                        tags: c.tags,
+                        tagsType: typeof c.tags,
+                        tagsIsArray: Array.isArray(c.tags),
+                        tagsLength: Array.isArray(c.tags) ? c.tags.length : 'N/A'
+                    })));
                 }
                 
                 // If API returns no clients, use cached data
@@ -1304,7 +1311,15 @@ const Clients = React.memo(() => {
                 // Use memoized data processor for better performance
                 const processStartTime = performance.now();
                 const processedClients = processClientData(apiClients);
-                console.log(`🔍 Processed clients: ${processedClients.length}`, processedClients);
+                console.log(`🔍 Processed clients: ${processedClients.length}`);
+                
+                // Debug: Check processed clients for tags
+                const processedWithTags = processedClients.filter(c => c.tags && Array.isArray(c.tags) && c.tags.length > 0);
+                if (processedWithTags.length > 0) {
+                    console.log(`✅ After processing: ${processedWithTags.length} clients have tags:`, processedWithTags.slice(0, 3).map(c => ({ name: c.name, tagCount: c.tags.length, tags: c.tags.map(t => t.name) })));
+                } else {
+                    console.log(`❌ After processing: NO clients have tags. Sample:`, processedClients.slice(0, 3).map(c => ({ name: c.name, tags: c.tags, tagsType: typeof c.tags, tagsLength: Array.isArray(c.tags) ? c.tags.length : 'N/A' })));
+                }
                 
                 // Separate clients and leads based on type
                 // Include records with type='client' OR null/undefined (legacy clients without type field)
@@ -2223,6 +2238,21 @@ const Clients = React.memo(() => {
             }
             const rawLeads = apiResponse?.data?.leads || apiResponse?.leads || [];
             console.log(`📥 Received ${rawLeads.length} leads from API`);
+            
+            // DEBUG: Check if any leads have tags in API response
+            const leadsWithTags = rawLeads.filter(l => l.tags && Array.isArray(l.tags) && l.tags.length > 0);
+            if (leadsWithTags.length > 0) {
+                console.log(`🏷️ Found ${leadsWithTags.length} leads with tags in API response:`, leadsWithTags.slice(0, 3).map(l => ({ name: l.name, tags: l.tags, tagsLength: l.tags?.length })));
+            } else {
+                console.log(`⚠️ No leads with tags found in API response. Sample leads:`, rawLeads.slice(0, 3).map(l => ({ 
+                    name: l.name, 
+                    hasTags: !!l.tags,
+                    tags: l.tags,
+                    tagsType: typeof l.tags,
+                    tagsIsArray: Array.isArray(l.tags),
+                    tagsLength: Array.isArray(l.tags) ? l.tags.length : 'N/A'
+                })));
+            }
             
             // DEBUG: Log lead details and ownerIds for visibility debugging
             const currentUser = window.storage?.getUser?.();
@@ -4416,6 +4446,12 @@ const Clients = React.memo(() => {
                                         <div className="flex flex-wrap gap-1.5">
                                             {(() => {
                                                 const tags = Array.isArray(client.tags) ? client.tags : [];
+                                                
+                                                // Debug logging for tags rendering
+                                                if (tags.length > 0) {
+                                                    console.log(`🎨 Rendering tags for client "${client.name}":`, tags);
+                                                }
+                                                
                                                 const MAX = 3;
                                                 const visible = tags.slice(0, MAX);
                                                 const remaining = tags.length - visible.length;
@@ -4961,8 +4997,21 @@ const Clients = React.memo(() => {
                                     </td>
                                     <td className="px-6 py-2">
                                         <div className="flex flex-wrap gap-1.5">
-                                            {lead.tags && Array.isArray(lead.tags) && lead.tags.length > 0 ? (
-                                                lead.tags.map((tag, index) => {
+                                            {(() => {
+                                                const tags = Array.isArray(lead.tags) ? lead.tags : [];
+                                                
+                                                // Debug logging for tags rendering
+                                                if (tags.length > 0) {
+                                                    console.log(`🎨 Rendering tags for lead "${lead.name}":`, tags);
+                                                } else if (lead.tags) {
+                                                    console.log(`⚠️ Lead "${lead.name}" has tags but not array:`, { tags: lead.tags, type: typeof lead.tags });
+                                                }
+                                                
+                                                if (tags.length === 0) {
+                                                    return <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>—</span>;
+                                                }
+                                                
+                                                return tags.map((tag, index) => {
                                                     // Handle both nested and flat tag structures
                                                     const tagObj = tag && typeof tag === 'object' && tag.name
                                                         ? tag // Already a tag object with name
@@ -4988,10 +5037,8 @@ const Clients = React.memo(() => {
                                                             {tagName}
                                                         </span>
                                                     );
-                                                })
-                                            ) : (
-                                                <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>—</span>
-                                            )}
+                                                });
+                                            })()}
                                         </div>
                                     </td>
                                 </tr>
