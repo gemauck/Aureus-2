@@ -502,6 +502,25 @@ const DatabaseAPI = {
                         throw new Error(errorMessage);
                     }
                     
+                    // Handle 502 Bad Gateway errors
+                    if (response.status === 502) {
+                        // Include "502" in the error message so catch block can recognize it
+                        const errorMessage = serverErrorMessage || `Bad Gateway (502): The server is temporarily unavailable. All retry attempts exhausted.`;
+                        throw new Error(`502: ${errorMessage}`);
+                    }
+                    
+                    // Handle 503 Service Unavailable errors
+                    if (response.status === 503) {
+                        const errorMessage = serverErrorMessage || `Service Unavailable (503): The service is temporarily unavailable.`;
+                        throw new Error(`503: ${errorMessage}`);
+                    }
+                    
+                    // Handle 504 Gateway Timeout errors
+                    if (response.status === 504) {
+                        const errorMessage = serverErrorMessage || `Gateway Timeout (504): The request timed out.`;
+                        throw new Error(`504: ${errorMessage}`);
+                    }
+                    
                     // For other errors, use the server's error message if available
                     const statusText = response.statusText || 'Error';
                     const msg = serverErrorMessage || '';
@@ -565,8 +584,10 @@ const DatabaseAPI = {
                                 console.error(`❌ Database API request failed after ${maxRetries + 1} attempts (${endpoint}):`, error);
                             }
                             if (isServerError) {
-                                // Suppress error logs for server errors - they're expected when backend has issues
-                                throw new Error(`Server error: The server is temporarily unavailable. Please try again in a moment.`);
+                                // Preserve the original error message so it can be identified by error handlers
+                                // The error message should include the status code (e.g., "502:", "503:", etc.)
+                                const originalMessage = error?.message || 'Server error';
+                                throw new Error(originalMessage);
                             } else {
                                 throw new Error(`Network error: Unable to connect to server. Please check your internet connection and try again.`);
                             }
