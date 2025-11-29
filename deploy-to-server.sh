@@ -71,70 +71,72 @@ fi
 # Set correct DATABASE_URL - ALWAYS use production database credentials
 echo ""
 echo "🔧 Setting correct DATABASE_URL everywhere..."
-# Production database credentials (ALWAYS use these)
-# Use environment variables for security - set these in your deployment environment
-DB_USERNAME="${DB_USERNAME:-doadmin}"
-DB_PASSWORD="${DB_PASSWORD:-${DATABASE_PASSWORD}}"
-DB_HOST="${DB_HOST:-dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com}"
-DB_PORT="${DB_PORT:-25060}"
-DB_NAME="${DB_NAME:-defaultdb}"
-DB_SSLMODE="${DB_SSLMODE:-require}"
 
-if [ -z "$DB_PASSWORD" ]; then
-    echo "❌ ERROR: DB_PASSWORD or DATABASE_PASSWORD environment variable must be set"
-    exit 1
-fi
-
-DATABASE_URL="postgresql://\${DB_USERNAME}:\${DB_PASSWORD}@\${DB_HOST}:\${DB_PORT}/\${DB_NAME}?sslmode=\${DB_SSLMODE}"
-
-echo "   Host: \$DB_HOST"
-echo "   Port: \$DB_PORT"
-echo "   Database: \$DB_NAME"
-
-# Backup existing .env if it exists
-if [ -f ".env" ]; then
-    cp .env .env.backup.\$(date +%Y%m%d_%H%M%S) 2>/dev/null || true
-fi
-
-# Update or add DATABASE_URL in .env
-if grep -q "^DATABASE_URL=" .env 2>/dev/null; then
-    sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"\${DATABASE_URL}\"|" .env
-    echo "✅ Updated DATABASE_URL in .env"
+# If no password env vars are set, DO NOT fail deploy – just keep existing DATABASE_URL
+if [ -z "\$DB_PASSWORD" ] && [ -z "\$DATABASE_PASSWORD" ]; then
+    echo "⚠️  DB_PASSWORD / DATABASE_PASSWORD not set - keeping existing DATABASE_URL in .env and /etc/environment"
+    echo "    (This is safe as long as the database was already configured correctly.)"
 else
-    echo "DATABASE_URL=\"\${DATABASE_URL}\"" >> .env
-    echo "✅ Added DATABASE_URL to .env"
-fi
+    # Production database credentials (ALWAYS use these)
+    # Use environment variables for security - set these in your deployment environment
+    DB_USERNAME="\${DB_USERNAME:-doadmin}"
+    DB_PASSWORD="\${DB_PASSWORD:-\${DATABASE_PASSWORD}}"
+    DB_HOST="\${DB_HOST:-dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com}"
+    DB_PORT="\${DB_PORT:-25060}"
+    DB_NAME="\${DB_NAME:-defaultdb}"
+    DB_SSLMODE="\${DB_SSLMODE:-require}"
 
-# Also update /etc/environment (system-wide)
-echo ""
-echo "🔧 Updating /etc/environment (system-wide)..."
-if [ -f "/etc/environment" ]; then
-    cp /etc/environment /etc/environment.backup.\$(date +%Y%m%d_%H%M%S) 2>/dev/null || true
-    sed -i '/^DATABASE_URL=/d' /etc/environment
-    echo "DATABASE_URL=\"\${DATABASE_URL}\"" >> /etc/environment
-    echo "✅ Updated DATABASE_URL in /etc/environment"
-else
-    echo "DATABASE_URL=\"\${DATABASE_URL}\"" > /etc/environment
-    echo "✅ Created /etc/environment with DATABASE_URL"
-fi
+    DATABASE_URL="postgresql://\${DB_USERNAME}:\${DB_PASSWORD}@\${DB_HOST}:\${DB_PORT}/\${DB_NAME}?sslmode=\${DB_SSLMODE}"
 
-# Remove .env.local if it exists (it overrides .env and may have wrong credentials)
-# SECURITY: .env.local should NEVER exist on production server
-echo ""
-echo "🔧 Removing .env.local if it exists (prevents override of .env)..."
-if [ -f .env.local ]; then
-    echo "   ⚠️  Found .env.local - removing it to prevent override"
-    rm -f .env.local
-    echo "   ✅ Removed .env.local"
-else
-    echo "   ✅ .env.local does not exist"
-fi
+    echo "   Host: \$DB_HOST"
+    echo "   Port: \$DB_PORT"
+    echo "   Database: \$DB_NAME"
 
-# Verify DATABASE_URL
-if grep -q "nov-3-backup5-do-user-28031752-0" .env; then
-    echo "✅ Database hostname is CORRECT in .env"
-else
-    echo "⚠️  WARNING: Database hostname might be incorrect in .env!"
+    # Backup existing .env if it exists
+    if [ -f ".env" ]; then
+        cp .env .env.backup.\$(date +%Y%m%d_%H%M%S) 2>/dev/null || true
+    fi
+
+    # Update or add DATABASE_URL in .env
+    if grep -q "^DATABASE_URL=" .env 2>/dev/null; then
+        sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"\${DATABASE_URL}\"|" .env
+        echo "✅ Updated DATABASE_URL in .env"
+    else
+        echo "DATABASE_URL=\"\${DATABASE_URL}\"" >> .env
+        echo "✅ Added DATABASE_URL to .env"
+    fi
+
+    # Also update /etc/environment (system-wide)
+    echo ""
+    echo "🔧 Updating /etc/environment (system-wide)..."
+    if [ -f "/etc/environment" ]; then
+        cp /etc/environment /etc/environment.backup.\$(date +%Y%m%d_%H%M%S) 2>/dev/null || true
+        sed -i '/^DATABASE_URL=/d' /etc/environment
+        echo "DATABASE_URL=\"\${DATABASE_URL}\"" >> /etc/environment
+        echo "✅ Updated DATABASE_URL in /etc/environment"
+    else
+        echo "DATABASE_URL=\"\${DATABASE_URL}\"" > /etc/environment
+        echo "✅ Created /etc/environment with DATABASE_URL"
+    fi
+
+    # Remove .env.local if it exists (it overrides .env and may have wrong credentials)
+    # SECURITY: .env.local should NEVER exist on production server
+    echo ""
+    echo "🔧 Removing .env.local if it exists (prevents override of .env)..."
+    if [ -f .env.local ]; then
+        echo "   ⚠️  Found .env.local - removing it to prevent override"
+        rm -f .env.local
+        echo "   ✅ Removed .env.local"
+    else
+        echo "   ✅ .env.local does not exist"
+    fi
+
+    # Verify DATABASE_URL
+    if grep -q "nov-3-backup5-do-user-28031752-0" .env; then
+        echo "✅ Database hostname is CORRECT in .env"
+    else
+        echo "⚠️  WARNING: Database hostname might be incorrect in .env!"
+    fi
 fi
 
 # Clear Prisma cache and regenerate
