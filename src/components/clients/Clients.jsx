@@ -27,7 +27,7 @@ const CRITICAL_COMPONENT_SCRIPTS = {
     ClientDetailModal: './dist/src/components/clients/ClientDetailModal.js?v=permanent-block-1762361500',
     LeadDetailModal: './dist/src/components/clients/LeadDetailModal.js?v=remove-projects-tab-1736162400',
     OpportunityDetailModal: './dist/src/components/clients/OpportunityDetailModal.js',
-    Pipeline: './dist/src/components/clients/Pipeline.js?v=remove-aida-stage-1735569600'
+    Pipeline: './dist/src/components/clients/Pipeline.js?v=remove-kanban-1764388650'
 };
 
 const useEnsureGlobalComponent = (globalName) => {
