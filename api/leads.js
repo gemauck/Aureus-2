@@ -91,8 +91,45 @@ async function handler(req, res) {
       try {
         console.log('📋 GET /api/leads - Starting query...')
         
-        // Schema modifications should be handled by migrations, not in request handlers
-        // The type and services columns are defined in Prisma schema and should already exist
+        // Ensure database connection
+        try {
+          await prisma.$connect()
+          console.log('✅ Database connected')
+        } catch (connError) {
+          console.warn('⚠️ Connection check failed (may reconnect automatically):', connError.message)
+        }
+        
+        // Ensure type column exists in database
+        try {
+          await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "type" TEXT`
+          console.log('✅ Type column ensured in database')
+        } catch (schemaError) {
+          // Column might already exist - this is expected if schema is up to date
+          console.log('ℹ️ Type column check skipped (expected if schema is up to date):', schemaError.message)
+        }
+        
+        // Ensure services column exists in database (PostgreSQL compatible)
+        try {
+          // Check if column exists first
+          const columnExists = await prisma.$queryRaw`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'Client' AND column_name = 'services'
+          `
+          if (!columnExists || columnExists.length === 0) {
+            await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN "services" TEXT DEFAULT '[]'`
+            console.log('✅ Services column added to database')
+          } else {
+            console.log('✅ Services column already exists')
+          }
+        } catch (schemaError) {
+          // If error contains "already exists" or "duplicate", column already exists
+          if (schemaError.message && (schemaError.message.includes('already exists') || schemaError.message.includes('duplicate'))) {
+            console.log('ℹ️ Services column already exists:', schemaError.message)
+          } else {
+            console.log('ℹ️ Services column check failed (may already exist):', schemaError.message)
+          }
+        }
         
         const userId = req.user?.sub
         const userEmail = req.user?.email || 'unknown'
@@ -344,12 +381,13 @@ async function handler(req, res) {
       }
 
       // Check for duplicate clients/leads before creating
-      // NOTE: This is now non‑blocking – we always continue to create
-      // the lead, but we include any duplicates in the response so the
-      // UI can show a warning instead of a hard error.
-      let duplicateCheck = null
       try {
-        duplicateCheck = await checkForDuplicates(body)
+        const duplicateCheck = await checkForDuplicates(body)
+        if (duplicateCheck && duplicateCheck.isDuplicate) {
+          const errorMessage = formatDuplicateError(duplicateCheck) || duplicateCheck.message
+          console.log('❌ Duplicate lead detected:', errorMessage)
+          return badRequest(res, errorMessage)
+        }
       } catch (dupError) {
         console.error('⚠️ Duplicate check failed, proceeding with creation:', dupError.message)
         // Don't block creation if duplicate check fails
@@ -361,8 +399,13 @@ async function handler(req, res) {
       if (body.stage) notes += `\nStage: ${body.stage}`;
       if (body.firstContactDate) notes += `\nFirst Contact: ${body.firstContactDate}`;
 
-      // Schema modifications should be handled by migrations, not in request handlers
-      // The type column is defined in Prisma schema and should already exist
+      // Ensure type column exists in database
+      try {
+        await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "type" TEXT`
+        console.log('✅ Type column ensured in database')
+      } catch (error) {
+        console.log('Type column already exists or error adding it:', error.message)
+      }
 
       // Only include fields that exist in the database schema
       // CRITICAL: Always set type to lowercase 'lead' to ensure consistency
@@ -434,45 +477,6 @@ async function handler(req, res) {
       console.log('🔍 Creating lead with data:', leadData)
       console.log('🔍 Lead data keys:', Object.keys(leadData))
       
-      // Ensure industry exists in Industry table before creating lead
-      if (leadData.industry && leadData.industry.trim()) {
-        const industryName = leadData.industry.trim()
-        try {
-          // Check if industry exists in Industry table
-          const existingIndustry = await prisma.industry.findUnique({
-            where: { name: industryName }
-          })
-          
-          if (!existingIndustry) {
-            // Create the industry if it doesn't exist
-            try {
-              await prisma.industry.create({
-                data: {
-                  name: industryName,
-                  isActive: true
-                }
-              })
-              console.log(`✅ Created industry "${industryName}" from lead creation`)
-            } catch (createError) {
-              // Ignore unique constraint violations (race condition)
-              if (!createError.message.includes('Unique constraint') && createError.code !== 'P2002') {
-                console.warn(`⚠️ Could not create industry "${industryName}":`, createError.message)
-              }
-            }
-          } else if (!existingIndustry.isActive) {
-            // Reactivate if it was deactivated
-            await prisma.industry.update({
-              where: { id: existingIndustry.id },
-              data: { isActive: true }
-            })
-            console.log(`✅ Reactivated industry "${industryName}"`)
-          }
-        } catch (industryError) {
-          // Don't block the lead creation if industry sync fails
-          console.warn('⚠️ Error syncing industry:', industryError.message)
-        }
-      }
-      
       try {
         const lead = await prisma.client.create({
           data: leadData
@@ -513,8 +517,7 @@ async function handler(req, res) {
         
         console.log(`📤 Returning created lead to ${userEmail}:`, { id: parsedLead.id, name: parsedLead.name, ownerId: parsedLead.ownerId || 'null', type: parsedLead.type })
         
-        // Attach duplicate info (if any) so frontend can show a warning
-        return created(res, { lead: parsedLead, duplicateWarning: duplicateCheck })
+        return created(res, { lead: parsedLead })
       } catch (dbError) {
         console.error('❌ Database error creating lead:', dbError)
         console.error('❌ Database error details:', {

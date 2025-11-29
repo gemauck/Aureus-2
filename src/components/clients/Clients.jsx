@@ -351,7 +351,45 @@ function processClientData(rawClients, cacheKey) {
             notes: ''
         }),
         services: Array.isArray(c.services) ? c.services : (typeof c.services === 'string' ? JSON.parse(c.services || '[]') : []),
-        tags: Array.isArray(c.tags) ? c.tags.filter(Boolean) : (c.tags ? [c.tags] : []),
+        tags: (() => {
+            // Handle tags: API returns either nested ClientTag objects or already-extracted Tag objects
+            if (!c.tags || !Array.isArray(c.tags)) {
+                return [];
+            }
+            // Extract tags from nested structure if needed: [{ tag: { id, name, color } }] -> [{ id, name, color }]
+            return c.tags
+                .map(t => {
+                    // If it's already a Tag object with id and name, use it
+                    if (t && typeof t === 'object' && t.id && t.name) {
+                        return {
+                            id: t.id,
+                            name: t.name,
+                            color: t.color || '#3B82F6',
+                            description: t.description || ''
+                        };
+                    }
+                    // If it's nested in a tag property, extract it
+                    if (t && typeof t === 'object' && t.tag && typeof t.tag === 'object') {
+                        return {
+                            id: t.tag.id,
+                            name: t.tag.name,
+                            color: t.tag.color || '#3B82F6',
+                            description: t.tag.description || ''
+                        };
+                    }
+                    // If it's just a string, convert to object
+                    if (typeof t === 'string' && t.trim()) {
+                        return {
+                            id: null,
+                            name: t,
+                            color: '#3B82F6',
+                            description: ''
+                        };
+                    }
+                    return null;
+                })
+                .filter(Boolean);
+        })(),
         ownerId: c.ownerId || null,
         isStarred,
         createdAt: c.createdAt,
@@ -697,20 +735,20 @@ const Clients = React.memo(() => {
     const currentUser = window.storage?.getUser?.();
     const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
     
-    // Debug logging
-    useEffect(() => {
-        console.log('🔍 Clients component - Admin check:', {
-            currentUser: currentUser?.email,
-            role: currentUser?.role,
-            isAdmin: isAdmin,
-            showIndustryModal: showIndustryModal
-        });
-    }, [currentUser, isAdmin, showIndustryModal]);
+    // Debug logging removed for performance - only log in development mode if needed
+    // useEffect(() => {
+    //     console.log('🔍 Clients component - Admin check:', {
+    //         currentUser: currentUser?.email,
+    //         role: currentUser?.role,
+    //         isAdmin: isAdmin,
+    //         showIndustryModal: showIndustryModal
+    //     });
+    // }, [currentUser, isAdmin, showIndustryModal]);
     
-    // Debug modal state changes
-    useEffect(() => {
-        console.log('🔍 showIndustryModal state changed to:', showIndustryModal);
-    }, [showIndustryModal]);
+    // Debug modal state changes removed for performance
+    // useEffect(() => {
+    //     console.log('🔍 showIndustryModal state changed to:', showIndustryModal);
+    // }, [showIndustryModal]);
     
     // Fetch industries from API
     const loadIndustries = useCallback(async () => {
@@ -1606,7 +1644,14 @@ const Clients = React.memo(() => {
     }, [viewMode, clients.length]);
 
     // Ensure leads are loaded from localStorage if state is empty
+    // Use ref to track if we've already attempted restoration to prevent re-runs
+    const leadsRestoredRef = useRef(false);
     useEffect(() => {
+        // Only run once on mount or if leads become empty after being populated
+        if (leadsRestoredRef.current && leads.length > 0) {
+            return; // Already restored and has data, skip
+        }
+        
         setLeads(prevLeads => {
             if (prevLeads.length === 0) {
                 const cachedLeads = window.storage?.getLeads?.();
@@ -1614,6 +1659,7 @@ const Clients = React.memo(() => {
                     const normalizedCachedLeads = normalizeLeadStages(cachedLeads);
                     console.log(`🔄 Restoring ${normalizedCachedLeads.length} leads from localStorage to state`);
                     setLeadsCount(normalizedCachedLeads.length);
+                    leadsRestoredRef.current = true;
                     return normalizedCachedLeads.map(lead => ({
                         ...lead,
                         isStarred: resolveStarredState(lead)
@@ -2260,7 +2306,45 @@ const Clients = React.memo(() => {
                     }),
                     proposals: parseArrayField(lead.proposals),
                     services: parseArrayField(lead.services),
-                    tags: Array.isArray(lead.tags) ? lead.tags.map(t => t.tag || t).filter(Boolean) : [],
+                    tags: (() => {
+                        // Handle tags: API returns either nested ClientTag objects or already-extracted Tag objects
+                        if (!lead.tags || !Array.isArray(lead.tags)) {
+                            return [];
+                        }
+                        // Extract tags from nested structure if needed: [{ tag: { id, name, color } }] -> [{ id, name, color }]
+                        return lead.tags
+                            .map(t => {
+                                // If it's already a Tag object with id and name, use it
+                                if (t && typeof t === 'object' && t.id && t.name) {
+                                    return {
+                                        id: t.id,
+                                        name: t.name,
+                                        color: t.color || '#3B82F6',
+                                        description: t.description || ''
+                                    };
+                                }
+                                // If it's nested in a tag property, extract it
+                                if (t && typeof t === 'object' && t.tag && typeof t.tag === 'object') {
+                                    return {
+                                        id: t.tag.id,
+                                        name: t.tag.name,
+                                        color: t.tag.color || '#3B82F6',
+                                        description: t.tag.description || ''
+                                    };
+                                }
+                                // If it's just a string, convert to object
+                                if (typeof t === 'string' && t.trim()) {
+                                    return {
+                                        id: null,
+                                        name: t,
+                                        color: '#3B82F6',
+                                        description: ''
+                                    };
+                                }
+                                return null;
+                            })
+                            .filter(Boolean);
+                    })(),
                     type: lead.type || 'lead',
                     ownerId: lead.ownerId || null,
                     createdAt: lead.createdAt,
@@ -2888,6 +2972,70 @@ const Clients = React.memo(() => {
                             window.DatabaseAPI.clearCache('/leads');
                             console.log('🗑️ Cleared API cache for leads');
                         }
+                        
+                        // CRITICAL: Refresh from database after save to ensure persistence
+                        // Wait a short moment for database to commit, then fetch fresh data
+                        setTimeout(async () => {
+                            try {
+                                console.log('🔄 Refreshing lead from database after save...');
+                                const token = window.storage?.getToken?.();
+                                if (!token) return;
+                                
+                                const response = await fetch(`/api/leads/${savedLead.id}`, {
+                                    method: 'GET',
+                                    headers: {
+                                        'Authorization': `Bearer ${token}`,
+                                        'Content-Type': 'application/json'
+                                    },
+                                    credentials: 'include'
+                                });
+                                
+                                if (response.ok) {
+                                    const refreshedLead = await response.json();
+                                    const freshLead = refreshedLead?.data?.lead || refreshedLead?.lead;
+                                    if (freshLead) {
+                                    // Parse JSON fields
+                                    const parseField = (val, defaultVal) => {
+                                        if (Array.isArray(val)) return val;
+                                        if (typeof val === 'string' && val.trim()) {
+                                            try { return JSON.parse(val); } catch { return defaultVal; }
+                                        }
+                                        return val || defaultVal;
+                                    };
+                                    const parsedLead = {
+                                        ...freshLead,
+                                        contacts: parseField(freshLead.contacts, []),
+                                        followUps: parseField(freshLead.followUps, []),
+                                        comments: parseField(freshLead.comments, []),
+                                        proposals: parseField(freshLead.proposals, []),
+                                        services: parseField(freshLead.services, [])
+                                    };
+                                    
+                                    // Update state with fresh data from database
+                                    const refreshedLeads = leads.map(l => 
+                                        l.id === parsedLead.id ? parsedLead : l
+                                    );
+                                    setLeads(refreshedLeads);
+                                    selectedLeadRef.current = parsedLead;
+                                    
+                                    // Update localStorage with fresh data
+                                    if (window.storage?.setLeads) {
+                                        window.storage.setLeads(refreshedLeads);
+                                    }
+                                    
+                                        console.log('✅ Refreshed lead from database - data persisted:', {
+                                            id: parsedLead.id,
+                                            status: parsedLead.status,
+                                            stage: parsedLead.stage,
+                                            industry: parsedLead.industry
+                                        });
+                                    }
+                                }
+                            } catch (refreshError) {
+                                console.warn('⚠️ Failed to refresh lead from database:', refreshError.message);
+                                // Not critical - data was already saved
+                            }
+                        }, 500); // Wait 500ms for database commit
                         
                         console.log('✅ Saved lead data from API:', {
                             contacts: Array.isArray(savedLead.contacts) ? savedLead.contacts.length : 'not array',
@@ -4446,8 +4594,6 @@ const Clients = React.memo(() => {
     const PipelineView = React.memo(({
         items,
         isDark,
-        boardView,
-        onBoardViewChange,
         typeFilter,
         onTypeFilterChange,
         stages,
@@ -4687,96 +4833,11 @@ const Clients = React.memo(() => {
             </div>
         );
 
-        const renderKanbanView = () => (
-            <div className="flex gap-4 overflow-x-auto pb-4">
-                {stages.map((stage) => {
-                    const stageItems = groupedByStage[stage] || [];
-                    const stageValue = stageItems.reduce((sum, item) => sum + (item.value || 0), 0);
-
-                    return (
-                        <div
-                            key={stage}
-                            className={`flex-1 min-w-[260px] rounded-lg border ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} shadow-sm`}
-                        >
-                            <div className={`px-4 py-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <h3 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{stage}</h3>
-                                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                            {stageItems.length} item{stageItems.length === 1 ? '' : 's'}
-                                        </p>
-                                    </div>
-                                    <div className={`text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                                        {formatCurrency(stageValue)}
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="p-4 space-y-3">
-                                {stageItems.length === 0 ? (
-                                    <div className={`text-sm italic ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>No items</div>
-                                ) : (
-                                    stageItems.map((item) => (
-                                        <div
-                                            key={item.key}
-                                            onClick={() => handleItemOpen(item)}
-                                            className={`rounded-lg border ${isDark ? 'border-gray-700 bg-gray-800 hover:bg-gray-700' : 'border-gray-200 bg-gray-50 hover:bg-white'} transition shadow-sm cursor-pointer`}
-                                        >
-                                            <div className="p-3 space-y-2">
-                                                <div className="flex items-start justify-between gap-2">
-                                                    <div>
-                                                        <div className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{item.name}</div>
-                                                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                            {item.organization}
-                                                        </div>
-                                                    </div>
-                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${typeBadgeClasses(item.type)}`}>
-                                                        {item.type === 'lead' ? 'Lead' : 'Opportunity'}
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-center justify-between text-xs">
-                                                    <span className={isDark ? 'text-gray-300' : 'text-gray-700'}>
-                                                        {formatCurrency(item.value)}
-                                                    </span>
-                                                    <span className={isDark ? 'text-gray-500' : 'text-gray-500'}>
-                                                        {item.owner || 'Unassigned'}
-                                                    </span>
-                                                </div>
-                                                <div className={`text-[11px] ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                                                    Updated {new Date(item.updatedAt || Date.now()).toLocaleDateString('en-ZA')}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-        );
 
         return (
             <div className="space-y-6">
                 <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border shadow-sm p-4 flex flex-wrap gap-3 items-center justify-between`}>
                     <div className="flex items-center flex-wrap gap-2">
-                        <div className="inline-flex rounded-lg border overflow-hidden">
-                            <button
-                                type="button"
-                                onClick={() => onBoardViewChange('list')}
-                                className={`px-3 py-1.5 text-sm font-medium ${boardView === 'list' ? 'bg-blue-600 text-white' : isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}`}
-                            >
-                                <i className="fas fa-list mr-1.5"></i>
-                                List
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => onBoardViewChange('kanban')}
-                                className={`px-3 py-1.5 text-sm font-medium ${boardView === 'kanban' ? 'bg-blue-600 text-white' : isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}`}
-                            >
-                                <i className="fas fa-columns mr-1.5"></i>
-                                Kanban
-                            </button>
-                        </div>
                         <div className="inline-flex rounded-lg border overflow-hidden">
                             <button
                                 type="button"
@@ -4868,7 +4929,7 @@ const Clients = React.memo(() => {
                         </div>
                     ))}
                 </div>
-                {boardView === 'kanban' ? renderKanbanView() : renderListView()}
+                {renderListView()}
             </div>
         );
     });
@@ -4937,17 +4998,12 @@ const Clients = React.memo(() => {
                                     )}
                                 </div>
                             </th>
-                            <th 
-                                className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}
-                            >
-                                Tags
-                            </th>
                         </tr>
                     </thead>
                     <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
                         {paginatedLeads.length === 0 ? (
                             <tr>
-                                <td colSpan="6" className={`px-6 py-12 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <td colSpan="5" className={`px-6 py-12 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                     <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
                                         <i className="fas fa-user-plus text-2xl text-gray-400"></i>
                                     </div>
@@ -5013,33 +5069,6 @@ const Clients = React.memo(() => {
                                                 {new Date(lead.firstContactDate).toLocaleDateString()}
                                             </div>
                                         )}
-                                    </td>
-                                    <td className="px-6 py-2">
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {lead.tags && Array.isArray(lead.tags) && lead.tags.length > 0 ? (
-                                                lead.tags.map((tag, index) => {
-                                                    const tagData = tag.tag || tag;
-                                                    const tagName = tagData?.name || tagData;
-                                                    const tagColor = tagData?.color || '#3B82F6';
-                                                    return (
-                                                        <span
-                                                            key={tagData?.id || index}
-                                                            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full border transition"
-                                                            style={{
-                                                                backgroundColor: `${tagColor}20`,
-                                                                color: tagColor,
-                                                                borderColor: tagColor
-                                                            }}
-                                                        >
-                                                            <i className="fas fa-tag text-[10px]"></i>
-                                                            {tagName}
-                                                        </span>
-                                                    );
-                                                })
-                                            ) : (
-                                                <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>—</span>
-                                            )}
-                                        </div>
                                     </td>
                                 </tr>
                             ))
@@ -5608,8 +5637,6 @@ const Clients = React.memo(() => {
                     <PipelineView
                         items={pipelineItems}
                         isDark={isDark}
-                        boardView={pipelineBoardView}
-                        onBoardViewChange={setPipelineBoardView}
                         typeFilter={pipelineTypeFilter}
                         onTypeFilterChange={setPipelineTypeFilter}
                         stages={PIPELINE_STAGES}

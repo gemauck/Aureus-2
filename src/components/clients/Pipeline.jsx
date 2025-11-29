@@ -109,7 +109,7 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
         source: 'All'
     });
     const [sortBy, setSortBy] = useState('value-desc');
-    const [viewMode, setViewMode] = useState('list'); // list, kanban
+    const [viewMode, setViewMode] = useState('list'); // list only
     const [refreshKey, setRefreshKey] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -507,100 +507,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
         }
     }, []);
 
-    // Fix tile positioning on initial load - ensure DOM is fully laid out before rendering
-    useEffect(() => {
-        // Wait for DOM to be fully ready and styles applied
-        // This ensures tiles are positioned correctly on first load
-        // Only run when data is loaded and we're in kanban view
-        if (viewMode === 'kanban' && (clients.length > 0 || leads.length > 0) && !isLoading && dataLoaded) {
-            let retryCount = 0;
-            const maxRetries = 5;
-            
-            const fixLayout = () => {
-                const stageColumns = document.querySelectorAll('[data-pipeline-stage]');
-                const cards = document.querySelectorAll('[draggable="true"]');
-                
-                // Check if we have both columns and cards rendered
-                if (stageColumns.length > 0 && cards.length > 0) {
-                    // Force browser to recalculate layout by accessing layout properties
-                    // This triggers a reflow without causing visual flicker
-                    stageColumns.forEach(column => {
-                        void column.offsetHeight;
-                        void column.offsetWidth;
-                    });
-                    
-                    // Also trigger layout on the kanban container
-                    const kanbanContainer = stageColumns[0]?.closest('.flex.gap-3');
-                    if (kanbanContainer) {
-                        void kanbanContainer.offsetHeight;
-                        void kanbanContainer.offsetWidth;
-                    }
-                    
-                    // Force layout recalculation on cards themselves
-                    cards.forEach(card => {
-                        void card.offsetHeight;
-                    });
-                    
-                    console.log('✅ Pipeline: Layout recalculation triggered for tile positioning', {
-                        columns: stageColumns.length,
-                        cards: cards.length,
-                        retry: retryCount
-                    });
-                    return true; // Success
-                } else {
-                    console.log('⚠️ Pipeline: Layout fix waiting for DOM elements', {
-                        columns: stageColumns.length,
-                        cards: cards.length,
-                        retry: retryCount
-                    });
-                    return false; // Not ready yet
-                }
-            };
-
-            const attemptFix = () => {
-                // Double requestAnimationFrame ensures we're after the browser's layout pass
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        // Add a delay to ensure stylesheets are fully loaded and DOM is updated
-                        setTimeout(() => {
-                            const success = fixLayout();
-                            
-                            // If not successful and we haven't exceeded retries, try again
-                            if (!success && retryCount < maxRetries) {
-                                retryCount++;
-                                setTimeout(attemptFix, 100 * retryCount); // Exponential backoff
-                            }
-                        }, 100);
-                    });
-                });
-            };
-
-            // Start the fix attempt
-            attemptFix();
-        }
-    }, [clients, leads, isLoading, viewMode, dataLoaded]);
-
-    // Add resize observer and mutation observer to fix layout when viewport changes or cards are added
-    useEffect(() => {
-        if (viewMode === 'kanban') {
-            const kanbanContainer = document.querySelector('[data-pipeline-stage]')?.closest('.flex.gap-3');
-            if (!kanbanContainer) return;
-
-            const resizeObserver = new ResizeObserver(() => {
-                // Force layout recalculation when container size changes
-                requestAnimationFrame(() => {
-                    const stageColumns = document.querySelectorAll('[data-pipeline-stage]');
-                    stageColumns.forEach(column => {
-                        void column.offsetHeight;
-                    });
-                });
-            });
-
-            resizeObserver.observe(kanbanContainer);
-
-            // MutationObserver to detect when cards are added to the DOM
-            const mutationObserver = new MutationObserver((mutations) => {
-                let shouldFixLayout = false;
+    // Removed Kanban-specific layout fix effects
                 
                 mutations.forEach((mutation) => {
                     // Check if cards were added
