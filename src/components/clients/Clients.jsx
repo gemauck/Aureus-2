@@ -668,7 +668,12 @@ const Clients = React.memo(() => {
     const selectedClientRef = useRef(null); // Ref to track selected client
     const selectedLeadRef = useRef(null); // Ref to track selected lead
     const pipelineOpportunitiesLoadedRef = useRef(new Map());
-    const isOpeningIndustryModalRef = useRef(false); // Ref to prevent multiple rapid clicks when opening industry modal
+    
+    // Industry management state - declared early to avoid temporal dead zone issues
+    const [industries, setIndustries] = useState([]);
+    const [showIndustryModal, setShowIndustryModal] = useState(false);
+    const [newIndustryName, setNewIndustryName] = useState('');
+    const [isLoadingIndustries, setIsLoadingIndustries] = useState(false);
     
     // PERFORMANCE FIX: Combine ref sync effects into one to reduce re-renders
     useEffect(() => {
@@ -676,13 +681,6 @@ const Clients = React.memo(() => {
         leadsRef.current = leads;
         viewModeRef.current = viewMode;
     }, [clients, leads, viewMode]);
-
-    // Reset industry modal ref when modal closes
-    useEffect(() => {
-        if (!showIndustryModal) {
-            isOpeningIndustryModalRef.current = false;
-        }
-    }, [showIndustryModal]);
 
 
     // Utility function to calculate time since first contact
@@ -738,12 +736,6 @@ const Clients = React.memo(() => {
     const [clientsPage, setClientsPage] = useState(1);
     const [leadsPage, setLeadsPage] = useState(1);
     const ITEMS_PER_PAGE = 25;
-    
-    // Industry management state
-    const [industries, setIndustries] = useState([]);
-    const [showIndustryModal, setShowIndustryModal] = useState(false);
-    const [newIndustryName, setNewIndustryName] = useState('');
-    const [isLoadingIndustries, setIsLoadingIndustries] = useState(false);
     
     // Get current user and check if admin
     const currentUser = window.storage?.getUser?.();
