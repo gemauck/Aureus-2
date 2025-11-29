@@ -1593,7 +1593,38 @@ const Clients = React.memo(() => {
         
         // Load data normally (will use cache if available for fast initial render)
         // The loadClients/loadLeads functions already handle cache intelligently
-    }, []); // Only run once on mount
+    }, [clearAllCaches]); // Include clearAllCaches in deps
+    
+    // One-time cache clear for tags fix - runs once after code update or when forced
+    useEffect(() => {
+        // Check URL for cache clear parameter
+        const urlParams = new URLSearchParams(window.location.search);
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const shouldForceClear = urlParams.has('clearCache') || hashParams.has('clearCache') || 
+                                 localStorage.getItem('abcotronics_force_clear_cache') === 'true';
+        
+        // Check if we've already done the tags refresh once (unless forced)
+        const tagsRefreshDone = sessionStorage.getItem('tags_fix_cache_cleared');
+        if (!tagsRefreshDone || shouldForceClear) {
+            // Mark as done immediately to prevent multiple clears
+            sessionStorage.setItem('tags_fix_cache_cleared', 'true');
+            localStorage.removeItem('abcotronics_force_clear_cache');
+            
+            // Clear caches and force refresh after a short delay to ensure everything is loaded
+            setTimeout(() => {
+                console.log('🔄 Tags fix: Clearing caches and refreshing data...', shouldForceClear ? '(FORCED)' : '');
+                clearAllCaches('both');
+                lastApiCallTimestamp = 0;
+                lastLeadsApiCallTimestamp = 0;
+                
+                // Force refresh after cache clear
+                setTimeout(() => {
+                    loadClients(true).catch(() => {});
+                    loadLeads(true).catch(() => {});
+                }, 100);
+            }, shouldForceClear ? 0 : 1000);
+        }
+    }, [clearAllCaches]); // Only run once on mount
 
     // PERFORMANCE FIX: Optimize view mode switching - only refresh if data is stale
     // Skip if user is editing to prevent data loss
@@ -5001,23 +5032,12 @@ const Clients = React.memo(() => {
                                     )}
                                 </div>
                             </th>
-                            <th 
-                                className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
-                                onClick={() => handleLeadSort('firstContactDate')}
-                            >
-                                <div className="flex items-center">
-                                    Time Since Contact
-                                    {leadSortField === 'firstContactDate' && (
-                                        <i className={`fas fa-sort-${leadSortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
-                                    )}
-                                </div>
-                            </th>
                         </tr>
                     </thead>
                     <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
                         {paginatedLeads.length === 0 ? (
                             <tr>
-                                <td colSpan="5" className={`px-6 py-12 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <td colSpan="4" className={`px-6 py-12 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                     <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
                                         <i className="fas fa-user-plus text-2xl text-gray-400"></i>
                                     </div>
@@ -5073,16 +5093,6 @@ const Clients = React.memo(() => {
                                         }`}>
                                             {lead.stage || 'Awareness'}
                                         </span>
-                                    </td>
-                                    <td className="px-6 py-2 whitespace-nowrap">
-                                        <div className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
-                                            {getTimeSinceFirstContact(lead.firstContactDate)}
-                                        </div>
-                                        {lead.firstContactDate && (
-                                            <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                {new Date(lead.firstContactDate).toLocaleDateString()}
-                                            </div>
-                                        )}
                                     </td>
                                 </tr>
                             ))
