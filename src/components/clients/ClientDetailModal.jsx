@@ -1766,39 +1766,38 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     id: user?.id || 'system'
                 };
                 
-                // Add to local opportunities array for immediate UI update
-                const currentOpportunities = Array.isArray(formData.opportunities) ? formData.opportunities : [];
-                const updatedOpportunities = [...currentOpportunities, savedOpportunity];
+                // Use functional update to ensure we're working with latest state and update immediately
+                setFormData(prev => {
+                    // Add to local opportunities array for immediate UI update
+                    const currentOpportunities = Array.isArray(prev.opportunities) ? prev.opportunities : [];
+                    // Check if opportunity already exists to avoid duplicates
+                    const opportunityExists = currentOpportunities.some(o => o.id === savedOpportunity.id);
+                    if (opportunityExists) {
+                        console.log('⚠️ Opportunity already in state, skipping duplicate');
+                        return prev;
+                    }
+                    
+                    const updatedOpportunities = [...currentOpportunities, savedOpportunity];
+                    
+                    const newActivityLog = [...(prev.activityLog || []), {
+                        id: Date.now() + 1,
+                        type: 'Opportunity Added',
+                        description: `Added opportunity: ${newOpportunity.name}`,
+                        timestamp: new Date().toISOString(),
+                        user: currentUser.name,
+                        userId: currentUser.id,
+                        userEmail: currentUser.email,
+                        relatedId: savedOpportunity.id
+                    }];
+                    
+                    return {
+                        ...prev,
+                        opportunities: updatedOpportunities,
+                        activityLog: newActivityLog
+                    };
+                });
                 
-                const newActivityLog = [...(formData.activityLog || []), {
-                    id: Date.now() + 1,
-                    type: 'Opportunity Added',
-                    description: `Added opportunity: ${newOpportunity.name}`,
-                    timestamp: new Date().toISOString(),
-                    user: currentUser.name,
-                    userId: currentUser.id,
-                    userEmail: currentUser.email,
-                    relatedId: savedOpportunity.id
-                }];
-                
-                const updatedFormData = {
-                    ...formData,
-                    opportunities: updatedOpportunities,
-                    activityLog: newActivityLog
-                };
-                
-                setFormData(updatedFormData);
-                
-                // DON'T call onSave here - it will overwrite the client with stale data!
-                // Instead, just update local state and let the user save when they're ready
-                // The opportunity is already in the database, so it will load on next fetch
-                
-                alert('✅ Opportunity saved to database successfully!');
-                
-                // Switch to opportunities tab to show the added opportunity
-                handleTabChange('opportunities');
-                
-                // Reset form
+                // Reset form immediately
                 setNewOpportunity({
                     name: '',
                     stage: 'Awareness',
@@ -1808,14 +1807,36 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 });
                 setShowOpportunityForm(false);
                 
-                // Reload opportunities from database to ensure we have the latest
+                // Switch to opportunities tab to show the added opportunity
+                // Use setTimeout to ensure state update is processed first
+                setTimeout(() => {
+                    handleTabChange('opportunities');
+                }, 0);
+                
+                // DON'T call onSave here - it will overwrite the client with stale data!
+                // Instead, just update local state and let the user save when they're ready
+                // The opportunity is already in the database, so it will load on next fetch
+                
+                console.log('✅ Opportunity created and saved to database:', savedOpportunity.id);
+                
+                // Reload opportunities from database in background to ensure we have the latest
+                // This will merge with the optimistic update
                 try {
                     const oppResponse = await window.api.getOpportunitiesByClient(formData.id);
                     const freshOpportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
-                    setFormData(prev => ({
-                        ...prev,
-                        opportunities: freshOpportunities
-                    }));
+                    
+                    // Merge with existing opportunities, ensuring no duplicates
+                    setFormData(prev => {
+                        const existingIds = new Set((prev.opportunities || []).map(o => o.id));
+                        const newOpportunities = freshOpportunities.filter(o => !existingIds.has(o.id));
+                        const merged = [...(prev.opportunities || []), ...newOpportunities];
+                        
+                        return {
+                            ...prev,
+                            opportunities: merged
+                        };
+                    });
+                    
                     console.log('✅ Reloaded opportunities from database:', freshOpportunities.length);
                     
                     // Trigger a window event to notify Pipeline view that opportunities changed
@@ -1825,9 +1846,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     console.log('📡 Dispatched opportunitiesUpdated event for Pipeline refresh');
                 } catch (error) {
                     console.error('❌ Failed to reload opportunities:', error);
+                    // Don't show error to user - optimistic update already shows the opportunity
                 }
-                
-                console.log('✅ Opportunity created and saved to database:', savedOpportunity.id);
             } else {
                 throw new Error('No opportunity ID returned from API');
             }
