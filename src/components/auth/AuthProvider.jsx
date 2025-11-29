@@ -211,6 +211,123 @@ const AuthProvider = ({ children }) => {
         init();
     }, []);
 
+    // Session validation - validate session when user returns to page after being away
+    useEffect(() => {
+        if (!user) return;
+
+        let lastValidationTime = Date.now();
+        const VALIDATION_COOLDOWN = 30000; // Don't re-validate within 30 seconds
+        const STALE_SESSION_THRESHOLD = 6 * 60 * 60 * 1000; // 6 hours - consider session potentially stale
+
+        const validateSession = async () => {
+            const token = window.storage?.getToken?.();
+            
+            // No token means we should already be logged out
+            if (!token) {
+                console.log('🔐 No token found - forcing logout');
+                if (window.forceLogout) {
+                    window.forceLogout('NO_TOKEN');
+                }
+                return;
+            }
+
+            // Skip validation if we just validated recently
+            const now = Date.now();
+            if (now - lastValidationTime < VALIDATION_COOLDOWN) {
+                return;
+            }
+
+            try {
+                // Try to validate the session with the server
+                const meResponse = await Promise.race([
+                    window.api.me(),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Session validation timeout')), 10000))
+                ]);
+
+                if (meResponse) {
+                    const validatedUser = meResponse.data?.user || meResponse.user || meResponse.data || meResponse;
+                    if (validatedUser) {
+                        // Session is valid - update user data if needed
+                        storage.setUser(validatedUser);
+                        setUser(validatedUser);
+                        lastValidationTime = now;
+                        console.log('✅ Session validated successfully');
+                        return;
+                    }
+                }
+                
+                // If we got here with no user data, session is invalid
+                console.log('🔐 Session validation returned no user - forcing logout');
+                if (window.forceLogout) {
+                    window.forceLogout('SESSION_INVALID');
+                }
+            } catch (err) {
+                const errorMessage = err?.message || String(err);
+                
+                // 401/Unauthorized means session expired - force logout
+                if (errorMessage.includes('401') || errorMessage.includes('Unauthorized') || errorMessage.includes('User not found')) {
+                    console.log('🔐 Session expired or invalid - forcing logout');
+                    if (window.forceLogout) {
+                        window.forceLogout('SESSION_EXPIRED');
+                    }
+                    return;
+                }
+
+                // Database/network errors - don't force logout, but warn user
+                const isNetworkError = errorMessage.includes('Database connection failed') ||
+                                      errorMessage.includes('unreachable') ||
+                                      errorMessage.includes('timeout') ||
+                                      errorMessage.includes('ECONNREFUSED') ||
+                                      errorMessage.includes('ETIMEDOUT') ||
+                                      errorMessage.includes('502') ||
+                                      errorMessage.includes('503') ||
+                                      errorMessage.includes('504');
+
+                if (isNetworkError) {
+                    console.warn('⚠️ Could not validate session - server unreachable. Working in offline mode.');
+                    // Dispatch event so UI can show offline indicator if desired
+                    window.dispatchEvent(new CustomEvent('auth:server-unreachable'));
+                } else {
+                    console.error('❌ Session validation error:', errorMessage);
+                }
+            }
+        };
+
+        // Validate session when user returns to tab after being away
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible' && user && window.storage?.getToken?.()) {
+                // Check how long the page was hidden
+                const hiddenDuration = Date.now() - lastValidationTime;
+                
+                // If page was hidden for more than the threshold, validate session
+                if (hiddenDuration >= STALE_SESSION_THRESHOLD) {
+                    console.log(`🔍 Page was hidden for ${Math.round(hiddenDuration / 1000)}s - validating session...`);
+                    validateSession();
+                }
+            }
+        };
+
+        // Also validate on focus (catches browser restore, etc.)
+        const handleFocus = () => {
+            if (user && window.storage?.getToken?.()) {
+                const timeSinceValidation = Date.now() - lastValidationTime;
+                if (timeSinceValidation >= STALE_SESSION_THRESHOLD) {
+                    console.log(`🔍 Window focused after ${Math.round(timeSinceValidation / 1000)}s - validating session...`);
+                    validateSession();
+                }
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', handleFocus);
+
+        // Cleanup
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('focus', handleFocus);
+        };
+    }, [user]);
+
     // Heartbeat effect - send periodic pings to track online status
     useEffect(() => {
         if (!user || !window.api || !window.api.heartbeat) {
@@ -227,18 +344,9 @@ const AuthProvider = ({ children }) => {
             }
         }, 120000); // 2 minutes
 
-        // Also send heartbeat on visibility change (when user returns to tab)
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible' && user && window.storage?.getToken?.()) {
-                window.api.heartbeat();
-            }
-        };
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-
         // Cleanup
         return () => {
             clearInterval(heartbeatInterval);
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
     }, [user]);
 
