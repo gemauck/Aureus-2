@@ -641,29 +641,36 @@ const ManagementMeetingNotes = () => {
         scrollToWeekId(selectedWeek);
     }, [selectedWeek, weeks, scrollToWeekId]);
 
-    // Flush all pending saves immediately
+    // Flush all pending saves immediately using fetch with keepalive for guaranteed delivery
     const flushPendingSaves = useCallback(() => {
-        // Clear all debounce timers and save immediately
+        // Clear all debounce timers
         Object.keys(saveTimers.current).forEach(fieldKey => {
             clearTimeout(saveTimers.current[fieldKey]);
             delete saveTimers.current[fieldKey];
         });
         
-        // Save all pending values
+        // Save all pending values using fetch with keepalive (survives page unload)
         const pendingEntries = Object.entries(pendingValues.current);
         pendingEntries.forEach(([fieldKey, data]) => {
             if (data) {
-                pendingSaves.current.add(fieldKey);
-                window.DatabaseAPI.updateDepartmentNotes(data.departmentNotesId, { [data.field]: data.value })
-                    .then(() => {
-                        delete pendingValues.current[fieldKey];
-                    })
-                    .catch(error => {
-                        console.error('Error flushing pending save:', error);
-                    })
-                    .finally(() => {
-                        pendingSaves.current.delete(fieldKey);
-                    });
+                // Get auth token
+                const token = localStorage.getItem('abcotronics_token') || sessionStorage.getItem('abcotronics_token');
+                const baseUrl = window.API_BASE_URL || '/api';
+                const url = `${baseUrl}/department-notes/${data.departmentNotesId}`;
+                const payload = JSON.stringify({ [data.field]: data.value });
+                
+                // Use fetch with keepalive - this survives page unload/navigation
+                fetch(url, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': token ? `Bearer ${token}` : ''
+                    },
+                    body: payload,
+                    keepalive: true // Key flag - request survives page unload
+                }).catch(() => {}); // Ignore errors during unload
+                
+                delete pendingValues.current[fieldKey];
             }
         });
     }, []);
@@ -690,12 +697,30 @@ const ManagementMeetingNotes = () => {
             }
         };
 
+        // Also intercept clicks on navigation links to flush before navigation
+        const handleNavClick = (e) => {
+            const target = e.target.closest('a, button');
+            if (target) {
+                // Check if it's a navigation element (link or nav button)
+                const isNavLink = target.tagName === 'A' || 
+                    target.closest('nav') || 
+                    target.closest('[data-nav]') ||
+                    target.classList.contains('nav-link');
+                
+                if (isNavLink && Object.keys(pendingValues.current).length > 0) {
+                    flushPendingSaves();
+                }
+            }
+        };
+
         window.addEventListener('beforeunload', handleBeforeUnload);
         document.addEventListener('visibilitychange', handleVisibilityChange);
+        document.addEventListener('click', handleNavClick, true); // Capture phase
 
         return () => {
             window.removeEventListener('beforeunload', handleBeforeUnload);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
+            document.removeEventListener('click', handleNavClick, true);
             
             // Cleanup: flush pending saves and clear timers on unmount
             flushPendingSaves();
@@ -1290,7 +1315,10 @@ const ManagementMeetingNotes = () => {
     // Refs for save status timeout
     const saveStatusTimeout = useRef(null);
     
-    // Debounced auto-save function - saves after 300ms of no typing
+    // Track the last saved value per field to avoid duplicate saves
+    const lastSavedValues = useRef({});
+    
+    // Immediate save function - saves on every change with no debounce
     const handleFieldChange = (departmentNotesId, field, value) => {
         // Update local state immediately for responsive UI
         const monthlyId = currentMonthlyNotes?.id || null;
@@ -1298,7 +1326,7 @@ const ManagementMeetingNotes = () => {
         
         const fieldKey = getFieldKey(departmentNotesId, field);
         
-        // Store the latest value for this field (so blur can access it)
+        // Store the latest value for this field (for flush on navigation)
         pendingValues.current[fieldKey] = { departmentNotesId, field, value };
         
         // Show 'saving' status
@@ -1307,36 +1335,29 @@ const ManagementMeetingNotes = () => {
             clearTimeout(saveStatusTimeout.current);
         }
         
-        // Clear any existing timer for this field
-        if (saveTimers.current[fieldKey]) {
-            clearTimeout(saveTimers.current[fieldKey]);
-        }
+        // Mark as pending save
+        pendingSaves.current.add(fieldKey);
         
-        // Set a new debounce timer - save after 300ms of no typing
-        saveTimers.current[fieldKey] = setTimeout(() => {
-            // Mark as pending save
-            pendingSaves.current.add(fieldKey);
-            
-            window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value })
-                .then(() => {
-                    // Successfully saved - clear from pending values
-                    delete pendingValues.current[fieldKey];
-                    // Show 'saved' briefly then go idle
-                    setSaveStatus('saved');
-                    saveStatusTimeout.current = setTimeout(() => {
-                        setSaveStatus('idle');
-                    }, 1500);
-                })
-                .catch(error => {
-                    console.error('Error auto-saving department notes:', error);
-                    // Don't clear pendingValues on error - blur will retry
+        // Save immediately - no debounce
+        window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value })
+            .then(() => {
+                // Successfully saved - clear from pending values and track last saved
+                delete pendingValues.current[fieldKey];
+                lastSavedValues.current[fieldKey] = value;
+                // Show 'saved' briefly then go idle
+                setSaveStatus('saved');
+                saveStatusTimeout.current = setTimeout(() => {
                     setSaveStatus('idle');
-                })
-                .finally(() => {
-                    pendingSaves.current.delete(fieldKey);
-                    delete saveTimers.current[fieldKey];
-                });
-        }, 50); // 50ms debounce - near-instant saves while still batching rapid keystrokes
+                }, 1500);
+            })
+            .catch(error => {
+                console.error('Error auto-saving department notes:', error);
+                // Keep in pendingValues on error - blur/navigation will retry
+                setSaveStatus('idle');
+            })
+            .finally(() => {
+                pendingSaves.current.delete(fieldKey);
+            });
     };
     
     // Flush save on blur - immediately saves the latest value
