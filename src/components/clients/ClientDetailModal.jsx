@@ -3,7 +3,7 @@
 // DEPLOYMENT FIX: Contact filter now only shows site-specific contacts
 // FIX: Added useRef to prevent form reset when user is editing
 // FIX: formData initialization moved to top to prevent TDZ errors
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect, useRef, useCallback } = React;
 
 const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange, onPauseSync, onEditingChange, onOpenOpportunity }) => {
     // CRITICAL: Initialize formData FIRST, before any other hooks or refs that might reference it
@@ -324,7 +324,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         
         lastProcessedClientRef.current = client;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [client?.id]); // Only watch client.id, not entire client object - matches Manufacturing pattern
+    }, [client?.id, loadJobCards]); // Only watch client.id, not entire client object - matches Manufacturing pattern
     
     // Track previous client ID to detect when a new client gets an ID after save
     const previousClientIdRef = useRef(client?.id || null);
@@ -554,10 +554,18 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         } else {
             setJobCards([]);
         }
-    }, [client?.id]);
+    }, [client?.id, loadJobCards]);
+
+    // Reload job cards when Service & Maintenance tab becomes active
+    useEffect(() => {
+        if (activeTab === 'service-maintenance' && client?.id) {
+            console.log('🔄 Service & Maintenance tab activated, reloading job cards...');
+            loadJobCards();
+        }
+    }, [activeTab, client?.id, loadJobCards]);
     
     // Load job cards for this client
-    const loadJobCards = async () => {
+    const loadJobCards = useCallback(async () => {
         if (!client?.id) {
             setJobCards([]);
             return;
@@ -664,7 +672,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         } finally {
             setLoadingJobCards(false);
         }
-    };
+    }, [client?.id, client?.name]);
     
     // Load client tags
     const loadClientTags = async () => {
