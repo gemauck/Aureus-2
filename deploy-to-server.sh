@@ -70,48 +70,78 @@ fi
 
 # Set correct DATABASE_URL - ALWAYS use production database credentials
 echo ""
-echo "🔧 Setting correct DATABASE_URL in .env..."
-# Load credentials from server-side file (created by setup-db-credentials-on-server.sh)
-CREDS_FILE=".db-credentials.sh"
-if [ -f "\$CREDS_FILE" ]; then
-    source "\$CREDS_FILE"
-    echo "✅ Loaded credentials from \$CREDS_FILE"
-else
-    echo "❌ ERROR: Credentials file not found: \$CREDS_FILE"
-    echo "   Please run setup-db-credentials-on-server.sh first to create credentials file"
-    exit 1
-fi
+echo "🔧 Setting correct DATABASE_URL everywhere..."
+# Production database credentials (ALWAYS use these)
+DB_USERNAME="doadmin"
+DB_PASSWORD="AVNS_D14tRDDknkgUUoVZ4Bv"
+DB_HOST="dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com"
+DB_PORT="25060"
+DB_NAME="defaultdb"
+DB_SSLMODE="require"
 
 DATABASE_URL="postgresql://\${DB_USERNAME}:\${DB_PASSWORD}@\${DB_HOST}:\${DB_PORT}/\${DB_NAME}?sslmode=\${DB_SSLMODE}"
+
+echo "   Host: \$DB_HOST"
+echo "   Port: \$DB_PORT"
+echo "   Database: \$DB_NAME"
 
 # Backup existing .env if it exists
 if [ -f ".env" ]; then
     cp .env .env.backup.\$(date +%Y%m%d_%H%M%S) 2>/dev/null || true
 fi
 
-# Update or add DATABASE_URL
+# Update or add DATABASE_URL in .env
 if grep -q "^DATABASE_URL=" .env 2>/dev/null; then
-    # Update existing DATABASE_URL
-    sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"${DATABASE_URL}\"|" .env
+    sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"\${DATABASE_URL}\"|" .env
     echo "✅ Updated DATABASE_URL in .env"
 else
-    # Add DATABASE_URL if it doesn't exist
-    echo "DATABASE_URL=\"${DATABASE_URL}\"" >> .env
+    echo "DATABASE_URL=\"\${DATABASE_URL}\"" >> .env
     echo "✅ Added DATABASE_URL to .env"
+fi
+
+# Also update /etc/environment (system-wide)
+echo ""
+echo "🔧 Updating /etc/environment (system-wide)..."
+if [ -f "/etc/environment" ]; then
+    cp /etc/environment /etc/environment.backup.\$(date +%Y%m%d_%H%M%S) 2>/dev/null || true
+    sed -i '/^DATABASE_URL=/d' /etc/environment
+    echo "DATABASE_URL=\"\${DATABASE_URL}\"" >> /etc/environment
+    echo "✅ Updated DATABASE_URL in /etc/environment"
+else
+    echo "DATABASE_URL=\"\${DATABASE_URL}\"" > /etc/environment
+    echo "✅ Created /etc/environment with DATABASE_URL"
 fi
 
 # Verify DATABASE_URL
 if grep -q "nov-3-backup5-do-user-28031752-0" .env; then
-    echo "✅ Database hostname is CORRECT"
+    echo "✅ Database hostname is CORRECT in .env"
 else
-    echo "⚠️  WARNING: Database hostname might be incorrect!"
+    echo "⚠️  WARNING: Database hostname might be incorrect in .env!"
 fi
+
+# Clear Prisma cache and regenerate
+echo ""
+echo "🔄 Clearing Prisma cache and regenerating client..."
+rm -rf node_modules/.prisma 2>/dev/null || true
+npx prisma generate || echo "⚠️  Prisma generate skipped"
 
 # Restart the application
 echo ""
 echo "🔄 Restarting application..."
 if command -v pm2 &> /dev/null; then
-    pm2 restart abcotronics-erp --update-env || pm2 restart all --update-env
+    # Kill PM2 completely to ensure fresh start
+    pm2 delete all 2>/dev/null || true
+    pm2 kill 2>/dev/null || true
+    sleep 2
+    
+    # Source environment to ensure DATABASE_URL is loaded
+    set -a
+    [ -f /etc/environment ] && source /etc/environment
+    set +a
+    
+    # Start PM2 with explicit environment
+    cd /var/www/abcotronics-erp
+    pm2 start server.js --name abcotronics-erp --update-env
     echo "✅ Application restarted with PM2 (environment variables updated)"
     pm2 save || true
 elif command -v systemctl &> /dev/null; then

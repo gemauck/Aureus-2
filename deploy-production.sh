@@ -99,6 +99,33 @@ git reset --hard HEAD || true
 git pull origin main || git pull origin master
 echo "✅ Code updated"
 
+# CRITICAL: Always set correct DATABASE_URL after git pull
+echo ""
+echo "🔧 Ensuring correct DATABASE_URL is set..."
+DB_USERNAME="doadmin"
+DB_PASSWORD="AVNS_D14tRDDknkgUUoVZ4Bv"
+DB_HOST="dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com"
+DB_PORT="25060"
+DB_NAME="defaultdb"
+DB_SSLMODE="require"
+CORRECT_DATABASE_URL="postgresql://${DB_USERNAME}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=${DB_SSLMODE}"
+
+# Update .env
+if grep -q "^DATABASE_URL=" .env 2>/dev/null; then
+    sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"${CORRECT_DATABASE_URL}\"|" .env
+else
+    echo "DATABASE_URL=\"${CORRECT_DATABASE_URL}\"" >> .env
+fi
+
+# Update /etc/environment
+if [ -f /etc/environment ]; then
+    sed -i '/^DATABASE_URL=/d' /etc/environment
+    echo "DATABASE_URL=\"${CORRECT_DATABASE_URL}\"" >> /etc/environment
+fi
+
+export DATABASE_URL="${CORRECT_DATABASE_URL}"
+echo "✅ DATABASE_URL set to correct production database"
+
 # Ensure Digital Ocean database is configured
 echo "🔧 Ensuring Digital Ocean database configuration..."
 if [ ! -f .env ]; then
@@ -186,8 +213,20 @@ else
   echo "✅ Post-deployment tests passed!"
 fi
 
+echo "🔄 Clearing Prisma cache and regenerating..."
+rm -rf node_modules/.prisma 2>/dev/null || true
+npx prisma generate || echo "⚠️  Prisma generate skipped"
+
+echo ""
 echo "🔄 Restarting application..."
-pm2 restart abcotronics-erp || pm2 start server.js --name abcotronics-erp
+pm2 delete all 2>/dev/null || true
+pm2 kill 2>/dev/null || true
+sleep 2
+set -a
+[ -f /etc/environment ] && source /etc/environment
+set +a
+cd /var/www/abcotronics-erp
+pm2 start server.js --name abcotronics-erp --update-env
 
 echo ""
 echo "✅ Deployment complete!"

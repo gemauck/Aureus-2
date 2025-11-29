@@ -45,6 +45,33 @@ else
     echo "✅ Code updated after stash"
 fi
 
+# CRITICAL: Always set correct DATABASE_URL after git pull
+echo ""
+echo "🔧 Ensuring correct DATABASE_URL is set..."
+DB_USERNAME="doadmin"
+DB_PASSWORD="AVNS_D14tRDDknkgUUoVZ4Bv"
+DB_HOST="dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com"
+DB_PORT="25060"
+DB_NAME="defaultdb"
+DB_SSLMODE="require"
+CORRECT_DATABASE_URL="postgresql://\${DB_USERNAME}:\${DB_PASSWORD}@\${DB_HOST}:\${DB_PORT}/\${DB_NAME}?sslmode=\${DB_SSLMODE}"
+
+# Update .env
+if grep -q "^DATABASE_URL=" .env 2>/dev/null; then
+    sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"\${CORRECT_DATABASE_URL}\"|" .env
+else
+    echo "DATABASE_URL=\"\${CORRECT_DATABASE_URL}\"" >> .env
+fi
+
+# Update /etc/environment
+if [ -f /etc/environment ]; then
+    sed -i '/^DATABASE_URL=/d' /etc/environment
+    echo "DATABASE_URL=\"\${CORRECT_DATABASE_URL}\"" >> /etc/environment
+fi
+
+export DATABASE_URL="\${CORRECT_DATABASE_URL}"
+echo "✅ DATABASE_URL set to correct production database"
+
 echo ""
 echo "📦 Installing dependencies..."
 npm install
@@ -71,7 +98,18 @@ echo "🔄 Restarting application..."
 # Try PM2 first
 if command -v pm2 &> /dev/null; then
     echo "   Using PM2..."
-    pm2 restart abcotronics-erp || pm2 restart all || pm2 start server.js --name abcotronics-erp
+    echo "   Clearing Prisma cache..."
+    rm -rf node_modules/.prisma 2>/dev/null || true
+    npx prisma generate || echo "⚠️  Prisma generate skipped"
+    
+    pm2 delete all 2>/dev/null || true
+    pm2 kill 2>/dev/null || true
+    sleep 2
+    set -a
+    [ -f /etc/environment ] && source /etc/environment
+    set +a
+    cd /var/www/abcotronics-erp
+    pm2 start server.js --name abcotronics-erp --update-env
     pm2 save
     echo "   ✅ Application restarted with PM2"
 # Try systemctl
