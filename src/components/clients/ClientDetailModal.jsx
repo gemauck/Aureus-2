@@ -324,7 +324,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         
         lastProcessedClientRef.current = client;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [client?.id, loadJobCards]); // Only watch client.id, not entire client object - matches Manufacturing pattern
+    }, [client?.id]); // Only watch client.id, not entire client object - matches Manufacturing pattern
     
     // Track previous client ID to detect when a new client gets an ID after save
     const previousClientIdRef = useRef(client?.id || null);
