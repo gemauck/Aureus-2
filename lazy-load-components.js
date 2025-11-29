@@ -326,7 +326,9 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                             
                             // Max retries reached or non-retryable error
                             if (isServerError) {
-                                console.warn(`⚠️ Component failed to load after ${maxAttempts} attempts: ${scriptSrc} (${response.status}, skipping)`);
+                                console.error(`❌ Component failed to load after ${maxAttempts} attempts: ${scriptSrc} (${response.status})`);
+                                console.error(`   This usually means the build files are missing on the server.`);
+                                console.error(`   Run: npm run build on the production server to generate dist/src/ files.`);
                             } else {
                                 console.warn(`⚠️ Component not found: ${scriptSrc} (${response.status}, skipping)`);
                             }

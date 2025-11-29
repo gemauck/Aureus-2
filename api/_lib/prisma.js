@@ -14,10 +14,18 @@ if (global.__prisma) {
 }
 
 try {
+  console.log('🔍 [PRISMA INIT] Starting Prisma initialization...')
+  console.log('🔍 [PRISMA INIT] process.env.DATABASE_URL exists:', !!process.env.DATABASE_URL)
+  
   if (!process.env.DATABASE_URL) {
     console.error('❌ DATABASE_URL is not set')
     throw new Error('DATABASE_URL environment variable is required')
   }
+  
+  // Log the DATABASE_URL immediately for debugging
+  const dbUrlForLog = process.env.DATABASE_URL.replace(/:([^:@]+)@/, ':***@')
+  console.log('🔍 [PRISMA INIT] DATABASE_URL value:', dbUrlForLog)
+  console.log('🔍 [PRISMA INIT] DATABASE_URL hostname:', process.env.DATABASE_URL.match(/@([^:]+):/)?.[1] || 'NOT FOUND')
   
   // Prohibit local database connections
   const dbUrl = process.env.DATABASE_URL.toLowerCase()
@@ -35,13 +43,27 @@ try {
     throw new Error('Local database connections are prohibited. Use the Digital Ocean production database.')
   }
   
-  console.log('🔗 Creating new Prisma client with DATABASE_URL:', process.env.DATABASE_URL.substring(0, 80) + '...')
+  // Force use of process.env.DATABASE_URL - ensure it's the correct one
+  const databaseUrl = process.env.DATABASE_URL
+  console.log('🔍 [PRISMA INIT] Checking hostname in:', databaseUrl ? databaseUrl.replace(/:([^:@]+)@/, ':***@') : 'NOT SET')
+  console.log('🔍 [PRISMA INIT] Contains nov-3-backup5:', databaseUrl ? databaseUrl.includes('nov-3-backup5-do-user-28031752-0') : 'N/A')
+  
+  if (!databaseUrl || !databaseUrl.includes('nov-3-backup5-do-user-28031752-0')) {
+    console.error('❌ ERROR: DATABASE_URL does not contain correct hostname!')
+    console.error('   Current DATABASE_URL:', databaseUrl ? databaseUrl.replace(/:([^:@]+)@/, ':***@') : 'NOT SET')
+    console.error('   Expected hostname: nov-3-backup5-do-user-28031752-0')
+    console.error('   Full DATABASE_URL (masked):', databaseUrl ? databaseUrl.replace(/:([^:@]+)@/, ':***@') : 'NOT SET')
+    throw new Error('DATABASE_URL must contain correct hostname: nov-3-backup5-do-user-28031752-0')
+  }
+  
+  console.log('🔗 Creating new Prisma client with DATABASE_URL:', dbUrlForLog)
+  
   global.__prisma = new PrismaClient({
     log: ['error', 'warn'],
     errorFormat: 'pretty',
     datasources: {
       db: {
-        url: process.env.DATABASE_URL
+        url: databaseUrl  // Use explicit variable
       }
     },
     // Reduce connection pool to prevent connection exhaustion

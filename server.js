@@ -9,10 +9,32 @@ import { dirname, join } from 'path'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-// Load .env.local if it exists (for local development)
+// Load .env.local ONLY in development (NEVER in production)
+// SECURITY: .env.local should never exist on production server as it overrides .env
+const isProduction = process.env.NODE_ENV === 'production' || 
+                     process.env.NODE_ENV === 'prod' ||
+                     !process.env.NODE_ENV || // Default to production if not set
+                     process.env.PM2_HOME || // PM2 indicates production
+                     process.env.RAILWAY_ENVIRONMENT || // Railway indicates production
+                     process.env.VERCEL || // Vercel indicates production
+                     process.env.HEROKU_APP_NAME // Heroku indicates production
+
 if (existsSync(join(__dirname, '.env.local'))) {
-  dotenv.config({ path: join(__dirname, '.env.local'), override: true })
-  console.log('✅ Loaded .env.local for local development')
+  if (isProduction) {
+    // CRITICAL: .env.local should NEVER exist in production
+    console.error('❌ SECURITY ERROR: .env.local file found in PRODUCTION!')
+    console.error('   .env.local is for local development only and will override .env')
+    console.error('   This file MUST be removed from the production server')
+    console.error('   Location:', join(__dirname, '.env.local'))
+    console.error('')
+    console.error('   To fix: Remove .env.local from the production server')
+    console.error('   The deployment scripts should handle this automatically')
+    process.exit(1) // Exit immediately to prevent using wrong credentials
+  } else {
+    // Safe to load in development
+    dotenv.config({ path: join(__dirname, '.env.local'), override: true })
+    console.log('✅ Loaded .env.local for local development')
+  }
 }
 
 import express from 'express'

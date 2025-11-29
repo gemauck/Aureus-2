@@ -10,8 +10,8 @@ APP_DIR="/var/www/abcotronics-erp"
 # Digital Ocean Database Connection Details
 # Password should be provided via environment variable or Digital Ocean connection string
 DB_USER="doadmin"
-DB_PASSWORD="${DB_PASSWORD:-}"  # Get from environment or prompt
-DB_HOST="dbaas-db-6934625-nov-3-backup-nov-3-backup4-nov-6-backup-do-use.l.db.ondigitalocean.com"
+DB_PASSWORD="${DB_PASSWORD:-AVNS_D14tRDDknkgUUoVZ4Bv}"  # Get from environment or use default
+DB_HOST="dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com"
 DB_PORT="25060"
 DB_NAME="defaultdb"
 

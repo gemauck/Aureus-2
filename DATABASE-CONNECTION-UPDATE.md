@@ -1,146 +1,129 @@
 # Database Connection Update
 
-## New Database Credentials
+## Connection Details
 
-The database connection has been updated with the following credentials:
-
-- **Host**: `dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com`
-- **Port**: `25060`
-- **Database**: `defaultdb`
-- **Username**: `doadmin`
-- **Password**: `[REDACTED - See .env file on server]`
-- **SSL Mode**: `require`
-
-## Connection String
+Based on the provided credentials, here's your DATABASE_URL:
 
 ```
-postgresql://doadmin:[PASSWORD]@dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require
+postgresql://doadmin:AVNS_D14tRDDknkgUUoVZ4Bv@dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require
 ```
 
-## Update Production Server
+## Quick Update (Local Development)
 
-### Option 1: Automated Script (Recommended)
-
-Run the automated update script:
+Run the update script:
 
 ```bash
 ./update-database-connection.sh
 ```
 
-This script will:
-1. Connect to the production server
-2. Backup the existing `.env` file
-3. Update the `DATABASE_URL` in `.env`
-4. Test the database connection
-5. Regenerate Prisma client
-6. Restart the application with PM2
+This will:
+- Update/create `.env` file with the DATABASE_URL
+- Update `ecosystem.config.mjs` (fallback value)
+- Restart your local server if needed
 
-### Option 2: Manual Update via SSH
+## Manual Update
 
-SSH into the production server and update manually:
+### Local Development (.env file)
 
-```bash
-ssh root@abcoafrica.co.za
-cd /var/www/abcotronics-erp
-
-# Backup existing .env
-cp .env .env.backup
-
-# Update DATABASE_URL in .env
-# Remove old DATABASE_URL line, then add:
-echo 'DATABASE_URL="postgresql://doadmin:[PASSWORD]@dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require"' >> .env
-
-# Regenerate Prisma client
-npx prisma generate
-
-# Restart application
-pm2 restart abcotronics-erp
-pm2 save
-```
-
-## Update Local Development
-
-For local development, create or update your `.env` file:
+Create or update `.env` file in the project root:
 
 ```bash
-# Create .env file
-cat > .env << 'EOF'
-DATABASE_URL="postgresql://doadmin:[PASSWORD]@dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require"
+DATABASE_URL="postgresql://doadmin:AVNS_D14tRDDknkgUUoVZ4Bv@dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require"
 JWT_SECRET=0266f788ee2255e2aa973f0984903fb61f3fb1d9f528b315c9dbd0bf53fe5ea8
-NODE_ENV=development
+NODE_ENV=production
 PORT=3000
-EOF
-
-# Regenerate Prisma client
-npx prisma generate
+APP_URL=https://abcoafrica.co.za
 ```
+
+### Production Server Update
+
+**⚠️ IMPORTANT: Update the production server's .env file directly via SSH**
+
+1. SSH into your production server:
+   ```bash
+   ssh root@abcoafrica.co.za
+   ```
+
+2. Navigate to your application directory:
+   ```bash
+   cd /path/to/your/app  # Replace with actual path
+   ```
+
+3. Edit the `.env` file:
+   ```bash
+   nano .env
+   # or
+   vi .env
+   ```
+
+4. Update or add the DATABASE_URL line:
+   ```
+   DATABASE_URL="postgresql://doadmin:AVNS_D14tRDDknkgUUoVZ4Bv@dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require"
+   ```
+
+5. Save and exit (Ctrl+X, then Y, then Enter for nano)
+
+6. Restart PM2 with updated environment:
+   ```bash
+   pm2 restart all --update-env
+   ```
+
+7. Check PM2 logs to verify connection:
+   ```bash
+   pm2 logs abcotronics-erp --lines 50
+   ```
 
 ## Verify Connection
 
-After updating, verify the connection works:
-
-```bash
-# Test database connection
-npx prisma db execute --stdin <<< "SELECT 1;"
-
-# Or test via API
-curl https://abcoafrica.co.za/api/health
-```
-
-## Troubleshooting
-
-### Connection Errors
-
-If you see connection errors:
-
-1. **Check firewall rules**: Ensure the production server IP is allowed in DigitalOcean database firewall
-2. **Verify credentials**: Double-check username and password
-3. **Check SSL**: Ensure `sslmode=require` is set
-4. **Test connection**: Use `psql` or Prisma Studio to test directly
-
-### PM2 Not Restarting
-
-If PM2 doesn't restart:
-
-```bash
-# Check PM2 status
-pm2 status
-
-# Restart manually
-pm2 restart abcotronics-erp
-
-# Or start fresh
-pm2 delete abcotronics-erp
-pm2 start ecosystem.config.mjs
-pm2 save
-```
-
-### Prisma Client Issues
-
-If Prisma client generation fails:
-
-```bash
-# Clear Prisma cache
-rm -rf node_modules/.prisma
-
-# Regenerate
-npx prisma generate
-
-# Restart application
-pm2 restart abcotronics-erp
-```
+After updating, check the server logs for:
+- ✅ `Prisma database connection established`
+- ✅ `Prisma client initialized`
+- ❌ Any connection errors
 
 ## Security Notes
 
-⚠️ **Important**: 
-- Never commit `.env` files to git
-- The password is stored in plain text in `.env` (this is standard for connection strings)
-- Ensure `.env` files have proper permissions (600) on the server
-- Consider using environment variables in your deployment platform instead of `.env` files
+1. **Never commit `.env` file to git** - It contains sensitive credentials
+2. **The `.env` file should be in `.gitignore`** - Verify this is set
+3. **Use environment variables on production** - Don't hardcode in source files
+4. **Rotate credentials if exposed** - If these credentials were shared publicly, rotate them in Digital Ocean dashboard
 
-## Files Updated
+## Connection String Breakdown
 
-- ✅ `ecosystem.config.mjs` - Updated with new connection string (fallback)
-- ✅ `update-database-connection.sh` - Created automated update script
-- ✅ `DATABASE-CONNECTION-UPDATE.md` - This documentation
+- **Protocol**: `postgresql://`
+- **Username**: `doadmin`
+- **Password**: `AVNS_D14tRDDknkgUUoVZ4Bv` (URL-encoded if needed)
+- **Host**: `dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com`
+- **Port**: `25060`
+- **Database**: `defaultdb`
+- **SSL Mode**: `require` (required for Digital Ocean)
 
+## Troubleshooting
+
+If you still see 500 errors after updating:
+
+1. **Check server logs**:
+   ```bash
+   pm2 logs abcotronics-erp --lines 100
+   ```
+
+2. **Verify DATABASE_URL is set**:
+   ```bash
+   pm2 env 0 | grep DATABASE_URL
+   ```
+
+3. **Test connection manually**:
+   ```bash
+   node -e "console.log(process.env.DATABASE_URL)"
+   ```
+
+4. **Check firewall/network**: Ensure the server can reach Digital Ocean database on port 25060
+
+5. **Verify database is running**: Check Digital Ocean dashboard
+
+## Next Steps
+
+After updating the DATABASE_URL:
+1. Restart the server
+2. Monitor logs for connection success
+3. Test API endpoints to verify they're working
+4. Check that the 500 errors are resolved

@@ -57,12 +57,18 @@ npx prisma generate || echo "⚠️  Prisma generate skipped"
 echo ""
 echo "🔧 Setting correct DATABASE_URL everywhere..."
 # Production database credentials (ALWAYS use these)
-DB_USERNAME="doadmin"
-DB_PASSWORD="AVNS_D14tRDDknkgUUoVZ4Bv"
-DB_HOST="dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com"
-DB_PORT="25060"
-DB_NAME="defaultdb"
-DB_SSLMODE="require"
+# Use environment variables for security - set these in your deployment environment
+DB_USERNAME="${DB_USERNAME:-doadmin}"
+DB_PASSWORD="${DB_PASSWORD:-${DATABASE_PASSWORD}}"
+DB_HOST="${DB_HOST:-dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com}"
+DB_PORT="${DB_PORT:-25060}"
+DB_NAME="${DB_NAME:-defaultdb}"
+DB_SSLMODE="${DB_SSLMODE:-require}"
+
+if [ -z "$DB_PASSWORD" ]; then
+    echo "❌ ERROR: DB_PASSWORD or DATABASE_PASSWORD environment variable must be set"
+    exit 1
+fi
 
 DATABASE_URL="postgresql://${DB_USERNAME}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=${DB_SSLMODE}"
 
@@ -97,6 +103,17 @@ if [ -f "/etc/environment" ]; then
 else
     echo "DATABASE_URL=\"${DATABASE_URL}\"" > /etc/environment
     echo "✅ Created /etc/environment with DATABASE_URL"
+fi
+
+# Remove .env.local if it exists (it overrides .env and may have wrong credentials)
+echo ""
+echo "🔧 Removing .env.local if it exists (prevents override of .env)..."
+if [ -f .env.local ]; then
+    echo "   ⚠️  Found .env.local - removing it to prevent override"
+    rm -f .env.local
+    echo "   ✅ Removed .env.local"
+else
+    echo "   ✅ .env.local does not exist"
 fi
 
 echo ""

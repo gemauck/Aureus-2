@@ -720,12 +720,123 @@ const DatabaseAPI = {
         return response;
     },
 
+    /**
+     * Process attachments: Extract base64 attachments and upload them separately
+     * This prevents 502 errors from large payloads by uploading files first, then replacing dataUrl with URLs
+     */
+    async processAttachments(leadData) {
+        const processedData = JSON.parse(JSON.stringify(leadData)); // Deep clone
+        let attachmentCount = 0;
+        let uploadedCount = 0;
+        const originalSize = JSON.stringify(leadData).length;
+        
+        // Helper function to upload a single attachment
+        const uploadAttachment = async (attachment, folder = 'comments') => {
+            // Skip if already has URL or no dataUrl
+            if (!attachment.dataUrl || !attachment.dataUrl.startsWith('data:')) {
+                return false;
+            }
+            
+            // Skip if already has a URL (already uploaded)
+            if (attachment.url && attachment.url.startsWith('/uploads/')) {
+                return false;
+            }
+            
+            attachmentCount++;
+            try {
+                console.log(`📤 Uploading attachment: ${attachment.name || 'unnamed'} (${(attachment.dataUrl.length / 1024).toFixed(1)}KB base64)`);
+                const token = window.storage?.getToken?.();
+                const response = await fetch(`${this.API_BASE}/api/files`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                    },
+                    body: JSON.stringify({
+                        folder: folder,
+                        name: attachment.name || `attachment-${Date.now()}.pdf`,
+                        dataUrl: attachment.dataUrl
+                    })
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error?.message || `Upload failed (${response.status})`);
+                }
+                
+                const json = await response.json();
+                const fileUrl = json.data?.url || json.url;
+                
+                if (fileUrl) {
+                    // Replace dataUrl with file URL, keep other attachment properties
+                    attachment.url = fileUrl;
+                    delete attachment.dataUrl; // Remove large base64 data
+                    uploadedCount++;
+                    console.log(`✅ Uploaded attachment: ${fileUrl}`);
+                    return true;
+                }
+            } catch (err) {
+                console.error(`❌ Error uploading attachment "${attachment.name || 'unnamed'}":`, err);
+                // Don't throw - continue processing other attachments
+            }
+            return false;
+        };
+        
+        // Process comments array for attachments
+        if (Array.isArray(processedData.comments)) {
+            for (const comment of processedData.comments) {
+                if (Array.isArray(comment.attachments)) {
+                    for (const attachment of comment.attachments) {
+                        await uploadAttachment(attachment, 'comments');
+                    }
+                }
+            }
+        }
+        
+        // Process sites documents
+        if (Array.isArray(processedData.sites)) {
+            for (const site of processedData.sites) {
+                if (site.documents && Array.isArray(site.documents)) {
+                    for (const doc of site.documents) {
+                        await uploadAttachment(doc, 'sites');
+                    }
+                }
+            }
+        }
+        
+        if (attachmentCount > 0) {
+            const newSize = JSON.stringify(processedData).length;
+            const reduction = originalSize > 0 ? ((1 - newSize / originalSize) * 100).toFixed(1) : 0;
+            console.log(`✅ Processed ${uploadedCount}/${attachmentCount} attachments`);
+            console.log(`📊 Payload size: ${(originalSize / 1024).toFixed(1)}KB → ${(newSize / 1024).toFixed(1)}KB (${reduction}% reduction)`);
+        }
+        
+        return processedData;
+    },
+
     async updateLead(id, leadData) {
         console.log(`📡 Updating lead ${id} in database...`);
-        console.log(`📦 Lead data being sent:`, JSON.stringify(leadData, null, 2));
+        
+        // Process attachments before sending (upload base64 attachments separately)
+        // This prevents 502 errors from large payloads
+        let leadDataToSend = leadData;
+        try {
+            leadDataToSend = await this.processAttachments(leadData);
+        } catch (err) {
+            console.warn('⚠️ Attachment processing failed, using original data:', err);
+            // Continue with original data - attachment processing is best-effort
+        }
+        
+        const payloadSize = JSON.stringify(leadDataToSend).length;
+        console.log(`📦 Lead data being sent (size: ${(payloadSize / 1024).toFixed(1)}KB)`);
+        
+        if (payloadSize > 50000) { // Warn if still > 50KB
+            console.warn(`⚠️ Payload is still large (${(payloadSize / 1024).toFixed(1)}KB). This may cause 502 errors.`);
+        }
+        
         const response = await this.makeRequest(`/leads/${id}`, {
             method: 'PATCH',
-            body: JSON.stringify(leadData)
+            body: JSON.stringify(leadDataToSend)
         });
         console.log('✅ Lead updated in database');
         return response;
