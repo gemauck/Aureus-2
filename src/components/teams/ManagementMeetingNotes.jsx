@@ -268,9 +268,17 @@ const ManagementMeetingNotes = () => {
     // State for tracking editing status and temporary values for each field
     const [editingFields, setEditingFields] = useState({}); // { [departmentNotesId-field]: true/false }
     const [tempFieldValues, setTempFieldValues] = useState({}); // { [departmentNotesId-field]: value }
+    
+    // State for showing save status indicator
+    const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
 
     // Track pending saves to ensure they complete before navigation
     const pendingSaves = useRef(new Set());
+    
+    // Debounce timers for auto-save
+    const saveTimers = useRef({});
+    // Latest values waiting to be saved (for flush on blur)
+    const pendingValues = useRef({});
 
     const weekCardRefs = useRef({});
     
@@ -633,11 +641,41 @@ const ManagementMeetingNotes = () => {
         scrollToWeekId(selectedWeek);
     }, [selectedWeek, weeks, scrollToWeekId]);
 
+    // Flush all pending saves immediately
+    const flushPendingSaves = useCallback(() => {
+        // Clear all debounce timers and save immediately
+        Object.keys(saveTimers.current).forEach(fieldKey => {
+            clearTimeout(saveTimers.current[fieldKey]);
+            delete saveTimers.current[fieldKey];
+        });
+        
+        // Save all pending values
+        const pendingEntries = Object.entries(pendingValues.current);
+        pendingEntries.forEach(([fieldKey, data]) => {
+            if (data) {
+                pendingSaves.current.add(fieldKey);
+                window.DatabaseAPI.updateDepartmentNotes(data.departmentNotesId, { [data.field]: data.value })
+                    .then(() => {
+                        delete pendingValues.current[fieldKey];
+                    })
+                    .catch(error => {
+                        console.error('Error flushing pending save:', error);
+                    })
+                    .finally(() => {
+                        pendingSaves.current.delete(fieldKey);
+                    });
+            }
+        });
+    }, []);
+
     // Ensure all pending saves complete before navigation
     useEffect(() => {
         const handleBeforeUnload = (e) => {
+            // Flush any pending saves before unload
+            flushPendingSaves();
+            
             // If there are pending saves, warn the user
-            if (pendingSaves.current.size > 0) {
+            if (pendingSaves.current.size > 0 || Object.keys(pendingValues.current).length > 0) {
                 // Modern browsers ignore custom messages, but this triggers the confirmation dialog
                 e.preventDefault();
                 e.returnValue = '';
@@ -646,18 +684,9 @@ const ManagementMeetingNotes = () => {
         };
 
         const handleVisibilityChange = () => {
-            // When tab becomes hidden (user navigating away), wait for pending saves
-            if (document.hidden && pendingSaves.current.size > 0) {
-                // Give pending saves a moment to complete
-                // The saves are already in progress, we just want to give them time
-                const checkPending = setInterval(() => {
-                    if (pendingSaves.current.size === 0) {
-                        clearInterval(checkPending);
-                    }
-                }, 50);
-                
-                // Clear interval after 2 seconds max to prevent hanging
-                setTimeout(() => clearInterval(checkPending), 2000);
+            // When tab becomes hidden (user navigating away), flush all pending saves
+            if (document.hidden) {
+                flushPendingSaves();
             }
         };
 
@@ -667,8 +696,11 @@ const ManagementMeetingNotes = () => {
         return () => {
             window.removeEventListener('beforeunload', handleBeforeUnload);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
+            
+            // Cleanup: flush pending saves and clear timers on unmount
+            flushPendingSaves();
         };
-    }, []);
+    }, [flushPendingSaves]);
 
     // Get all action items for the month
     const allActionItems = useMemo(() => {
@@ -1255,37 +1287,81 @@ const ManagementMeetingNotes = () => {
         }
     };
 
-    // Auto-save function - immediate save on every change
+    // Refs for save status timeout
+    const saveStatusTimeout = useRef(null);
+    
+    // Debounced auto-save function - saves after 300ms of no typing
     const handleFieldChange = (departmentNotesId, field, value) => {
         // Update local state immediately for responsive UI
         const monthlyId = currentMonthlyNotes?.id || null;
         updateDepartmentNotesLocal(departmentNotesId, field, value, monthlyId);
         
-        // Save immediately - no debounce delay
         const fieldKey = getFieldKey(departmentNotesId, field);
-        const savePromise = window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value })
-            .catch(error => {
-                console.error('Error auto-saving department notes:', error);
-                // Reload on error to revert changes
-                if (selectedMonth) {
-                    reloadMonthlyNotes(selectedMonth).catch(() => {});
-                }
-            })
-            .finally(() => {
-                // Remove from pending saves when complete
-                pendingSaves.current.delete(fieldKey);
-            });
         
-        // Track this save as pending
-        pendingSaves.current.add(fieldKey);
+        // Store the latest value for this field (so blur can access it)
+        pendingValues.current[fieldKey] = { departmentNotesId, field, value };
+        
+        // Show 'saving' status
+        setSaveStatus('saving');
+        if (saveStatusTimeout.current) {
+            clearTimeout(saveStatusTimeout.current);
+        }
+        
+        // Clear any existing timer for this field
+        if (saveTimers.current[fieldKey]) {
+            clearTimeout(saveTimers.current[fieldKey]);
+        }
+        
+        // Set a new debounce timer - save after 300ms of no typing
+        saveTimers.current[fieldKey] = setTimeout(() => {
+            // Mark as pending save
+            pendingSaves.current.add(fieldKey);
+            
+            window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value })
+                .then(() => {
+                    // Successfully saved - clear from pending values
+                    delete pendingValues.current[fieldKey];
+                    // Show 'saved' briefly then go idle
+                    setSaveStatus('saved');
+                    saveStatusTimeout.current = setTimeout(() => {
+                        setSaveStatus('idle');
+                    }, 1500);
+                })
+                .catch(error => {
+                    console.error('Error auto-saving department notes:', error);
+                    // Don't clear pendingValues on error - blur will retry
+                    setSaveStatus('idle');
+                })
+                .finally(() => {
+                    pendingSaves.current.delete(fieldKey);
+                    delete saveTimers.current[fieldKey];
+                });
+        }, 50); // 50ms debounce - near-instant saves while still batching rapid keystrokes
     };
     
-    // Force save on blur - ensures latest value is saved before navigation
+    // Flush save on blur - immediately saves the latest value
     const handleFieldBlur = (departmentNotesId, field, value) => {
         const fieldKey = getFieldKey(departmentNotesId, field);
         
-        // Always save on blur to ensure latest value is persisted, even if previous save is pending
-        const savePromise = window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value })
+        // Clear any pending debounce timer
+        if (saveTimers.current[fieldKey]) {
+            clearTimeout(saveTimers.current[fieldKey]);
+            delete saveTimers.current[fieldKey];
+        }
+        
+        // Get the most recent value (either from pending or passed in)
+        const pendingData = pendingValues.current[fieldKey];
+        const valueToSave = pendingData ? pendingData.value : value;
+        
+        // Mark as pending
+        pendingSaves.current.add(fieldKey);
+        
+        // Save immediately on blur
+        window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: valueToSave })
+            .then(() => {
+                // Successfully saved - clear from pending values
+                delete pendingValues.current[fieldKey];
+            })
             .catch(error => {
                 console.error('Error saving department notes on blur:', error);
                 if (selectedMonth) {
@@ -1295,9 +1371,6 @@ const ManagementMeetingNotes = () => {
             .finally(() => {
                 pendingSaves.current.delete(fieldKey);
             });
-        
-        // Track this save as pending
-        pendingSaves.current.add(fieldKey);
     };
 
     // Track temp IDs to prevent duplicates when server responds
@@ -2073,10 +2146,25 @@ const ManagementMeetingNotes = () => {
             <div className={`rounded-xl border p-4 ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-white border-gray-200 shadow-sm'}`}>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
-                        <h2 className={`text-xl font-bold mb-1 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
-                            <i className="fas fa-clipboard-list mr-2 text-primary-600"></i>
-                            Management Meeting Notes
-                        </h2>
+                        <div className="flex items-center gap-3">
+                            <h2 className={`text-xl font-bold mb-1 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                                <i className="fas fa-clipboard-list mr-2 text-primary-600"></i>
+                                Management Meeting Notes
+                            </h2>
+                            {/* Save Status Indicator */}
+                            {saveStatus === 'saving' && (
+                                <span className={`inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-full ${isDark ? 'bg-blue-900/50 text-blue-300 border border-blue-700' : 'bg-blue-50 text-blue-600 border border-blue-200'}`}>
+                                    <i className="fas fa-circle-notch fa-spin"></i>
+                                    Saving...
+                                </span>
+                            )}
+                            {saveStatus === 'saved' && (
+                                <span className={`inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-full ${isDark ? 'bg-green-900/50 text-green-300 border border-green-700' : 'bg-green-50 text-green-600 border border-green-200'}`}>
+                                    <i className="fas fa-check"></i>
+                                    Saved
+                                </span>
+                            )}
+                        </div>
                         <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Weekly department updates and action tracking</p>
                     </div>
                     <div className="flex flex-wrap items-center justify-end gap-2">

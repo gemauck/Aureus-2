@@ -561,10 +561,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             
             // Normalize client name for comparison (case-insensitive, trimmed)
             const normalizedClientName = (client.name || '').trim().toLowerCase();
-            const clientIdToMatch = client.id;
+            const clientIdToMatch = String(client.id); // Ensure string type for database match
             
             console.log('🔍 Loading job cards for client:', {
                 clientId: clientIdToMatch,
+                clientIdType: typeof clientIdToMatch,
+                originalClientId: client.id,
+                originalClientIdType: typeof client.id,
                 clientName: client.name,
                 normalizedName: normalizedClientName
             });
@@ -575,6 +578,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             
             // Strategy 1: Fetch by clientId (most accurate)
             if (clientIdToMatch) {
+                console.log('📡 Strategy 1: Fetching by clientId:', `/api/jobcards?clientId=${encodeURIComponent(clientIdToMatch)}&pageSize=1000`);
                 response = await fetch(`/api/jobcards?clientId=${encodeURIComponent(clientIdToMatch)}&pageSize=1000`, {
                     headers: { 
                         'Authorization': `Bearer ${token}`,
@@ -582,14 +586,28 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     }
                 });
                 
+                console.log('📡 Strategy 1 response status:', response.status, response.statusText);
+                
                 if (response.ok) {
                     data = await response.json();
-                    console.log(`📋 Job cards from clientId filter: ${(data.jobCards || []).length} found`);
+                    const count = (data.jobCards || []).length;
+                    console.log(`📋 Job cards from clientId filter: ${count} found`);
+                    if (count > 0) {
+                        console.log('📋 Sample job card:', {
+                            jobCardNumber: data.jobCards[0].jobCardNumber,
+                            clientId: data.jobCards[0].clientId,
+                            clientName: data.jobCards[0].clientName
+                        });
+                    }
+                } else {
+                    const errorText = await response.text().catch(() => 'Unknown error');
+                    console.error('❌ Strategy 1 failed:', response.status, errorText);
                 }
             }
             
             // Strategy 2: If no results, try by clientName (case-insensitive partial match)
             if ((!data || (data.jobCards || []).length === 0) && client.name) {
+                console.log('📡 Strategy 2: Fetching by clientName:', `/api/jobcards?clientName=${encodeURIComponent(client.name)}&pageSize=1000`);
                 response = await fetch(`/api/jobcards?clientName=${encodeURIComponent(client.name)}&pageSize=1000`, {
                     headers: { 
                         'Authorization': `Bearer ${token}`,
@@ -597,13 +615,53 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     }
                 });
                 
+                console.log('📡 Strategy 2 response status:', response.status, response.statusText);
+                
                 if (response.ok) {
                     data = await response.json();
-                    console.log(`📋 Job cards from clientName filter: ${(data.jobCards || []).length} found`);
+                    const count = (data.jobCards || []).length;
+                    console.log(`📋 Job cards from clientName filter: ${count} found`);
+                    if (count > 0) {
+                        console.log('📋 Sample job card:', {
+                            jobCardNumber: data.jobCards[0].jobCardNumber,
+                            clientId: data.jobCards[0].clientId,
+                            clientName: data.jobCards[0].clientName
+                        });
+                    }
+                } else {
+                    const errorText = await response.text().catch(() => 'Unknown error');
+                    console.error('❌ Strategy 2 failed:', response.status, errorText);
                 }
             }
             
-            // Strategy 3 removed: Expensive fallback with pageSize=5000 was causing rate limit (429) errors
+            // Strategy 3: Debug fallback - fetch a sample to see what's in the database
+            if ((!data || (data.jobCards || []).length === 0)) {
+                console.log('📡 Strategy 3: Fetching sample of all job cards for debugging...');
+                try {
+                    const debugResponse = await fetch(`/api/jobcards?pageSize=10`, {
+                        headers: { 
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    if (debugResponse.ok) {
+                        const debugData = await debugResponse.json();
+                        const allJobCards = debugData.jobCards || [];
+                        console.log(`🔍 Debug: Found ${allJobCards.length} total job cards in database (sample)`);
+                        if (allJobCards.length > 0) {
+                            console.log('🔍 Sample job cards:', allJobCards.map(jc => ({
+                                jobCardNumber: jc.jobCardNumber,
+                                clientId: jc.clientId,
+                                clientName: jc.clientName,
+                                matchesClientId: String(jc.clientId) === clientIdToMatch,
+                                matchesClientName: jc.clientName && jc.clientName.toLowerCase().includes(normalizedClientName)
+                            })));
+                        }
+                    }
+                } catch (debugError) {
+                    console.warn('⚠️ Debug fetch failed:', debugError);
+                }
+            }
             
             // Handle response errors (including rate limiting)
             if (response && !response.ok) {

@@ -711,6 +711,7 @@ const Clients = React.memo(() => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterIndustry, setFilterIndustry] = useState('All Industries');
     const [filterStatus, setFilterStatus] = useState('All Status');
+    const [filterStage, setFilterStage] = useState('All Stages');
     const [filterServices, setFilterServices] = useState(() => {
         try {
             const saved = localStorage.getItem('clients_filterServices');
@@ -3680,7 +3681,9 @@ const Clients = React.memo(() => {
                 );
             
             const matchesIndustry = filterIndustry === 'All Industries' || client.industry === filterIndustry;
-            const matchesStatus = filterStatus === 'All Status' || client.status === filterStatus;
+            // Normalize status for comparison
+            const clientStatus = client.status ? (client.status.charAt(0).toUpperCase() + client.status.slice(1).toLowerCase()) : '';
+            const matchesStatus = filterStatus === 'All Status' || clientStatus === filterStatus;
             
             // Check if client matches selected services (if any are selected)
             const matchesServices = filterServices.length === 0 || 
@@ -3706,15 +3709,21 @@ const Clients = React.memo(() => {
                 // Contact search removed for leads
             
             const matchesIndustry = filterIndustry === 'All Industries' || lead.industry === filterIndustry;
-            // Status is hardcoded as 'active' for all leads, so status filter doesn't apply
-            const matchesStatus = true;
+            
+            // Status filter - normalize for comparison
+            const leadStatus = lead.status ? (lead.status.charAt(0).toUpperCase() + lead.status.slice(1).toLowerCase()) : '';
+            const matchesStatus = filterStatus === 'All Status' || leadStatus === filterStatus;
+            
+            // Stage filter - normalize for comparison
+            const leadStage = lead.stage ? (lead.stage.charAt(0).toUpperCase() + lead.stage.slice(1).toLowerCase()) : '';
+            const matchesStage = filterStage === 'All Stages' || leadStage === filterStage;
             
             // Check if starred filter is applied
             const matchesStarred = !showStarredOnly || resolveStarredState(lead);
             
-            return matchesSearch && matchesIndustry && matchesStatus && matchesStarred;
+            return matchesSearch && matchesIndustry && matchesStatus && matchesStage && matchesStarred;
         });
-    }, [leads, searchTerm, filterIndustry, showStarredOnly]);
+    }, [leads, searchTerm, filterIndustry, filterStatus, filterStage, showStarredOnly]);
 
     // PERFORMANCE FIX: Memoize sorted leads
     const sortedLeads = useMemo(() => {
@@ -3762,11 +3771,62 @@ const Clients = React.memo(() => {
         return Array.from(serviceSet).sort();
     }, [clients, leads]);
 
+    // Extract all unique status values from clients and leads dynamically
+    const allStatuses = useMemo(() => {
+        const statusSet = new Set();
+        [...clients, ...leads].forEach(item => {
+            if (item.status && typeof item.status === 'string' && item.status.trim()) {
+                // Normalize status: capitalize first letter, rest lowercase
+                const normalized = item.status.charAt(0).toUpperCase() + item.status.slice(1).toLowerCase();
+                statusSet.add(normalized);
+            }
+        });
+        return Array.from(statusSet).sort();
+    }, [clients, leads]);
+
+    // Extract all unique stage values from leads dynamically
+    const allStages = useMemo(() => {
+        const stageSet = new Set();
+        leads.forEach(lead => {
+            if (lead.stage && typeof lead.stage === 'string' && lead.stage.trim()) {
+                // Normalize stage: capitalize first letter, rest lowercase
+                const normalized = lead.stage.charAt(0).toUpperCase() + lead.stage.slice(1).toLowerCase();
+                stageSet.add(normalized);
+            }
+        });
+        // Ensure all PIPELINE_STAGES are included even if not in data yet
+        PIPELINE_STAGES.forEach(stage => stageSet.add(stage));
+        return Array.from(stageSet).sort();
+    }, [leads]);
+
+    // Extract all unique industries from clients and leads dynamically (as fallback/supplement to API)
+    const allIndustriesFromData = useMemo(() => {
+        const industrySet = new Set();
+        [...clients, ...leads].forEach(item => {
+            if (item.industry && typeof item.industry === 'string' && item.industry.trim()) {
+                industrySet.add(item.industry.trim());
+            }
+        });
+        return Array.from(industrySet).sort();
+    }, [clients, leads]);
+
+    // Combine API industries with data industries to ensure all current options are available
+    const allIndustries = useMemo(() => {
+        const industrySet = new Set();
+        // Add industries from API
+        industries.forEach(ind => {
+            if (ind.name) industrySet.add(ind.name);
+        });
+        // Add industries from actual data
+        allIndustriesFromData.forEach(ind => industrySet.add(ind));
+        return Array.from(industrySet).sort();
+    }, [industries, allIndustriesFromData]);
+
     // Reset page to 1 when filters or sort changes
     useEffect(() => {
         setClientsPage(1);
         setLeadsPage(1);
-    }, [searchTerm, filterIndustry, filterStatus, filterServices, showStarredOnly, sortField, sortDirection, leadSortField, leadSortDirection]);
+    }, [searchTerm, filterIndustry, filterStatus, filterStage, filterServices, showStarredOnly, sortField, sortDirection, leadSortField, leadSortDirection]);
 
     const pipelineStages = ['Awareness', 'Interest', 'Desire', 'Action'];
 
@@ -5475,22 +5535,11 @@ const Clients = React.memo(() => {
                                 }`}
                             >
                                 <option value="All Industries">All Industries</option>
-                                {industries.map((industry) => (
-                                    <option key={industry.id} value={industry.name}>
-                                        {industry.name}
+                                {allIndustries.map((industry) => (
+                                    <option key={industry} value={industry}>
+                                        {industry}
                                     </option>
                                 ))}
-                                {industries.length === 0 && (
-                                    <>
-                                        <option value="Mining">Mining</option>
-                                        <option value="Mining Contractor">Mining Contractor</option>
-                                        <option value="Forestry">Forestry</option>
-                                        <option value="Agriculture">Agriculture</option>
-                                        <option value="Diesel Supply">Diesel Supply</option>
-                                        <option value="Logistics">Logistics</option>
-                                        <option value="Other">Other</option>
-                                    </>
-                                )}
                             </select>
                         </div>
                         <div>
@@ -5504,11 +5553,33 @@ const Clients = React.memo(() => {
                                 }`}
                             >
                                 <option value="All Status">All Status</option>
-                                <option value="Potential">Potential</option>
-                                <option value="Active">Active</option>
-                                <option value="Disinterested">Disinterested</option>
+                                {allStatuses.map((status) => (
+                                    <option key={status} value={status}>
+                                        {status}
+                                    </option>
+                                ))}
                             </select>
                         </div>
+                        {viewMode === 'leads' && (
+                            <div>
+                                <select
+                                    value={filterStage}
+                                    onChange={(e) => setFilterStage(e.target.value)}
+                                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
+                                        isDark 
+                                            ? 'bg-gray-700 border-gray-600 text-gray-200 focus:bg-gray-700' 
+                                            : 'bg-gray-50 border-gray-300 text-gray-900 focus:bg-white'
+                                    }`}
+                                >
+                                    <option value="All Stages">All Stages</option>
+                                    {allStages.map((stage) => (
+                                        <option key={stage} value={stage}>
+                                            {stage}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                         {viewMode !== 'leads' && (
                             <div>
                                 <ServicesDropdown
@@ -5538,7 +5609,7 @@ const Clients = React.memo(() => {
                     </div>
                     
                     {/* Modern Search Results Counter */}
-                    {(searchTerm || filterIndustry !== 'All Industries' || filterStatus !== 'All Status' || (viewMode !== 'leads' && filterServices.length > 0) || showStarredOnly) && (
+                    {(searchTerm || filterIndustry !== 'All Industries' || filterStatus !== 'All Status' || (viewMode === 'leads' && filterStage !== 'All Stages') || (viewMode !== 'leads' && filterServices.length > 0) || showStarredOnly) && (
                         <div className={`mt-5 sm:mt-6 pt-5 sm:pt-6 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -5555,6 +5626,7 @@ const Clients = React.memo(() => {
                                         setSearchTerm('');
                                         setFilterIndustry('All Industries');
                                         setFilterStatus('All Status');
+                                        setFilterStage('All Stages');
                                         if (viewMode !== 'leads') {
                                             setFilterServices([]);
                                         }
