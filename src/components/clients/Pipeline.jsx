@@ -85,7 +85,7 @@ const normalizeLifecycleStageValue = (value) => {
  * COMPREHENSIVE SALES PIPELINE PLATFORM
  * 
  * Features:
- * - Kanban board with drag-and-drop across AIDA stages
+ * - List view with drag-and-drop across AIDA stages
  * - Advanced filtering by value, industry, age
  * - Pipeline metrics and forecasting
  * - Activity tracking and timeline
@@ -506,56 +506,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
             console.log('⚡ Pipeline: Loaded cached leads immediately:', normalizedSavedLeads.length, 'leads');
         }
     }, []);
-
-    // Removed Kanban-specific layout fix effects
-                
-                mutations.forEach((mutation) => {
-                    // Check if cards were added
-                    if (mutation.addedNodes.length > 0) {
-                        mutation.addedNodes.forEach((node) => {
-                            if (node.nodeType === 1 && (node.hasAttribute('draggable') || node.querySelector('[draggable="true"]'))) {
-                                shouldFixLayout = true;
-                            }
-                        });
-                    }
-                });
-                
-                if (shouldFixLayout && dataLoaded) {
-                    // Wait a bit for the browser to finish rendering
-                    setTimeout(() => {
-                        requestAnimationFrame(() => {
-                            const stageColumns = document.querySelectorAll('[data-pipeline-stage]');
-                            const cards = document.querySelectorAll('[draggable="true"]');
-                            
-                            if (stageColumns.length > 0 && cards.length > 0) {
-                                stageColumns.forEach(column => {
-                                    void column.offsetHeight;
-                                    void column.offsetWidth;
-                                });
-                                
-                                cards.forEach(card => {
-                                    void card.offsetHeight;
-                                });
-                                
-                                console.log('✅ Pipeline: Layout fixed after cards added to DOM');
-                            }
-                        });
-                    }, 50);
-                }
-            });
-
-            // Observe the kanban container for changes
-            mutationObserver.observe(kanbanContainer, {
-                childList: true,
-                subtree: true
-            });
-
-            return () => {
-                resizeObserver.disconnect();
-                mutationObserver.disconnect();
-            };
-        }
-    }, [viewMode, clients, leads, dataLoaded]);
 
     const loadData = async () => {
         const cachedClientsRaw =
@@ -1694,221 +1644,9 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
     // Removed global and native listeners - using simple React synthetic events like TaskManagement
 
-    // Diagnostic function to verify drag and drop setup
-    useEffect(() => {
-        if (viewMode === 'kanban' && dataLoaded) {
-            setTimeout(() => {
-                const cards = document.querySelectorAll('[data-pipeline-stage] [draggable="true"]');
-                const stages = document.querySelectorAll('[data-pipeline-stage]');
-                console.log('🔍 Pipeline: Drag and drop diagnostic', {
-                    cardsFound: cards.length,
-                    stagesFound: stages.length,
-                    cardsWithDraggable: Array.from(cards).filter(c => c.draggable === true).length,
-                    stagesWithNativeListeners: Array.from(stages).filter(s => s._pipelineDragover && s._pipelineDrop).length,
-                    sampleCard: cards[0] ? {
-                        draggable: cards[0].draggable,
-                        hasDragStart: cards[0].ondragstart !== null,
-                        pointerEvents: window.getComputedStyle(cards[0]).pointerEvents,
-                        userSelect: window.getComputedStyle(cards[0]).userSelect
-                    } : null
-                });
-            }, 1000);
-        }
-    }, [viewMode, dataLoaded, filteredItems.length]);
+    // Kanban diagnostic removed - only List view is available
 
-    // Kanban Board View
-    const KanbanView = () => (
-        <div className="flex gap-3 overflow-x-auto pb-4">
-            {pipelineStages.map(stage => {
-                const stageItems = filteredItems
-                    .filter(item => item.stage === stage.name)
-                    .sort((a, b) => {
-                        const aStar = a.isStarred ? 1 : 0;
-                        const bStar = b.isStarred ? 1 : 0;
-                        if (aStar !== bStar) {
-                            return bStar - aStar;
-                        }
-                        switch (sortBy) {
-                            case 'value-desc': return b.value - a.value;
-                            case 'value-asc': return a.value - b.value;
-                            case 'date-desc': return new Date(b.createdDate) - new Date(a.createdDate);
-                            case 'date-asc': return new Date(a.createdDate) - new Date(b.createdDate);
-                            case 'name-asc': return a.name.localeCompare(b.name);
-                            case 'name-desc': return b.name.localeCompare(a.name);
-                            default: return 0;
-                        }
-                    });
-                const stageValue = stageItems.reduce((sum, item) => sum + item.value, 0);
-                const isStageHighlighted =
-                    draggedOverStage === stage.name ||
-                    (touchDragState && touchDragState.targetStage === stage.name);
-                
-                // Define handlers inline like TaskManagement - this ensures proper closure
-                const handleDragOver = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setDraggedOverStage(stage.name);
-                    if (e.dataTransfer) {
-                        e.dataTransfer.dropEffect = 'move';
-                    }
-                };
-
-                const handleDragLeave = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const relatedTarget = e.relatedTarget;
-                    if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
-                        setDraggedOverStage((prev) => (prev === stage.name ? null : prev));
-                    }
-                };
-
-                const handleDrop = async (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setDraggedOverStage(null);
-
-                    // Prefer React state for the dragged item (more reliable than dataTransfer on some browsers)
-                    let item = draggedItem || null;
-
-                    // Fallback: attempt to resolve via dataTransfer ID if state is missing
-                    if (!item && e?.dataTransfer) {
-                        const itemId = e.dataTransfer.getData('pipelineItemId');
-                        if (itemId && itemId !== '') {
-                            if (draggedType) {
-                                item = getPipelineItems().find(
-                                    (i) => String(i.id) === String(itemId) && i.type === draggedType
-                                );
-                            } else {
-                                item = getPipelineItems().find((i) => String(i.id) === String(itemId));
-                            }
-                        }
-                    }
-
-                    console.log('🎯 Pipeline: drop', {
-                        stageTarget: stage.name,
-                        draggedItemId: draggedItem?.id,
-                        draggedItemType: draggedType,
-                        resolvedItemId: item?.id,
-                        resolvedItemType: item?.type
-                    });
-
-                    if (!item || item.stage === stage.name) {
-                        if (!item) {
-                            console.warn('⚠️ Pipeline: drop handler could not resolve dragged item');
-                        }
-                        return;
-                    }
-
-                    // Use draggedType from state, or fallback to item.type
-                    const finalType = draggedType || item.type;
-
-                    let didPersistRemotely = false;
-                    try {
-                        // Optimistic UI update
-                        if (finalType === 'lead') {
-                            updateLeadStageOptimistically(item.id, stage.name);
-                        } else if (finalType === 'opportunity') {
-                            updateOpportunityStageOptimistically(item.clientId, item.id, stage.name);
-                        }
-
-                        // Persist to database
-                        if (finalType === 'lead') {
-                            const updateFn = window.api?.updateLeadStage || window.DatabaseAPI?.updateLeadStage;
-                            if (updateFn) {
-                                await updateFn(item.id, stage.name);
-                                didPersistRemotely = true;
-                            }
-                        } else if (finalType === 'opportunity') {
-                            const updateFn = window.api?.updateOpportunityStage || window.DatabaseAPI?.updateOpportunityStage;
-                            if (updateFn && item.clientId) {
-                                await updateFn(item.clientId, item.id, stage.name);
-                                didPersistRemotely = true;
-                            }
-                        }
-                        
-                        if (didPersistRemotely) {
-                            schedulePipelineRefresh();
-                        }
-                    } catch (error) {
-                        console.error('❌ Pipeline: Failed to update stage', error);
-                        alert('Failed to update stage. Please try again.');
-                        schedulePipelineRefresh();
-                    } finally {
-                        setDraggedItem(null);
-                        setDraggedType(null);
-                        setIsDragging(false);
-                        setTouchDragState(null);
-                        setJustDragged(true);
-                        setTimeout(() => {
-                            setJustDragged(false);
-                        }, 300);
-                    }
-                };
-
-                return (
-                    <div 
-                        key={stage.id} 
-                        data-pipeline-stage={stage.name}
-                        className={`flex-1 min-w-[240px] bg-gray-50 rounded-lg p-3 ${!isDragging ? 'transition-all' : ''} ${
-                            isStageHighlighted ? 'ring-2 ring-blue-500 bg-blue-50' : ''
-                        }`}
-                        onDragOver={handleDragOver}
-                        onDragLeave={handleDragLeave}
-                        onDrop={handleDrop}
-                    >
-                        {/* Stage Header */}
-                        <div className="mb-2 px-1">
-                            <div className="flex items-center gap-2 mb-1">
-                                <div className={`w-6 h-6 bg-${stage.color}-100 rounded-lg flex items-center justify-center`}>
-                                    <i className={`fas ${stage.icon} text-${stage.color}-600 text-xs`}></i>
-                                </div>
-                                <div className="flex-1">
-                                    <h3 className="text-xs font-semibold text-gray-900">{stage.name}</h3>
-                                    <p className="text-[9px] text-gray-500">{stage.avgDuration}</p>
-                                </div>
-                                <span className="px-1.5 py-0.5 bg-white rounded-full text-xs font-medium text-gray-700 border border-gray-200">
-                                    {stageItems.length}
-                                </span>
-                            </div>
-                            
-                            {/* Stage Metrics */}
-                            <div className="mt-1.5 p-1.5 bg-white rounded border border-gray-200">
-                                <div className="text-[10px] text-gray-600">
-                                    <span className="font-medium">Total:</span> R {stageValue.toLocaleString('en-ZA')}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Stage Description */}
-                        <div className="mb-2 px-1">
-                            <p className="text-[9px] text-gray-500 italic">{stage.description}</p>
-                        </div>
-
-                        {/* Cards */}
-                        <div 
-                            className="space-y-3 min-h-[100px]"
-                        >
-                            {stageItems.length === 0 ? (
-                                <div 
-                                    className={`text-center py-8 rounded-lg border-2 border-dashed ${!isDragging ? 'transition' : ''} ${
-                                        (draggedOverStage === stage.name || (touchDragState && touchDragState.targetStage === stage.name)) ? 'border-primary-400 bg-primary-50' : 'border-gray-300'
-                                    }`}
-                                >
-                                    <i className="fas fa-inbox text-2xl text-gray-300 mb-2"></i>
-                                    <p className="text-xs text-gray-400">No deals in this stage</p>
-                                    <p className="text-[10px] text-gray-400 mt-1">Drag deals here</p>
-                                </div>
-                            ) : (
-                                stageItems.map(item => (
-                                    <PipelineCard key={`${item.type}-${item.id}`} item={item} />
-                                ))
-                            )}
-                        </div>
-                    </div>
-                );
-            })}
-        </div>
-    );
+    // Kanban view removed - only List view is available
 
     // Combined Deals List View
     const ListView = () => {
@@ -2102,28 +1840,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
             {/* View Toggle & Filters */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 space-y-4">
-                {/* View Mode Tabs */}
+                {/* View Mode - List only */}
                 <div className="flex items-center justify-between">
-                    <div className="inline-flex bg-gray-100 rounded-lg p-1">
-                        <button
-                            onClick={() => setViewMode('list')}
-                            className={`px-4 py-2 rounded-md text-sm font-medium transition ${
-                                viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
-                            }`}
-                        >
-                            <i className="fas fa-layer-group mr-2"></i>
-                            List
-                        </button>
-                        <button
-                            onClick={() => setViewMode('kanban')}
-                            className={`px-4 py-2 rounded-md text-sm font-medium transition ${
-                                viewMode === 'kanban' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
-                            }`}
-                        >
-                            <i className="fas fa-th mr-2"></i>
-                            Kanban
-                        </button>
-                    </div>
 
                     {/* Sort By */}
                     <select
@@ -2220,9 +1938,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 )}
             </div>
 
-            {/* Main Content */}
-            {viewMode === 'kanban' && <KanbanView />}
-            {viewMode === 'list' && <ListView />}
+            {/* Main Content - List View Only */}
+            <ListView />
 
             {/* Fallback detail modals when integration callbacks are unavailable */}
             {!onOpenLead && fallbackDeal?.type === 'lead' && LeadDetailModalComponent && (
