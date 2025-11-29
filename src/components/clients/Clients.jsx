@@ -5500,37 +5500,6 @@ const Clients = React.memo(() => {
                                     </>
                                 )}
                             </select>
-                            <button
-                                type="button"
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    
-                                    // Prevent multiple rapid clicks
-                                    if (isOpeningIndustryModalRef.current || showIndustryModal) {
-                                        console.log('🔧 Clients: Ignoring duplicate click');
-                                        return;
-                                    }
-                                    
-                                    isOpeningIndustryModalRef.current = true;
-                                    console.log('🔧 Industry management button clicked');
-                                    console.log('🔧 Current showIndustryModal state:', showIndustryModal);
-                                    console.log('🔧 isAdmin:', isAdmin);
-                                    setShowIndustryModal(true);
-                                    setTimeout(() => {
-                                        console.log('🔧 After setState, showIndustryModal:', showIndustryModal);
-                                    }, 0);
-                                }}
-                                className={`px-4 py-3 border rounded-lg text-sm font-medium transition-colors cursor-pointer ${
-                                    isDark
-                                        ? 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600'
-                                        : 'bg-gray-50 border-gray-300 text-gray-900 hover:bg-gray-100'
-                                }`}
-                                title={isAdmin ? "Manage Industries" : "Admin Only - Manage Industries"}
-                                style={{ zIndex: 10, opacity: isAdmin ? 1 : 0.5 }}
-                            >
-                                <i className="fas fa-cog"></i>
-                            </button>
                         </div>
                         <div>
                             <select
