@@ -25,7 +25,7 @@ const safeStorage = {
 // Map of critical modal bundles to ensure they can be recovered if the initial script tag failed to load
 const CRITICAL_COMPONENT_SCRIPTS = {
     ClientDetailModal: './dist/src/components/clients/ClientDetailModal.js?v=permanent-block-1762361500',
-    LeadDetailModal: './dist/src/components/clients/LeadDetailModal.js?v=lead-fix-1736162400',
+    LeadDetailModal: './dist/src/components/clients/LeadDetailModal.js?v=remove-projects-tab-1736162400',
     OpportunityDetailModal: './dist/src/components/clients/OpportunityDetailModal.js',
     Pipeline: './dist/src/components/clients/Pipeline.js?v=remove-aida-stage-1735569600'
 };
@@ -4556,23 +4556,26 @@ const Clients = React.memo(() => {
                                     <td className="px-6 py-2 whitespace-nowrap">
                                         <div className="flex flex-wrap gap-1.5">
                                             {(() => {
-                                                const tags = Array.isArray(client.tags) 
-                                                    ? client.tags 
-                                                    : (client.tags ? [client.tags] : []);
-                                                // Handle tags that might be objects with name property
-                                                const tagNames = tags.map(tag => typeof tag === 'object' && tag.name ? tag.name : tag).filter(Boolean);
+                                                const tags = Array.isArray(client.tags) ? client.tags : [];
                                                 const MAX = 3;
-                                                const visible = tagNames.slice(0, MAX);
-                                                const remaining = tagNames.length - visible.length;
+                                                const visible = tags.slice(0, MAX);
+                                                const remaining = tags.length - visible.length;
                                                 return (
                                                     <>
                                                         {visible.map((tag, idx) => {
-                                                            const tagObj = typeof tags[idx] === 'object' && tags[idx] ? tags[idx] : { name: tag, color: '#3B82F6' };
+                                                            // Ensure tag is an object with name and color
+                                                            const tagObj = tag && typeof tag === 'object' 
+                                                                ? { 
+                                                                    id: tag.id || idx, 
+                                                                    name: tag.name || String(tag), 
+                                                                    color: tag.color || '#3B82F6' 
+                                                                }
+                                                                : { id: idx, name: String(tag || ''), color: '#3B82F6' };
                                                             const tagColor = tagObj.color || '#3B82F6';
-                                                            const tagName = typeof tag === 'object' && tag.name ? tag.name : tag;
+                                                            const tagName = tagObj.name || '-';
                                                             return (
                                                                 <span 
-                                                                    key={idx} 
+                                                                    key={tagObj.id || idx} 
                                                                     className={`inline-flex items-center px-2 py-0.5 text-[10px] rounded text-white`}
                                                                     style={{ backgroundColor: tagColor }}
                                                                 >
@@ -4583,8 +4586,8 @@ const Clients = React.memo(() => {
                                                         {remaining > 0 && (
                                                             <span className={`inline-flex items-center px-2 py-0.5 text-[10px] rounded ${isDark ? 'bg-primary-900 text-primary-200' : 'bg-primary-100 text-primary-700'}`}>+{remaining}</span>
                                                         )}
-                                                        {tagNames.length === 0 && (
-                                                            <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>None</span>
+                                                        {tags.length === 0 && (
+                                                            <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>—</span>
                                                         )}
                                                     </>
                                                 );
