@@ -53,8 +53,19 @@ npm install --production
 echo "🏗️  Generating Prisma client..."
 npx prisma generate || echo "⚠️  Prisma generate skipped"
 
-echo "🔄 Restarting application..."
-pm2 restart abcotronics-erp || pm2 start server.js --name abcotronics-erp
+echo "🔍 Verifying DATABASE_URL is set in .env..."
+if grep -q "^DATABASE_URL=" .env 2>/dev/null; then
+    echo "✅ DATABASE_URL found in .env"
+    DB_PREVIEW=$(grep "^DATABASE_URL=" .env | sed 's/:[^@]*@/:***@/' | head -1)
+    echo "   $DB_PREVIEW"
+else
+    echo "⚠️  WARNING: DATABASE_URL not found in .env!"
+    echo "   Please set DATABASE_URL in .env file before restarting"
+fi
+
+echo ""
+echo "🔄 Restarting application with updated environment..."
+pm2 restart abcotronics-erp --update-env || pm2 start server.js --name abcotronics-erp --update-env
 
 echo ""
 echo "✅ Deployment complete!"
