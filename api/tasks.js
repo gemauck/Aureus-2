@@ -18,6 +18,22 @@ async function handler(req, res) {
       try {
         const { status, projectId } = req.query || {}
         
+        // Get current user info to match by name/email as well
+        const currentUser = await prisma.user.findUnique({
+          where: { id: userId },
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        }).catch(() => null)
+        
+        const userMatchFields = {
+          id: userId,
+          name: currentUser?.name || req.user?.name || '',
+          email: currentUser?.email || req.user?.email || ''
+        }
+        
         // Get tasks from Task table
         const where = { assigneeId: userId }
         
@@ -79,9 +95,22 @@ async function handler(req, res) {
               if (Array.isArray(tasksList)) {
                 for (const task of tasksList) {
                   // Check if task is assigned to current user
-                  // Tasks can have assigneeId, assignee, or assignedTo field
-                  const taskAssigneeId = task.assigneeId || task.assignee?.id || task.assignedTo
-                  if (taskAssigneeId === userId) {
+                  // Tasks can have assigneeId, assignee (as object with id/name/email or as string name), or assignedTo field
+                  const taskAssigneeId = task.assigneeId || task.assignee?.id || null
+                  const taskAssigneeName = typeof task.assignee === 'string' 
+                    ? task.assignee 
+                    : (task.assignee?.name || task.assignedTo || '')
+                  const taskAssigneeEmail = task.assignee?.email || task.assignedTo || ''
+                  
+                  // Match by ID, name, or email
+                  const isAssignedToUser = 
+                    taskAssigneeId === userMatchFields.id ||
+                    (userMatchFields.name && taskAssigneeName && 
+                     taskAssigneeName.toLowerCase().trim() === userMatchFields.name.toLowerCase().trim()) ||
+                    (userMatchFields.email && taskAssigneeEmail && 
+                     taskAssigneeEmail.toLowerCase().trim() === userMatchFields.email.toLowerCase().trim())
+                  
+                  if (isAssignedToUser) {
                     // Only include if status filter matches (if provided)
                     if (!status || (task.status || 'todo').toLowerCase() === status.toLowerCase()) {
                       tasksFromProjects.push({
@@ -89,7 +118,7 @@ async function handler(req, res) {
                         projectId: project.id,
                         title: task.title || task.name || 'Untitled Task',
                         status: task.status || 'todo',
-                        assigneeId: taskAssigneeId,
+                        assigneeId: taskAssigneeId || userId,
                         dueDate: task.dueDate ? new Date(task.dueDate) : null,
                         createdAt: task.createdAt ? new Date(task.createdAt) : new Date(),
                         updatedAt: task.updatedAt ? new Date(task.updatedAt) : new Date(),
