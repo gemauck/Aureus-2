@@ -9,23 +9,22 @@ const SectionCommentWidget = window.SectionCommentWidget;
 // CRITICAL FIX for React error #300: Always call hooks in the same order
 // The issue was that window.useAuth might not be available on first render but becomes available later,
 // causing React to see different numbers of hooks between renders.
-// Solution: Use useState to track availability and always call the hook consistently
+// Solution: Always call window.useAuth() if it exists, ensuring consistent hook calls
 const useAuthSafe = () => {
-    // Use useState to track if useAuth was available on mount
-    // This ensures we always call hooks in the same order
-    const [useAuthAvailable] = useState(() => {
-        // Check on first render only - this value is stable across re-renders
-        return window.useAuth && typeof window.useAuth === 'function';
-    });
-    
-    // CRITICAL: Always call window.useAuth() if it was available on mount OR if it's available now
+    // CRITICAL: Always attempt to call window.useAuth() if it exists
     // This ensures React sees the same number of hooks on every render
-    // We check both the initial state and current availability to handle late-loading scenarios
-    const shouldCallUseAuth = useAuthAvailable || (window.useAuth && typeof window.useAuth === 'function');
+    // We must never conditionally skip calling a hook - that violates React's rules
     
-    if (shouldCallUseAuth) {
+    // Check if useAuth exists and is callable
+    const useAuthHook = window.useAuth && typeof window.useAuth === 'function' ? window.useAuth : null;
+    
+    // Always call the hook if it exists - this is the key fix for React error #300
+    // If it doesn't exist, we'll return a default object, but we must always attempt the call
+    // when the hook is available to maintain consistent hook order
+    if (useAuthHook) {
         try {
-            const authResult = window.useAuth();
+            // Always call the hook - never skip this call conditionally
+            const authResult = useAuthHook();
             // Validate the result is an object with expected properties
             if (authResult && typeof authResult === 'object') {
                 return authResult;

@@ -195,33 +195,30 @@ const MyProjectTasks = () => {
                                         sessionStorage.setItem('openProjectId', task.project.id);
                                         sessionStorage.setItem('openTaskId', task.id);
                                         
-                                        // Use EntityUrl if available for proper navigation
-                                        if (window.EntityUrl) {
-                                            window.EntityUrl.navigateToEntity('task', task.id, {
-                                                parentId: task.project.id,
-                                                parentType: 'project'
-                                            });
-                                        } else {
-                                            // Fallback to hash navigation
-                                            const projectLink = `#/projects/${task.project.id}?task=${task.id}`;
-                                            window.location.hash = projectLink;
-                                            window.dispatchEvent(new CustomEvent('navigateToPage', { 
-                                                detail: { page: 'projects' } 
+                                        // Navigate to project page with task query parameter in hash
+                                        // This format works with hash-based routing: #/projects/{projectId}?task={taskId}
+                                        const projectLink = `#/projects/${task.project.id}?task=${task.id}`;
+                                        
+                                        // Use hash navigation which works with the existing system
+                                        window.location.hash = projectLink;
+                                        
+                                        // Also dispatch navigateToPage event to trigger project loading
+                                        window.dispatchEvent(new CustomEvent('navigateToPage', { 
+                                            detail: { page: 'projects' } 
+                                        }));
+                                        
+                                        // ProjectDetail will automatically read the task query param and open it
+                                        // But we also dispatch openTask event as backup after a delay
+                                        setTimeout(() => {
+                                            window.dispatchEvent(new CustomEvent('openTask', {
+                                                detail: { 
+                                                    taskId: task.id,
+                                                    tab: 'details'
+                                                }
                                             }));
-                                            
-                                            // Dispatch openTask event after navigation
-                                            setTimeout(() => {
-                                                window.dispatchEvent(new CustomEvent('openTask', {
-                                                    detail: { 
-                                                        taskId: task.id,
-                                                        tab: 'details'
-                                                    }
-                                                }));
-                                            }, 300);
-                                        }
+                                        }, 500);
                                     } else {
                                         // Task doesn't have a project - navigate to projects page anyway
-                                        // The task detail might be available elsewhere
                                         window.dispatchEvent(new CustomEvent('navigateToPage', { 
                                             detail: { page: 'projects' } 
                                         }));

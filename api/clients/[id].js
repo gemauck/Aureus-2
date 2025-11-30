@@ -74,7 +74,15 @@ async function handler(req, res) {
         
         return ok(res, { client: parsedClient })
       } catch (dbError) {
-        console.error('❌ Database error getting client:', dbError)
+        console.error('❌ Database error getting client:', {
+          message: dbError.message,
+          name: dbError.name,
+          code: dbError.code,
+          meta: dbError.meta,
+          stack: dbError.stack?.substring(0, 1000),
+          clientId: id,
+          url: req.url
+        })
         return serverError(res, 'Failed to get client', dbError.message)
       }
     }
@@ -272,7 +280,15 @@ async function handler(req, res) {
     return badRequest(res, 'Method not allowed')
 
   } catch (error) {
-    console.error('❌ Clients [id] API Error:', error)
+    console.error('❌ Clients [id] API Error:', {
+      message: error.message,
+      name: error.name,
+      code: error.code,
+      stack: error.stack?.substring(0, 1000),
+      url: req.url,
+      method: req.method,
+      id: req.params?.id
+    })
     return serverError(res, 'Internal server error', error.message)
   }
 }

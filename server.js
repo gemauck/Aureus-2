@@ -637,6 +637,41 @@ app.all('/api/clients', async (req, res, next) => {
     return handler(req, res)
   } catch (e) {
     console.error('❌ Error in clients handler:', e)
+    console.error('❌ Error stack:', e.stack)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
+// Explicit mapping for leads list and create operations (GET, POST /api/leads)
+app.all('/api/leads', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'leads.js'))
+    if (!handler) {
+      console.error('❌ Leads handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') {
+      await result
+    }
+    return result
+  } catch (e) {
+    console.error('❌ Error in leads handler:', e)
+    console.error('❌ Error stack:', e.stack)
+    console.error('❌ Error details:', {
+      message: e.message,
+      name: e.name,
+      code: e.code,
+      url: req.url,
+      method: req.method
+    })
     if (!res.headersSent) {
       return res.status(500).json({ 
         error: 'Internal server error',
@@ -745,9 +780,22 @@ app.all('/api/clients/:id', async (req, res, next) => {
       console.error('❌ Client [id] handler not found')
       return res.status(404).json({ error: 'API endpoint not found' })
     }
-    return handler(req, res)
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') {
+      await result
+    }
+    return result
   } catch (e) {
     console.error('❌ Error in client [id] handler:', e)
+    console.error('❌ Error stack:', e.stack)
+    console.error('❌ Error details:', {
+      message: e.message,
+      name: e.name,
+      code: e.code,
+      url: req.url,
+      method: req.method,
+      params: req.params
+    })
     if (!res.headersSent) {
       return res.status(500).json({ 
         error: 'Internal server error',

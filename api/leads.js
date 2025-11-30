@@ -418,6 +418,7 @@ async function handler(req, res) {
               meta: fallbackError.meta,
               stack: fallbackError.stack
             })
+            // Re-throw to be caught by outer catch block
             throw fallbackError
           }
         }
@@ -462,6 +463,17 @@ async function handler(req, res) {
         
         return ok(res, { leads: parsedLeads })
       } catch (dbError) {
+        // Log the error immediately with full details
+        console.error('❌ Database error in GET /api/leads:', {
+          message: dbError.message,
+          name: dbError.name,
+          code: dbError.code,
+          meta: dbError.meta,
+          stack: dbError.stack?.substring(0, 1000),
+          url: req.url,
+          method: req.method
+        })
+        
         const isConnError = logDatabaseError(dbError, 'listing leads')
         
         // Enhanced error details for debugging

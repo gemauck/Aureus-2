@@ -281,12 +281,15 @@ async function handler(req, res) {
         
         return ok(res, { clients: parsedClients })
       } catch (dbError) {
-        console.error('❌ Database error listing clients:', {
+        // Log the error immediately with full details
+        console.error('❌ Database error in GET /api/clients:', {
           message: dbError.message,
           name: dbError.name,
           code: dbError.code,
           meta: dbError.meta,
-          stack: dbError.stack?.substring(0, 500)
+          stack: dbError.stack?.substring(0, 1000),
+          url: req.url,
+          method: req.method
         })
         
         // Check if it's a connection error

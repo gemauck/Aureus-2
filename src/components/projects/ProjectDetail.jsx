@@ -500,10 +500,29 @@ function initializeProjectDetail() {
     useEffect(() => {
         if (!project?.id || !tasks || tasks.length === 0) return;
         try {
-            const search = window.location.search || '';
-            if (!search) return;
-            const params = new URLSearchParams(search);
-            const taskId = params.get('task');
+            // Check both window.location.search (for regular URLs) and hash query params (for hash-based routing)
+            let taskId = null;
+            let params = null;
+            
+            // First check hash query params (for hash-based routing like #/projects/123?task=456)
+            const hash = window.location.hash || '';
+            if (hash.includes('?')) {
+                const hashParts = hash.split('?');
+                if (hashParts.length > 1) {
+                    params = new URLSearchParams(hashParts[1]);
+                    taskId = params.get('task');
+                }
+            }
+            
+            // If not found in hash, check window.location.search (for regular URLs)
+            if (!taskId) {
+                const search = window.location.search || '';
+                if (search) {
+                    params = new URLSearchParams(search);
+                    taskId = params.get('task');
+                }
+            }
+            
             if (taskId) {
                 // Find the task in the tasks array (including subtasks)
                 let foundTask = tasks.find(t => t.id === taskId || String(t.id) === String(taskId));
@@ -528,11 +547,13 @@ function initializeProjectDetail() {
                     setViewingTaskParent(foundParent);
                     setShowTaskDetailModal(true);
                     // Remove the task parameter from URL to clean it up
-                    params.delete('task');
-                    const newSearch = params.toString();
-                    const newHash = window.location.hash.split('?')[0] + (newSearch ? `?${newSearch}` : '');
-                    if (window.history && window.history.replaceState) {
-                        window.history.replaceState(null, '', newHash);
+                    if (params) {
+                        params.delete('task');
+                        const newSearch = params.toString();
+                        const newHash = window.location.hash.split('?')[0] + (newSearch ? `?${newSearch}` : '');
+                        if (window.history && window.history.replaceState) {
+                            window.history.replaceState(null, '', newHash);
+                        }
                     }
                 }
             }
@@ -540,6 +561,52 @@ function initializeProjectDetail() {
             console.warn('⚠️ ProjectDetail: failed to apply task deep-link:', error);
         }
     }, [project?.id, tasks]);
+    
+    // Listen for openTask event (for programmatic task opening)
+    useEffect(() => {
+        if (!project?.id || !tasks || tasks.length === 0) return;
+        
+        const handleOpenTask = async (event) => {
+            if (!event.detail || !event.detail.taskId) return;
+            
+            const taskId = event.detail.taskId;
+            const tab = event.detail.tab || 'details';
+            
+            try {
+                // Find the task in the tasks array (including subtasks)
+                let foundTask = tasks.find(t => t.id === taskId || String(t.id) === String(taskId));
+                let foundParent = null;
+                
+                // If not found in main tasks, check subtasks
+                if (!foundTask) {
+                    for (const task of tasks) {
+                        if (task.subtasks && Array.isArray(task.subtasks)) {
+                            const subtask = task.subtasks.find(st => st.id === taskId || String(st.id) === String(taskId));
+                            if (subtask) {
+                                foundTask = subtask;
+                                foundParent = task;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                if (foundTask) {
+                    // Ensure task detail modal is loaded
+                    await ensureTaskDetailModalLoaded();
+                    
+                    setViewingTask(foundTask);
+                    setViewingTaskParent(foundParent);
+                    setShowTaskDetailModal(true);
+                }
+            } catch (error) {
+                console.warn('⚠️ ProjectDetail: failed to open task from event:', error);
+            }
+        };
+        
+        window.addEventListener('openTask', handleOpenTask);
+        return () => window.removeEventListener('openTask', handleOpenTask);
+    }, [project?.id, tasks, ensureTaskDetailModalLoaded]);
     
     // Track if document collection process exists
     // Normalize the value from project prop (handle boolean, string, number, undefined)
