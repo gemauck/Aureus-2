@@ -265,7 +265,36 @@ const Teams = () => {
     };
     
     // ALL useState hooks must be declared before any useEffect hooks
-    const [activeTab, setActiveTab] = useState(getTabFromURL());
+    const [activeTab, setActiveTabState] = useState(getTabFromURL());
+    
+    // Ref to track current tab for async operations
+    const activeTabRef = useRef(activeTab);
+    useEffect(() => {
+        activeTabRef.current = activeTab;
+    }, [activeTab]);
+    
+    // Wrapper for setActiveTab that waits for pending saves before switching away from meeting-notes
+    const setActiveTab = useCallback(async (newTab) => {
+        // If switching away from meeting-notes, wait for pending saves
+        const currentTab = activeTabRef.current;
+        if (currentTab === 'meeting-notes' && newTab !== 'meeting-notes') {
+            const meetingNotesRef = window.ManagementMeetingNotesRef;
+            if (meetingNotesRef?.current?.hasPendingSaves?.()) {
+                try {
+                    // Wait for saves to complete (with timeout)
+                    await Promise.race([
+                        meetingNotesRef.current.flushPendingSaves(),
+                        new Promise(resolve => setTimeout(resolve, 2000)) // 2 second timeout
+                    ]);
+                    // Small delay to ensure saves are fully processed
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                } catch (error) {
+                    console.error('Error waiting for saves before tab switch:', error);
+                }
+            }
+        }
+        setActiveTabState(newTab);
+    }, []);
     const [selectedTeam, setSelectedTeam] = useState(() => {
         // Initialize from URL if available
         const urlParams = new URLSearchParams(window.location.search);
@@ -385,12 +414,36 @@ const Teams = () => {
         window.history.pushState({ tab: activeTab, team: selectedTeam?.id }, '', url);
     }, [activeTab, selectedTeam]);
     
-    // Listen for browser back/forward
+    // Also handle browser back/forward with save waiting
     useEffect(() => {
-        const handlePopState = (event) => {
+        const handlePopState = async (event) => {
             // Read tab from URL
             const urlTab = getTabFromURL();
-            setActiveTab(urlTab);
+            
+            // If we're leaving meeting-notes, wait for saves
+            // Use setActiveTabState with functional update to get current value
+            setActiveTabState((currentTab) => {
+                if (currentTab === 'meeting-notes' && urlTab !== 'meeting-notes') {
+                    const meetingNotesRef = window.ManagementMeetingNotesRef;
+                    if (meetingNotesRef?.current?.hasPendingSaves?.()) {
+                        // Wait for saves asynchronously (can't await in setState callback)
+                        Promise.race([
+                            meetingNotesRef.current.flushPendingSaves(),
+                            new Promise(resolve => setTimeout(resolve, 2000))
+                        ]).then(() => {
+                            // After saves complete, update tab
+                            setActiveTabState(urlTab);
+                        }).catch((error) => {
+                            console.error('Error waiting for saves before navigation:', error);
+                            setActiveTabState(urlTab);
+                        });
+                        // Return current tab for now, will be updated after saves
+                        return currentTab;
+                    }
+                }
+                // No pending saves, update immediately
+                return urlTab;
+            });
             
             // Read team from URL
             const urlParams = new URLSearchParams(window.location.search);
@@ -410,6 +463,7 @@ const Teams = () => {
         window.addEventListener('popstate', handlePopState);
         return () => window.removeEventListener('popstate', handlePopState);
     }, [isTeamAccessible]);
+    
 
     // Check modal components on mount only
     useEffect(() => {

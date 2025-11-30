@@ -641,16 +641,31 @@ const ManagementMeetingNotes = () => {
         scrollToWeekId(selectedWeek);
     }, [selectedWeek, weeks, scrollToWeekId]);
 
-    // Flush all pending saves immediately using fetch with keepalive for guaranteed delivery
-    const flushPendingSaves = useCallback(() => {
+    // Track active save promises to wait for completion
+    const activeSavePromises = useRef(new Set());
+    
+    // Expose flush function and pending status for parent components (initialized after flushPendingSaves is defined)
+    const managementMeetingNotesRef = useRef({
+        flushPendingSaves: null,
+        hasPendingSaves: () => {
+            return pendingSaves.current.size > 0 || 
+                   Object.keys(pendingValues.current).length > 0 || 
+                   activeSavePromises.current.size > 0;
+        }
+    });
+    
+    // Flush all pending saves and wait for them to complete
+    const flushPendingSaves = useCallback(async () => {
         // Clear all debounce timers
         Object.keys(saveTimers.current).forEach(fieldKey => {
             clearTimeout(saveTimers.current[fieldKey]);
             delete saveTimers.current[fieldKey];
         });
         
-        // Save all pending values using fetch with keepalive (survives page unload)
+        // Collect all pending saves as promises
         const pendingEntries = Object.entries(pendingValues.current);
+        const savePromises = [];
+        
         pendingEntries.forEach(([fieldKey, data]) => {
             if (data) {
                 // Get auth token
@@ -659,30 +674,55 @@ const ManagementMeetingNotes = () => {
                 const url = `${baseUrl}/department-notes/${data.departmentNotesId}`;
                 const payload = JSON.stringify({ [data.field]: data.value });
                 
-                // Use fetch with keepalive - this survives page unload/navigation
-                fetch(url, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': token ? `Bearer ${token}` : ''
-                    },
-                    body: payload,
-                    keepalive: true // Key flag - request survives page unload
-                }).catch(() => {}); // Ignore errors during unload
+                // Create save promise
+                const savePromise = window.DatabaseAPI.updateDepartmentNotes(data.departmentNotesId, { [data.field]: data.value })
+                    .then(() => {
+                        delete pendingValues.current[fieldKey];
+                        activeSavePromises.current.delete(savePromise);
+                    })
+                    .catch((error) => {
+                        console.error('Error flushing save:', error);
+                        // On error, also try fetch with keepalive as fallback
+                        fetch(url, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': token ? `Bearer ${token}` : ''
+                            },
+                            body: payload,
+                            keepalive: true
+                        }).catch(() => {});
+                        activeSavePromises.current.delete(savePromise);
+                    });
                 
-                delete pendingValues.current[fieldKey];
+                activeSavePromises.current.add(savePromise);
+                savePromises.push(savePromise);
             }
         });
+        
+        // Wait for all saves to complete (with timeout for safety)
+        if (savePromises.length > 0) {
+            try {
+                await Promise.race([
+                    Promise.all(savePromises),
+                    new Promise((resolve) => setTimeout(resolve, 3000)) // 3 second timeout
+                ]);
+            } catch (error) {
+                console.error('Error waiting for saves to complete:', error);
+            }
+        }
     }, []);
 
     // Ensure all pending saves complete before navigation
     useEffect(() => {
-        const handleBeforeUnload = (e) => {
-            // Flush any pending saves before unload
-            flushPendingSaves();
-            
-            // If there are pending saves, warn the user
-            if (pendingSaves.current.size > 0 || Object.keys(pendingValues.current).length > 0) {
+        const handleBeforeUnload = async (e) => {
+            // If there are pending saves or active save promises, warn the user
+            if (pendingSaves.current.size > 0 || 
+                Object.keys(pendingValues.current).length > 0 || 
+                activeSavePromises.current.size > 0) {
+                // Flush any pending saves before unload (async, but we can't await in beforeunload)
+                flushPendingSaves().catch(() => {});
+                
                 // Modern browsers ignore custom messages, but this triggers the confirmation dialog
                 e.preventDefault();
                 e.returnValue = '';
@@ -690,25 +730,62 @@ const ManagementMeetingNotes = () => {
             }
         };
 
-        const handleVisibilityChange = () => {
+        const handleVisibilityChange = async () => {
             // When tab becomes hidden (user navigating away), flush all pending saves
             if (document.hidden) {
-                flushPendingSaves();
+                await flushPendingSaves();
             }
         };
 
-        // Also intercept clicks on navigation links to flush before navigation
-        const handleNavClick = (e) => {
+        // Intercept clicks on navigation links/buttons to wait for saves before navigation
+        const handleNavClick = async (e) => {
             const target = e.target.closest('a, button');
-            if (target) {
-                // Check if it's a navigation element (link or nav button)
-                const isNavLink = target.tagName === 'A' || 
-                    target.closest('nav') || 
-                    target.closest('[data-nav]') ||
-                    target.classList.contains('nav-link');
+            if (!target) return;
+            
+            // Check if it's a navigation element (link or nav button)
+            const isNavLink = target.tagName === 'A' || 
+                target.closest('nav') || 
+                target.closest('[data-nav]') ||
+                target.classList.contains('nav-link') ||
+                // Check for Teams component tab buttons
+                (target.closest('[class*="tab"]') && target.textContent?.match(/(Documents|Workflows|Checklists|Notices|Meeting Notes|Overview)/i)) ||
+                // Check for sidebar navigation
+                target.closest('[class*="sidebar"]') ||
+                target.closest('[class*="nav"]');
+            
+            if (isNavLink) {
+                const hasPendingSaves = pendingSaves.current.size > 0 || 
+                    Object.keys(pendingValues.current).length > 0 || 
+                    activeSavePromises.current.size > 0;
                 
-                if (isNavLink && Object.keys(pendingValues.current).length > 0) {
-                    flushPendingSaves();
+                if (hasPendingSaves) {
+                    // Prevent default navigation temporarily
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    // Wait for all saves to complete
+                    try {
+                        await flushPendingSaves();
+                        // Wait a bit more for any final saves
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        
+                        // Re-trigger the click after saves complete
+                        if (target.tagName === 'A') {
+                            window.location.href = target.href;
+                        } else if (target.onclick) {
+                            target.onclick(e);
+                        } else {
+                            target.click();
+                        }
+                    } catch (error) {
+                        console.error('Error waiting for saves before navigation:', error);
+                        // Still allow navigation even if save fails
+                        if (target.tagName === 'A') {
+                            window.location.href = target.href;
+                        } else {
+                            target.click();
+                        }
+                    }
                 }
             }
         };
@@ -723,7 +800,16 @@ const ManagementMeetingNotes = () => {
             document.removeEventListener('click', handleNavClick, true);
             
             // Cleanup: flush pending saves and clear timers on unmount
-            flushPendingSaves();
+            flushPendingSaves().catch(() => {});
+        };
+    }, [flushPendingSaves]);
+    
+    // Update ref when flushPendingSaves changes and expose to window
+    useEffect(() => {
+        managementMeetingNotesRef.current.flushPendingSaves = flushPendingSaves;
+        window.ManagementMeetingNotesRef = managementMeetingNotesRef;
+        return () => {
+            delete window.ManagementMeetingNotesRef;
         };
     }, [flushPendingSaves]);
 
