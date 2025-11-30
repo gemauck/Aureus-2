@@ -1954,6 +1954,57 @@ const ManagementMeetingNotes = () => {
         activeSavePromises.current.add(savePromise);
     };
 
+    // Save all fields for a department at once
+    const handleSaveDepartment = async (departmentNotesId) => {
+        if (!departmentNotesId) return;
+        
+        // Preserve scroll position
+        const currentScrollPosition = window.scrollY || window.pageYOffset;
+        
+        // Find the department note
+        const week = currentMonthlyNotes?.weeklyNotes?.find(w => 
+            w.departmentNotes?.some(dn => dn.id === departmentNotesId)
+        );
+        if (!week) return;
+        
+        const deptNote = week.departmentNotes?.find(dn => dn.id === departmentNotesId);
+        if (!deptNote) return;
+        
+        // Collect all field values
+        const fieldsToSave = {
+            successes: deptNote.successes || '',
+            weekToFollow: deptNote.weekToFollow || '',
+            frustrations: deptNote.frustrations || ''
+        };
+        
+        try {
+            setLoading(true);
+            // Save all fields at once
+            await window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, fieldsToSave);
+            
+            // Clear any pending saves for this department
+            Object.keys(fieldsToSave).forEach(field => {
+                const fieldKey = getFieldKey(departmentNotesId, field);
+                delete pendingValues.current[fieldKey];
+                lastSavedValues.current[fieldKey] = fieldsToSave[field];
+            });
+            
+            // Restore scroll position after save
+            requestAnimationFrame(() => {
+                window.scrollTo(0, currentScrollPosition);
+            });
+        } catch (error) {
+            console.error('Error saving department notes:', error);
+            alert('Failed to save department notes. Please try again.');
+            // Restore scroll position even on error
+            requestAnimationFrame(() => {
+                window.scrollTo(0, currentScrollPosition);
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // Track temp IDs to prevent duplicates when server responds
     const tempActionItemIds = useRef({}); // { tempId: realId }
 
@@ -2124,6 +2175,9 @@ const ManagementMeetingNotes = () => {
     // Create/Update action item
     const handleSaveActionItem = async (actionItemData) => {
         try {
+            // Prevent any default behavior and preserve scroll position
+            const currentScrollPosition = window.scrollY || window.pageYOffset;
+            
             // Validate required fields
             if (!actionItemData.title || !actionItemData.title.trim()) {
                 alert('Please enter a title for the action item');
@@ -2150,6 +2204,11 @@ const ManagementMeetingNotes = () => {
             }
             setShowActionItemModal(false);
             setEditingActionItem(null);
+            
+            // Restore scroll position after state updates
+            requestAnimationFrame(() => {
+                window.scrollTo(0, currentScrollPosition);
+            });
 
             setLoading(true);
 
@@ -2406,6 +2465,9 @@ const ManagementMeetingNotes = () => {
     const handleCreateComment = async (content) => {
         if (!commentContext) return;
         
+        // Prevent any default behavior
+        const currentScrollPosition = window.scrollY || window.pageYOffset;
+        
         const currentUser = window.storage?.getUserInfo() || {};
         const tempComment = {
             id: `temp-${Date.now()}`,
@@ -2421,6 +2483,11 @@ const ManagementMeetingNotes = () => {
         addCommentLocal(tempComment);
         setShowCommentModal(false);
         setCommentContext(null);
+        
+        // Restore scroll position after state updates
+        requestAnimationFrame(() => {
+            window.scrollTo(0, currentScrollPosition);
+        });
         
         try {
             setLoading(true);
@@ -3340,7 +3407,10 @@ const ManagementMeetingNotes = () => {
 
                                                         {/* Add Comment Button */}
                                                         <button
-                                                            onClick={() => {
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
                                                                 setCommentContext({ 
                                                                     type: 'department', 
                                                                     id: deptNote.id,
@@ -3357,7 +3427,10 @@ const ManagementMeetingNotes = () => {
 
                                                         {/* Add Action Item Button */}
                                                         <button
-                                                            onClick={() => {
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
                                                                 setEditingActionItem({ 
                                                                     monthlyNotesId: currentMonthlyNotes?.id,
                                                                     weeklyNotesId: week.id, 
@@ -3369,6 +3442,20 @@ const ManagementMeetingNotes = () => {
                                                         >
                                                             <i className="fas fa-plus mr-1"></i>
                                                             Add Action Item
+                                                        </button>
+
+                                                        {/* Save Department Button */}
+                                                        <button
+                                                            type="button"
+                                                            onClick={async (e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                await handleSaveDepartment(deptNote.id);
+                                                            }}
+                                                            className={`w-full text-xs px-3 py-2 rounded font-medium transition ${isDark ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
+                                                        >
+                                                            <i className="fas fa-save mr-1"></i>
+                                                            Save Department
                                                         </button>
                                                     </div>
                                                 </>
@@ -3476,9 +3563,16 @@ const ManagementMeetingNotes = () => {
                                 {editingActionItem ? 'Edit Action Item' : 'Add Action Item'}
                             </h3>
                             <button
-                                onClick={() => {
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const currentScrollPosition = window.scrollY || window.pageYOffset;
                                     setShowActionItemModal(false);
                                     setEditingActionItem(null);
+                                    requestAnimationFrame(() => {
+                                        window.scrollTo(0, currentScrollPosition);
+                                    });
                                 }}
                                 className={`p-1 ${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-gray-400 hover:text-gray-600'}`}
                             >
@@ -3507,9 +3601,16 @@ const ManagementMeetingNotes = () => {
                         <div className="flex items-center justify-between mb-4">
                             <h3 className={`text-lg font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Add Comment</h3>
                             <button
-                                onClick={() => {
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const currentScrollPosition = window.scrollY || window.pageYOffset;
                                     setShowCommentModal(false);
                                     setCommentContext(null);
+                                    requestAnimationFrame(() => {
+                                        window.scrollTo(0, currentScrollPosition);
+                                    });
                                 }}
                                 className={`p-1 ${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-gray-400 hover:text-gray-600'}`}
                             >
@@ -3672,7 +3773,15 @@ const ActionItemForm = ({ actionItem, monthlyNotesId, users, isDark, onSave, onC
             <div className="flex gap-2 justify-end">
                 <button
                     type="button"
-                    onClick={onCancel}
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const currentScrollPosition = window.scrollY || window.pageYOffset;
+                        onCancel();
+                        requestAnimationFrame(() => {
+                            window.scrollTo(0, currentScrollPosition);
+                        });
+                    }}
                     className={`px-4 py-2 text-sm rounded-lg ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                 >
                     Cancel
@@ -3746,7 +3855,15 @@ const CommentForm = ({ isDark, onSubmit, onCancel, commentContext, onCreateActio
                 <div className="flex gap-2 justify-end">
                     <button
                         type="button"
-                        onClick={onCancel}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const currentScrollPosition = window.scrollY || window.pageYOffset;
+                            onCancel();
+                            requestAnimationFrame(() => {
+                                window.scrollTo(0, currentScrollPosition);
+                            });
+                        }}
                         className={`px-4 py-2 text-sm rounded-lg ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                     >
                         Cancel
@@ -3776,7 +3893,15 @@ const CommentForm = ({ isDark, onSubmit, onCancel, commentContext, onCreateActio
             <div className="flex gap-2 justify-end">
                 <button
                     type="button"
-                    onClick={onCancel}
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const currentScrollPosition = window.scrollY || window.pageYOffset;
+                        onCancel();
+                        requestAnimationFrame(() => {
+                            window.scrollTo(0, currentScrollPosition);
+                        });
+                    }}
                     className={`px-4 py-2 text-sm rounded-lg ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                 >
                     Cancel
@@ -3784,7 +3909,15 @@ const CommentForm = ({ isDark, onSubmit, onCancel, commentContext, onCreateActio
                 {onCreateActionItem && (
                     <button
                         type="button"
-                        onClick={handleCreateActionItemFromComment}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const currentScrollPosition = window.scrollY || window.pageYOffset;
+                            handleCreateActionItemFromComment();
+                            requestAnimationFrame(() => {
+                                window.scrollTo(0, currentScrollPosition);
+                            });
+                        }}
                         className={`px-4 py-2 text-sm rounded-lg ${isDark ? 'bg-purple-700 text-purple-200 hover:bg-purple-600' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'}`}
                     >
                         <i className="fas fa-tasks mr-1"></i>

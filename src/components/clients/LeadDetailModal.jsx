@@ -241,6 +241,9 @@ const LeadDetailModal = ({
     // External agents state
     const [externalAgents, setExternalAgents] = useState([]);
     const [isLoadingExternalAgents, setIsLoadingExternalAgents] = useState(false);
+    const [showExternalAgentModal, setShowExternalAgentModal] = useState(false);
+    const [newExternalAgentName, setNewExternalAgentName] = useState('');
+    const [isCreatingExternalAgent, setIsCreatingExternalAgent] = useState(false);
     
     // Debug modal state
     useEffect(() => {
@@ -364,6 +367,77 @@ const LeadDetailModal = ({
     useEffect(() => {
         loadExternalAgents();
     }, [loadExternalAgents]);
+    
+    // Create new external agent
+    const handleCreateExternalAgent = useCallback(async () => {
+        if (!newExternalAgentName.trim()) {
+            alert('Please enter an external agent name');
+            return;
+        }
+        
+        if (!isAdmin) {
+            alert('Only administrators can create external agents');
+            return;
+        }
+        
+        setIsCreatingExternalAgent(true);
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                alert('Authentication required');
+                return;
+            }
+            
+            const response = await fetch('/api/external-agents', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    name: newExternalAgentName.trim(),
+                    isActive: true
+                })
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                const newAgent = data?.data?.externalAgent || data?.externalAgent;
+                
+                // Reload external agents list
+                await loadExternalAgents();
+                
+                // Select the newly created agent
+                if (newAgent && newAgent.id) {
+                    setFormData(prev => {
+                        const updated = {...prev, externalAgentId: newAgent.id};
+                        formDataRef.current = updated;
+                        userEditedFieldsRef.current.add('externalAgentId');
+                        return updated;
+                    });
+                }
+                
+                // Close modal and reset form
+                setShowExternalAgentModal(false);
+                setNewExternalAgentName('');
+                
+                // Show success message
+                if (typeof window.showNotification === 'function') {
+                    window.showNotification('External agent created successfully', 'success');
+                }
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                const errorMessage = errorData?.message || errorData?.error || 'Failed to create external agent';
+                alert(errorMessage);
+            }
+        } catch (error) {
+            console.error('Error creating external agent:', error);
+            alert('Failed to create external agent. Please try again.');
+        } finally {
+            setIsCreatingExternalAgent(false);
+        }
+    }, [newExternalAgentName, isAdmin, loadExternalAgents]);
     
     // Add new industry
     const handleAddIndustry = useCallback(async () => {
@@ -3128,7 +3202,19 @@ const LeadDetailModal = ({
 
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">External Agent</label>
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <label className="block text-sm font-medium text-gray-700">External Agent</label>
+                                            {isAdmin && (
+                                                <button
+                                                    onClick={() => setShowExternalAgentModal(true)}
+                                                    className="text-xs px-2 py-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors flex items-center gap-1"
+                                                    title="Add New External Agent (Admin Only)"
+                                                >
+                                                    <i className="fas fa-plus text-xs"></i>
+                                                    <span>Add New</span>
+                                                </button>
+                                            )}
+                                        </div>
                                         <select 
                                             value={formData.externalAgentId || ''}
                                             onFocus={() => {
@@ -5531,6 +5617,97 @@ const LeadDetailModal = ({
                     </form>
                 </div>
             </div>
+            
+            {/* External Agent Modal - Admin Only */}
+            {showExternalAgentModal && (
+                <div 
+                    className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) {
+                            setShowExternalAgentModal(false);
+                            setNewExternalAgentName('');
+                        }
+                    }}
+                >
+                    <div 
+                        className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                            <h2 className="text-xl font-semibold text-gray-900">Add New External Agent</h2>
+                            <button
+                                onClick={() => {
+                                    setShowExternalAgentModal(false);
+                                    setNewExternalAgentName('');
+                                }}
+                                className="text-gray-400 hover:text-gray-600"
+                            >
+                                <i className="fas fa-times text-xl"></i>
+                            </button>
+                        </div>
+                        
+                        {/* Body */}
+                        <div className="p-6">
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    External Agent Name *
+                                </label>
+                                <input
+                                    type="text"
+                                    value={newExternalAgentName}
+                                    onChange={(e) => setNewExternalAgentName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !isCreatingExternalAgent) {
+                                            handleCreateExternalAgent();
+                                        } else if (e.key === 'Escape') {
+                                            setShowExternalAgentModal(false);
+                                            setNewExternalAgentName('');
+                                        }
+                                    }}
+                                    placeholder="Enter external agent name"
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    autoFocus
+                                />
+                            </div>
+                            <p className="text-xs text-gray-500 mb-4">
+                                Only administrators can create new external agents.
+                            </p>
+                        </div>
+                        
+                        {/* Footer */}
+                        <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+                            <button
+                                onClick={() => {
+                                    setShowExternalAgentModal(false);
+                                    setNewExternalAgentName('');
+                                }}
+                                className="px-4 py-2 rounded-lg transition-colors bg-gray-100 hover:bg-gray-200 text-gray-700"
+                                disabled={isCreatingExternalAgent}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleCreateExternalAgent}
+                                disabled={!newExternalAgentName.trim() || isCreatingExternalAgent}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isCreatingExternalAgent ? (
+                                    <>
+                                        <i className="fas fa-spinner fa-spin mr-2"></i>
+                                        Creating...
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="fas fa-plus mr-2"></i>
+                                        Create Agent
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             </>
         );
     }
@@ -5792,7 +5969,17 @@ const LeadDetailModal = ({
                                 ),
                                 React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
                                     React.createElement('div', null,
-                                        React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'External Agent'),
+                                        React.createElement('div', { className: 'flex items-center justify-between mb-2' },
+                                            React.createElement('label', { className: 'block text-sm font-medium text-gray-700' }, 'External Agent'),
+                                            isAdmin && React.createElement('button', {
+                                                onClick: () => setShowExternalAgentModal(true),
+                                                className: 'text-xs px-2 py-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors flex items-center gap-1',
+                                                title: 'Add New External Agent (Admin Only)'
+                                            },
+                                                React.createElement('i', { className: 'fas fa-plus text-xs' }),
+                                                React.createElement('span', null, 'Add New')
+                                            )
+                                        ),
                                         React.createElement('select', {
                                             value: formData.externalAgentId || '',
                                             onChange: (e) => {
@@ -5944,9 +6131,88 @@ const LeadDetailModal = ({
                     )
                 )
             )
-        )
+        ),
         // Industry Management Modal is rendered via DOM manipulation in useEffect (line 297)
         // No JSX modal needed here - the useEffect handles it
+        
+        // External Agent Modal - Admin Only
+        showExternalAgentModal ? React.createElement('div', {
+            className: 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]',
+            onClick: (e) => {
+                if (e.target === e.currentTarget) {
+                    setShowExternalAgentModal(false);
+                    setNewExternalAgentName('');
+                }
+            }
+        },
+            React.createElement('div', {
+                className: 'bg-white rounded-lg shadow-xl max-w-md w-full mx-4',
+                onClick: (e) => e.stopPropagation()
+            },
+                // Header
+                React.createElement('div', { className: 'px-6 py-4 border-b border-gray-200 flex items-center justify-between' },
+                    React.createElement('h2', { className: 'text-xl font-semibold text-gray-900' }, 'Add New External Agent'),
+                    React.createElement('button', {
+                        onClick: () => {
+                            setShowExternalAgentModal(false);
+                            setNewExternalAgentName('');
+                        },
+                        className: 'text-gray-400 hover:text-gray-600'
+                    }, React.createElement('i', { className: 'fas fa-times text-xl' }))
+                ),
+                // Body
+                React.createElement('div', { className: 'p-6' },
+                    React.createElement('div', { className: 'mb-4' },
+                        React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'External Agent Name *'),
+                        React.createElement('input', {
+                            type: 'text',
+                            value: newExternalAgentName,
+                            onChange: (e) => setNewExternalAgentName(e.target.value),
+                            onKeyDown: (e) => {
+                                if (e.key === 'Enter' && !isCreatingExternalAgent) {
+                                    handleCreateExternalAgent();
+                                } else if (e.key === 'Escape') {
+                                    setShowExternalAgentModal(false);
+                                    setNewExternalAgentName('');
+                                }
+                            },
+                            placeholder: 'Enter external agent name',
+                            className: 'w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent',
+                            autoFocus: true
+                        })
+                    ),
+                    React.createElement('p', { className: 'text-xs text-gray-500 mb-4' }, 'Only administrators can create new external agents.')
+                ),
+                // Footer
+                React.createElement('div', { className: 'px-6 py-4 border-t border-gray-200 flex justify-end gap-3' },
+                    React.createElement('button', {
+                        onClick: () => {
+                            setShowExternalAgentModal(false);
+                            setNewExternalAgentName('');
+                        },
+                        className: 'px-4 py-2 rounded-lg transition-colors bg-gray-100 hover:bg-gray-200 text-gray-700',
+                        disabled: isCreatingExternalAgent
+                    }, 'Cancel'),
+                    React.createElement('button', {
+                        onClick: handleCreateExternalAgent,
+                        disabled: !newExternalAgentName.trim() || isCreatingExternalAgent,
+                        className: 'px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed'
+                    },
+                        isCreatingExternalAgent ? (
+                            React.createElement(React.Fragment, null,
+                                React.createElement('i', { className: 'fas fa-spinner fa-spin mr-2' }),
+                                'Creating...'
+                            )
+                        ) : (
+                            React.createElement(React.Fragment, null,
+                                React.createElement('i', { className: 'fas fa-plus mr-2' }),
+                                'Create Agent'
+                            )
+                        )
+                    )
+                )
+            )
+        ) : null
     );
 };
 
