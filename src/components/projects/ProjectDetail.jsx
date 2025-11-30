@@ -2536,28 +2536,29 @@ function initializeProjectDetail() {
         }
     }, [taskLists, persistProjectData]);
 
-    // List View Component
-    const ListView = () => {
-        if (typeof window !== 'undefined') {
-            setTimeout(() => {
-                const tables = document.querySelectorAll('[data-task-table-version="3.0"]');
-                if (tables.length === 0) {
-                    console.error('❌ NO TABLE FOUND - OLD CODE MAY BE RUNNING');
-                }
-            }, 1000);
-        }
-        const formatChecklistProgress = (checklist = []) => {
-            if (!Array.isArray(checklist) || checklist.length === 0) {
-                return { percent: 0, label: '0/0 complete' };
+    // List View Component - Memoized to prevent recreation on every render
+    const ListView = useMemo(() => {
+        return () => {
+            if (typeof window !== 'undefined') {
+                setTimeout(() => {
+                    const tables = document.querySelectorAll('[data-task-table-version="3.0"]');
+                    if (tables.length === 0) {
+                        console.error('❌ NO TABLE FOUND - OLD CODE MAY BE RUNNING');
+                    }
+                }, 1000);
             }
-            const completed = checklist.filter(item => item.completed).length;
-            return {
-                percent: Math.round((completed / checklist.length) * 100),
-                label: `${completed}/${checklist.length} complete`
+            const formatChecklistProgress = (checklist = []) => {
+                if (!Array.isArray(checklist) || checklist.length === 0) {
+                    return { percent: 0, label: '0/0 complete' };
+                }
+                const completed = checklist.filter(item => item.completed).length;
+                return {
+                    percent: Math.round((completed / checklist.length) * 100),
+                    label: `${completed}/${checklist.length} complete`
+                };
             };
-        };
 
-        return (
+            return (
             <div className="space-y-4">
                 <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
@@ -2929,8 +2930,9 @@ function initializeProjectDetail() {
                     })}
                 </div>
             </div>
-        );
-    };
+            );
+        };
+    }, [filteredTaskLists, taskFilters, listOptions, statusOptions, assigneeOptions, priorityOptions, visibleTaskCount, totalTaskCount, hasActiveTaskFilters, resetTaskFilters, handleAddTask, handleEditList, handleViewTaskDetail, handleDeleteTask, handleAddSubtask, openTaskComments, getStatusColor, getPriorityColor, getDueDateMeta]);
 
     const TaskDetailModalComponent = taskDetailModalComponent || (typeof window.TaskDetailModal === 'function' ? window.TaskDetailModal : null);
     const CommentsPopupComponent = commentsPopupComponent || (typeof window.CommentsPopup === 'function' ? window.CommentsPopup : null);

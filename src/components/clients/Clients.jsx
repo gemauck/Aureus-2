@@ -1213,11 +1213,23 @@ const Clients = React.memo(() => {
             const timeSinceLastCall = now - lastApiCallTimestamp;
             
             // Check if cached clients are missing tags - if so, always fetch from API
+            // IMPORTANT: Check the original cached data, not the state (which may have empty arrays set)
             const cachedClientsMissingTags = cachedClients && cachedClients.length > 0 && 
-                cachedClients.some(client => !client.tags || !Array.isArray(client.tags) || client.tags.length === 0);
+                cachedClients.some(client => {
+                    const hasTags = client.tags && Array.isArray(client.tags) && client.tags.length > 0;
+                    return !hasTags;
+                });
             const clientsMissingTags = clients.length > 0 && 
-                clients.some(client => !client.tags || !Array.isArray(client.tags) || client.tags.length === 0);
+                clients.some(client => {
+                    const hasTags = client.tags && Array.isArray(client.tags) && client.tags.length > 0;
+                    return !hasTags;
+                });
             const needsTagsRefresh = cachedClientsMissingTags || clientsMissingTags;
+            
+            // Debug: Log if tags refresh is needed
+            if (needsTagsRefresh) {
+                console.log('🔄 Tags missing - forcing API call to fetch tags');
+            }
             
             // If we have cached clients AND it's been less than 10 seconds since last call, skip API entirely
             // This prevents unnecessary network requests when data is fresh
@@ -1296,6 +1308,12 @@ const Clients = React.memo(() => {
                 // If API returns no clients, use cached data
                 if (apiClients.length === 0 && cachedClients && cachedClients.length > 0) {
                     return; // Keep showing cached data
+                }
+                
+                // Clear processClientData cache if tags are missing - ensures fresh processing with tags
+                if (needsTagsRefresh) {
+                    clientDataCache = null;
+                    clientDataCacheTimestamp = 0;
                 }
                 
                 // Use memoized data processor for better performance
@@ -2111,11 +2129,23 @@ const Clients = React.memo(() => {
                 const timeSinceLastCall = now - lastLeadsApiCallTimestamp;
                 
                 // Check if cached leads are missing tags - if so, always fetch from API
+                // IMPORTANT: Check the original cached data, not the state (which may have empty arrays set)
                 const cachedLeadsMissingTags = cachedLeads && Array.isArray(cachedLeads) && cachedLeads.length > 0 && 
-                    cachedLeads.some(lead => !lead.tags || !Array.isArray(lead.tags) || lead.tags.length === 0);
+                    cachedLeads.some(lead => {
+                        const hasTags = lead.tags && Array.isArray(lead.tags) && lead.tags.length > 0;
+                        return !hasTags;
+                    });
                 const leadsMissingTags = leads.length > 0 && 
-                    leads.some(lead => !lead.tags || !Array.isArray(lead.tags) || lead.tags.length === 0);
+                    leads.some(lead => {
+                        const hasTags = lead.tags && Array.isArray(lead.tags) && lead.tags.length > 0;
+                        return !hasTags;
+                    });
                 const needsTagsRefresh = cachedLeadsMissingTags || leadsMissingTags;
+                
+                // Debug: Log if tags refresh is needed
+                if (needsTagsRefresh) {
+                    console.log('🔄 Lead tags missing - forcing API call to fetch tags');
+                }
                 
                 // Check if we should skip API call:
                 // 1. If we have leads in state AND recent API call - skip

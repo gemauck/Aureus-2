@@ -282,6 +282,9 @@ const ManagementMeetingNotes = () => {
     const saveTimers = useRef({});
     // Latest values waiting to be saved (for flush on blur)
     const pendingValues = useRef({});
+    
+    // Track current React state values for all fields (fallback if DOM capture fails)
+    const currentFieldValues = useRef({}); // { [fieldKey]: value }
 
     const weekCardRefs = useRef({});
     
@@ -670,7 +673,7 @@ const ManagementMeetingNotes = () => {
             const fieldName = textarea.getAttribute('data-field');
             const value = textarea.value || '';
             
-            if (deptNoteId && fieldName && value) {
+            if (deptNoteId && fieldName) {
                 const fieldKey = `${deptNoteId}-${fieldName}`;
                 // ALWAYS update with current DOM value - it's the source of truth
                 capturedValues[fieldKey] = {
@@ -678,13 +681,144 @@ const ManagementMeetingNotes = () => {
                     field: fieldName,
                     value: value
                 };
-                console.log(`📸 Captured current DOM value for ${fieldKey}:`, value.substring(0, 50) + '...');
+                console.log(`📸 Captured textarea DOM value for ${fieldKey}:`, value.substring(0, 50) + '...');
             }
         });
         
-        // Also check RichTextEditor components if they exist
-        // RichTextEditor might store value differently, but we'll rely on onChange for those
-        // since they're more complex components
+        // CRITICAL: Find RichTextEditor contentEditable divs
+        // Strategy: Find labels for our fields, then find the contentEditable div that follows
+        const labels = document.querySelectorAll('label');
+        labels.forEach(label => {
+            const labelText = (label.textContent || '').toLowerCase();
+            let fieldName = null;
+            
+            // Determine field name from label text
+            if (labelText.includes('success')) {
+                fieldName = 'successes';
+            } else if ((labelText.includes('week') || labelText.includes('plan')) && (labelText.includes('follow') || labelText.includes('plan'))) {
+                fieldName = 'weekToFollow';
+            } else if (labelText.includes('frustrat')) {
+                fieldName = 'frustrations';
+            }
+            
+            if (fieldName) {
+                // Find the contentEditable div that follows this label (RichTextEditor)
+                let nextSibling = label.nextElementSibling;
+                let contentEditableDiv = null;
+                
+                // Look for contentEditable in next sibling or its children
+                while (nextSibling && !contentEditableDiv) {
+                    contentEditableDiv = nextSibling.querySelector('[contenteditable="true"]') || 
+                                       (nextSibling.getAttribute('contenteditable') === 'true' ? nextSibling : null);
+                    if (contentEditableDiv) break;
+                    nextSibling = nextSibling.nextElementSibling;
+                }
+                
+                if (contentEditableDiv) {
+                    // Find the department note ID by walking up the DOM tree
+                    let parent = label.closest('[class*="department"], [class*="dept"], [class*="note"]') || label.parentElement;
+                    let deptNoteId = null;
+                    
+                    // Walk up to find department note context - look for week cards or department note containers
+                    while (parent && parent !== document.body) {
+                        // Check if we're in a week card that contains department notes
+                        // The department note ID should be in the currentMonthlyNotes data
+                        // We'll need to match by department and week
+                        const weekCard = parent.closest('[class*="week"], [data-week-id]');
+                        if (weekCard) {
+                            // Try to find deptNote by matching department and week from currentMonthlyNotes
+                            // For now, we'll use a different strategy - find by matching the field value
+                            // Actually, let's use the React state fallback for RichTextEditor
+                            // and focus on textarea capture which has data attributes
+                            break;
+                        }
+                        parent = parent.parentElement;
+                    }
+                    
+                    // If we found contentEditable but no deptNoteId, we'll rely on React state fallback
+                    // But try to extract from the DOM structure if possible
+                    const html = contentEditableDiv.innerHTML || '';
+                    if (html.trim()) {
+                        // We'll match this later using React state fallback
+                        // Store with a temporary key that we'll resolve
+                        console.log(`📸 Found RichTextEditor for ${fieldName}, will match via React state`);
+                    }
+                }
+            }
+        });
+        
+        // Alternative: Find all contentEditable divs and try to match them to department notes
+        // by checking if they're in a department note section
+        const allContentEditables = document.querySelectorAll('[contenteditable="true"]');
+        allContentEditables.forEach(div => {
+            // Check if this is near a label we care about
+            const label = div.closest('div')?.querySelector('label');
+            if (label) {
+                const labelText = (label.textContent || '').toLowerCase();
+                let fieldName = null;
+                
+                if (labelText.includes('success')) {
+                    fieldName = 'successes';
+                } else if ((labelText.includes('week') || labelText.includes('plan')) && (labelText.includes('follow') || labelText.includes('plan'))) {
+                    fieldName = 'weekToFollow';
+                } else if (labelText.includes('frustrat')) {
+                    fieldName = 'frustrations';
+                }
+                
+                if (fieldName) {
+                    const html = div.innerHTML || '';
+                    // We'll match this to the correct deptNoteId using React state fallback
+                    console.log(`📸 Found RichTextEditor ${fieldName} with content, will match via React state`);
+                }
+            }
+        });
+        
+        // CRITICAL FALLBACK: Use React state values from currentMonthlyNotes
+        // This is the most reliable way to capture RichTextEditor values
+        if (currentMonthlyNotes?.weeklyNotes) {
+            currentMonthlyNotes.weeklyNotes.forEach(week => {
+                if (week?.departmentNotes) {
+                    week.departmentNotes.forEach(deptNote => {
+                        if (deptNote?.id) {
+                            // Capture all three fields
+                            ['successes', 'weekToFollow', 'frustrations'].forEach(field => {
+                                const fieldKey = `${deptNote.id}-${field}`; // Inline getFieldKey
+                                const value = deptNote[field] || '';
+                                
+                                // Always use React state value if available (it's the source of truth)
+                                // Only override if DOM capture found a different (newer) value
+                                if (!capturedValues[fieldKey] || capturedValues[fieldKey].value !== value) {
+                                    capturedValues[fieldKey] = {
+                                        departmentNotesId: deptNote.id,
+                                        field: field,
+                                        value: value
+                                    };
+                                    console.log(`📸 Captured React state value for ${fieldKey}:`, String(value).substring(0, 50) + '...');
+                                }
+                            });
+                        }
+                    });
+                }
+            });
+        }
+        
+        // Also use currentFieldValues ref as additional fallback
+        Object.entries(currentFieldValues.current).forEach(([fieldKey, value]) => {
+            if (!capturedValues[fieldKey] && value) {
+                // Parse fieldKey to get deptNoteId and field
+                const parts = fieldKey.split('-');
+                if (parts.length >= 2) {
+                    const deptNoteId = parts[0];
+                    const field = parts.slice(1).join('-'); // Handle fields with dashes
+                    capturedValues[fieldKey] = {
+                        departmentNotesId: deptNoteId,
+                        field: field,
+                        value: value
+                    };
+                    console.log(`📸 Captured currentFieldValues ref for ${fieldKey} (fallback):`, String(value).substring(0, 50) + '...');
+                }
+            }
+        });
         
         return capturedValues;
     }, []);
@@ -858,11 +992,13 @@ const ManagementMeetingNotes = () => {
 
         // Intercept ALL clicks to block navigation when saves are pending
         const handleNavClick = async (e) => {
-            const target = e.target.closest('a, button');
+            const target = e.target.closest('a, button, [role="button"]');
             if (!target) return;
             
             // Check if it's a navigation element (link or nav button)
+            const href = target.getAttribute('href') || target.closest('a')?.getAttribute('href');
             const isNavLink = target.tagName === 'A' || 
+                href ||
                 target.closest('nav') || 
                 target.closest('[data-nav]') ||
                 target.classList.contains('nav-link') ||
@@ -872,7 +1008,10 @@ const ManagementMeetingNotes = () => {
                 target.closest('[class*="sidebar"]') ||
                 target.closest('[class*="nav"]') ||
                 // Check for any button that might navigate
-                (target.tagName === 'BUTTON' && (target.onclick || target.getAttribute('onclick')));
+                (target.tagName === 'BUTTON' && (target.onclick || target.getAttribute('onclick'))) ||
+                // Check for sidebar menu items (common patterns)
+                target.closest('[class*="menu-item"]') ||
+                target.closest('[class*="nav-item"]');
             
             if (isNavLink) {
                 const hasPendingSaves = pendingSaves.current.size > 0 || 
@@ -956,20 +1095,100 @@ const ManagementMeetingNotes = () => {
         window.addEventListener('beforeunload', handleBeforeUnload);
         document.addEventListener('visibilitychange', handleVisibilityChange);
         document.addEventListener('click', handleNavClick, true); // Capture phase
+        
+        // CRITICAL: Intercept RouteState navigation (MainLayout page changes)
+        const interceptRouteState = () => {
+            if (!window.RouteState) return null;
+            
+            const originalSetPage = window.RouteState.setPage;
+            const originalSetPageSubpath = window.RouteState.setPageSubpath;
+            
+            // Wrap setPage to check for pending saves
+            window.RouteState.setPage = async function(...args) {
+                const meetingNotesRef = window.ManagementMeetingNotesRef;
+                if (meetingNotesRef?.current?.hasPendingSaves?.() || 
+                    meetingNotesRef?.current?.isBlockingNavigation?.()) {
+                    console.log('🚫 RouteState.setPage BLOCKED - saves in progress...');
+                    await meetingNotesRef.current.flushPendingSaves();
+                    
+                    // Verify saves complete
+                    let verifyAttempts = 0;
+                    while ((meetingNotesRef?.current?.hasPendingSaves?.() || 
+                           meetingNotesRef?.current?.isBlockingNavigation?.()) && 
+                           verifyAttempts < 10) {
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                        verifyAttempts++;
+                    }
+                    
+                    if (!meetingNotesRef?.current?.hasPendingSaves?.() && 
+                        !meetingNotesRef?.current?.isBlockingNavigation?.()) {
+                        console.log('✅ RouteState.setPage: All saves complete, allowing navigation');
+                        return originalSetPage.apply(this, args);
+                    } else {
+                        console.error('❌ RouteState.setPage: Saves not complete, blocking navigation');
+                        return; // Block navigation
+                    }
+                }
+                return originalSetPage.apply(this, args);
+            };
+            
+            // Wrap setPageSubpath to check for pending saves
+            window.RouteState.setPageSubpath = async function(...args) {
+                const meetingNotesRef = window.ManagementMeetingNotesRef;
+                if (meetingNotesRef?.current?.hasPendingSaves?.() || 
+                    meetingNotesRef?.current?.isBlockingNavigation?.()) {
+                    console.log('🚫 RouteState.setPageSubpath BLOCKED - saves in progress...');
+                    await meetingNotesRef.current.flushPendingSaves();
+                    
+                    // Verify saves complete
+                    let verifyAttempts = 0;
+                    while ((meetingNotesRef?.current?.hasPendingSaves?.() || 
+                           meetingNotesRef?.current?.isBlockingNavigation?.()) && 
+                           verifyAttempts < 10) {
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                        verifyAttempts++;
+                    }
+                    
+                    if (!meetingNotesRef?.current?.hasPendingSaves?.() && 
+                        !meetingNotesRef?.current?.isBlockingNavigation?.()) {
+                        console.log('✅ RouteState.setPageSubpath: All saves complete, allowing navigation');
+                        return originalSetPageSubpath.apply(this, args);
+                    } else {
+                        console.error('❌ RouteState.setPageSubpath: Saves not complete, blocking navigation');
+                        return; // Block navigation
+                    }
+                }
+                return originalSetPageSubpath.apply(this, args);
+            };
+            
+            return () => {
+                // Restore original functions on cleanup
+                if (window.RouteState && originalSetPage) {
+                    window.RouteState.setPage = originalSetPage;
+                }
+                if (window.RouteState && originalSetPageSubpath) {
+                    window.RouteState.setPageSubpath = originalSetPageSubpath;
+                }
+            };
+        };
+        
+        const cleanupRouteState = interceptRouteState();
 
         return () => {
             window.removeEventListener('beforeunload', handleBeforeUnload);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             document.removeEventListener('click', handleNavClick, true);
+            if (cleanupRouteState) cleanupRouteState();
             
             // Cleanup: flush pending saves and clear timers on unmount
             flushPendingSaves().catch(() => {});
         };
-    }, [flushPendingSaves]);
+    }, [flushPendingSaves, isBlockingNavigation]);
     
     // Update ref when flushPendingSaves changes and expose to window
     useEffect(() => {
         managementMeetingNotesRef.current.flushPendingSaves = flushPendingSaves;
+        managementMeetingNotesRef.current.flushPendingSaving = flushPendingSaves; // Alias for Teams.jsx
         managementMeetingNotesRef.current.isBlockingNavigation = () => isBlockingNavigation;
         window.ManagementMeetingNotesRef = managementMeetingNotesRef;
         return () => {
@@ -1578,6 +1797,9 @@ const ManagementMeetingNotes = () => {
         
         // ALWAYS store the latest value - this is critical for navigation blocking
         pendingValues.current[fieldKey] = { departmentNotesId, field, value };
+        
+        // CRITICAL: Also track in currentFieldValues for DOM capture fallback
+        currentFieldValues.current[fieldKey] = value;
         
         // Show 'saving' status
         setSaveStatus('saving');
