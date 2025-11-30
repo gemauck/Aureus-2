@@ -228,6 +228,12 @@ async function handler(req, res) {
         }
       })
       
+      // Check if project exists before updating
+      const projectExists = await prisma.project.findUnique({ where: { id } })
+      if (!projectExists) {
+        console.error('❌ Project not found for update:', id)
+        return notFound(res, 'Project not found')
+      }
       
       try {
         const project = await prisma.project.update({ 
@@ -239,6 +245,10 @@ async function handler(req, res) {
         return ok(res, { project })
       } catch (dbError) {
         console.error('❌ Database error updating project:', dbError)
+        // Check if it's a "record not found" error (P2025)
+        if (dbError.code === 'P2025') {
+          return notFound(res, 'Project not found')
+        }
         return serverError(res, 'Failed to update project', dbError.message)
       }
     }
@@ -246,6 +256,13 @@ async function handler(req, res) {
     // Delete Project (DELETE /api/projects/[id])
     if (req.method === 'DELETE') {
       try {
+        // Check if project exists first
+        const projectExists = await prisma.project.findUnique({ where: { id } })
+        if (!projectExists) {
+          console.error('❌ Project not found for deletion:', id)
+          return notFound(res, 'Project not found')
+        }
+        
         // Ensure referential integrity by removing dependents first, then the project
         
         // Delete all related records in a transaction
@@ -281,6 +298,10 @@ async function handler(req, res) {
           code: dbError.code,
           meta: dbError.meta
         })
+        // Check if it's a "record not found" error (P2025)
+        if (dbError.code === 'P2025') {
+          return notFound(res, 'Project not found')
+        }
         return serverError(res, 'Failed to delete project', dbError.message)
       }
     }

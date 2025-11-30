@@ -4,12 +4,15 @@
 // If React isn't ready yet, we fall back to an empty object so the script
 // doesn't crash before we can register a fallback component.
 const ReactGlobal = window.React || {};
-const { useState, useEffect, useCallback, useMemo, useRef } = ReactGlobal;
+const { useState, useEffect, useCallback, useMemo, useRef, createElement } = ReactGlobal;
 // Safely access useAuth - don't destructure if undefined
 const useAuth = window.useAuth || (() => {
   console.error('❌ Manufacturing: useAuth is not available');
   return { user: null };
 });
+
+// Helper to safely get React for error fallbacks
+const getReactForError = () => window.React || ReactGlobal;
 
 const MANUFACTURING_TABS = ['dashboard', 'inventory', 'bom', 'production', 'sales', 'purchase', 'movements', 'suppliers', 'locations'];
 const normalizeManufacturingTab = (value = 'dashboard') => {
@@ -17,11 +20,32 @@ const normalizeManufacturingTab = (value = 'dashboard') => {
   return MANUFACTURING_TABS.includes(normalized) ? normalized : 'dashboard';
 };
 
-const Manufacturing = () => {
+// Wrap component definition in try-catch to catch any errors during definition
+let Manufacturing;
+try {
+  Manufacturing = () => {
+  // Safety check for React hooks - if React isn't ready, show error
+  if (!ReactGlobal || !ReactGlobal.useState || !ReactGlobal.useEffect) {
+    console.error('❌ Manufacturing: React hooks are not available');
+    const ReactForError = getReactForError();
+    if (ReactForError && ReactForError.createElement) {
+      return ReactForError.createElement('div', { className: 'text-center py-12 text-gray-500' },
+        'React is not loaded yet. Please wait a moment and refresh the page.'
+      );
+    }
+    return null;
+  }
+  
   // Safety check for useAuth
   if (!window.useAuth) {
     console.error('❌ Manufacturing: useAuth is not available');
-    return <div className="text-center py-12 text-gray-500">Authentication not loaded. Please refresh the page.</div>;
+    const ReactForError = getReactForError();
+    if (ReactForError && ReactForError.createElement) {
+      return ReactForError.createElement('div', { className: 'text-center py-12 text-gray-500' },
+        'Authentication not loaded. Please refresh the page.'
+      );
+    }
+    return null;
   }
   
   const { user } = useAuth();
@@ -8821,50 +8845,116 @@ const Manufacturing = () => {
     </div>
   );
 };
+} catch (componentError) {
+  console.error('❌ Manufacturing.jsx: Error during component definition:', componentError);
+  console.error('❌ Error stack:', componentError.stack);
+  // Define a fallback component
+  Manufacturing = () => {
+    const ReactForError = getReactForError();
+    if (ReactForError && ReactForError.createElement) {
+      return ReactForError.createElement('div', { className: 'text-center py-12 text-gray-500' },
+        ReactForError.createElement('p', null, '❌ Manufacturing component failed to initialize.'),
+        ReactForError.createElement('p', null, 'Error: ', componentError.message),
+        ReactForError.createElement('br'),
+        ReactForError.createElement('button', {
+          onClick: () => window.location.reload(),
+          className: 'mt-4 px-4 py-2 bg-blue-600 text-white rounded'
+        }, 'Reload Page')
+      );
+    }
+    return null;
+  };
+}
 
 // Make available globally - Register immediately
-
-try {
-    if (typeof Manufacturing !== 'undefined') {
-        window.Manufacturing = Manufacturing;
-        
-        // Dispatch ready event
-        if (typeof window.dispatchEvent === 'function') {
-            try {
-                window.dispatchEvent(new CustomEvent('manufacturingComponentReady'));
-                
-                // Also dispatch after a small delay in case listeners weren't ready
-                setTimeout(() => {
+// Wrap in IIFE to catch any errors during component definition
+(function() {
+    try {
+        // Check if Manufacturing was defined (might be undefined if there was an error earlier)
+        if (typeof Manufacturing !== 'undefined') {
+            window.Manufacturing = Manufacturing;
+            console.log('✅ Manufacturing component registered successfully');
+            
+            // Dispatch ready event
+            if (typeof window.dispatchEvent === 'function') {
+                try {
                     window.dispatchEvent(new CustomEvent('manufacturingComponentReady'));
-                }, 100);
-                
-                // One more delayed dispatch for safety
-                setTimeout(() => {
-                    window.dispatchEvent(new CustomEvent('manufacturingComponentReady'));
-                }, 500);
-            } catch (e) {
-                console.warn('⚠️ Could not dispatch manufacturingComponentReady event:', e);
+                    
+                    // Also dispatch after a small delay in case listeners weren't ready
+                    setTimeout(() => {
+                        window.dispatchEvent(new CustomEvent('manufacturingComponentReady'));
+                    }, 100);
+                    
+                    // One more delayed dispatch for safety
+                    setTimeout(() => {
+                        window.dispatchEvent(new CustomEvent('manufacturingComponentReady'));
+                    }, 500);
+                } catch (e) {
+                    console.warn('⚠️ Could not dispatch manufacturingComponentReady event:', e);
+                }
             }
+        } else {
+            console.error('❌ Manufacturing.jsx: Manufacturing function is undefined!');
+            console.error('❌ This means there was a JavaScript error before the component definition.');
+            console.error('❌ Check the browser console for syntax errors or runtime errors above this message.');
+            
+            // Register a fallback component that shows an error message
+            const ReactForFallback = getReactForError();
+            window.Manufacturing = () => {
+                if (ReactForFallback && ReactForFallback.createElement) {
+                    return ReactForFallback.createElement('div', { className: 'text-center py-12 text-gray-500' },
+                        ReactForFallback.createElement('p', null, '❌ Manufacturing component failed to load.'),
+                        ReactForFallback.createElement('p', null, 'Please check the browser console for errors.'),
+                        ReactForFallback.createElement('br'),
+                        ReactForFallback.createElement('button', {
+                            onClick: () => window.location.reload(),
+                            className: 'mt-4 px-4 py-2 bg-blue-600 text-white rounded'
+                        }, 'Reload Page')
+                    );
+                } else {
+                    // If React isn't available, return a simple div
+                    return {
+                        type: 'div',
+                        props: {
+                            className: 'text-center py-12 text-gray-500',
+                            dangerouslySetInnerHTML: {
+                                __html: '❌ Manufacturing component failed to load. Please check the browser console for errors.<br><button onclick="window.location.reload()" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Reload Page</button>'
+                            }
+                        }
+                    };
+                }
+            };
         }
-    } else {
-        console.error('❌ Manufacturing.jsx: Manufacturing function is undefined!');
-        console.error('❌ This means there was a JavaScript error before the component definition.');
+    } catch (error) {
+        console.error('❌ Manufacturing.jsx: Error registering component:', error);
+        console.error('❌ Error stack:', error.stack);
+        // Still try to register a fallback
+        const ReactForFallback = getReactForError();
+        window.Manufacturing = () => {
+            if (ReactForFallback && ReactForFallback.createElement) {
+                return ReactForFallback.createElement('div', { className: 'text-center py-12 text-gray-500' },
+                    'Manufacturing component failed to load. Error: ', error.message,
+                    ReactForFallback.createElement('br'),
+                    ReactForFallback.createElement('button', {
+                        onClick: () => window.location.reload(),
+                        className: 'mt-4 px-4 py-2 bg-blue-600 text-white rounded'
+                    }, 'Reload Page')
+                );
+            } else {
+                // If React isn't available, return a simple div string
+                return {
+                    type: 'div',
+                    props: {
+                        className: 'text-center py-12 text-gray-500',
+                        dangerouslySetInnerHTML: {
+                            __html: `Manufacturing component failed to load. Error: ${error.message}<br><button onclick="window.location.reload()" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Reload Page</button>`
+                        }
+                    }
+                };
+            }
+        };
     }
-} catch (error) {
-    console.error('❌ Manufacturing.jsx: Error registering component:', error);
-    console.error('❌ Error stack:', error.stack);
-    // Still try to register a fallback
-    window.Manufacturing = () => {
-        return React.createElement('div', { className: 'text-center py-12 text-gray-500' },
-            'Manufacturing component failed to load. Error: ', error.message,
-            React.createElement('br'),
-            React.createElement('button', {
-                onClick: () => window.location.reload(),
-                className: 'mt-4 px-4 py-2 bg-blue-600 text-white rounded'
-            }, 'Reload Page')
-        );
-    };
-}
+})();
 
 // Also set it after a short delay to catch late registrations
 setTimeout(() => {

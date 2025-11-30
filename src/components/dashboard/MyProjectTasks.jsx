@@ -187,7 +187,47 @@ const MyProjectTasks = () => {
                         {filteredTasks.map((task) => (
                             <div
                                 key={task.id}
-                                className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                                onClick={() => {
+                                    if (!task.id) return;
+                                    
+                                    if (task.project && task.project.id) {
+                                        // Navigate to project detail and open the task
+                                        sessionStorage.setItem('openProjectId', task.project.id);
+                                        sessionStorage.setItem('openTaskId', task.id);
+                                        
+                                        // Use EntityUrl if available for proper navigation
+                                        if (window.EntityUrl) {
+                                            window.EntityUrl.navigateToEntity('task', task.id, {
+                                                parentId: task.project.id,
+                                                parentType: 'project'
+                                            });
+                                        } else {
+                                            // Fallback to hash navigation
+                                            const projectLink = `#/projects/${task.project.id}?task=${task.id}`;
+                                            window.location.hash = projectLink;
+                                            window.dispatchEvent(new CustomEvent('navigateToPage', { 
+                                                detail: { page: 'projects' } 
+                                            }));
+                                            
+                                            // Dispatch openTask event after navigation
+                                            setTimeout(() => {
+                                                window.dispatchEvent(new CustomEvent('openTask', {
+                                                    detail: { 
+                                                        taskId: task.id,
+                                                        tab: 'details'
+                                                    }
+                                                }));
+                                            }, 300);
+                                        }
+                                    } else {
+                                        // Task doesn't have a project - navigate to projects page anyway
+                                        // The task detail might be available elsewhere
+                                        window.dispatchEvent(new CustomEvent('navigateToPage', { 
+                                            detail: { page: 'projects' } 
+                                        }));
+                                    }
+                                }}
+                                className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
                             >
                                 <div className="flex items-start justify-between">
                                     <div className="flex-1">
@@ -220,7 +260,8 @@ const MyProjectTasks = () => {
                                     
                                     {task.project && (
                                         <button
-                                            onClick={() => {
+                                            onClick={(e) => {
+                                                e.stopPropagation(); // Prevent task click from firing
                                                 // Navigate to project detail using the standard pattern
                                                 sessionStorage.setItem('openProjectId', task.project.id);
                                                 window.dispatchEvent(new CustomEvent('navigateToPage', { 

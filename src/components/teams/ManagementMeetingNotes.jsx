@@ -269,8 +269,7 @@ const ManagementMeetingNotes = () => {
     const [editingFields, setEditingFields] = useState({}); // { [departmentNotesId-field]: true/false }
     const [tempFieldValues, setTempFieldValues] = useState({}); // { [departmentNotesId-field]: value }
     
-    // State for showing save status indicator
-    const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
+    // Save status removed - saves happen silently in background
     
     // State for blocking navigation when saves are in progress
     const [isBlockingNavigation, setIsBlockingNavigation] = useState(false);
@@ -1856,8 +1855,7 @@ const ManagementMeetingNotes = () => {
         }
     };
 
-    // Refs for save status timeout
-    const saveStatusTimeout = useRef(null);
+    // Save status refs removed - saves happen silently in background
     
     // Track the last saved value per field to avoid duplicate saves
     const lastSavedValues = useRef({});
@@ -1876,11 +1874,7 @@ const ManagementMeetingNotes = () => {
         // CRITICAL: Also track in currentFieldValues for DOM capture fallback
         currentFieldValues.current[fieldKey] = value;
         
-        // Show 'saving' status
-        setSaveStatus('saving');
-        if (saveStatusTimeout.current) {
-            clearTimeout(saveStatusTimeout.current);
-        }
+        // NO SAVE STATUS MESSAGES - save silently in background
         
         // Mark as pending save
         pendingSaves.current.add(fieldKey);
@@ -1896,17 +1890,15 @@ const ManagementMeetingNotes = () => {
                 }
                 // Always track last saved value
                 lastSavedValues.current[fieldKey] = value;
-                // Show 'saved' briefly then go idle
-                setSaveStatus('saved');
-                saveStatusTimeout.current = setTimeout(() => {
-                    setSaveStatus('idle');
-                }, 1500);
+                
+                // NO SAVE STATUS MESSAGES - save silently
             })
             .catch(error => {
                 console.error('Error auto-saving department notes:', error);
                 // Keep in pendingValues on error - blur/navigation will retry
                 // DO NOT remove from pendingValues on error - it must be saved
-                setSaveStatus('idle');
+                
+                // NO SAVE STATUS MESSAGES - save silently
             })
             .finally(() => {
                 pendingSaves.current.delete(fieldKey);
@@ -2781,19 +2773,6 @@ const ManagementMeetingNotes = () => {
                                 <i className="fas fa-clipboard-list mr-2 text-primary-600"></i>
                                 Management Meeting Notes
                             </h2>
-                            {/* Save Status Indicator */}
-                            {saveStatus === 'saving' && (
-                                <span className={`inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-full ${isDark ? 'bg-blue-900/50 text-blue-300 border border-blue-700' : 'bg-blue-50 text-blue-600 border border-blue-200'}`}>
-                                    <i className="fas fa-circle-notch fa-spin"></i>
-                                    Saving...
-                                </span>
-                            )}
-                            {saveStatus === 'saved' && (
-                                <span className={`inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-full ${isDark ? 'bg-green-900/50 text-green-300 border border-green-700' : 'bg-green-50 text-green-600 border border-green-200'}`}>
-                                    <i className="fas fa-check"></i>
-                                    Saved
-                                </span>
-                            )}
                         </div>
                         <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Weekly department updates and action tracking</p>
                     </div>

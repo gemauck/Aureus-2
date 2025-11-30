@@ -340,7 +340,11 @@ const DatabaseAPI = {
                 }
                 
                 // Add timeout handling using AbortController
-                const timeoutMs = options.timeout || 30000; // Default 30 seconds, configurable
+                // Use shorter timeout for faster failure detection on connection issues
+                // Reduced from 30s to 15s to fail faster on connection resets/timeouts (ERR_CONNECTION_RESET, ERR_TIMED_OUT)
+                // This allows faster retry attempts and better user experience
+                // Note: Individual requests can still override with options.timeout for longer-running operations
+                const timeoutMs = options.timeout || 15000; // Default 15 seconds (reduced from 30s)
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => {
                     controller.abort();
@@ -366,7 +370,37 @@ const DatabaseAPI = {
                         throw timeoutError;
                     }
                     
-                    // Re-throw other errors
+                    // Check for connection reset and network errors in the error message/name
+                    // ERR_CONNECTION_RESET may appear in console but error might be TypeError with "Failed to fetch"
+                    const errorMessage = error?.message?.toLowerCase() || '';
+                    const errorString = String(error).toLowerCase();
+                    const errorName = error?.name?.toLowerCase() || '';
+                    
+                    // Check for connection reset indicators
+                    const isConnectionReset = errorMessage.includes('err_connection_reset') || 
+                                            errorMessage.includes('connection reset') ||
+                                            errorString.includes('err_connection_reset') ||
+                                            errorString.includes('connection reset');
+                    
+                    // Check for network errors that could be connection resets
+                    const isNetworkFailure = errorName === 'networkerror' ||
+                                            (errorName === 'typeerror' && (errorMessage.includes('fetch') || errorMessage.includes('failed'))) ||
+                                            errorMessage.includes('failed to fetch') ||
+                                            errorMessage.includes('networkerror') ||
+                                            errorMessage.includes('network request failed');
+                    
+                    if (isConnectionReset || (isNetworkFailure && !errorMessage.includes('timeout'))) {
+                        // Create a unified network error that will be retried
+                        const networkError = new Error(`Network error: ${isConnectionReset ? 'Connection reset' : 'Failed to fetch'} - ${endpoint}`);
+                        networkError.name = isConnectionReset ? 'ConnectionResetError' : 'NetworkError';
+                        networkError.isNetworkError = true;
+                        networkError.isConnectionReset = isConnectionReset;
+                        // Preserve original error for debugging
+                        networkError.originalError = error;
+                        throw networkError;
+                    }
+                    
+                    // Re-throw other errors (timeouts are handled above)
                     throw error;
                 }
             };
@@ -477,21 +511,41 @@ const DatabaseAPI = {
                             console.error('❌ Token refresh failed with status:', refreshRes.status);
                         }
                     } catch (refreshError) {
-                        console.error('❌ Token refresh error:', refreshError);
-                        // If refresh fails, don't retry - force logout immediately
-                        if (window.forceLogout) {
-                            window.forceLogout('SESSION_EXPIRED');
+                        // Check if refresh failed due to network error vs auth error
+                        const refreshErrorMessage = refreshError?.message?.toLowerCase() || '';
+                        const isNetworkError = refreshErrorMessage.includes('failed to fetch') ||
+                                             refreshErrorMessage.includes('network') ||
+                                             refreshErrorMessage.includes('timeout') ||
+                                             refreshErrorMessage.includes('connection reset') ||
+                                             refreshError?.name === 'TypeError';
+                        
+                        if (isNetworkError) {
+                            // Network error during refresh - don't log out, let retry logic handle it
+                            console.warn('⚠️ Token refresh failed due to network error, will retry:', refreshError.message);
+                            // Create a network error that will be caught by retry logic
+                            const networkErr = new Error(`Network error during authentication refresh: ${refreshError.message}`);
+                            networkErr.name = 'NetworkError';
+                            networkErr.isNetworkError = true;
+                            networkErr.originalError = refreshError;
+                            // Re-throw to be caught by outer retry logic - don't treat as auth failure
+                            throw networkErr;
                         } else {
-                            if (window.storage?.removeToken) window.storage.removeToken();
-                            if (window.storage?.removeUser) window.storage.removeUser();
-                            if (window.LiveDataSync) {
-                                window.LiveDataSync.stop();
+                            // Auth error (not network) - session is truly expired, log out
+                            console.error('❌ Token refresh failed (auth error):', refreshError);
+                            if (window.forceLogout) {
+                                window.forceLogout('SESSION_EXPIRED');
+                            } else {
+                                if (window.storage?.removeToken) window.storage.removeToken();
+                                if (window.storage?.removeUser) window.storage.removeUser();
+                                if (window.LiveDataSync) {
+                                    window.LiveDataSync.stop();
+                                }
+                                if (!window.location.hash.includes('#/login')) {
+                                    window.location.hash = '#/login';
+                                }
                             }
-                            if (!window.location.hash.includes('#/login')) {
-                                window.location.hash = '#/login';
-                            }
+                            throw new Error('Authentication expired. Please log in again.');
                         }
-                        throw new Error('Authentication expired. Please log in again.');
                     }
                     
                     // If refresh didn't succeed and we still have a 401, don't retry
@@ -655,15 +709,40 @@ const DatabaseAPI = {
                                      error.message?.includes('timeout') ||
                                      error.message?.includes('ERR_TIMED_OUT');
                     
-                    // Only retry on network errors, timeout errors, or server errors (502/503/504), not on other HTTP errors or auth errors
+                    // Check if it's a connection reset error
+                    const isConnectionReset = error.isConnectionReset === true ||
+                                            error.name === 'ConnectionResetError' ||
+                                            error.message?.includes('ERR_CONNECTION_RESET') ||
+                                            error.message?.includes('connection reset');
+                    
+                    // Only retry on network errors, timeout errors, connection resets, or server errors (502/503/504), not on other HTTP errors or auth errors
                     const isNetwork = this.isNetworkError(error);
-                    const shouldRetry = (isNetwork || isTimeout || isServerError) && attempt < maxRetries;
+                    const shouldRetry = (isNetwork || isTimeout || isConnectionReset || isServerError) && attempt < maxRetries;
                     
                     if (shouldRetry) {
-                        // Calculate exponential backoff delay: 1s, 2s, 4s
-                        const delay = baseDelay * Math.pow(2, attempt);
-                        const errorType = isTimeout ? 'Timeout error' : (isServerError ? 'Server error' : 'Network error');
-                        console.warn(`⚠️ ${errorType} on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`, error.message);
+                        // For connection resets, use shorter initial delay (connection issues often resolve quickly)
+                        // For timeouts, use slightly longer delay (might be server overload)
+                        // For other errors, use normal exponential backoff
+                        let delay;
+                        if (isConnectionReset) {
+                            // Connection resets: 500ms, 1s, 2s, 4s - faster retries since connection issues may resolve quickly
+                            delay = Math.min(500 * Math.pow(2, attempt), 4000);
+                        } else if (isTimeout) {
+                            // Timeouts: 1s, 2s, 4s, 8s - give server a bit more time
+                            delay = baseDelay * Math.pow(2, attempt);
+                        } else {
+                            // Other network errors: standard exponential backoff
+                            delay = baseDelay * Math.pow(2, attempt);
+                        }
+                        
+                        const errorType = isConnectionReset ? 'Connection reset' : 
+                                        (isTimeout ? 'Timeout error' : 
+                                        (isServerError ? 'Server error' : 'Network error'));
+                        
+                        // Only log first few attempts to reduce console noise
+                        if (attempt < 2) {
+                            console.warn(`⚠️ ${errorType} on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`, error.message);
+                        }
                         await this._sleep(delay);
                         continue; // Retry the request
                     } else {
@@ -687,7 +766,22 @@ const DatabaseAPI = {
                                 const originalMessage = error?.message || 'Server error';
                                 throw new Error(originalMessage);
                             } else {
-                                throw new Error(`Network error: Unable to connect to server. Please check your internet connection and try again.`);
+                                // Provide more specific error message based on error type
+                                const errorMessage = error?.message || String(error);
+                                const isConnectionReset = errorMessage.includes('ERR_CONNECTION_RESET') || 
+                                                        errorMessage.includes('connection reset') ||
+                                                        error.isConnectionReset === true;
+                                const isTimeout = errorMessage.includes('timeout') || 
+                                                errorMessage.includes('ERR_TIMED_OUT') ||
+                                                error.isTimeout === true;
+                                
+                                if (isConnectionReset) {
+                                    throw new Error(`Connection reset: Unable to maintain connection to server. Please check your internet connection and try again.`);
+                                } else if (isTimeout) {
+                                    throw new Error(`Request timeout: Server took too long to respond. Please try again.`);
+                                } else {
+                                    throw new Error(`Network error: Unable to connect to server. Please check your internet connection and try again.`);
+                                }
                             }
                         } else {
                             // Check if it's a database connection error - suppress logs for these

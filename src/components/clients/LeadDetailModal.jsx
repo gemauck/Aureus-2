@@ -156,6 +156,7 @@ const LeadDetailModal = ({
         sites: [],
         firstContactDate: new Date().toISOString().split('T')[0],
         thumbnail: '',
+        externalAgentId: null,
         id: null // Ensure id exists even if null
     };
     
@@ -237,6 +238,10 @@ const LeadDetailModal = ({
     const [isLoadingIndustries, setIsLoadingIndustries] = useState(false);
     const isOpeningIndustryModalRef = useRef(false); // Prevent multiple rapid clicks
     
+    // External agents state
+    const [externalAgents, setExternalAgents] = useState([]);
+    const [isLoadingExternalAgents, setIsLoadingExternalAgents] = useState(false);
+    
     // Debug modal state
     useEffect(() => {
         // Reset the ref when modal state changes
@@ -305,6 +310,60 @@ const LeadDetailModal = ({
             loadIndustries();
         }
     }, [showIndustryModal, loadIndustries]);
+    
+    // Load external agents function
+    const loadExternalAgents = useCallback(async () => {
+        try {
+            // Check rate limit before making request
+            if (window.RateLimitManager?.isRateLimited()) {
+                console.warn('⏸️ Rate limit active. Skipping external agents load.');
+                setIsLoadingExternalAgents(false);
+                return;
+            }
+            
+            setIsLoadingExternalAgents(true);
+            const token = window.storage?.getToken?.();
+            if (!token) return;
+            
+            // Use throttled request
+            const response = await window.RateLimitManager?.throttleRequest?.(
+                () => fetch('/api/external-agents', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include'
+                }),
+                1 // Lowest priority
+            ) || await fetch('/api/external-agents', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                const agentsList = data?.data?.externalAgents || data?.externalAgents || [];
+                setExternalAgents(agentsList);
+            }
+        } catch (error) {
+            // Don't log rate limit errors
+            if (error.status !== 429 && error.code !== 'RATE_LIMIT_EXCEEDED') {
+                console.error('Error loading external agents:', error);
+            }
+        } finally {
+            setIsLoadingExternalAgents(false);
+        }
+    }, []);
+    
+    // Fetch external agents on mount
+    useEffect(() => {
+        loadExternalAgents();
+    }, [loadExternalAgents]);
     
     // Add new industry
     const handleAddIndustry = useCallback(async () => {
@@ -3067,6 +3126,51 @@ const LeadDetailModal = ({
                                     </div>
                                 </div>
 
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">External Agent</label>
+                                        <select 
+                                            value={formData.externalAgentId || ''}
+                                            onFocus={() => {
+                                                isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
+                                                notifyEditingChange(true);
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                            }}
+                                            onChange={(e) => {
+                                                isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
+                                                userEditedFieldsRef.current.add('externalAgentId');
+                                                notifyEditingChange(true);
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                editingTimeoutRef.current = setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                    notifyEditingChange(false);
+                                                }, 5000);
+                                                setFormData(prev => {
+                                                    const updated = {...prev, externalAgentId: e.target.value || null};
+                                                    formDataRef.current = updated;
+                                                    return updated;
+                                                });
+                                            }}
+                                            onBlur={() => {
+                                                setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                    notifyEditingChange(false);
+                                                }, 500);
+                                            }}
+                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                        >
+                                            <option value="">Select External Agent</option>
+                                            {externalAgents.map((agent) => (
+                                                <option key={agent.id} value={agent.id}>
+                                                    {agent.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
                                 
 
                                 <div>
@@ -5684,7 +5788,51 @@ const LeadDetailModal = ({
                                             React.createElement('option', { value: 'Desire' }, 'Desire - Lead wants our solution'),
                                             React.createElement('option', { value: 'Action' }, 'Action - Lead is ready to buy')
                                         )
-                                    ),
+                                    )
+                                ),
+                                React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-4' },
+                                    React.createElement('div', null,
+                                        React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'External Agent'),
+                                        React.createElement('select', {
+                                            value: formData.externalAgentId || '',
+                                            onChange: (e) => {
+                                                isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
+                                                userEditedFieldsRef.current.add('externalAgentId');
+                                                notifyEditingChange(true);
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                editingTimeoutRef.current = setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                    notifyEditingChange(false);
+                                                }, 5000);
+                                                setFormData(prev => {
+                                                    const updated = {...prev, externalAgentId: e.target.value || null};
+                                                    formDataRef.current = updated;
+                                                    return updated;
+                                                });
+                                            },
+                                            onFocus: () => {
+                                                isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
+                                                notifyEditingChange(true);
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                            },
+                                            onBlur: () => {
+                                                setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                    notifyEditingChange(false);
+                                                }, 500);
+                                            },
+                                            className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500'
+                                        },
+                                            React.createElement('option', { value: '' }, 'Select External Agent'),
+                                            externalAgents.map((agent) =>
+                                                React.createElement('option', { key: agent.id, value: agent.id }, agent.name)
+                                            )
+                                        )
+                                    )
+                                ),
+                                React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' },
                                     React.createElement('div', { className: 'md:col-span-2' },
                                         React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'Notes'),
                                         React.createElement('textarea', {

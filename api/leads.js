@@ -152,6 +152,7 @@ async function handler(req, res) {
                   tag: true
                 }
               },
+              externalAgent: true,
               // Include starredBy relation only if we have a valid userId
               // If no validUserId, starredBy will be undefined and isStarred will be false
               ...(validUserId ? {
@@ -408,7 +409,8 @@ async function handler(req, res) {
           taxExempt: false,
           notes: ''
         }),
-        proposals: JSON.stringify(Array.isArray(body.proposals) ? body.proposals : [])
+        proposals: JSON.stringify(Array.isArray(body.proposals) ? body.proposals : []),
+        externalAgentId: body.externalAgentId || null
       }
 
 
@@ -532,7 +534,8 @@ async function handler(req, res) {
           contracts: body.contracts !== undefined ? (typeof body.contracts === 'string' ? body.contracts : JSON.stringify(body.contracts)) : undefined,
           activityLog: body.activityLog !== undefined ? (typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(body.activityLog)) : undefined,
           billingTerms: body.billingTerms !== undefined ? (typeof body.billingTerms === 'string' ? body.billingTerms : JSON.stringify(body.billingTerms)) : undefined,
-          proposals: body.proposals !== undefined ? (typeof body.proposals === 'string' ? body.proposals : JSON.stringify(body.proposals)) : undefined
+          proposals: body.proposals !== undefined ? (typeof body.proposals === 'string' ? body.proposals : JSON.stringify(body.proposals)) : undefined,
+          externalAgentId: body.externalAgentId !== undefined ? (body.externalAgentId || null) : undefined
         }
         Object.keys(updateData).forEach(key => {
           if (updateData[key] === undefined) {

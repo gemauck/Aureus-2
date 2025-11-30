@@ -47,6 +47,7 @@ async function handler(req, res) {
                 tag: true
               }
             },
+            externalAgent: true,
             ...(validUserId ? {
               starredBy: {
                 where: {
@@ -124,7 +125,8 @@ async function handler(req, res) {
         activityLog: body.activityLog !== undefined ? (typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : [])) : undefined,
         billingTerms: body.billingTerms !== undefined ? (typeof body.billingTerms === 'string' ? body.billingTerms : JSON.stringify(body.billingTerms)) : undefined,
         proposals: body.proposals !== undefined ? (typeof body.proposals === 'string' ? body.proposals : JSON.stringify(Array.isArray(body.proposals) ? body.proposals : [])) : undefined,
-        services: body.services !== undefined ? (typeof body.services === 'string' ? body.services : JSON.stringify(Array.isArray(body.services) ? body.services : [])) : undefined
+        services: body.services !== undefined ? (typeof body.services === 'string' ? body.services : JSON.stringify(Array.isArray(body.services) ? body.services : [])) : undefined,
+        externalAgentId: body.externalAgentId !== undefined ? (body.externalAgentId || null) : undefined
       }
 
       // Remove undefined values (but keep empty strings and empty arrays as JSON strings)
