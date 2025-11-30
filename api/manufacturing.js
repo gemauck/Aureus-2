@@ -1908,7 +1908,7 @@ async function handler(req, res) {
               data: {
                 movementId: `MOV${String(seq).padStart(4, '0')}`,
                 date: new Date(),
-                type: 'production',
+                type: 'receipt', // Finished product receipt (increases stock)
                 itemName: finishedProduct.name,
                 sku: finishedProduct.sku,
                 quantity: quantityProduced,
@@ -2902,12 +2902,13 @@ async function handler(req, res) {
         }
         
         // Normalize quantity based on movement type
-        // Receipts should always be positive, consumption should always be negative
-        if (type === 'receipt' || type === 'production') {
-          // Ensure receipts are always positive
+        // Receipts should always be positive (increase stock)
+        // Production, consumption, and sales should always be negative (decrease stock)
+        if (type === 'receipt') {
+          // Ensure receipts are always positive (increase stock)
           quantity = Math.abs(quantity)
-        } else if (type === 'consumption' || type === 'sale') {
-          // Ensure consumption is always negative
+        } else if (type === 'production' || type === 'consumption' || type === 'sale') {
+          // Ensure production/consumption/sale are always negative (decrease stock)
           quantity = -Math.abs(quantity)
         }
         // Adjustments can be positive or negative (user corrections)
@@ -3005,7 +3006,7 @@ async function handler(req, res) {
           }
           
           // Default to main warehouse if no location specified for receipts
-          if (!toLocationId && (type === 'receipt' || type === 'production')) {
+          if (!toLocationId && type === 'receipt') {
             const mainWarehouse = await tx.stockLocation.findFirst({ 
               where: { code: 'LOC001' } 
             })
@@ -3064,7 +3065,7 @@ async function handler(req, res) {
                 }
               })
             }
-          } else if (type === 'receipt' || type === 'production') {
+          } else if (type === 'receipt') {
             // Create item on first receipt if it doesn't exist
             if (!item) {
               const unitCost = parseFloat(body.unitCost) || 0
@@ -3127,7 +3128,7 @@ async function handler(req, res) {
               })
             }
             
-            // Update LocationInventory for receipt/production
+            // Update LocationInventory for receipt
             if (toLocationId) {
               await upsertLocationInventory(
                 toLocationId,
@@ -3155,6 +3156,71 @@ async function handler(req, res) {
                   }
                 })
               }
+            }
+          } else if (type === 'production') {
+            // Production reduces stock (consumes materials) - same logic as consumption
+            if (!item) {
+              throw new Error('Inventory item not found for production')
+            }
+            
+            // quantity is already negative for production, so we add it (subtract absolute value)
+            const absQty = Math.abs(quantity)
+            const locationId = fromLocationId || toLocationId || item.locationId
+            
+            // Check location-specific stock if location is specified
+            if (locationId) {
+              const locInv = await tx.locationInventory.findUnique({ 
+                where: { locationId_sku: { locationId, sku: body.sku } } 
+              })
+              if (!locInv || (locInv.quantity || 0) < absQty) {
+                throw new Error(`Insufficient stock at location for production (available: ${locInv?.quantity || 0}, requested: ${absQty})`)
+              }
+            } else {
+              // Fallback to master inventory check
+              if ((item.quantity || 0) < absQty) {
+                throw new Error('Insufficient stock for production')
+              }
+            }
+            
+            newQuantity = (item.quantity || 0) + quantity // quantity is negative, so this subtracts
+            const totalValue = newQuantity * (item.unitCost || 0)
+            const reorderPoint = item.reorderPoint || 0
+            const status = newQuantity > reorderPoint ? 'in_stock' : (newQuantity > 0 ? 'low_stock' : 'out_of_stock')
+            item = await tx.inventoryItem.update({
+              where: { id: item.id },
+              data: {
+                quantity: newQuantity,
+                totalValue,
+                status
+              }
+            })
+            
+            // Update LocationInventory for production
+            if (locationId) {
+              await upsertLocationInventory(
+                locationId,
+                body.sku,
+                body.itemName,
+                quantity, // already negative
+                undefined,
+                undefined
+              )
+              
+              // Recalculate master aggregate
+              const totalAtLocations = await tx.locationInventory.aggregate({ 
+                _sum: { quantity: true }, 
+                where: { sku: body.sku } 
+              })
+              const aggQty = totalAtLocations._sum.quantity || 0
+              
+              item = await tx.inventoryItem.update({
+                where: { id: item.id },
+                data: {
+                  quantity: aggQty,
+                  totalValue: aggQty * (item.unitCost || 0),
+                  status: aggQty > (item.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
+                }
+              })
             }
           } else if (type === 'consumption' || type === 'sale') {
             if (!item) {

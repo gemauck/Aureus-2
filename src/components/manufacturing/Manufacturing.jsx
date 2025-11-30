@@ -8619,36 +8619,29 @@ const Manufacturing = () => {
             </div>
           </div>
           {(() => {
-            const itemMovements = itemMovementsForDetail;
+            // Movements are sorted oldest-first, but we want to display newest-first
+            // So we reverse for display, but calculate balances backwards from current quantity
+            const itemMovements = [...itemMovementsForDetail].reverse();
 
             // Helper function to normalize quantity based on movement type
             // This ensures consistent handling across balance calculation and display
             const normalizeQuantity = (movement) => {
               let qty = parseFloat(movement.quantity) || 0;
               // Normalize quantity based on type
-              if (movement.type === 'receipt' || movement.type === 'production') {
-                qty = Math.abs(qty); // Always positive
-              } else if (movement.type === 'consumption' || movement.type === 'sale') {
-                qty = -Math.abs(qty); // Always negative
+              if (movement.type === 'receipt') {
+                qty = Math.abs(qty); // Receipts always increase stock (positive)
+              } else if (movement.type === 'production' || movement.type === 'consumption' || movement.type === 'sale') {
+                qty = -Math.abs(qty); // Production/consumption/sale always decrease stock (negative)
               }
               // Adjustments keep their sign as-is (can be positive or negative)
               // This is critical - adjustments are stored with their actual sign in the database
               return qty;
             };
 
-            // Calculate starting balance from current quantity and movements
-            // This ensures closing balance matches current quantity
-            let runningBalance = item.quantity || 0;
-            
-            if (itemMovements.length > 0) {
-              // Calculate the net effect of all movements using the same normalization
-              const totalMovementQty = itemMovements.reduce((sum, m) => {
-                return sum + normalizeQuantity(m);
-              }, 0);
-              // Starting balance = current quantity - sum of all movements
-              // This works because: startingBalance + totalMovementQty = currentQuantity
-              runningBalance = (item.quantity || 0) - totalMovementQty;
-            }
+            // Calculate balances backwards from current quantity (since we're displaying newest-first)
+            // Start with current quantity and work backwards by subtracting each movement
+            const currentQuantity = item.quantity || 0;
+            let runningBalance = currentQuantity;
 
             return (
               <div className="overflow-x-auto">
@@ -8680,8 +8673,10 @@ const Manufacturing = () => {
                         const isIncrease = qty > 0;
                         const isDecrease = qty < 0;
                         
-                        // Update running balance
-                        runningBalance += qty;
+                        // Display the balance AFTER this movement (runningBalance)
+                        // Then calculate the balance BEFORE this movement for the next row
+                        const balanceToDisplay = runningBalance;
+                        runningBalance = runningBalance - qty;
                         
                         return (
                           <tr key={movement.id} className="hover:bg-gray-50">
@@ -8711,9 +8706,9 @@ const Manufacturing = () => {
                               )}
                             </td>
                             <td className={`px-3 py-2 text-sm text-right font-semibold ${
-                              runningBalance < 0 ? 'text-red-600' : runningBalance === 0 ? 'text-orange-600' : 'text-gray-900'
+                              balanceToDisplay < 0 ? 'text-red-600' : balanceToDisplay === 0 ? 'text-orange-600' : 'text-gray-900'
                             }`}>
-                              {runningBalance.toFixed(2)} {item.unit}
+                              {balanceToDisplay.toFixed(2)} {item.unit}
                             </td>
                             <td className="px-3 py-2 text-sm text-gray-600">
                               {movement.reference || movement.movementId || '-'}
@@ -8728,9 +8723,9 @@ const Manufacturing = () => {
                           <span className="text-gray-900">Closing Balance</span>
                         </td>
                         <td className={`px-3 py-2 text-sm text-right font-bold ${
-                          runningBalance < 0 ? 'text-red-600' : runningBalance === 0 ? 'text-orange-600' : 'text-blue-600'
+                          currentQuantity < 0 ? 'text-red-600' : currentQuantity === 0 ? 'text-orange-600' : 'text-blue-600'
                         }`}>
-                          {runningBalance.toFixed(2)} {item.unit}
+                          {currentQuantity.toFixed(2)} {item.unit}
                         </td>
                         <td className="px-3 py-2 text-sm text-gray-700">-</td>
                       </tr>

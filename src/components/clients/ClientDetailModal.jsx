@@ -999,7 +999,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 console.log('⏭️ Skipping database load - form has been edited and client ID unchanged');
             }
         }
-    }, [client]);
+    }, [client?.id]); // Only depend on client.id, not entire client object to prevent infinite loops
     
     // Load full client data from database to get latest comments, followUps, activityLog
     const loadClientFromDatabase = async (clientId) => {
