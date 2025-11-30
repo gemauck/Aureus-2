@@ -742,9 +742,24 @@ async function handler(req, res) {
       try {
         const owner = req.user?.sub
         
-        // Parse query parameters from URL
-        const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
-        const locationId = req.query?.locationId || req.query?.location || urlObj.searchParams.get('locationId') || urlObj.searchParams.get('location')
+        // Parse query parameters from URL - use safe parsing method
+        let locationId = null
+        try {
+          // Try req.query first (if available from framework)
+          locationId = req.query?.locationId || req.query?.location
+          
+          // If not in req.query, parse from URL manually
+          if (!locationId && req.url) {
+            const queryString = req.url.split('?')[1]
+            if (queryString) {
+              const params = new URLSearchParams(queryString)
+              locationId = params.get('locationId') || params.get('location')
+            }
+          }
+        } catch (parseError) {
+          console.warn('⚠️ Failed to parse query parameters:', parseError.message)
+          // Continue with locationId = null (will show all locations)
+        }
         
         const locationFilterActive = locationId && locationId !== 'all' && locationId !== ''
         let items = []
