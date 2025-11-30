@@ -130,7 +130,13 @@ async function handler(req, res) {
           page,
           pageSize,
           totalItems,
-          clientId: clientId || clientName || 'all'
+          clientId: clientId || clientName || 'all',
+          whereClause,
+          sampleJobCard: jobCards[0] ? {
+            jobCardNumber: jobCards[0].jobCardNumber,
+            clientId: jobCards[0].clientId,
+            clientName: jobCards[0].clientName
+          } : null
         })
         
         // Format dates for response
@@ -284,7 +290,6 @@ async function handler(req, res) {
           }
         })
         
-        console.log('✅ Created job card:', jobCard.id)
         return created(res, { 
           jobCard: {
             ...jobCard,
@@ -385,7 +390,6 @@ async function handler(req, res) {
           data: updateData
         })
         
-        console.log('✅ Updated job card:', id)
         return ok(res, { 
           jobCard: {
             ...jobCard,
@@ -420,20 +424,14 @@ async function handler(req, res) {
     // DELETE (DELETE /api/jobcards/:id)
     if (req.method === 'DELETE' && id) {
       try {
-        console.log('🗑️ DELETE request received for job card:', id);
-        console.log('🗑️ Request method:', req.method);
-        console.log('🗑️ Request URL:', req.url);
         
         // Check if job card exists first
         const existing = await prisma.jobCard.findUnique({ where: { id } });
         if (!existing) {
-          console.log('⚠️ Job card not found:', id);
           return notFound(res, 'Job card not found');
         }
         
-        console.log('🗑️ Found job card, deleting:', id);
         await prisma.jobCard.delete({ where: { id } });
-        console.log('✅ Deleted job card:', id);
         
         // Return simple deletion confirmation
         return ok(res, { deleted: true, id });
