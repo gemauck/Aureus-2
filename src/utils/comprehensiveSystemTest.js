@@ -2,8 +2,6 @@
 // Run this in the browser console to test the enhanced state management system
 
 window.runComprehensiveSystemTest = async function() {
-    console.log('🚀 Starting Comprehensive System Test...');
-    console.log('=====================================');
     
     const testResults = {
         startTime: Date.now(),
@@ -12,7 +10,6 @@ window.runComprehensiveSystemTest = async function() {
     };
     
     // Test 1: Check if all enhanced systems are loaded
-    console.log('\n🧪 Test 1: System Initialization');
     try {
         const checks = {
             enhancedStateManager: !!window.EnhancedStateManager,
@@ -22,7 +19,6 @@ window.runComprehensiveSystemTest = async function() {
             clientsComponent: !!window.Clients
         };
         
-        console.log('System availability:', checks);
         
         const allLoaded = Object.values(checks).every(Boolean);
         if (!allLoaded) {
@@ -30,7 +26,6 @@ window.runComprehensiveSystemTest = async function() {
         }
         
         testResults.tests.push({ name: 'System Initialization', status: 'PASSED' });
-        console.log('✅ All enhanced systems loaded successfully');
         
     } catch (error) {
         testResults.tests.push({ name: 'System Initialization', status: 'FAILED', error: error.message });
@@ -38,7 +33,6 @@ window.runComprehensiveSystemTest = async function() {
     }
     
     // Test 2: Enhanced State Manager Functionality
-    console.log('\n🧪 Test 2: Enhanced State Manager');
     try {
         const stateManager = window.EnhancedStateManager;
         
@@ -58,7 +52,6 @@ window.runComprehensiveSystemTest = async function() {
         }
         
         testResults.tests.push({ name: 'Enhanced State Manager', status: 'PASSED' });
-        console.log('✅ Enhanced State Manager working correctly');
         
     } catch (error) {
         testResults.tests.push({ name: 'Enhanced State Manager', status: 'FAILED', error: error.message });
@@ -66,7 +59,6 @@ window.runComprehensiveSystemTest = async function() {
     }
     
     // Test 3: Enhanced API Wrapper
-    console.log('\n🧪 Test 3: Enhanced API Wrapper');
     try {
         const apiWrapper = window.EnhancedAPIWrapper;
         
@@ -83,7 +75,6 @@ window.runComprehensiveSystemTest = async function() {
         }
         
         testResults.tests.push({ name: 'Enhanced API Wrapper', status: 'PASSED' });
-        console.log('✅ Enhanced API Wrapper working correctly');
         
     } catch (error) {
         testResults.tests.push({ name: 'Enhanced API Wrapper', status: 'FAILED', error: error.message });
@@ -91,7 +82,6 @@ window.runComprehensiveSystemTest = async function() {
     }
     
     // Test 4: Data Validation
-    console.log('\n🧪 Test 4: Data Validation');
     try {
         const stateManager = window.EnhancedStateManager;
         
@@ -121,7 +111,6 @@ window.runComprehensiveSystemTest = async function() {
         }
         
         testResults.tests.push({ name: 'Data Validation', status: 'PASSED' });
-        console.log('✅ Data validation working correctly');
         
     } catch (error) {
         testResults.tests.push({ name: 'Data Validation', status: 'FAILED', error: error.message });
@@ -129,7 +118,6 @@ window.runComprehensiveSystemTest = async function() {
     }
     
     // Test 5: CRUD Operations (Optimistic)
-    console.log('\n🧪 Test 5: CRUD Operations');
     try {
         const stateManager = window.EnhancedStateManager;
         
@@ -183,7 +171,6 @@ window.runComprehensiveSystemTest = async function() {
         }
         
         testResults.tests.push({ name: 'CRUD Operations', status: 'PASSED' });
-        console.log('✅ CRUD operations working correctly');
         
     } catch (error) {
         testResults.tests.push({ name: 'CRUD Operations', status: 'FAILED', error: error.message });
@@ -191,7 +178,6 @@ window.runComprehensiveSystemTest = async function() {
     }
     
     // Test 6: Optimistic Updates
-    console.log('\n🧪 Test 6: Optimistic Updates');
     try {
         const stateManager = window.EnhancedStateManager;
         
@@ -221,7 +207,6 @@ window.runComprehensiveSystemTest = async function() {
         }
         
         testResults.tests.push({ name: 'Optimistic Updates', status: 'PASSED' });
-        console.log('✅ Optimistic updates working correctly');
         
     } catch (error) {
         testResults.tests.push({ name: 'Optimistic Updates', status: 'FAILED', error: error.message });
@@ -229,7 +214,6 @@ window.runComprehensiveSystemTest = async function() {
     }
     
     // Test 7: Error Handling
-    console.log('\n🧪 Test 7: Error Handling');
     try {
         const stateManager = window.EnhancedStateManager;
         
@@ -247,7 +231,6 @@ window.runComprehensiveSystemTest = async function() {
         }
         
         testResults.tests.push({ name: 'Error Handling', status: 'PASSED' });
-        console.log('✅ Error handling working correctly');
         
     } catch (error) {
         testResults.tests.push({ name: 'Error Handling', status: 'FAILED', error: error.message });
@@ -255,7 +238,6 @@ window.runComprehensiveSystemTest = async function() {
     }
     
     // Test 8: Concurrent Operations
-    console.log('\n🧪 Test 8: Concurrent Operations');
     try {
         const stateManager = window.EnhancedStateManager;
         
@@ -296,7 +278,6 @@ window.runComprehensiveSystemTest = async function() {
         }
         
         testResults.tests.push({ name: 'Concurrent Operations', status: 'PASSED' });
-        console.log('✅ Concurrent operations working correctly');
         
     } catch (error) {
         testResults.tests.push({ name: 'Concurrent Operations', status: 'FAILED', error: error.message });
@@ -304,7 +285,6 @@ window.runComprehensiveSystemTest = async function() {
     }
     
     // Test 9: Real-time Sync
-    console.log('\n🧪 Test 9: Real-time Sync');
     try {
         const stateManager = window.EnhancedStateManager;
         
@@ -338,7 +318,6 @@ window.runComprehensiveSystemTest = async function() {
         unsubscribe();
         
         testResults.tests.push({ name: 'Real-time Sync', status: 'PASSED' });
-        console.log('✅ Real-time sync working correctly');
         
     } catch (error) {
         testResults.tests.push({ name: 'Real-time Sync', status: 'FAILED', error: error.message });
@@ -346,7 +325,6 @@ window.runComprehensiveSystemTest = async function() {
     }
     
     // Test 10: UI Integration
-    console.log('\n🧪 Test 10: UI Integration');
     try {
         // Check if enhanced save functions are available in Clients component
         if (typeof window.Clients !== 'function') {
@@ -363,7 +341,6 @@ window.runComprehensiveSystemTest = async function() {
         }
         
         testResults.tests.push({ name: 'UI Integration', status: 'PASSED' });
-        console.log('✅ UI integration working correctly');
         
     } catch (error) {
         testResults.tests.push({ name: 'UI Integration', status: 'FAILED', error: error.message });
@@ -386,28 +363,17 @@ window.runComprehensiveSystemTest = async function() {
         duration: testResults.duration
     };
     
-    console.log('\n📊 COMPREHENSIVE SYSTEM TEST REPORT');
-    console.log('===================================');
-    console.log(`Total Tests: ${totalTests}`);
-    console.log(`Passed: ${passedTests}`);
-    console.log(`Failed: ${failedTests}`);
-    console.log(`Success Rate: ${testResults.summary.successRate.toFixed(1)}%`);
-    console.log(`Duration: ${testResults.duration}ms`);
     
     if (failedTests > 0) {
-        console.log('\n❌ FAILED TESTS:');
         testResults.tests
             .filter(t => t.status === 'FAILED')
             .forEach(t => {
-                console.log(`  - ${t.name}: ${t.error}`);
             });
     }
     
-    console.log('\n✅ PASSED TESTS:');
     testResults.tests
         .filter(t => t.status === 'PASSED')
         .forEach(t => {
-            console.log(`  - ${t.name}`);
         });
     
     // Store results globally for debugging
@@ -419,7 +385,6 @@ window.runComprehensiveSystemTest = async function() {
 
 // Additional utility functions for testing
 window.testClientSave = async function() {
-    console.log('🧪 Testing Client Save Functionality...');
     
     try {
         const stateManager = window.EnhancedStateManager;
@@ -454,7 +419,6 @@ window.testClientSave = async function() {
             validateBeforeSave: true
         });
         
-        console.log('✅ Client save test passed:', createdClient);
         return createdClient;
         
     } catch (error) {
@@ -464,7 +428,6 @@ window.testClientSave = async function() {
 };
 
 window.testLeadSave = async function() {
-    console.log('🧪 Testing Lead Save Functionality...');
     
     try {
         const stateManager = window.EnhancedStateManager;
@@ -489,7 +452,6 @@ window.testLeadSave = async function() {
             validateBeforeSave: true
         });
         
-        console.log('✅ Lead save test passed:', createdLead);
         return createdLead;
         
     } catch (error) {
@@ -499,7 +461,6 @@ window.testLeadSave = async function() {
 };
 
 window.testConcurrentSaves = async function() {
-    console.log('🧪 Testing Concurrent Save Operations...');
     
     try {
         const stateManager = window.EnhancedStateManager;
@@ -529,7 +490,6 @@ window.testConcurrentSaves = async function() {
         
         const results = await Promise.all(promises);
         
-        console.log(`✅ Concurrent saves test passed: ${results.length} clients created`);
         return results;
         
     } catch (error) {
@@ -540,11 +500,4 @@ window.testConcurrentSaves = async function() {
 
 // Auto-run test if called directly
 if (typeof window !== 'undefined') {
-    console.log('🚀 Enhanced State Management System Test Suite Loaded');
-    console.log('Run "runComprehensiveSystemTest()" to start testing');
-    console.log('Available test functions:');
-    console.log('  - runComprehensiveSystemTest()');
-    console.log('  - testClientSave()');
-    console.log('  - testLeadSave()');
-    console.log('  - testConcurrentSaves()');
 }

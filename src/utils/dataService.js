@@ -76,7 +76,6 @@
 
     async createProject(projectData) {
         try {
-            console.log('🌐 Creating project via API (API-only mode)');
             const response = await window.api.createProject(projectData);
             return response.project || response;
         } catch (error) {
@@ -89,7 +88,6 @@
     async getTimeEntries() {
         if (getIsProduction() && window.api?.listTimeEntries) {
             try {
-                console.log('🌐 Using API for time entries');
                 const response = await window.api.listTimeEntries();
                 return normalizeArrayResponse(response, ['timeEntries']);
             } catch (error) {
@@ -97,7 +95,6 @@
                 return safeStorageCall(window.storage, 'getTimeEntries', []);
             }
         } else {
-            console.log('💾 Using localStorage for time entries');
             return safeStorageCall(window.storage, 'getTimeEntries', []);
         }
     },
@@ -105,7 +102,6 @@
     async setTimeEntries(timeEntries) {
         if (getIsProduction() && window.api?.createTimeEntry) {
             try {
-                console.log('🌐 Syncing time entries to API');
                 // For now, just store locally in production
                 // TODO: Implement proper API sync
                 if (window.storage?.setTimeEntries) {
@@ -118,7 +114,6 @@
                 }
             }
         } else {
-            console.log('💾 Using localStorage for time entries');
             if (typeof window.storage?.setTimeEntries === 'function') {
                 window.storage.setTimeEntries(timeEntries);
             }
@@ -128,7 +123,6 @@
     async createTimeEntry(timeEntryData) {
         if (getIsProduction() && window.api?.createTimeEntry) {
             try {
-                console.log('🌐 Creating time entry via API');
                 const response = await window.api.createTimeEntry(timeEntryData);
                 return response.timeEntry || response;
             } catch (error) {
@@ -146,7 +140,6 @@
                 return newTimeEntry;
             }
         } else {
-            console.log('💾 Creating time entry in localStorage');
             const timeEntries = await this.getTimeEntries();
             const newTimeEntry = {
                 id: Math.max(0, ...timeEntries.map(t => t.id)) + 1,
@@ -198,7 +191,6 @@
             if (typeof source.fetch !== 'function') continue;
 
             try {
-                console.log(`🌐 Using ${source.label} for users`);
                 const response = await source.fetch();
                 const users = extractUsers(response);
                 cacheUsers(users);
@@ -210,7 +202,6 @@
             }
         }
 
-        console.log('💾 Using localStorage for users');
         return safeStorageCall(window.storage, 'getUsers', []);
     },
 
@@ -229,10 +220,7 @@
         // Always try to use API if available, regardless of environment
         if (window.api?.listClients) {
             try {
-                console.log('🌐 Using API for clients');
                 const response = await window.api.listClients();
-                console.log('🔍 Client API Response:', response);
-                console.log('🔍 Response structure:', { data: response.data, clients: response.clients, hasData: !!response.data, hasClients: !!response.clients });
                 
                 // Handle nested data structure: { data: { clients: [...] } }
                 let clients = [];
@@ -246,14 +234,12 @@
                     clients = response;
                 }
                 
-                console.log('📊 Clients extracted:', clients.length, clients);
                 return clients;
             } catch (error) {
                 console.warn('⚠️ API failed, falling back to localStorage:', error.message);
                 return safeStorageCall(window.storage, 'getClients', []);
             }
         } else {
-            console.log('💾 Using localStorage for clients');
             return safeStorageCall(window.storage, 'getClients', []);
         }
     },
@@ -262,7 +248,6 @@
         // Always try to use API if available, regardless of environment
         if (window.api?.createClient) {
             try {
-                console.log('🌐 Syncing clients to API');
                 // For now, just store locally in production
                 // TODO: Implement proper API sync
                 if (window.storage?.setClients) {
@@ -275,7 +260,6 @@
                 }
             }
         } else {
-            console.log('💾 Using localStorage for clients');
             if (typeof window.storage?.setClients === 'function') {
                 window.storage.setClients(clients);
             }
@@ -286,7 +270,6 @@
         // Always try to use API if available, regardless of environment
         if (window.api?.createClient) {
             try {
-                console.log('🌐 Creating client via API');
                 const response = await window.api.createClient(clientData);
                 return response.client || response;
             } catch (error) {
@@ -304,7 +287,6 @@
                 return newClient;
             }
         } else {
-            console.log('💾 Creating client in localStorage');
             const clients = await this.getClients();
             const newClient = {
                 id: Math.max(0, ...clients.map(c => c.id)) + 1,
@@ -394,7 +376,6 @@
     async getEmployees() {
         if (window.api?.getEmployees) {
             try {
-                console.log('🌐 Using API for employees');
                 const response = await window.api.getEmployees();
                 return normalizeArrayResponse(response, ['employees']);
             } catch (error) {
@@ -402,7 +383,6 @@
                 return safeStorageCall(window.storage, 'getEmployees', []);
             }
         } else {
-            console.log('💾 Using localStorage for employees');
             return safeStorageCall(window.storage, 'getEmployees', []);
         }
     },
@@ -416,7 +396,6 @@
     async createEmployee(employeeData) {
         if (window.api?.createEmployee) {
             try {
-                console.log('🌐 Creating employee via API');
                 const response = await window.api.createEmployee(employeeData);
                 return response.employee || response;
             } catch (error) {
@@ -434,7 +413,6 @@
                 return newEmployee;
             }
         } else {
-            console.log('💾 Creating employee in localStorage');
             const employees = await this.getEmployees();
             const newEmployee = {
                 id: Math.max(0, ...employees.map(e => e.id)) + 1,
@@ -451,7 +429,6 @@
     async updateEmployee(id, employeeData) {
         if (window.api?.updateEmployee) {
             try {
-                console.log('🌐 Updating employee via API');
                 const response = await window.api.updateEmployee(id, employeeData);
                 return response.employee || response;
             } catch (error) {
@@ -465,7 +442,6 @@
                 return updatedEmployees.find(e => e.id === id);
             }
         } else {
-            console.log('💾 Updating employee in localStorage');
             const employees = await this.getEmployees();
             const updatedEmployees = employees.map(emp => 
                 emp.id === id ? { ...emp, ...employeeData, updatedAt: new Date().toISOString() } : emp
@@ -478,7 +454,6 @@
     async deleteEmployee(id) {
         if (window.api?.deleteEmployee) {
             try {
-                console.log('🌐 Deleting employee via API');
                 await window.api.deleteEmployee(id);
                 return true;
             } catch (error) {
@@ -490,7 +465,6 @@
                 return true;
             }
         } else {
-            console.log('💾 Deleting employee in localStorage');
             const employees = await this.getEmployees();
             const filteredEmployees = employees.filter(emp => emp.id !== id);
             await this.setEmployees(filteredEmployees);
@@ -544,15 +518,6 @@
 
     // Debug function
     window.debugDataService = () => {
-        console.log('🔍 Data Service Debug:', {
-            isProduction: getIsProduction(),
-            isLocalhost: getIsLocalhost(),
-            hasAPI: !!window.api,
-            hasStorage: !!window.storage,
-            apiMethods: Object.keys(window.api || {}),
-            storageMethods: Object.keys(window.storage || {}),
-            dataServiceMethods: Object.keys(dataService)
-        });
     };
 
     const finalLog = window.debug?.log || (() => {});

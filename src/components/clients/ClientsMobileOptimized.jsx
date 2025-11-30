@@ -34,7 +34,6 @@ const ClientsMobileOptimized = () => {
             const token = window.storage?.getToken?.();
             if (token) {
                 const apiResponse = await window.api.getClients();
-                console.log('API response:', apiResponse);
                 
                 // Extract clients from response - handle different response structures
                 let apiClients = [];
@@ -48,14 +47,12 @@ const ClientsMobileOptimized = () => {
                     apiClients = apiResponse.data;
                 }
                 
-                console.log('Extracted clients:', apiClients.length, apiClients);
                 
                 if (apiClients && apiClients.length > 0) {
                     // Filter to only include clients (type === 'client' or null/undefined for legacy)
                     const clientsOnly = apiClients.filter(c => 
                         c.type === 'client' || c.type === null || c.type === undefined
                     );
-                    console.log(`✅ Filtered ${clientsOnly.length} clients from ${apiClients.length} total items`);
                     setClients(clientsOnly);
                 } else {
                     const savedClients = window.storage?.getClients?.();
@@ -120,8 +117,6 @@ const ClientsMobileOptimized = () => {
 
     // Save functions
     const handleSaveClient = async (clientFormData, stayInEditMode = false) => {
-        console.log('=== MOBILE SAVE CLIENT DEBUG ===');
-        console.log('Received form data:', clientFormData);
         
         try {
             const token = window.storage?.getToken?.();
@@ -160,12 +155,10 @@ const ClientsMobileOptimized = () => {
                 setClients(updated);
                 window.storage?.setClients?.(updated);
                 setSelectedClient(comprehensiveClient);
-                console.log('✅ Updated client in localStorage');
             } else {
                 const newClients = [...clients, comprehensiveClient];
                 setClients(newClients);
                 window.storage?.setClients?.(newClients);
-                console.log('✅ Added new client to localStorage');
                 
                 // For new clients, redirect to main clients view
                 setViewMode('clients');
@@ -182,8 +175,6 @@ const ClientsMobileOptimized = () => {
     };
 
     const handleSaveLead = async (leadFormData) => {
-        console.log('=== MOBILE SAVE LEAD DEBUG ===');
-        console.log('Received lead data:', leadFormData);
         
         try {
             const token = window.storage?.getToken?.();
@@ -195,10 +186,8 @@ const ClientsMobileOptimized = () => {
                 // Update existing lead
                 const updatedLead = { ...selectedLead, ...leadFormData };
                 
-                console.log('🌐 Calling API to update lead:', updatedLead.id);
                 const apiResponse = await window.api.updateLead(updatedLead.id, updatedLead);
                 const updatedLeadFromAPI = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
-                console.log('✅ Lead updated in database');
                 
                 // Use the updated lead from API
                 if (updatedLeadFromAPI && updatedLeadFromAPI.id) {
@@ -211,7 +200,6 @@ const ClientsMobileOptimized = () => {
                     setLeads(updatedLeads);
                     setSelectedLead(updatedLead);
                 }
-                console.log('✅ Lead updated');
             } else {
                 // Create new lead - don't include ID, let database generate it
                 // Get current user info
@@ -231,15 +219,12 @@ const ClientsMobileOptimized = () => {
                     }]
                 };
                 
-                console.log('🌐 Calling API to create lead:', newLeadData);
                 const apiResponse = await window.api.createLead(newLeadData);
                 const savedLead = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
-                console.log('✅ Lead created in database:', savedLead);
                 
                 // Use the saved lead from database (with proper ID)
                 const updatedLeads = [...leads, savedLead];
                 setLeads(updatedLeads);
-                console.log('✅ New lead created and saved to database');
                 
                 // For new leads, redirect to main leads view
                 setViewMode('leads');

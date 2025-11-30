@@ -94,7 +94,6 @@
             return false;
         }
 
-        console.log('✅ Pipeline Platform initialized successfully');
         return true;
     };
 
@@ -137,5 +136,4 @@
         waitForDependencies(initializePipeline);
     }
 
-    console.log('Pipeline Integration loaded');
 })();

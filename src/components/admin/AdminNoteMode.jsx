@@ -161,23 +161,11 @@ const AdminNoteMode = () => {
     // Mock function to send to issue tracker
     const sendToIssueTracker = async (feedback) => {
         // In a real implementation, this would send to your issue tracker API
-        console.log('Sending feedback to issue tracker:', feedback);
         
         // Simulate API call
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         // For now, just log to console
-        console.log('Feedback submitted:', {
-            title: `${feedback.type.toUpperCase()}: ${feedback.note.substring(0, 50)}...`,
-            description: `**Feedback Type:** ${feedback.type}
-**Priority:** ${feedback.priority}
-**Note:** ${feedback.note}
-**Element Path:** \`${feedback.elementPath}\`
-**Page URL:** ${feedback.pageUrl}
-**Timestamp:** ${feedback.timestamp}`,
-            labels: [feedback.type, feedback.priority, 'admin-feedback'],
-            metadata: feedback.elementInfo
-        });
     };
 
     // Add event listeners when active

@@ -9,12 +9,6 @@ import { logDatabaseError } from './_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔍 Time Entries API Debug:', {
-      method: req.method,
-      url: req.url,
-      headers: req.headers,
-      user: req.user
-    })
     
     // Parse the URL path (already has /api/ stripped by server)
     // Strip query parameters before splitting
@@ -28,7 +22,6 @@ async function handler(req, res) {
         const timeEntries = await prisma.timeEntry.findMany({ 
           orderBy: { createdAt: 'desc' } 
         })
-        console.log('✅ Time entries retrieved successfully:', timeEntries.length)
         return ok(res, timeEntries)
       } catch (dbError) {
         const isConnError = logDatabaseError(dbError, 'listing time entries')
@@ -57,12 +50,10 @@ async function handler(req, res) {
         ownerId: req.user?.sub || null
       }
 
-      console.log('🔍 Creating time entry with data:', timeEntryData)
       try {
         const timeEntry = await prisma.timeEntry.create({
           data: timeEntryData
         })
-        console.log('✅ Time entry created successfully:', timeEntry.id)
         return created(res, { timeEntry })
       } catch (dbError) {
         console.error('❌ Database error creating time entry:', dbError)
@@ -76,7 +67,6 @@ async function handler(req, res) {
         try {
           const timeEntry = await prisma.timeEntry.findUnique({ where: { id } })
           if (!timeEntry) return notFound(res)
-          console.log('✅ Time entry retrieved successfully:', timeEntry.id)
           return ok(res, { timeEntry })
         } catch (dbError) {
           console.error('❌ Database error getting time entry:', dbError)
@@ -101,13 +91,11 @@ async function handler(req, res) {
           }
         })
         
-        console.log('🔍 Updating time entry with data:', updateData)
         try {
           const timeEntry = await prisma.timeEntry.update({ 
             where: { id }, 
             data: updateData 
           })
-          console.log('✅ Time entry updated successfully:', timeEntry.id)
           return ok(res, { timeEntry })
         } catch (dbError) {
           console.error('❌ Database error updating time entry:', dbError)
@@ -117,7 +105,6 @@ async function handler(req, res) {
       if (req.method === 'DELETE') {
         try {
           await prisma.timeEntry.delete({ where: { id } })
-          console.log('✅ Time entry deleted successfully:', id)
           return ok(res, { deleted: true })
         } catch (dbError) {
           console.error('❌ Database error deleting time entry:', dbError)

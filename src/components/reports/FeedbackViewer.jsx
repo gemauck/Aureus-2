@@ -38,12 +38,10 @@ const FeedbackViewer = () => {
     const loadFeedback = async () => {
         setLoading(true);
         try {
-            console.log('📥 Loading feedback from API...');
             const response = await window.api.getFeedback({
                 includeUser: true,
                 includeReplies: true
             });
-            console.log('📥 Feedback API response:', response);
             
             // Check if we got a health check response by mistake
             if (response?.platform || response?.status === 'ok' && response?.timestamp) {
@@ -58,10 +56,8 @@ const FeedbackViewer = () => {
             const feedbackData = response?.data || response || [];
             const feedbackArray = Array.isArray(feedbackData) ? feedbackData : [];
             
-            console.log('📥 Extracted feedback array:', feedbackArray.length, 'items');
             
             if (feedbackArray.length > 0) {
-                console.log('📥 First feedback item:', feedbackArray[0]);
             }
             
             setFeedback(feedbackArray);

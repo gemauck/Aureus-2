@@ -9,12 +9,6 @@ import { logDatabaseError } from './_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔍 Invoices API Debug:', {
-      method: req.method,
-      url: req.url,
-      headers: req.headers,
-      user: req.user
-    })
     
     // Parse the URL path - strip /api/ prefix if present
     // Strip query parameters before splitting
@@ -28,7 +22,6 @@ async function handler(req, res) {
         const invoices = await prisma.invoice.findMany({ 
           orderBy: { createdAt: 'desc' } 
         })
-        console.log('✅ Invoices retrieved successfully:', invoices.length)
         return ok(res, invoices)
       } catch (dbError) {
         const isConnError = logDatabaseError(dbError, 'listing invoices')
@@ -59,12 +52,10 @@ async function handler(req, res) {
         ownerId: req.user?.sub || null
       }
 
-      console.log('🔍 Creating invoice with data:', invoiceData)
       try {
         const invoice = await prisma.invoice.create({
           data: invoiceData
         })
-        console.log('✅ Invoice created successfully:', invoice.id)
         return created(res, { invoice })
       } catch (dbError) {
         console.error('❌ Database error creating invoice:', dbError)
@@ -78,7 +69,6 @@ async function handler(req, res) {
         try {
           const invoice = await prisma.invoice.findUnique({ where: { id } })
           if (!invoice) return notFound(res)
-          console.log('✅ Invoice retrieved successfully:', invoice.id)
           return ok(res, { invoice })
         } catch (dbError) {
           console.error('❌ Database error getting invoice:', dbError)
@@ -106,13 +96,11 @@ async function handler(req, res) {
           }
         })
         
-        console.log('🔍 Updating invoice with data:', updateData)
         try {
           const invoice = await prisma.invoice.update({ 
             where: { id }, 
             data: updateData 
           })
-          console.log('✅ Invoice updated successfully:', invoice.id)
           return ok(res, { invoice })
         } catch (dbError) {
           console.error('❌ Database error updating invoice:', dbError)
@@ -122,7 +110,6 @@ async function handler(req, res) {
       if (req.method === 'DELETE') {
         try {
           await prisma.invoice.delete({ where: { id } })
-          console.log('✅ Invoice deleted successfully:', id)
           return ok(res, { deleted: true })
         } catch (dbError) {
           console.error('❌ Database error deleting invoice:', dbError)

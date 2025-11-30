@@ -34,7 +34,6 @@ const TaskManagement = () => {
         setView(newView);
         try {
             localStorage.setItem('taskManagementView', newView);
-            console.log('View preference saved:', newView);
         } catch (e) {
             console.warn('Failed to save view preference to localStorage:', e);
         }
@@ -70,12 +69,9 @@ const TaskManagement = () => {
     useEffect(() => {
         try {
             const savedView = localStorage.getItem('taskManagementView');
-            console.log('Loading view preference from localStorage:', savedView);
             if (savedView && ['list', 'kanban', 'calendar'].includes(savedView)) {
                 setView(savedView);
-                console.log('View preference loaded:', savedView);
             } else {
-                console.log('No valid view preference found, using default: list');
             }
         } catch (e) {
             console.warn('Failed to load view preference from localStorage:', e);
@@ -330,7 +326,6 @@ const TaskManagement = () => {
             if (response.ok) {
                 loadTasks();
                 // Show success feedback (could be enhanced with a toast notification)
-                console.log('Task deleted successfully');
             } else {
                 // Fallback to offline: remove locally
                 const offline = readOfflineTasks().filter(t => String(t.id) !== String(taskId));

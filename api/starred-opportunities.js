@@ -7,7 +7,6 @@ import { withLogging } from './_lib/logger.js'
 
 async function handler(req, res) {
   try {
-    console.log(`🔍 Starred-opportunities API called: ${req.method} ${req.url}`)
     const userId = req.user?.sub
     if (!userId) {
       console.error('❌ No userId found in request')

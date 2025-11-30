@@ -97,15 +97,6 @@ async function handler(req, res) {
             const body = req.body || await parseJsonBody(req);
             const { userId: targetUserId, type, title, message, link, metadata } = body;
             
-            console.log('📥 POST /notifications - Received notification request:', {
-                targetUserId,
-                type,
-                title: title?.substring(0, 50),
-                message: message?.substring(0, 50),
-                hasLink: !!link,
-                hasMetadata: !!metadata,
-                requestUserId: userId
-            });
             
             if (!targetUserId || !type || !title || !message) {
                 console.error('❌ POST /notifications - Missing required fields:', {
@@ -148,22 +139,8 @@ async function handler(req, res) {
                         inAppSystem: true
                     }
                 });
-                console.log(`📋 Created default notification settings for user ${targetUserId} (all notifications enabled)`);
             }
             
-            console.log(`🔍 Notification settings for user ${targetUserId}:`, {
-                inAppMentions: settings.inAppMentions,
-                inAppComments: settings.inAppComments,
-                inAppTasks: settings.inAppTasks,
-                inAppInvoices: settings.inAppInvoices,
-                inAppSystem: settings.inAppSystem,
-                emailMentions: settings.emailMentions,
-                emailComments: settings.emailComments,
-                emailTasks: settings.emailTasks,
-                emailInvoices: settings.emailInvoices,
-                emailSystem: settings.emailSystem,
-                requestedType: type
-            });
             
             // Check if user wants in-app notifications for this type
             let shouldCreateInAppNotification = false;
@@ -179,7 +156,6 @@ async function handler(req, res) {
                 shouldCreateInAppNotification = true;
             }
             
-            console.log(`🔔 Should create in-app notification: ${shouldCreateInAppNotification} (type: ${type})`);
             
             let notification = null;
             
@@ -196,11 +172,6 @@ async function handler(req, res) {
                             metadata: metadata ? JSON.stringify(metadata) : '{}',
                             read: false
                         }
-                    });
-                    console.log(`✅ In-app notification created for user ${targetUserId} (type: ${type})`, {
-                        notificationId: notification.id,
-                        title,
-                        message: message.substring(0, 50) + '...'
                     });
                 } catch (dbError) {
                     console.error(`❌ Failed to create in-app notification for user ${targetUserId}:`, dbError);
@@ -240,7 +211,6 @@ async function handler(req, res) {
                 shouldSendEmail = true;
             }
             
-            console.log(`📧 Should send email: ${shouldSendEmail} (type: ${type}, user email: ${targetUser.email ? 'present' : 'missing'})`);
             
             if (!shouldSendEmail) {
                 console.warn(`⚠️ Email notification skipped for user ${targetUserId} (type: ${type}) - user preference disabled`, {
@@ -263,7 +233,6 @@ async function handler(req, res) {
             
             // Send email notification if enabled
             if (shouldSendEmail && targetUser.email) {
-                console.log(`📧 Preparing to send email notification to ${targetUser.email} (type: ${type})`);
                 
                 // For ALL project-related notifications (including mentions), fetch project and client details
                 // This ensures emails include project name, client name, and comment extract
@@ -412,15 +381,6 @@ async function handler(req, res) {
                             isProjectRelated: !!(metadata && (type === 'comment' || type === 'mention' || type === 'task'))
                         }
                     );
-                    console.log(`✅ Email notification sent to ${targetUser.email}`, {
-                        messageId: emailResult?.messageId,
-                        success: emailResult?.success,
-                        type,
-                        subject: enhancedSubject,
-                        hasProjectName: !!projectName,
-                        hasClientName: !!clientName,
-                        hasCommentText: !!commentText
-                    });
                 } catch (emailError) {
                     console.error('❌ Failed to send email notification:', emailError);
                     console.error('❌ Email notification error details:', {
@@ -440,12 +400,6 @@ async function handler(req, res) {
             }
             
             const responseData = { notification, created: !!notification };
-            console.log('📤 POST /notifications - Sending response:', {
-                hasNotification: !!notification,
-                notificationId: notification?.id,
-                created: !!notification,
-                type
-            });
             
             return ok(res, responseData);
         } catch (error) {

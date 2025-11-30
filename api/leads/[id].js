@@ -9,12 +9,6 @@ import { logDatabaseError, isConnectionError } from '../_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔍 Lead [id] API Debug:', {
-      method: req.method,
-      url: req.url,
-      headers: req.headers,
-      user: req.user
-    })
     
     // Extract ID from req.params (set by server routing) or fallback to URL parsing
     let id = req.params?.id
@@ -24,7 +18,6 @@ async function handler(req, res) {
       id = pathSegments[pathSegments.length - 1] // Get the ID from the URL
     }
 
-    console.log('🔍 ID from params:', req.params?.id, 'Extracted ID:', id)
 
     if (!id) {
       return badRequest(res, 'Lead ID required')
@@ -95,8 +88,6 @@ async function handler(req, res) {
         // Check if current user has starred this lead
         parsedLead.isStarred = validUserId && lead.starredBy && Array.isArray(lead.starredBy) && lead.starredBy.length > 0
         
-        console.log('✅ Lead retrieved successfully:', lead.id)
-        console.log('✅ Parsed proposals count:', Array.isArray(parsedLead.proposals) ? parsedLead.proposals.length : 'not an array')
         return ok(res, { lead: parsedLead })
       } catch (dbError) {
         const isConnError = logDatabaseError(dbError, 'getting lead')
@@ -111,8 +102,6 @@ async function handler(req, res) {
     // Update Lead (PATCH /api/leads/[id])
     if (req.method === 'PATCH') {
       const body = req.body || await parseJsonBody(req)
-      console.log('🔍 Received body:', body)
-      console.log('🔍 Body keys:', Object.keys(body))
       
       const updateData = {
         name: body.name,
@@ -145,15 +134,6 @@ async function handler(req, res) {
         }
       })
 
-      console.log('🔍 Updating lead with data:', updateData)
-      console.log('🔍 Update contains status:', updateData.status)
-      console.log('🔍 Update contains stage:', updateData.stage, '(type:', typeof updateData.stage, ')')
-      console.log('🔍 Update contains contacts:', updateData.contacts ? `${typeof updateData.contacts} (length: ${updateData.contacts.length})` : 'not included')
-      console.log('🔍 Update contains followUps:', updateData.followUps ? `${typeof updateData.followUps} (length: ${updateData.followUps.length})` : 'not included')
-      console.log('🔍 Update contains notes:', updateData.notes !== undefined ? `string (length: ${updateData.notes.length})` : 'not included')
-      console.log('🔍 Update contains comments:', updateData.comments ? `${typeof updateData.comments} (length: ${updateData.comments.length})` : 'not included')
-      console.log('🔍 Update contains proposals:', updateData.proposals ? (typeof updateData.proposals === 'string' ? `${updateData.proposals.length} chars (JSON string)` : `${updateData.proposals.length} proposals`) : 'NOT INCLUDED')
-      console.log('🔍 Lead ID to update:', id)
       
       try {
         // First verify the lead exists
@@ -166,7 +146,6 @@ async function handler(req, res) {
           console.error('❌ Record is not a lead:', id, 'type:', existing.type)
           return badRequest(res, 'Not a lead')
         }
-        console.log('🔍 Found existing lead - current status:', existing.status)
         
         // Store old name and website for RSS feed update
         const oldName = existing.name
@@ -190,7 +169,6 @@ async function handler(req, res) {
                     isActive: true
                   }
                 })
-                console.log(`✅ Created industry "${industryName}" from lead update`)
               } catch (createError) {
                 // Ignore unique constraint violations (race condition)
                 if (!createError.message.includes('Unique constraint') && createError.code !== 'P2002') {
@@ -203,7 +181,6 @@ async function handler(req, res) {
                 where: { id: existingIndustry.id },
                 data: { isActive: true }
               })
-              console.log(`✅ Reactivated industry "${industryName}"`)
             }
           } catch (industryError) {
             // Don't block the lead update if industry sync fails
@@ -216,15 +193,9 @@ async function handler(req, res) {
           where: { id },
           data: updateData
         })
-        console.log('✅ Lead updated successfully:', lead.id)
-        console.log('✅ New status:', lead.status, '(was:', existing.status, ')')
-        console.log('✅ New stage:', lead.stage, '(was:', existing.stage, ')')
-        console.log('✅ Updated proposals:', lead.proposals ? (typeof lead.proposals === 'string' ? JSON.parse(lead.proposals).length + ' proposals' : lead.proposals.length + ' proposals') : 'NO PROPOSALS')
-        console.log('✅ Full updated lead:', JSON.stringify(lead, null, 2))
         
         // If name changed, trigger RSS feed update (async, don't wait)
         if (updateData.name !== undefined && oldName && oldName !== lead.name) {
-          console.log(`📰 Lead name changed from "${oldName}" to "${lead.name}" - triggering RSS feed update`)
           // Trigger RSS search asynchronously (don't block the response)
           searchAndSaveNewsForClient(lead.id, lead.name, lead.website || oldWebsite || '').catch(error => {
             console.error('❌ Error updating RSS feed after name change:', error)
@@ -272,7 +243,6 @@ async function handler(req, res) {
         await prisma.client.delete({ 
           where: { id } 
         })
-        console.log('✅ Lead deleted successfully:', id)
         return ok(res, { message: 'Lead deleted successfully' })
       } catch (dbError) {
         const isConnError = logDatabaseError(dbError, 'deleting lead')

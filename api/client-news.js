@@ -8,12 +8,6 @@ import { withLogging } from './_lib/logger.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔍 Client News API Debug:', {
-      method: req.method,
-      url: req.url,
-      headers: req.headers,
-      user: req.user
-    })
 
     // GET /api/client-news - Get all news articles
     if (req.method === 'GET') {
@@ -40,7 +34,6 @@ async function handler(req, res) {
         const newsArticles = allNewsArticles.filter(article => {
           // If client relationship is missing, exclude the article (data integrity issue)
           if (!article.client) {
-            console.log(`⚠️ Article ${article.id} has no client relationship - excluding`)
             return false
           }
 
@@ -52,13 +45,11 @@ async function handler(req, res) {
           const isSubscribed = rssSubscribed !== false
 
           if (!isSubscribed) {
-            console.log(`🚫 FILTERED OUT: Article "${article.title}" for unsubscribed client "${article.client.name}" (rssSubscribed: ${rssSubscribed})`)
           }
           
           return isSubscribed
         })
 
-        console.log(`📰 NEWS FILTER: Total articles: ${allNewsArticles.length}, After filtering (subscribed only): ${newsArticles.length}`)
         
         // Log which clients are unsubscribed
         const unsubscribedClients = new Set()
@@ -68,7 +59,6 @@ async function handler(req, res) {
           }
         })
         if (unsubscribedClients.size > 0) {
-          console.log(`🚫 Unsubscribed clients found:`, Array.from(unsubscribedClients))
         }
 
         // Format the response
@@ -86,7 +76,6 @@ async function handler(req, res) {
           isNew: article.isNew
         }))
 
-        console.log('✅ Client news articles retrieved:', formattedArticles.length)
         return ok(res, { newsArticles: formattedArticles })
       } catch (dbError) {
         console.error('❌ Database error getting client news:', dbError)
@@ -157,7 +146,6 @@ async function handler(req, res) {
           })
         }
 
-        console.log('✅ Client news article saved:', article.id)
         return created(res, { newsArticle: article })
       } catch (dbError) {
         console.error('❌ Database error creating client news:', dbError)

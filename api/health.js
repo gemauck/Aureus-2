@@ -17,17 +17,14 @@ async function handler(req, res) {
   }
 
   try {
-    console.log('🏥 Health check started')
     
     // Test database connection
     try {
       await prisma.$connect()
-      console.log('✅ Database connection successful')
       healthData.checks.database = 'connected'
       
       // Test database query
       const userCount = await prisma.user.count()
-      console.log('✅ Database query successful, user count:', userCount)
       
       // Check if any admin user exists (non-blocking check)
       try {
@@ -41,13 +38,10 @@ async function handler(req, res) {
         
         if (adminUsers.length > 0) {
           healthData.checks.admin_user = 'exists'
-          console.log('✅ Admin users exist')
         } else {
           healthData.checks.admin_user = 'none_found'
-          console.log('ℹ️ No active admin users found (this is informational only)')
         }
       } catch (adminCheckError) {
-        console.log('ℹ️ Admin user check skipped:', adminCheckError.message)
         healthData.checks.admin_user = 'check_skipped'
       }
       
@@ -69,14 +63,11 @@ async function handler(req, res) {
       
       if (!hasTypeColumn) {
         await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN "type" TEXT DEFAULT 'client'`
-        console.log('✅ Added type column to Client table')
       }
       
       await prisma.$executeRaw`UPDATE "Client" SET "type" = 'client' WHERE "type" IS NULL`
-      console.log('✅ Database migration completed in health check')
       healthData.migration = 'completed'
     } catch (migrationError) {
-      console.log('Migration error (may be expected):', migrationError.message)
       healthData.migration = 'skipped'
     }
     
@@ -89,7 +80,6 @@ async function handler(req, res) {
       // Admin user check is informational only, not a blocking issue
     }
     
-    console.log('🏥 Health check completed:', healthData.status)
     res.json(healthData)
     
   } catch (error) {

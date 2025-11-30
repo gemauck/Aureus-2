@@ -42,7 +42,6 @@ async function handler(req, res) {
     // Try send email, but don't reveal errors to client (for security - don't reveal if user exists)
     try {
       await sendPasswordResetEmail({ email: user.email, name: user.name || user.email, resetLink })
-      console.log('✅ Password reset email sent successfully to:', user.email)
     } catch (e) {
       console.error('❌ Password reset email send failed:', e.message)
       console.error('❌ Password reset email error details:', {

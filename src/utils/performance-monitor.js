@@ -156,37 +156,18 @@
             const report = this.getReport();
             const grade = report.performance;
             
-            console.log('\n' + '='.repeat(60));
-            console.log('📊 LOAD-ONCE ARCHITECTURE PERFORMANCE REPORT');
-            console.log('='.repeat(60));
-            console.log(`
-⏱️  Uptime: ${report.uptime}
-🚀 Initial Load: ${report.initialLoad}
-📡 Total API Calls: ${report.totalApiCalls}
-📊 API Calls/Minute: ${report.apiCallsPerMinute}
-⚡ Avg Navigation: ${report.averageNavigationTime}
-💾 Cache Hit Rate: ${report.cacheHitRate}
-❌ Errors: ${report.errors.length}
-
-📈 Performance Grade: ${grade.grade} (${grade.status})
-            `.trim());
             
             if (report.errors.length > 0) {
-                console.log('\n⚠️ Recent Errors:');
                 report.errors.slice(-5).forEach(err => {
-                    console.log(`  - ${err.type}: ${err.error}`);
                 });
             }
             
             if (report.recentApiCalls.length > 0) {
-                console.log('\n📡 Recent API Calls:');
                 report.recentApiCalls.forEach(call => {
                     const url = call.url.toString().substring(0, 50);
-                    console.log(`  - ${url} (${call.duration.toFixed(0)}ms)`);
                 });
             }
             
-            console.log('='.repeat(60) + '\n');
             
             return report;
         }
@@ -200,12 +181,10 @@
     
     window.clearPerfMetrics = () => {
         window.performanceMonitor = new PerformanceMonitor();
-        console.log('✅ Performance metrics cleared');
     };
 
     // Automated health checks
     window.healthCheck = () => {
-        console.log('\n🏥 Running Health Check...\n');
         
         const checks = [];
         
@@ -257,62 +236,30 @@
         checks.forEach(check => {
             const icon = check.passed ? '✅' : (check.critical ? '🔴' : '⚠️');
             const value = check.value ? ` (${check.value})` : '';
-            console.log(`${icon} ${check.name}${value}`);
         });
         
         const allCriticalPassed = checks.filter(c => c.critical).every(c => c.passed);
         const allPassed = checks.every(c => c.passed);
         
-        console.log('\n' + '─'.repeat(40));
         if (allPassed) {
-            console.log('🎉 All checks passed! System healthy.');
         } else if (allCriticalPassed) {
-            console.log('✅ Critical systems operational. Minor issues detected.');
         } else {
-            console.log('🔴 CRITICAL ISSUES DETECTED! Check failed items above.');
         }
-        console.log('─'.repeat(40) + '\n');
         
         return { checks, healthy: allCriticalPassed };
     };
 
     // Compare architectures
     window.compareArchitectures = () => {
-        console.log('\n' + '='.repeat(70));
-        console.log('🔄 ARCHITECTURE COMPARISON');
-        console.log('='.repeat(70));
         
         const current = window.USE_LOAD_ONCE_ARCHITECTURE ? 'New (Load-Once)' : 'Old (Legacy)';
         const metrics = window.performanceMonitor.getReport();
         
-        console.log(`
-Current Architecture: ${current}
-
-OLD ARCHITECTURE (Legacy):
-  - Initial Load: 3-5 seconds
-  - Navigation: 1-2 seconds
-  - API Calls/min: 100-120
-  - Race Conditions: Yes
-  - Data Loss: Common
-  - UX: Poor (spinners everywhere)
-
-NEW ARCHITECTURE (Load-Once):
-  - Initial Load: ${metrics.initialLoad}
-  - Navigation: < 100ms
-  - API Calls/min: ${metrics.apiCallsPerMinute}
-  - Race Conditions: No
-  - Data Loss: None
-  - UX: Excellent (instant, smooth)
-
-Performance Grade: ${metrics.performance.grade} (${metrics.performance.status})
-        `.trim());
         
-        console.log('='.repeat(70) + '\n');
     };
 
     // Real-time monitoring dashboard
     window.startMonitoring = (intervalSeconds = 60) => {
-        console.log(`📊 Starting real-time monitoring (every ${intervalSeconds}s)...`);
         
         const interval = setInterval(() => {
             window.performanceMonitor.printReport();
@@ -321,10 +268,8 @@ Performance Grade: ${metrics.performance.grade} (${metrics.performance.status})
         
         window.stopMonitoring = () => {
             clearInterval(interval);
-            console.log('⏹️ Monitoring stopped');
         };
         
-        console.log('ℹ️ Run window.stopMonitoring() to stop');
         
         return interval;
     };
@@ -338,9 +283,6 @@ Performance Grade: ${metrics.performance.grade} (${metrics.performance.status})
         
         const status = window.useData().getCacheStatus();
         
-        console.log('\n' + '='.repeat(60));
-        console.log('💾 CACHE INSPECTION');
-        console.log('='.repeat(60));
         
         Object.entries(status).forEach(([key, info]) => {
             const icon = info.hasData ? '✅' : '❌';
@@ -348,25 +290,16 @@ Performance Grade: ${metrics.performance.grade} (${metrics.performance.status})
             const validity = info.valid ? '✓ Valid' : '✗ Expired';
             const loading = info.loading ? '(Loading...)' : '';
             
-            console.log(`
-${icon} ${key}
-   Age: ${age}
-   Status: ${validity} ${loading}
-   Error: ${info.error || 'None'}
-            `.trim());
         });
         
-        console.log('='.repeat(60) + '\n');
     };
 
     // Test suite
     window.runTests = async () => {
-        console.log('\n🧪 Running Test Suite...\n');
         
         const tests = [];
         
         // Test 1: Cache performance
-        console.log('Test 1: Cache Performance');
         const start = performance.now();
         const data = window.useData().getCachedData('clients');
         const end = performance.now();
@@ -380,7 +313,6 @@ ${icon} ${key}
         });
         
         // Test 2: Data availability
-        console.log('Test 2: Data Availability');
         const status = window.useData().getCacheStatus();
         const hasClients = status.clients?.hasData;
         const hasLeads = status.leads?.hasData;
@@ -398,7 +330,6 @@ ${icon} ${key}
         });
         
         // Test 3: API call frequency
-        console.log('Test 3: API Call Frequency');
         const metrics = window.performanceMonitor.metrics;
         const uptime = (Date.now() - window.performanceMonitor.startTime) / 60000;
         const callsPerMin = metrics.apiCalls.length / uptime;
@@ -411,22 +342,15 @@ ${icon} ${key}
         });
         
         // Print results
-        console.log('\n' + '─'.repeat(60));
-        console.log('TEST RESULTS:');
-        console.log('─'.repeat(60));
         
         tests.forEach((test, i) => {
             const icon = test.passed ? '✅' : '❌';
             const expected = test.expected ? ` (Expected: ${test.expected})` : '';
-            console.log(`${icon} ${test.name}: ${test.value}${expected}`);
         });
         
         const passed = tests.filter(t => t.passed).length;
         const total = tests.length;
         
-        console.log('─'.repeat(60));
-        console.log(`Results: ${passed}/${total} tests passed`);
-        console.log('─'.repeat(60) + '\n');
         
         return { tests, passed, total };
     };
@@ -434,18 +358,8 @@ ${icon} ${key}
     // Auto-run health check after 5 seconds
     setTimeout(() => {
         if (window.USE_LOAD_ONCE_ARCHITECTURE) {
-            console.log('\n🚀 Load-Once Architecture Active\n');
             window.healthCheck();
-            console.log('\n💡 Available Commands:');
-            console.log('  - perfReport()          : Performance report');
-            console.log('  - healthCheck()         : System health check');
-            console.log('  - inspectCache()        : Inspect cache status');
-            console.log('  - runTests()            : Run test suite');
-            console.log('  - compareArchitectures(): Compare old vs new');
-            console.log('  - startMonitoring(60)   : Real-time monitoring');
-            console.log('  - debugDataContext()    : DataContext debug info\n');
         }
     }, 5000);
 
-    console.log('✅ Performance monitoring loaded');
 })();

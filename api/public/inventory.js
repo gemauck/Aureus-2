@@ -9,7 +9,6 @@ async function handler(req, res) {
   }
 
   try {
-    console.log('📡 Public inventory endpoint: Fetching inventory items for job card form...')
     
     // Get all active inventory items
     // Note: InventoryItem doesn't have a 'description' field, and status values are: in_stock, low_stock, out_of_stock, in_production
@@ -35,7 +34,6 @@ async function handler(req, res) {
       }
     })
 
-    console.log(`✅ Public inventory endpoint: Returning ${items.length} inventory items`)
     
     return ok(res, {
       inventory: items,

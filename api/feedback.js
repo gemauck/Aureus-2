@@ -9,7 +9,6 @@ import { verifyToken } from './_lib/jwt.js'
 // Notify admins when feedback is submitted
 async function notifyAdminsOfFeedback(feedback, submittingUser) {
   try {
-    console.log('📧 Starting feedback email notification process...')
     
     // Get all admin users (case-insensitive role check)
     const admins = await prisma.user.findMany({
@@ -63,7 +62,6 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
     }
 
     if (fallbackRecipients.length > 0) {
-      console.log('📧 Added fallback recipients from FEEDBACK_NOTIFY_EMAILS:', fallbackRecipients.map(r => r.email).join(', '))
     } else if (fallbackRecipientsConfigured.length > 0) {
       console.warn('⚠️ Fallback feedback recipients configured, but all addresses already belong to admin users (no additional recipients added).')
     }
@@ -78,7 +76,6 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
       return
     }
 
-    console.log(`📧 Notifying ${recipients.length} recipient(s):`, recipients.map(r => r.email).join(', '))
 
     // Prepare email content
     const userName = submittingUser?.name || submittingUser?.email || 'A user'
@@ -137,13 +134,11 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
     
     const emailPromises = recipients.map(async (recipient) => {
       try {
-        console.log(`📧 Attempting to send feedback email to ${recipient.email}...`)
         const result = await sendNotificationEmail(
           recipient.email,
           subject,
           htmlContent
         )
-        console.log(`✅ Feedback email sent successfully to ${recipient.email}:`, result.messageId)
         successCount++
         return { success: true, email: recipient.email }
       } catch (emailError) {
@@ -166,12 +161,6 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
 
     const results = await Promise.all(emailPromises)
     
-    console.log(`📧 Feedback email notification summary:`)
-    console.log(`   ✅ Successfully sent: ${successCount}`)
-    console.log(`   ❌ Failed: ${failureCount}`)
-    console.log(`   Total admins found: ${admins.length}`)
-    console.log(`   Admins with email: ${adminsWithEmail.length}`)
-    console.log(`   Fallback recipients used: ${fallbackRecipients.length}`)
     
     if (failureCount > 0) {
       console.error(`⚠️ Some feedback emails failed to send. Check email configuration:`)
@@ -384,21 +373,9 @@ async function handler(req, res) {
         
         // Send email notification to admins (non-blocking)
         // Add explicit logging to ensure function is called
-        console.log('📝 Feedback created, triggering email notification...')
-        console.log('📝 Feedback data:', {
-          id: createdItem.id,
-          userId: createdItem.userId,
-          section: createdItem.section,
-          submittingUser: req.user ? { 
-            id: req.user.sub, 
-            email: req.user.email, 
-            name: req.user.name 
-          } : 'not logged in'
-        })
         
         notifyAdminsOfFeedback(createdItem, req.user)
           .then(() => {
-            console.log('✅ Feedback notification process completed')
           })
           .catch(err => {
           console.error('❌ Failed to send feedback notification:', err)

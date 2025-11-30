@@ -32,12 +32,6 @@ const ClientModal = ({ client, onSave, onClose }) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        console.log('=== SIMPLE CLIENT MODAL SUBMIT ===');
-        console.log('Form data:', formData);
-        console.log('Sites array:', formData.sites);
-        console.log('Sites length:', formData.sites.length);
-        console.log('Sites type:', typeof formData.sites);
-        console.log('Is sites array?', Array.isArray(formData.sites));
         onSave(formData);
     };
 

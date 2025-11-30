@@ -15,7 +15,6 @@ const Dashboard = () => {
             try {
                 // Use ClientCache for optimized loading
                 if (window.ClientCache) {
-                    console.log('⚡ Using ClientCache for ultra-fast loading...');
                     const cachedData = await window.ClientCache.loadDataWithCache();
                     
                     // Set data immediately (from cache or localStorage) - leads are database-only
@@ -24,10 +23,8 @@ const Dashboard = () => {
                     setProjects(cachedData.projects);
                     setTimeEntries(cachedData.timeEntries);
                     
-                    console.log(`✅ Dashboard loaded instantly from ${cachedData.fromCache ? 'cache' : 'localStorage'}`);
                 } else {
                     // Fallback to direct localStorage loading (leads are database-only)
-                    console.log('⚡ Loading from localStorage directly...');
                     const savedClients = (storage && typeof storage.getClients === 'function') ? storage.getClients() || [] : [];
                     const savedProjects = (storage && typeof storage.getProjects === 'function') ? storage.getProjects() || [] : [];
                     const savedTimeEntries = (storage && typeof storage.getTimeEntries === 'function') ? storage.getTimeEntries() || [] : [];

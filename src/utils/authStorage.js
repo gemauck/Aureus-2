@@ -55,7 +55,6 @@ const AuthStorage = {
     removeUser: () => {
         try {
             localStorage.removeItem('abcotronics_user');
-            console.log('✅ User data removed');
         } catch (e) {
             console.error('Error removing user:', e);
         }

@@ -372,7 +372,6 @@ const ProgressPersistenceTest = function ProgressPersistenceTestComponent() {
 // Register globally
 try {
     window.ProgressPersistenceTest = ProgressPersistenceTest;
-    console.log('✅ ProgressPersistenceTest registered successfully');
 } catch (error) {
     console.error('❌ Failed to register ProgressPersistenceTest:', error);
 }

@@ -77,7 +77,6 @@ const DashboardLive = () => {
 
     // Optimized real-time data loading with immediate localStorage display
     const loadDashboardData = useCallback(async (showLoading = true) => {
-        console.log('🔄 DashboardLive: Starting optimized data load...');
         
         if (showLoading) {
             setIsLoading(true);
@@ -89,7 +88,6 @@ const DashboardLive = () => {
 
         try {
             // IMMEDIATE: Load from localStorage first for instant display
-            console.log('⚡ DashboardLive: Loading cached data immediately...');
             const allClients = window.storage?.getClients?.() || [];
             
             // Get clients and leads from separate localStorage keys
@@ -119,12 +117,10 @@ const DashboardLive = () => {
             setIsLoading(false);
             setIsRefreshing(false);
             setConnectionStatus('connected');
-            console.log('✅ DashboardLive: Cached data displayed instantly');
 
             // Check authentication for API sync
             const token = window.storage?.getToken?.();
             if (!token) {
-                console.log('⚠️ DashboardLive: No auth token, using cached data only');
                 return;
             }
 
@@ -135,7 +131,6 @@ const DashboardLive = () => {
             }
 
             // BACKGROUND: Sync with API in parallel (non-blocking)
-            console.log('🔄 DashboardLive: Syncing with API in background...');
             const syncPromises = [
                 window.DatabaseAPI.getClients().catch(err => {
                     console.warn('Client sync failed:', err);
@@ -194,13 +189,11 @@ const DashboardLive = () => {
                 // Store leads in localStorage for next load (even if empty to prevent stale cache)
                 if (window.storage?.setLeads) {
                     window.storage.setLeads(leadsFromAPI);
-                    console.log('✅ DashboardLive: Stored leads in localStorage:', leadsFromAPI.length);
                 }
                 
                 // Store clients in localStorage for next load (even if empty to prevent stale cache)
                 if (window.storage?.setClients) {
                     window.storage.setClients(clients);
-                    console.log('✅ DashboardLive: Stored clients in localStorage:', clients.length);
                 }
                 
                 // Handle different API response formats
@@ -224,7 +217,6 @@ const DashboardLive = () => {
                 });
 
                 setLastUpdated(new Date());
-                console.log('✅ DashboardLive: Fresh API data synced');
             });
 
         } catch (error) {
@@ -528,7 +520,6 @@ const DashboardLive = () => {
         
         // Subscribe to live updates
         window.LiveDataSync.subscribe(subscriptionId, (message) => {
-            console.log('📡 Dashboard received live update:', message);
             
             switch (message.type) {
                 case 'connection':

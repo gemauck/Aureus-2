@@ -207,7 +207,6 @@ const ClientDetailModalMobile = ({ client, onSave, onClose, allProjects, onNavig
                     return;
                 }
                 
-                console.log('🌐 Deleting opportunity via API:', opportunityId);
                 await window.api.deleteOpportunity(opportunityId);
                 
                 // Update local opportunities array
@@ -220,7 +219,6 @@ const ClientDetailModalMobile = ({ client, onSave, onClose, allProjects, onNavig
                 
                 alert('✅ Opportunity deleted from database successfully!');
                 
-                console.log('✅ Opportunity deleted from database:', opportunityId);
             } catch (error) {
                 console.error('❌ Error deleting opportunity:', error);
                 alert('❌ Error deleting opportunity from database: ' + error.message);

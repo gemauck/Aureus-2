@@ -12,7 +12,6 @@ export function ok(res, data) {
     }
     return value
   })
-  console.log('📤 ok() response:', serialized.substring(0, 150))
   
   // Set status code first, then headers, then send response (HTTP/2 compatible)
   res.statusCode = 200

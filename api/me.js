@@ -15,7 +15,6 @@ async function handler(req, res) {
       return unauthorized(res, 'Authentication required')
     }
 
-    console.log('✅ Me endpoint: Fetching user for id:', req.user.sub)
 
     // Development-only shortcut to avoid DB when running locally
     if (process.env.DEV_LOCAL_NO_DB === 'true' || (req.user?.sub || '').startsWith('dev-')) {
@@ -81,7 +80,6 @@ async function handler(req, res) {
       return unauthorized(res, 'User not found')
     }
 
-    console.log('✅ Me endpoint: User found:', user.email)
     return ok(res, { user })
   } catch (e) {
     console.error('❌ Me endpoint error:', e)

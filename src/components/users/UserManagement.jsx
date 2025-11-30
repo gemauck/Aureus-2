@@ -88,7 +88,6 @@ const UserManagement = () => {
                 return;
             }
 
-            console.log('🔄 Loading users and invitations...');
             const response = await fetch('/api/users', {
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -97,21 +96,17 @@ const UserManagement = () => {
 
             if (response.ok) {
                 const responseData = await response.json();
-                console.log('📦 Full API response:', responseData);
                 
                 // Handle both response formats: {users, invitations} or {data: {users, invitations}}
                 const data = responseData.data || responseData;
-                console.log('📦 Extracted data:', data);
                 
                 const usersList = (data.users || []).map(user => {
                     // Parse permissions from JSON string to array
-                    console.log('🔍 Processing user:', user.email, 'permissions (raw):', user.permissions, 'type:', typeof user.permissions);
                     if (user.permissions) {
                         try {
                             if (typeof user.permissions === 'string') {
                                 const parsed = JSON.parse(user.permissions);
                                 user.permissions = Array.isArray(parsed) ? parsed : [];
-                                console.log('✅ Parsed permissions for', user.email, ':', user.permissions);
                             } else if (!Array.isArray(user.permissions)) {
                                 user.permissions = [];
                             }
@@ -120,15 +115,12 @@ const UserManagement = () => {
                             user.permissions = [];
                         }
                     } else {
-                        console.log('⚠️ No permissions field for user:', user.email);
                         user.permissions = [];
                     }
                     return user;
                 });
                 const invitationsList = data.invitations || [];
                 
-                console.log('✅ Users loaded:', usersList.length);
-                console.log('✅ Invitations loaded:', invitationsList.length);
                 
                 setUsers(usersList);
                 setInvitations(invitationsList);
@@ -181,7 +173,6 @@ const UserManagement = () => {
             return;
         }
 
-        console.log('➕ Adding new user:', newUser);
 
         try {
             const success = await handleAddUser(newUser);
@@ -203,13 +194,11 @@ const UserManagement = () => {
             return;
         }
 
-        console.log('📧 Sending invitation for:', newInvitation);
 
         try {
             const token = window.storage?.getToken?.();
             const currentUser = window.storage?.getUser?.();
             
-            console.log('📤 Making invitation API call...');
             const response = await fetch('/api/users/invite', {
                 method: 'POST',
                 headers: {
@@ -235,10 +224,8 @@ const UserManagement = () => {
                 throw new Error('Server returned invalid response. Please check the server logs.');
             }
             
-            console.log('📨 Invitation API response:', data);
 
             if (response.ok) {
-                console.log('✅ Invitation created successfully');
                 
                 setShowInviteModal(false);
                 setNewInvitation({ email: '', name: '', role: 'user' });
@@ -272,12 +259,6 @@ const UserManagement = () => {
         const invitationLink = responseData.invitationLink;
         const debug = responseData.debug;
         
-        console.log('🎉 Showing invitation result modal:', {
-            invitation,
-            invitationLink,
-            emailSent: debug?.emailSent,
-            emailError: debug?.emailError
-        });
 
         const emailSent = debug?.emailSent;
         const emailError = debug?.emailError;
@@ -450,8 +431,6 @@ const UserManagement = () => {
     const handleAddUser = async (userData) => {
         try {
             const token = window.storage?.getToken?.();
-            console.log('➕ Creating user via API...');
-            console.log('📤 User data being sent:', userData);
             
             const response = await fetch('/api/users', {
                 method: 'POST',
@@ -462,13 +441,9 @@ const UserManagement = () => {
                 body: JSON.stringify(userData)
             });
 
-            console.log('📡 Response status:', response.status, response.statusText);
             const data = await response.json();
-            console.log('📨 Add user response:', data);
 
             if (response.ok) {
-                console.log('✅ User created successfully');
-                console.log('📨 Full response data:', data);
                 await loadUsers();
                 
                 // Handle both response formats: {tempPassword} or {data: {tempPassword}}
@@ -498,12 +473,6 @@ const UserManagement = () => {
         try {
             const token = window.storage?.getToken?.();
             
-            console.log('📤 UserManagement handleEditUser: Sending request:', {
-                userId,
-                userData,
-                accessibleProjectIds: userData.accessibleProjectIds,
-                accessibleProjectIdsType: typeof userData.accessibleProjectIds
-            });
             
             const response = await fetch('/api/users', {
                 method: 'PUT',
@@ -516,11 +485,6 @@ const UserManagement = () => {
 
             const data = await response.json();
             
-            console.log('📥 UserManagement handleEditUser: Response:', {
-                status: response.status,
-                ok: response.ok,
-                data
-            });
 
             if (response.ok) {
                 loadUsers();
@@ -545,7 +509,6 @@ const UserManagement = () => {
 
         try {
             const token = window.storage?.getToken?.();
-            console.log('🗑️ Deleting user:', userId);
             
             const response = await fetch(`/api/users/${userId}`, {
                 method: 'DELETE',
@@ -558,7 +521,6 @@ const UserManagement = () => {
             const data = await response.json();
             
             if (response.ok) {
-                console.log('✅ User deleted successfully');
                 loadUsers();
                 alert('User deleted successfully');
             } else {
@@ -635,7 +597,6 @@ const UserManagement = () => {
     };
 
     const handleDeleteInvitation = async (invitationId, email) => {
-        console.log('🗑️ Delete invitation clicked:', { invitationId, email });
         
         if (!invitationId) {
             console.error('❌ No invitation ID provided');
@@ -655,7 +616,6 @@ const UserManagement = () => {
                 return;
             }
 
-            console.log('📤 Sending DELETE request to:', `/api/users/invitation/${invitationId}`);
             const response = await fetch(`/api/users/invitation/${invitationId}`, {
                 method: 'DELETE',
                 headers: {
@@ -663,7 +623,6 @@ const UserManagement = () => {
                 }
             });
 
-            console.log('📡 Response status:', response.status);
 
             if (!response.ok) {
                 const errorText = await response.text();
@@ -679,7 +638,6 @@ const UserManagement = () => {
             }
 
             const data = await response.json();
-            console.log('✅ Delete response:', data);
 
             if (response.ok) {
                 alert('Invitation deleted successfully');
@@ -975,7 +933,6 @@ const UserManagement = () => {
                                                     onClick={(e) => {
                                                         e.preventDefault();
                                                         e.stopPropagation();
-                                                        console.log('✅ Edit button clicked for user:', user.name, user.id);
                                                         setEditingUser(user);
                                                         setShowEditUserModal(true);
                                                     }}
@@ -1010,7 +967,6 @@ const UserManagement = () => {
                                                     
                                                     if (userPermissions && userPermissions.length > 0) {
                                                         // User has custom permissions - use them exclusively
-                                                        console.log('📋 Loading custom permissions for user:', user.email, userPermissions);
                                                         finalPermissions = userPermissions;
                                                     } else {
                                                         // No custom permissions - use defaults based on role
@@ -1034,7 +990,6 @@ const UserManagement = () => {
                                                                 });
                                                             }
                                                         });
-                                                        console.log('📋 Using default permissions for user:', user.email, finalPermissions);
                                                     }
                                                     
                                                     setEditingUserPermissions(user);
@@ -1140,15 +1095,9 @@ const UserManagement = () => {
                                                 </button>
                                                 <button
                                                     onClick={(e) => {
-                                                        console.log('🔴 CLICK EVENT FIRED');
-                                                        console.log('🔴 Event target:', e.target);
-                                                        console.log('🔴 Current target:', e.currentTarget);
                                                         e.preventDefault();
                                                         e.stopPropagation();
                                                         e.cancelBubble = true;
-                                                        console.log('🔴 Delete button clicked for invitation:', invitation);
-                                                        console.log('🔴 Invitation ID:', invitation?.id);
-                                                        console.log('🔴 Invitation Email:', invitation?.email);
                                                         alert(`Testing delete for: ${invitation?.email || 'unknown'}`);
                                                         if (!invitation || !invitation.id) {
                                                             console.error('❌ Invalid invitation object:', invitation);
@@ -1158,18 +1107,14 @@ const UserManagement = () => {
                                                         handleDeleteInvitation(invitation.id, invitation.email);
                                                     }}
                                                     onMouseDown={(e) => {
-                                                        console.log('🖱️ MOUSE DOWN EVENT');
                                                         e.preventDefault();
                                                         e.stopPropagation();
                                                         e.cancelBubble = true;
-                                                        console.log('🖱️ Delete button mouse down');
                                                     }}
                                                     onTouchStart={(e) => {
-                                                        console.log('👆 TOUCH START EVENT');
                                                         e.preventDefault();
                                                         e.stopPropagation();
                                                         e.cancelBubble = true;
-                                                        console.log('👆 Delete button touch start');
                                                     }}
                                                     className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 cursor-pointer px-3 py-2 rounded hover:bg-red-50 dark:hover:bg-red-900/20 border border-red-300 dark:border-red-700 hover:border-red-400 dark:hover:border-red-600 min-w-[40px] min-h-[40px] flex items-center justify-center"
                                                     title="Delete Invitation"
@@ -1603,13 +1548,6 @@ const UserManagement = () => {
                                 ...(role === 'guest' && { accessibleProjectIds: accessibleProjectIds })
                             };
                             
-                            console.log('📤 UserManagement: Sending user update:', {
-                                userId: editingUser.id,
-                                role: userData.role,
-                                hasAccessibleProjectIds: userData.accessibleProjectIds !== undefined,
-                                accessibleProjectIds: userData.accessibleProjectIds,
-                                accessibleProjectIdsLength: userData.accessibleProjectIds?.length || 0
-                            });
                             
                             const success = await handleEditUser(editingUser.id, userData);
                             if (success) {
@@ -2204,14 +2142,6 @@ const UserManagement = () => {
                                             userId: editingUserPermissions.id,
                                             permissions: permissionsArray  // Send as array, not stringified
                                         };
-                                        console.log('📤 Sending permissions update:', {
-                                            userId: editingUserPermissions.id,
-                                            selectedPermissions,
-                                            selectedPermissionsType: typeof selectedPermissions,
-                                            isArray: Array.isArray(selectedPermissions),
-                                            permissionsArray,
-                                            requestBody
-                                        });
                                         
                                         const response = await fetch('/api/users', {
                                             method: 'PUT',
@@ -2223,13 +2153,11 @@ const UserManagement = () => {
                                         });
 
                                         const data = await response.json();
-                                        console.log('📥 Response from server:', { status: response.status, data });
                                         
                                         if (response.ok) {
                                             // Handle response format: {data: {success, message, user}}
                                             // The ok() function wraps everything in {data: ...}
                                             const responseUser = data.data?.user || data.user;
-                                            console.log('✅ Permissions saved successfully, response user:', responseUser);
                                             // Update the user in the local state immediately with the response data
                                             if (responseUser) {
                                                 // Parse permissions from response
@@ -2261,7 +2189,6 @@ const UserManagement = () => {
                                                     });
                                                 });
                                                 
-                                                console.log('✅ Updated user in state with permissions:', parsedPermissions);
                                             }
                                             
                                             alert('Permissions updated successfully');
@@ -2305,13 +2232,11 @@ const UserManagement = () => {
 // Make available globally
 try {
     window.UserManagement = UserManagement;
-    console.log('✅ UserManagement.jsx loaded and registered on window.UserManagement', typeof window.UserManagement);
     
     // Dispatch ready event
     if (typeof window.dispatchEvent === 'function') {
         try {
             window.dispatchEvent(new CustomEvent('usersComponentReady'));
-            console.log('📢 Dispatched usersComponentReady event');
             
             // Also dispatch after a small delay in case listeners weren't ready
             setTimeout(() => {

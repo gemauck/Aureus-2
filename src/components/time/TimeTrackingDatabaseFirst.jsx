@@ -15,18 +15,15 @@ const TimeTrackingDatabaseFirst = () => {
 
     // Load time entries from database
     const loadTimeEntries = async () => {
-        console.log('🔄 Loading time entries from database...');
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
-                console.log('⚠️ No authentication token - redirecting to login');
                 window.location.hash = '#/login';
                 return;
             }
 
             const response = await window.api.getTimeEntries();
             const apiEntries = response?.data || [];
-            console.log('📡 Database returned time entries:', apiEntries.length);
             
             // Process time entries data
             const processedEntries = apiEntries.map(entry => ({
@@ -51,12 +48,10 @@ const TimeTrackingDatabaseFirst = () => {
             }));
             
             setTimeEntries(processedEntries);
-            console.log('✅ Time entries loaded from database');
             
         } catch (error) {
             console.error('❌ Failed to load time entries from database:', error);
             if (error.message.includes('Unauthorized') || error.message.includes('401')) {
-                console.log('🔑 Authentication expired - redirecting to login');
                 window.storage.removeToken();
                 window.storage.removeUser();
                 window.location.hash = '#/login';
@@ -68,7 +63,6 @@ const TimeTrackingDatabaseFirst = () => {
 
     // Save time entry to database
     const handleSaveTimeEntry = async (timeEntryData) => {
-        console.log('💾 Saving time entry to database...');
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
@@ -100,7 +94,6 @@ const TimeTrackingDatabaseFirst = () => {
             if (selectedEntry) {
                 // Update existing time entry
                 await window.api.updateTimeEntry(comprehensiveEntry.id, comprehensiveEntry);
-                console.log('✅ Time entry updated in database');
                 
                 // Update local state
                 const updated = timeEntries.map(entry => entry.id === selectedEntry.id ? comprehensiveEntry : entry);
@@ -109,7 +102,6 @@ const TimeTrackingDatabaseFirst = () => {
             } else {
                 // Create new time entry
                 const newEntry = await window.api.createTimeEntry(comprehensiveEntry);
-                console.log('✅ Time entry created in database');
                 
                 // Add to local state
                 setTimeEntries(prev => [...prev, newEntry]);
@@ -133,7 +125,6 @@ const TimeTrackingDatabaseFirst = () => {
             return;
         }
 
-        console.log(`💾 Deleting time entry ${entryId} from database...`);
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
@@ -142,7 +133,6 @@ const TimeTrackingDatabaseFirst = () => {
             }
 
             await window.api.deleteTimeEntry(entryId);
-            console.log('✅ Time entry deleted from database');
             
             // Update local state
             setTimeEntries(prev => prev.filter(entry => entry.id !== entryId));

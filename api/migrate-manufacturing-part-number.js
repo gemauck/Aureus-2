@@ -6,7 +6,6 @@ import { withLogging } from './_lib/logger.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔧 Running migration to add Manufacturing Part Number field...')
     
     // Add manufacturingPartNumber column to InventoryItem table
     await prisma.$executeRawUnsafe(`
@@ -14,7 +13,6 @@ async function handler(req, res) {
       ADD COLUMN IF NOT EXISTS "manufacturingPartNumber" TEXT DEFAULT '';
     `)
     
-    console.log('✅ Manufacturing Part Number column added successfully')
     
     // Verify the column exists
     const columnCheck = await prisma.$queryRawUnsafe(`
@@ -25,7 +23,6 @@ async function handler(req, res) {
     `)
     
     if (columnCheck && columnCheck.length > 0) {
-      console.log('✅ Column verification passed')
       
       return ok(res, { 
         message: 'Manufacturing Part Number migration completed successfully',
@@ -43,7 +40,6 @@ async function handler(req, res) {
   } catch (e) {
     // If column already exists, that's fine
     if (e.message && e.message.includes('already exists')) {
-      console.log('✅ Column already exists (this is fine)')
       return ok(res, { 
         message: 'Column already exists',
         migrationPassed: true,

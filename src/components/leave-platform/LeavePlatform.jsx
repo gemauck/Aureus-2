@@ -158,7 +158,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         const [showEmployeeModal, setShowEmployeeModal] = useState(false);
         const [viewingEmployeeId, setViewingEmployeeId] = useState(null);
         
-        console.log('✅ LeavePlatform component rendering, user:', user?.email || 'none');
         useEffect(() => {
             setCurrentTab(initialTab);
         }, [initialTab]);
@@ -181,11 +180,9 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         useEffect(() => {
             const handleComponentLoaded = (event) => {
                 if (event.detail?.component === 'EmployeeDetail') {
-                    console.log('✅ EmployeeDetail component loaded, updating reference');
                     setEmployeeDetailComponent(window.EmployeeDetail);
                 }
                 if (event.detail?.component === 'EmployeeManagement') {
-                    console.log('✅ EmployeeManagement component loaded, updating reference');
                     setEmployeeManagementComponent(window.EmployeeManagement);
                 }
             };
@@ -217,7 +214,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                 if (window.EmployeeDetail) {
                     setEmployeeDetailComponent(prev => {
                         if (!prev) {
-                            console.log('✅ EmployeeDetail component found via polling, updating reference');
                             return window.EmployeeDetail;
                         }
                         return prev;
@@ -227,7 +223,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                 if (window.EmployeeManagement) {
                     setEmployeeManagementComponent(prev => {
                         if (!prev) {
-                            console.log('✅ EmployeeManagement component found via polling, updating reference');
                             return window.EmployeeManagement;
                         }
                         return prev;
@@ -341,7 +336,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                 return;
             }
             
-            console.log('⚡ Leave Platform: Loading essential data...');
             const startTime = performance.now();
             
             // Only load what's needed for the initial "My Leave" tab
@@ -360,7 +354,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                 try {
                     const apps = await appsResponse.value.json();
                     setLeaveApplications(apps.applications || apps.data?.applications || []);
-                    console.log(`✅ Loaded ${apps.applications?.length || apps.data?.applications?.length || 0} leave applications`);
                 } catch (e) {
                     console.warn('Error parsing applications:', e);
                 }
@@ -372,7 +365,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                 try {
                     const balances = await balancesResponse.value.json();
                     setLeaveBalances(balances.balances || balances.data?.balances || []);
-                    console.log(`✅ Loaded ${balances.balances?.length || balances.data?.balances?.length || 0} leave balances`);
                 } catch (e) {
                     console.warn('Error parsing balances:', e);
                 }
@@ -381,7 +373,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             }
 
             const loadTime = ((performance.now() - startTime) / 1000).toFixed(2);
-            console.log(`⚡ Leave Platform: Essential data loaded (${loadTime}s)`);
 
             // Load remaining data in background (non-blocking)
             setTimeout(() => {
@@ -395,14 +386,12 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
     // Load remaining data in background
     const loadRemainingData = async () => {
         try {
-            console.log('🔍 Leave Platform: loadRemainingData called');
             const headers = getAuthHeaders();
             if (!headers.Authorization) {
                 console.warn('⚠️ Leave Platform: No auth token for remaining data');
                 return;
             }
             
-            console.log('⚡ Leave Platform: Loading remaining data in background...');
             const startTime = performance.now();
             
             const [employeesResponse, deptsResponse, approversResponse, birthdaysResponse] = await Promise.allSettled([
@@ -417,7 +406,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                     const users = await employeesResponse.value.json();
                     const employeesData = users.users || users.data?.users || [];
                     setEmployees(employeesData);
-                    console.log(`✅ Loaded ${employeesData.length} employees`);
                     if (employeesData.length === 0) {
                         console.warn('⚠️ Leave Platform: No employees found in API response. Response structure:', users);
                     }
@@ -470,7 +458,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             }
 
             const loadTime = ((performance.now() - startTime) / 1000).toFixed(2);
-            console.log(`⚡ Leave Platform: Remaining data loaded (${loadTime}s)`);
         } catch (error) {
             console.error('Error loading remaining data:', error);
         }
@@ -531,7 +518,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                 const users = await parseArray(employeesResponse, ['users', 'data.users']);
                 if (users.length || employeesResponse.status === 'fulfilled') {
                     setEmployees(users);
-                    console.log(`✅ Reloaded ${users.length} employees`);
                     if (users.length === 0 && employeesResponse.status === 'fulfilled' && employeesResponse.value?.ok) {
                         console.warn('⚠️ Leave Platform: No employees found after reload');
                     }
@@ -554,7 +540,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
 
             const endTime = performance.now();
             const loadTime = ((endTime - startTime) / 1000).toFixed(2);
-                console.log(`⚡ Leave Platform: Data loaded (${loadTime}s)`);
         } catch (error) {
             console.error('Error loading data:', error);
         } finally {
@@ -585,7 +570,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
 
                 if (response.ok) {
                     if (successMessage) {
-                        console.log(successMessage);
                     }
                     await loadData({ silent: true });
                     return true;
@@ -771,9 +755,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         }, []);
 
         const handleEmployeeClick = useCallback((employee) => {
-            console.log('👤 Employee clicked:', employee);
             if (employee && employee.id) {
-                console.log('✅ Setting viewingEmployeeId to:', employee.id);
                 setViewingEmployeeId(employee.id);
             } else {
                 console.error('❌ Employee missing or missing id:', employee);
@@ -849,9 +831,6 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                     }
                     // Show employee detail view if an employee is selected
                     if (viewingEmployeeId) {
-                        console.log('🔍 Attempting to render EmployeeDetail for employee:', viewingEmployeeId);
-                        console.log('🔍 EmployeeDetailComponent available:', !!EmployeeDetailComponent);
-                        console.log('🔍 EmployeeDetailComponent type:', typeof EmployeeDetailComponent);
                         
                         if (EmployeeDetailComponent && typeof EmployeeDetailComponent === 'function') {
                             try {
@@ -2730,15 +2709,11 @@ const ImportBalancesView = ({ onImport }) => {
 try {
     if (typeof window !== 'undefined') {
         window.LeavePlatform = LeavePlatform;
-        console.log('✅ LeavePlatform component loaded and registered on window.LeavePlatform');
-        console.log('✅ LeavePlatform component type:', typeof LeavePlatform);
-        console.log('✅ LeavePlatform is function:', typeof LeavePlatform === 'function');
         
         // Dispatch event to notify that component is ready
         if (typeof window.dispatchEvent !== 'undefined') {
             try {
                 window.dispatchEvent(new CustomEvent('leavePlatformComponentReady'));
-                console.log('✅ LeavePlatform: Dispatched leavePlatformComponentReady event');
             } catch (e) {
                 console.warn('⚠️ LeavePlatform: Failed to dispatch event:', e);
             }

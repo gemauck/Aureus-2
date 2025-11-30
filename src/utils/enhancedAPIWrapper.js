@@ -43,14 +43,12 @@ class EnhancedAPIWrapper {
 
     // Handle online mode
     handleOnlineMode() {
-        console.log('🌐 Connection restored - processing queued requests');
         this.connectionStatus = 'online';
         this.processQueue();
     }
 
     // Handle offline mode
     handleOfflineMode() {
-        console.log('📴 Connection lost - queuing requests');
         this.connectionStatus = 'offline';
     }
 
@@ -92,7 +90,6 @@ class EnhancedAPIWrapper {
 
         // If offline, queue the request
         if (this.connectionStatus === 'offline') {
-            console.log(`📴 Offline - queuing ${method} ${endpoint}`);
             this.requestQueue.push(requestConfig);
             return this.createOfflineResponse(requestConfig);
         }
@@ -202,7 +199,6 @@ class EnhancedAPIWrapper {
             // Remove from pending requests
             this.pendingRequests.delete(id);
             
-            console.log(`✅ ${method} ${endpoint} completed successfully`);
             return result;
 
         } catch (error) {
@@ -236,7 +232,6 @@ class EnhancedAPIWrapper {
             this.retryConfig.maxDelay
         );
 
-        console.log(`🔄 Retrying ${requestConfig.method} ${requestConfig.endpoint} (attempt ${requestConfig.retryCount}) after ${delay}ms`);
 
         await new Promise(resolve => setTimeout(resolve, delay));
         
@@ -265,7 +260,6 @@ class EnhancedAPIWrapper {
         }
 
         this.isProcessingQueue = true;
-        console.log(`🔄 Processing ${this.requestQueue.length} queued requests`);
 
         try {
             // Sort by priority and timestamp
@@ -336,7 +330,6 @@ class EnhancedAPIWrapper {
 
     // Enhanced CRUD operations with state management integration
     async createClient(clientData) {
-        console.log('🆕 Creating client with enhanced API:', clientData);
         
         try {
             const result = await this.post('/clients', clientData, { priority: 'high' });
@@ -356,7 +349,6 @@ class EnhancedAPIWrapper {
     }
 
     async updateClient(id, clientData) {
-        console.log(`🔄 Updating client ${id} with enhanced API:`, clientData);
         
         try {
             const result = await this.patch(`/clients/${id}`, clientData, { priority: 'high' });
@@ -378,7 +370,6 @@ class EnhancedAPIWrapper {
     }
 
     async deleteClient(id) {
-        console.log(`🗑️ Deleting client ${id} with enhanced API`);
         
         try {
             const result = await this.delete(`/clients/${id}`, { priority: 'high' });
@@ -398,7 +389,6 @@ class EnhancedAPIWrapper {
     }
 
     async getClients() {
-        console.log('📡 Fetching clients with enhanced API');
         
         try {
             const result = await this.get('/clients', { priority: 'normal' });
@@ -417,7 +407,6 @@ class EnhancedAPIWrapper {
 
     // Similar methods for other entities
     async createLead(leadData) {
-        console.log('🆕 Creating lead with enhanced API:', leadData);
         
         try {
             const result = await this.post('/leads', leadData, { priority: 'high' });
@@ -436,7 +425,6 @@ class EnhancedAPIWrapper {
     }
 
     async updateLead(id, leadData) {
-        console.log(`🔄 Updating lead ${id} with enhanced API:`, leadData);
         
         try {
             const result = await this.patch(`/leads/${id}`, leadData, { priority: 'high' });
@@ -457,7 +445,6 @@ class EnhancedAPIWrapper {
     }
 
     async deleteLead(id) {
-        console.log(`🗑️ Deleting lead ${id} with enhanced API`);
         
         try {
             const result = await this.delete(`/leads/${id}`, { priority: 'high' });
@@ -476,7 +463,6 @@ class EnhancedAPIWrapper {
     }
 
     async getLeads() {
-        console.log('📡 Fetching leads with enhanced API');
         
         try {
             const result = await this.get('/leads', { priority: 'normal' });
@@ -518,7 +504,6 @@ class EnhancedAPIWrapper {
         
         // Debugging disabled
         if (window.debug && window.debug.enabled) {
-            console.log('🧹 Request queue cleared');
         }
     }
 }
@@ -529,7 +514,6 @@ window.EnhancedAPIWrapper = new EnhancedAPIWrapper();
 // Debug function - disabled by default
 window.debugEnhancedAPI = () => {
     // Debugging disabled - uncomment to enable:
-    // console.log('🔍 Enhanced API Wrapper Debug:', window.EnhancedAPIWrapper.getConnectionStatus());
 };
 
 export default EnhancedAPIWrapper;

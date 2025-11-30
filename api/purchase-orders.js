@@ -8,12 +8,6 @@ import { withLogging } from './_lib/logger.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔍 Purchase Orders API Debug:', {
-      method: req.method,
-      url: req.url,
-      headers: req.headers,
-      user: req.user
-    })
     
     // Parse the URL path - strip /api/ prefix if present
     const urlPath = req.url.split('?')[0].split('#')[0].replace(/^\/api\//, '/')
@@ -35,7 +29,6 @@ async function handler(req, res) {
           },
           orderBy: { createdAt: 'desc' } 
         })
-        console.log('✅ Purchase orders retrieved successfully:', purchaseOrders.length)
         return ok(res, { purchaseOrders })
       } catch (dbError) {
         console.error('❌ Database error listing purchase orders:', dbError)
@@ -94,7 +87,6 @@ async function handler(req, res) {
         ownerId: req.user?.sub || null
       }
 
-      console.log('🔍 Creating purchase order with data:', purchaseOrderData)
       try {
         const purchaseOrder = await prisma.purchaseOrder.create({
           data: purchaseOrderData
@@ -106,7 +98,6 @@ async function handler(req, res) {
           items: typeof purchaseOrder.items === 'string' ? JSON.parse(purchaseOrder.items) : purchaseOrder.items
         }
         
-        console.log('✅ Purchase order created successfully:', purchaseOrder.id)
         return created(res, { purchaseOrder: responseOrder })
       } catch (dbError) {
         console.error('❌ Database error creating purchase order:', dbError)
@@ -138,7 +129,6 @@ async function handler(req, res) {
             items: typeof purchaseOrder.items === 'string' ? JSON.parse(purchaseOrder.items) : purchaseOrder.items
           }
           
-          console.log('✅ Purchase order retrieved successfully:', purchaseOrder.id)
           return ok(res, { purchaseOrder: responseOrder })
         } catch (dbError) {
           console.error('❌ Database error getting purchase order:', dbError)
@@ -188,7 +178,6 @@ async function handler(req, res) {
         
         // If status is changing to 'received', create stock movements
         if (newStatus === 'received' && oldStatus !== 'received') {
-          console.log(`📦 Purchase order ${id} status changing to 'received' - creating stock movements`)
           
           try {
             // Parse items from existing order or update data
@@ -361,7 +350,6 @@ async function handler(req, res) {
                     })
                   }
                   
-                  console.log(`✅ Stock movement created for ${item.sku} (${quantity} units)`)
                 }
                 
                 // Update purchase order with received date if not set
@@ -378,7 +366,6 @@ async function handler(req, res) {
                 timeout: 30000
               })
               
-              console.log(`✅ Stock movements created successfully for purchase order ${id}`)
             }
           } catch (stockMovementError) {
             console.error('❌ Error creating stock movements:', stockMovementError)
@@ -386,7 +373,6 @@ async function handler(req, res) {
           }
         } else {
           // Normal update without stock movement creation
-          console.log('🔍 Updating purchase order with data:', updateData)
           try {
             const purchaseOrder = await prisma.purchaseOrder.update({ 
               where: { id }, 
@@ -399,7 +385,6 @@ async function handler(req, res) {
               items: typeof purchaseOrder.items === 'string' ? JSON.parse(purchaseOrder.items) : purchaseOrder.items
             }
             
-            console.log('✅ Purchase order updated successfully:', purchaseOrder.id)
             return ok(res, { purchaseOrder: responseOrder })
           } catch (dbError) {
             console.error('❌ Database error updating purchase order:', dbError)
@@ -424,7 +409,6 @@ async function handler(req, res) {
       if (req.method === 'DELETE') {
         try {
           await prisma.purchaseOrder.delete({ where: { id } })
-          console.log('✅ Purchase order deleted successfully:', id)
           return ok(res, { deleted: true })
         } catch (dbError) {
           console.error('❌ Database error deleting purchase order:', dbError)

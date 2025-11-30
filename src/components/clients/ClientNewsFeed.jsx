@@ -50,14 +50,11 @@ const ClientNewsFeed = () => {
     const loadActivities = async () => {
         setIsLoading(true);
         try {
-            console.log('📰 Loading activities from clients and leads...');
             
             // Fetch activities from all clients' and leads' activityLogs
             const clientsResponse = await window.DatabaseAPI?.getClients();
             const leadsResponse = await window.DatabaseAPI?.getLeads?.();
             
-            console.log('📰 Clients response:', clientsResponse);
-            console.log('📰 Leads response:', leadsResponse);
             
             const allActivities = [];
             
@@ -71,7 +68,6 @@ const ClientNewsFeed = () => {
                 clients = clientsResponse;
             }
             
-            console.log('📰 Processing clients:', clients.length);
             
             clients.forEach(client => {
                 // Only process actual clients (type === 'client' or null/undefined)
@@ -83,7 +79,6 @@ const ClientNewsFeed = () => {
                     ? client.activityLog 
                     : (typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : []);
                 
-                console.log(`📰 Client ${client.name}: ${activityLog.length} activities`);
                 
                 activityLog.forEach(activity => {
                     allActivities.push({
@@ -106,7 +101,6 @@ const ClientNewsFeed = () => {
                 leads = leadsResponse;
             }
             
-            console.log('📰 Processing leads:', leads.length);
             
             leads.forEach(lead => {
                 // Only process actual leads
@@ -118,7 +112,6 @@ const ClientNewsFeed = () => {
                     ? lead.activityLog 
                     : (typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : []);
                 
-                console.log(`📰 Lead ${lead.name}: ${activityLog.length} activities`);
                 
                 activityLog.forEach(activity => {
                     allActivities.push({
@@ -131,11 +124,6 @@ const ClientNewsFeed = () => {
                 });
             });
             
-            console.log('📰 Total activities loaded:', allActivities.length);
-            console.log('📰 Activities breakdown:', {
-                clients: allActivities.filter(a => a.clientType === 'client').length,
-                leads: allActivities.filter(a => a.clientType === 'lead').length
-            });
 
                 // Filter by client if selected
                 let filtered = allActivities;
@@ -176,7 +164,6 @@ const ClientNewsFeed = () => {
 
     const loadNewsArticles = async () => {
         try {
-            console.log('📰 Loading news articles...');
             
             // Get token using the same method as other components
             const token = window.storage?.getToken?.();
@@ -201,31 +188,16 @@ const ClientNewsFeed = () => {
                 credentials: 'include'
             });
             
-            console.log('📰 API Response status:', response.status);
             
             if (response.ok) {
                 const data = await response.json();
-                console.log('📰 API Response data structure:', {
-                    hasData: !!data.data,
-                    hasNewsArticles: !!data.data?.newsArticles,
-                    newsArticlesCount: data.data?.newsArticles?.length || 0,
-                    directNewsArticlesCount: data.newsArticles?.length || 0
-                });
                 
                 // API returns { data: { newsArticles: [...] } }
                 let articles = data?.data?.newsArticles || data?.newsArticles || [];
-                console.log(`📰 Parsed articles count: ${articles.length}`);
                 
                 // Log client IDs and subscription status for debugging
                 if (articles.length > 0) {
                     const clientIds = [...new Set(articles.map(a => a.clientId))];
-                    console.log(`📰 Articles from ${clientIds.length} unique clients:`, clientIds.slice(0, 10));
-                    console.log('📰 First article sample:', {
-                        id: articles[0].id,
-                        title: articles[0].title?.substring(0, 50),
-                        clientId: articles[0].clientId,
-                        clientName: articles[0].clientName
-                    });
                 }
                 
                 // Filter by client if selected
@@ -256,7 +228,6 @@ const ClientNewsFeed = () => {
                 // Sort by published date (newest first)
                 articles.sort((a, b) => new Date(b.publishedAt || b.createdAt) - new Date(a.publishedAt || a.createdAt));
                 
-                console.log('📰 Setting articles to state:', articles.length);
                 setNewsArticles(articles);
             } else {
                 console.error('📰 API response not OK:', response.status, response.statusText);
@@ -487,7 +458,6 @@ const ClientNewsFeed = () => {
                             </p>
                             <button
                                 onClick={() => {
-                                    console.log('🔄 Manual refresh triggered');
                                     loadNewsArticles();
                                 }}
                                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
@@ -581,7 +551,6 @@ const ClientNewsFeed = () => {
                                                     if (confirm(`Unsubscribe from news feed for ${article.clientName}? You won't receive new articles for this ${article.clientType === 'lead' ? 'lead' : 'client'} anymore.`)) {
                                                         try {
                                                             const token = window.storage?.getToken?.();
-                                                            console.log(`🔔 Unsubscribing from ${article.clientName} news feed...`);
                                                             
                                                             const response = await fetch(`/api/clients/${article.clientId}/rss-subscription`, {
                                                                 method: 'POST',
@@ -596,12 +565,9 @@ const ClientNewsFeed = () => {
                                                             
                                                             if (response.ok) {
                                                                 const result = await response.json();
-                                                                console.log('✅ Unsubscribe response:', result);
-                                                                console.log(`✅ Client ${result.client?.name} now has rssSubscribed: ${result.client?.rssSubscribed}`);
                                                                 
                                                                 // Verify the unsubscribe worked
                                                                 if (result.client?.rssSubscribed === false) {
-                                                                    console.log('✅ Unsubscribe confirmed - rssSubscribed is now false');
                                                                 } else {
                                                                     console.warn('⚠️ WARNING: Unsubscribe may not have worked - rssSubscribed is:', result.client?.rssSubscribed);
                                                                 }

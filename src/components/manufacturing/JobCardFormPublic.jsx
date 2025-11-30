@@ -381,7 +381,6 @@ const JobCardFormPublic = () => {
     const defaultLat = formData.latitude ? parseFloat(formData.latitude) : -25.7479; // South Africa default
     const defaultLng = formData.longitude ? parseFloat(formData.longitude) : 28.2293;
 
-    console.log('🗺️ JobCardFormPublic: Initializing map at', defaultLat, defaultLng);
 
     // Ensure container is visible
     if (mapContainerRef.current) {
@@ -400,7 +399,6 @@ const JobCardFormPublic = () => {
       zoomControl: true
     });
 
-    console.log('✅ JobCardFormPublic: Map created successfully');
 
     // Add tile layer
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -481,11 +479,9 @@ const JobCardFormPublic = () => {
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      console.log('🌐 Connection restored');
     };
     const handleOffline = () => {
       setIsOnline(false);
-      console.log('📴 Connection lost - working offline');
     };
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -498,7 +494,6 @@ const JobCardFormPublic = () => {
   useEffect(() => {
     const loadClients = async () => {
       try {
-        console.log('📡 JobCardFormPublic: Loading clients...');
         
         // Always load from cache first
         const cached1 = JSON.parse(localStorage.getItem('manufacturing_clients') || '[]');
@@ -510,10 +505,8 @@ const JobCardFormPublic = () => {
           return (status === 'active' || status === '' || !c.status) && (type === 'client' || !c.type);
         }) : [];
         
-        console.log(`📋 JobCardFormPublic: Found ${activeClients.length} active clients in cache`);
         
         if (activeClients.length > 0) {
-          console.log('✅ JobCardFormPublic: Setting clients from cache');
           setClients(activeClients);
         }
         
@@ -522,7 +515,6 @@ const JobCardFormPublic = () => {
         // Try to load from public API endpoint (no auth required)
         if (isOnline) {
           try {
-            console.log('📡 JobCardFormPublic: Attempting to load clients from public API...');
             const response = await fetch('/api/public/clients', {
               method: 'GET',
               headers: {
@@ -534,7 +526,6 @@ const JobCardFormPublic = () => {
               const data = await response.json();
               const clients = data?.data?.clients || data?.clients || [];
               
-              console.log(`✅ JobCardFormPublic: Loaded ${clients.length} clients from public API`);
               if (clients.length > 0) {
                 setClients(clients);
                 localStorage.setItem('manufacturing_clients', JSON.stringify(clients));
@@ -554,7 +545,6 @@ const JobCardFormPublic = () => {
                       return (status === 'active' || status === '' || !c.status) && (type === 'client' || !c.type);
                     }) : [];
                     if (active.length > 0) {
-                      console.log(`✅ JobCardFormPublic: Loaded ${active.length} clients from authenticated API`);
                       setClients(active);
                       localStorage.setItem('manufacturing_clients', JSON.stringify(active));
                       localStorage.setItem('clients', JSON.stringify(active));
@@ -580,24 +570,20 @@ const JobCardFormPublic = () => {
   useEffect(() => {
     const loadUsers = async () => {
       try {
-        console.log('📡 JobCardFormPublic: Loading users...');
         
         // Always load from cache first
         const cached1 = JSON.parse(localStorage.getItem('manufacturing_users') || '[]');
         const cached2 = JSON.parse(localStorage.getItem('users') || '[]');
         const cached = cached1.length > 0 ? cached1 : cached2;
         
-        console.log(`📋 JobCardFormPublic: Found ${cached.length} users in cache`);
         
         if (cached.length > 0) {
-          console.log('✅ JobCardFormPublic: Setting users from cache');
           setUsers(cached);
         }
 
         // Try to load from public API endpoint (no auth required)
         if (isOnline) {
           try {
-            console.log('📡 JobCardFormPublic: Attempting to load users from public API...');
             const response = await fetch('/api/public/users', {
               method: 'GET',
               headers: {
@@ -609,7 +595,6 @@ const JobCardFormPublic = () => {
               const data = await response.json();
               const usersData = data?.data?.users || data?.users || [];
               
-              console.log(`✅ JobCardFormPublic: Loaded ${usersData.length} users from public API`);
               if (usersData.length > 0) {
                 setUsers(usersData);
                 localStorage.setItem('manufacturing_users', JSON.stringify(usersData));
@@ -624,7 +609,6 @@ const JobCardFormPublic = () => {
                   if (response?.data?.users || Array.isArray(response?.data)) {
                     const usersData = response.data.users || response.data || [];
                     if (usersData.length > 0) {
-                      console.log(`✅ JobCardFormPublic: Loaded ${usersData.length} users from authenticated API`);
                       setUsers(usersData);
                       localStorage.setItem('manufacturing_users', JSON.stringify(usersData));
                       localStorage.setItem('users', JSON.stringify(usersData));
@@ -649,21 +633,17 @@ const JobCardFormPublic = () => {
   useEffect(() => {
     const loadStockData = async () => {
       try {
-        console.log('📡 JobCardFormPublic: Loading inventory...');
         
         // Always load from cache first
         const cachedInventory = JSON.parse(localStorage.getItem('manufacturing_inventory') || '[]');
-        console.log(`📋 JobCardFormPublic: Found ${cachedInventory.length} inventory items in cache`);
         
         if (cachedInventory.length > 0) {
-          console.log('✅ JobCardFormPublic: Setting inventory from cache');
           setInventory(cachedInventory);
         }
 
         // Try to load from public API endpoint (no auth required)
         if (isOnline) {
           try {
-            console.log('📡 JobCardFormPublic: Attempting to load inventory from public API...');
             const response = await fetch('/api/public/inventory', {
               method: 'GET',
               headers: {
@@ -675,7 +655,6 @@ const JobCardFormPublic = () => {
               const data = await response.json();
               const inventoryItems = data?.data?.inventory || data?.inventory || [];
               
-              console.log(`✅ JobCardFormPublic: Loaded ${inventoryItems.length} inventory items from public API`);
               if (inventoryItems.length > 0) {
                 setInventory(inventoryItems);
                 localStorage.setItem('manufacturing_inventory', JSON.stringify(inventoryItems));
@@ -690,7 +669,6 @@ const JobCardFormPublic = () => {
                   if (response?.data?.inventory || Array.isArray(response?.data)) {
                     const inventoryItems = response.data.inventory || response.data || [];
                     if (inventoryItems.length > 0) {
-                      console.log(`✅ JobCardFormPublic: Loaded ${inventoryItems.length} inventory items from authenticated API`);
                       setInventory(inventoryItems);
                       localStorage.setItem('manufacturing_inventory', JSON.stringify(inventoryItems));
                     }
@@ -705,17 +683,14 @@ const JobCardFormPublic = () => {
           }
         }
         
-        console.log('📡 JobCardFormPublic: Loading locations...');
         
         // Always load from cache first
         const cachedLocations1 = JSON.parse(localStorage.getItem('stock_locations') || '[]');
         const cachedLocations2 = JSON.parse(localStorage.getItem('manufacturing_locations') || '[]');
         const cachedLocations = cachedLocations1.length > 0 ? cachedLocations1 : cachedLocations2;
         
-        console.log(`📋 JobCardFormPublic: Found ${cachedLocations.length} locations in cache`);
         
         if (cachedLocations.length > 0) {
-          console.log('✅ JobCardFormPublic: Setting locations from cache');
           setStockLocations(cachedLocations);
         } else {
           const defaultLocations = [
@@ -729,7 +704,6 @@ const JobCardFormPublic = () => {
         // Try to load from public API endpoint (no auth required)
         if (isOnline) {
           try {
-            console.log('📡 JobCardFormPublic: Attempting to load locations from public API...');
             const response = await fetch('/api/public/locations', {
               method: 'GET',
               headers: {
@@ -741,7 +715,6 @@ const JobCardFormPublic = () => {
               const data = await response.json();
               const locations = data?.data?.locations || data?.locations || [];
               
-              console.log(`✅ JobCardFormPublic: Loaded ${locations.length} locations from public API`);
               if (locations.length > 0) {
                 setStockLocations(locations);
                 localStorage.setItem('stock_locations', JSON.stringify(locations));
@@ -757,7 +730,6 @@ const JobCardFormPublic = () => {
                   if (response?.data?.locations || Array.isArray(response?.data)) {
                     const locations = response.data.locations || response.data || [];
                     if (locations.length > 0) {
-                      console.log(`✅ JobCardFormPublic: Loaded ${locations.length} locations from authenticated API`);
                       setStockLocations(locations);
                       localStorage.setItem('stock_locations', JSON.stringify(locations));
                       localStorage.setItem('manufacturing_locations', JSON.stringify(locations));
@@ -798,17 +770,14 @@ const JobCardFormPublic = () => {
           return;
         }
 
-        console.log('📡 JobCardFormPublic: Loading sites for client:', client.id);
         
         // First, try to get sites from client object
         let sites = typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []);
         
-        console.log(`📋 JobCardFormPublic: Found ${sites.length} sites in client object`);
         
         // Also try to load from API if online
         if (isOnline && sites.length === 0) {
           try {
-            console.log('📡 JobCardFormPublic: Attempting to load sites from API...');
             const response = await fetch(`/api/sites/client/${formData.clientId}`, {
               method: 'GET',
               headers: {
@@ -820,7 +789,6 @@ const JobCardFormPublic = () => {
               const data = await response.json();
               const apiSites = data?.data?.sites || data?.sites || [];
               if (Array.isArray(apiSites) && apiSites.length > 0) {
-                console.log(`✅ JobCardFormPublic: Loaded ${apiSites.length} sites from API`);
                 sites = apiSites;
               }
             } else {
@@ -833,7 +801,6 @@ const JobCardFormPublic = () => {
         
         setAvailableSites(sites);
         setFormData(prev => ({ ...prev, clientName: client.name || '' }));
-        console.log(`✅ JobCardFormPublic: Set ${sites.length} sites for client`);
       } else {
         setAvailableSites([]);
         setFormData(prev => ({ ...prev, siteId: '', siteName: '' }));
@@ -1018,20 +985,12 @@ const JobCardFormPublic = () => {
           // Try cache as fallback
           const cached = JSON.parse(localStorage.getItem('service_form_templates') || '[]');
           if (cached.length > 0 && !cancelled) {
-            console.log('📦 JobCardFormPublic: Using cached templates:', cached.length);
             setFormTemplates(cached);
           }
           return;
         }
 
         const data = await response.json();
-        console.log('📋 JobCardFormPublic: Raw API response:', {
-          hasData: !!data.data,
-          hasTemplates: !!data.templates,
-          hasDataTemplates: !!data.data?.templates,
-          keys: Object.keys(data),
-          dataKeys: data.data ? Object.keys(data.data) : []
-        });
         
         // The API wraps responses in { data: ... }, so templates are at data.data.templates
         const templates = Array.isArray(data.data?.templates) 
@@ -1040,10 +999,6 @@ const JobCardFormPublic = () => {
             ? data.templates 
             : [];
         
-        console.log('📋 JobCardFormPublic: Loaded form templates:', {
-          templateCount: templates.length,
-          templates: templates.map(t => ({ id: t.id, name: t.name }))
-        });
         
         if (!cancelled) {
           setFormTemplates(templates);
@@ -1279,7 +1234,6 @@ const JobCardFormPublic = () => {
       // Primary persistence: use public, unauthenticated job cards API
       // This creates a real job card record that appears in Service & Maintenance
       try {
-        console.log('📡 JobCardFormPublic: Submitting job card to public API...');
         const response = await fetch('/api/public/jobcards', {
           method: 'POST',
           headers: {
@@ -1298,7 +1252,6 @@ const JobCardFormPublic = () => {
         const saved = result?.jobCard || result?.data?.jobCard || null;
 
         if (saved && saved.id) {
-          console.log('✅ JobCardFormPublic: Job card created via public API:', saved);
           // Optionally update local copy with server ID / number so future tooling can reconcile
           const syncedCards = updatedJobCards.map((jc) =>
             jc.id === jobCardData.id
@@ -2627,7 +2580,6 @@ const JobCardFormPublic = () => {
 try {
   window.JobCardFormPublic = JobCardFormPublic;
   if (window.debug && !window.debug.performanceMode) {
-    console.log('✅ JobCardFormPublic.jsx loaded and registered');
   }
 } catch (error) {
   console.error('❌ JobCardFormPublic.jsx: Error registering component:', error);

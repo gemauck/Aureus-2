@@ -20,7 +20,6 @@ const DashboardDatabaseFirst = () => {
 
     // Load dashboard data from database
     const loadDashboardData = async () => {
-        console.log('📊 Loading dashboard data from database...');
         setIsLoading(true);
         setError(null);
 
@@ -28,7 +27,6 @@ const DashboardDatabaseFirst = () => {
             // Check if user is authenticated
             const token = window.storage?.getToken?.();
             if (!token) {
-                console.log('⚠️ No auth token, showing empty dashboard');
                 setDashboardData({
                     clients: [],
                     leads: [],
@@ -95,7 +93,6 @@ const DashboardDatabaseFirst = () => {
                 window.storage.setLeads(leads);
                 window.storage.setProjects(projects);
                 window.storage.setTimeEntries(timeEntries);
-                console.log('✅ Dashboard: Cached all data to localStorage');
             }
 
             setDashboardData({
@@ -107,7 +104,6 @@ const DashboardDatabaseFirst = () => {
             });
 
             setLastUpdated(new Date());
-            console.log('✅ Dashboard data loaded successfully');
 
         } catch (error) {
             console.error('❌ Failed to load dashboard data:', error);

@@ -88,7 +88,6 @@ window.ListModal = ListModal;
 
 try {
     window.dispatchEvent(new CustomEvent('componentLoaded', { detail: { component: 'ListModal' } }));
-    console.log('✅ ListModal registered and componentLoaded event dispatched');
 } catch (error) {
     console.warn('⚠️ Failed to dispatch componentLoaded event for ListModal:', error);
 }

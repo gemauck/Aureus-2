@@ -7,12 +7,6 @@ import { withLogging } from '../../_lib/logger.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔍 Client Tags API Debug:', {
-      method: req.method,
-      url: req.url,
-      headers: req.headers,
-      user: req.user
-    })
     
     // Extract client ID from req.params
     const clientId = req.params.id
@@ -43,7 +37,6 @@ async function handler(req, res) {
         })
         
         const tags = clientTags.map(ct => ct.tag)
-        console.log('✅ Client tags retrieved successfully:', tags.length)
         return ok(res, { tags })
       } catch (dbError) {
         console.error('❌ Database error getting client tags:', dbError)
@@ -91,7 +84,6 @@ async function handler(req, res) {
             tag: true
           }
         })
-        console.log('✅ Tag associated with client successfully')
         return created(res, { tag: clientTag.tag })
       } catch (dbError) {
         console.error('❌ Database error associating tag:', dbError)
@@ -117,7 +109,6 @@ async function handler(req, res) {
             }
           }
         })
-        console.log('✅ Tag removed from client successfully')
         return ok(res, { message: 'Tag removed successfully' })
       } catch (dbError) {
         if (dbError.code === 'P2025') {

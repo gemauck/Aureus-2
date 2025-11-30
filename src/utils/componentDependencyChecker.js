@@ -50,7 +50,6 @@ window.waitForComponent = function(componentName, timeout = 5000) {
         const check = () => {
             const status = window.checkComponentDependencies(componentName);
             if (status.available) {
-                console.log(`✅ ${componentName} and dependencies are available`);
                 resolve(true);
                 return;
             }
@@ -94,7 +93,6 @@ window.waitForComponent = function(componentName, timeout = 5000) {
  * Logs warnings for missing dependencies
  */
 window.validateAllDependencies = function() {
-    console.log('🔍 Validating component dependencies...');
     
     Object.keys(COMPONENT_DEPENDENCIES).forEach(componentName => {
         const status = window.checkComponentDependencies(componentName);
@@ -102,9 +100,7 @@ window.validateAllDependencies = function() {
         if (status.componentAvailable && status.missing.length > 0) {
             console.warn(`⚠️ ${componentName} is loaded but missing dependencies:`, status.missing);
         } else if (!status.componentAvailable && status.missing.length > 0) {
-            console.log(`ℹ️ ${componentName} not loaded yet (missing: ${status.missing.join(', ')})`);
         } else if (status.available) {
-            console.log(`✅ ${componentName} and all dependencies are available`);
         }
     });
 };
@@ -119,4 +115,3 @@ if (document.readyState === 'loading') {
 }
 
 // Export for use in other scripts
-console.log('✅ Component dependency checker loaded');

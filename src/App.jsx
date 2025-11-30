@@ -1,6 +1,5 @@
 // Main App Component
 if (window.debug && !window.debug.performanceMode) {
-    console.log('🔍 App.jsx: Script is executing...');
 }
 
 // Check for invitation page BEFORE any providers are initialized
@@ -289,7 +288,6 @@ if (!document.getElementById('loading-animations')) {
 try {
     window.App = App;
     if (window.debug && !window.debug.performanceMode) {
-        console.log('✅ App.jsx loaded and registered on window.App', typeof window.App);
     }
     
     // Verify React is available

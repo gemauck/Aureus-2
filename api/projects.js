@@ -9,28 +9,14 @@ import { isConnectionError } from './_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔍 Projects API Debug:', {
-      method: req.method,
-      url: req.url,
-      headers: req.headers,
-      user: req.user
-    })
     
     // Add debugging for the specific issue
-    console.log('🔍 Projects API: Starting handler execution')
-    console.log('🔍 Projects API: Request method:', req.method)
-    console.log('🔍 Projects API: Request URL:', req.url)
-    console.log('🔍 Projects API: Full request path:', req.path)
-    console.log('🔍 Projects API: Original URL:', req.originalUrl)
     
     // Parse the URL path - strip /api/ prefix if present
     // Strip query parameters before splitting
     const urlPath = req.url.split('?')[0].split('#')[0].replace(/^\/api\//, '/')
     const pathSegments = urlPath.split('/').filter(Boolean)
-    console.log('🔍 Projects API: Path segments:', pathSegments)
     const id = req.params?.id || pathSegments[pathSegments.length - 1]
-    console.log('🔍 Projects API: Extracted ID:', id)
-    console.log('🔍 Projects API: Path segments length:', pathSegments.length)
 
     // List Projects (GET /api/projects)
     if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'projects') {
@@ -55,7 +41,6 @@ async function handler(req, res) {
             
             // If no accessible projects specified, return empty array
             if (!accessibleProjectIds || accessibleProjectIds.length === 0) {
-              console.log('✅ Guest user has no accessible projects');
               return ok(res, { projects: [] });
             }
             
@@ -66,7 +51,6 @@ async function handler(req, res) {
               }
             };
             
-            console.log('✅ Filtering projects for guest user:', accessibleProjectIds);
           } catch (parseError) {
             console.error('❌ Error parsing accessibleProjectIds:', parseError);
             return ok(res, { projects: [] });
@@ -129,7 +113,6 @@ async function handler(req, res) {
           };
         })
         
-        console.log('✅ Projects retrieved successfully:', projectsWithTaskCount.length)
         return ok(res, { projects: projectsWithTaskCount })
       } catch (dbError) {
         console.error('❌ Database error listing projects:', {
@@ -184,13 +167,6 @@ async function handler(req, res) {
 
       body = body || {}
 
-      console.log('🔍 POST request body:', JSON.stringify(body, null, 2))
-      console.log('🔍 req.body type:', typeof req.body)
-      console.log('🔍 req.body is null:', req.body === null)
-      console.log('🔍 req.body is undefined:', req.body === undefined)
-      console.log('🔍 req.body keys:', Object.keys(req.body || {}))
-      console.log('🔍 body.name value:', body.name)
-      console.log('🔍 body.name type:', typeof body.name)
       if (!body.name) {
         console.error('❌ No name provided in request body')
         console.error('❌ Full request details:', {
@@ -212,7 +188,6 @@ async function handler(req, res) {
           
           // If client doesn't exist, create it
           if (!client) {
-            console.log('Creating new client:', body.clientName);
             client = await prisma.client.create({
               data: {
                 name: body.clientName,
@@ -281,22 +256,11 @@ async function handler(req, res) {
             )
       }
 
-      console.log('🔍 Creating project with data:', JSON.stringify(projectData, null, 2))
-      console.log('🔍 Project data types:', {
-        name: typeof projectData.name,
-        clientName: typeof projectData.clientName,
-        clientId: projectData.clientId,
-        status: typeof projectData.status,
-        startDate: projectData.startDate instanceof Date ? 'Date' : typeof projectData.startDate,
-        dueDate: projectData.dueDate instanceof Date ? 'Date' : (projectData.dueDate ? typeof projectData.dueDate : 'null'),
-        type: typeof projectData.type
-      })
       
       try {
         const project = await prisma.project.create({
           data: projectData
         })
-        console.log('✅ Project created successfully:', project.id)
         return created(res, { project })
       } catch (dbError) {
         console.error('❌ Database error creating project:', dbError)
@@ -310,20 +274,12 @@ async function handler(req, res) {
     }
 
     // Get, Update, Delete Single Project (GET, PUT, DELETE /api/projects/[id])
-    console.log('🔍 Checking single project operation:', {
-      pathSegmentsLength: pathSegments.length,
-      firstSegment: pathSegments[0],
-      id: id,
-      method: req.method,
-      hasParams: !!req.params?.id
-    })
     
     if (pathSegments.length === 2 && pathSegments[0] === 'projects' && id) {
       if (req.method === 'GET') {
         try {
           const project = await prisma.project.findUnique({ where: { id } })
           if (!project) return notFound(res)
-          console.log('✅ Project retrieved successfully:', project.id)
           return ok(res, { project })
         } catch (dbError) {
           console.error('❌ Database error getting project:', dbError)
@@ -348,7 +304,6 @@ async function handler(req, res) {
 
         body = body || {}
 
-        console.log('🔍 PUT request body:', body)
         
         // Find or create client by name if clientName is provided
         let clientId = null;
@@ -360,7 +315,6 @@ async function handler(req, res) {
             
             // If client doesn't exist, create it
             if (!client) {
-              console.log('Creating new client:', body.clientName);
               client = await prisma.client.create({
                 data: {
                   name: body.clientName,
@@ -439,18 +393,11 @@ async function handler(req, res) {
               // It's something else (number, boolean, etc.), stringify it
               updateData.documentSections = JSON.stringify(body.documentSections);
             }
-            console.log('✅ documentSections will be saved:', {
-              type: typeof body.documentSections,
-              isString: typeof body.documentSections === 'string',
-              length: typeof body.documentSections === 'string' ? body.documentSections.length : 'N/A',
-              preview: typeof body.documentSections === 'string' ? body.documentSections.substring(0, 100) : 'N/A'
-            });
           } catch (error) {
             console.error('❌ Error processing documentSections:', error);
             // Don't fail the entire update, but log the error
           }
         } else {
-          console.log('⚠️ documentSections not provided in update - will not be updated');
         }
 
         // Handle monthlyProgress separately if provided - with validation for safety
@@ -513,17 +460,9 @@ async function handler(req, res) {
           }
         })
         
-        console.log('🔍 Updating project with data:', updateData)
-        console.log('🔍 hasDocumentCollectionProcess in updateData:', {
-          raw: body.hasDocumentCollectionProcess,
-          processed: updateData.hasDocumentCollectionProcess,
-          type: typeof updateData.hasDocumentCollectionProcess,
-          inUpdateData: 'hasDocumentCollectionProcess' in updateData
-        })
         try {
           // Verify hasDocumentCollectionProcess is in updateData before updating
           if ('hasDocumentCollectionProcess' in updateData) {
-            console.log('✅ hasDocumentCollectionProcess will be updated to:', updateData.hasDocumentCollectionProcess);
           } else {
             console.warn('⚠️ hasDocumentCollectionProcess NOT in updateData - will not be updated');
           }
@@ -532,20 +471,9 @@ async function handler(req, res) {
             where: { id }, 
             data: updateData 
           })
-          console.log('✅ Project updated successfully:', project.id)
-          console.log('🔍 hasDocumentCollectionProcess after update:', {
-            value: project.hasDocumentCollectionProcess,
-            type: typeof project.hasDocumentCollectionProcess,
-            isTrue: project.hasDocumentCollectionProcess === true
-          })
           
           // Verify the update actually worked
           const verifyProject = await prisma.project.findUnique({ where: { id } });
-          console.log('🔍 Verification - hasDocumentCollectionProcess in database:', {
-            value: verifyProject?.hasDocumentCollectionProcess,
-            type: typeof verifyProject?.hasDocumentCollectionProcess,
-            isTrue: verifyProject?.hasDocumentCollectionProcess === true
-          });
           
           return ok(res, { project })
         } catch (dbError) {
@@ -554,7 +482,6 @@ async function handler(req, res) {
         }
       }
       if (req.method === 'DELETE') {
-        console.log('🗑️ DELETE request received for project:', id)
         try {
           // Check if project exists first
           const projectExists = await prisma.project.findUnique({ where: { id } })
@@ -563,7 +490,6 @@ async function handler(req, res) {
             return notFound(res, 'Project not found')
           }
           
-          console.log('🔍 Deleting project and related records:', id)
           // Ensure referential integrity by removing dependents first, then the project
           await prisma.$transaction(async (tx) => {
             // First, handle task hierarchy - set parentTaskId to null for all tasks
@@ -572,25 +498,19 @@ async function handler(req, res) {
               where: { projectId: id },
               data: { parentTaskId: null }
             })
-            console.log('🔄 Updated tasks to remove parent references:', tasksUpdated.count)
             
             // Now delete all tasks (they no longer have parent references)
             const tasksDeleted = await tx.task.deleteMany({ where: { projectId: id } })
-            console.log('🗑️ Deleted tasks:', tasksDeleted.count)
             
             // Delete invoices
             const invoicesDeleted = await tx.invoice.deleteMany({ where: { projectId: id } })
-            console.log('🗑️ Deleted invoices:', invoicesDeleted.count)
             
             // Delete time entries
             const timeEntriesDeleted = await tx.timeEntry.deleteMany({ where: { projectId: id } })
-            console.log('🗑️ Deleted time entries:', timeEntriesDeleted.count)
             
             // Delete the project
             await tx.project.delete({ where: { id } })
-            console.log('✅ Project deleted successfully:', id)
           })
-          console.log('✅ Project and related records deleted successfully:', id)
           return ok(res, { deleted: true, message: 'Project deleted successfully' })
         } catch (dbError) {
           console.error('❌ Database error deleting project (with cascade):', dbError)

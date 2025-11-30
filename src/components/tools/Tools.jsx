@@ -27,7 +27,6 @@ const Tools = () => {
             // Log current status for debugging
             const loadedCount = Object.values(components).filter(comp => comp !== undefined && comp !== null).length;
             if (retryCount % 10 === 0) { // Log every second
-                console.log(`🔧 Tools: Checking components... (${loadedCount}/4 loaded, attempt ${retryCount})`);
             }
             
             // Check if any component is missing
@@ -41,12 +40,6 @@ const Tools = () => {
                 // All components loaded or max retries reached
                 setToolComponents(components);
                 if (allLoaded) {
-                    console.log('✅ Tools: All tool components loaded successfully!', {
-                        TankSizeCalculator: !!components.TankSizeCalculator,
-                        UnitConverter: !!components.UnitConverter,
-                        PDFToWordConverter: !!components.PDFToWordConverter,
-                        HandwritingToWord: !!components.HandwritingToWord
-                    });
                 } else {
                     console.warn('⚠️ Tools: Some tool components failed to load after maximum retries', {
                         TankSizeCalculator: !!components.TankSizeCalculator,

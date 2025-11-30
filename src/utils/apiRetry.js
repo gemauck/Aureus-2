@@ -20,11 +20,9 @@ export async function retryApiCall(apiCall, maxRetries = 3, initialDelay = 1000)
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            console.log(`🔄 API retry attempt ${attempt}/${maxRetries}`);
             const result = await apiCall();
             
             if (attempt > 1) {
-                console.log(`✅ API call succeeded on attempt ${attempt} (after ${attempt - 1} retries)`);
             }
             
             return result;
@@ -40,11 +38,6 @@ export async function retryApiCall(apiCall, maxRetries = 3, initialDelay = 1000)
                 error.message?.includes('fetch') ||
                 error.name === 'TypeError' && error.message?.includes('fetch');
             
-            console.log(`❌ API call failed on attempt ${attempt}:`, {
-                error: error.message,
-                isRetryable: isRetryableError,
-                willRetry: attempt < maxRetries && isRetryableError
-            });
             
             if (!isRetryableError) {
                 // Don't retry non-connection errors (auth errors, validation errors, etc.)
@@ -91,11 +84,9 @@ export async function retryApiCallWithOptions(apiCall, options = {}) {
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            console.log(`🔄 API retry attempt ${attempt}/${maxRetries} (custom strategy)`);
             const result = await apiCall();
             
             if (attempt > 1) {
-                console.log(`✅ API call succeeded on attempt ${attempt}`);
             }
             
             return result;
@@ -109,12 +100,6 @@ export async function retryApiCallWithOptions(apiCall, options = {}) {
                   error.message?.includes('ERR_CONNECTION_REFUSED') ||
                   error.message?.includes('ECONNREFUSED');
             
-            console.log(`❌ API call failed:`, {
-                attempt,
-                error: error.message,
-                isRetryable,
-                willRetry: attempt < maxRetries && isRetryable
-            });
             
             if (!isRetryable || attempt >= maxRetries) {
                 throw error;
@@ -142,7 +127,6 @@ export async function checkServerHealth() {
         
         if (response.ok) {
             const data = await response.json();
-            console.log('✅ Server health check passed:', data);
             return true;
         }
         
@@ -182,5 +166,4 @@ if (typeof window !== 'undefined') {
         checkServerHealth,
         fetchWithRetry
     };
-    console.log('✅ API Retry utilities loaded globally as window.apiRetry');
 }

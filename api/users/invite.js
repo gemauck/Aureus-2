@@ -12,11 +12,9 @@ async function handler(req, res) {
     if (req.method !== 'POST') return badRequest(res, 'Invalid method')
     
     try {
-        console.log('📧 Starting user invitation process...')
         
         // Ensure Invitation table exists (self-healing for first deploys)
         try {
-            console.log('🔧 Ensuring Invitation table exists...')
             await prisma.$queryRawUnsafe(
                 'CREATE TABLE IF NOT EXISTS "Invitation" ("id" TEXT NOT NULL, "email" TEXT NOT NULL, "name" TEXT NOT NULL, "role" TEXT NOT NULL DEFAULT \'' + 'user' + '\', "accessibleProjectIds" TEXT NOT NULL DEFAULT \'[]\', "token" TEXT NOT NULL, "status" TEXT NOT NULL DEFAULT \'' + 'pending' + '\', "invitedBy" TEXT, "expiresAt" TIMESTAMP(3) NOT NULL, "acceptedAt" TIMESTAMP(3), "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL, CONSTRAINT "Invitation_pkey" PRIMARY KEY ("id"));'
             )
@@ -27,11 +25,8 @@ async function handler(req, res) {
                 await prisma.$queryRawUnsafe('ALTER TABLE "Invitation" ADD COLUMN IF NOT EXISTS "accessibleProjectIds" TEXT DEFAULT \'[]\';')
             } catch (e) {
                 // Column might already exist, ignore
-                console.log('⚠️ accessibleProjectIds column may already exist:', e.message)
             }
-            console.log('✅ Invitation table structure verified')
         } catch (e) {
-            console.log('⚠️ Table creation skipped (permissions or already exists):', e.message)
             // Ignore if permissions disallow DDL; proceed and let Prisma error if table truly missing
         }
 
@@ -53,37 +48,28 @@ async function handler(req, res) {
             }
         }
         
-        console.log('📝 Processing invitation for:', { email, name, role, invitedBy: inviterId, accessibleProjectIds: accessibleProjectIdsJson })
         
         if (!email || !name) {
-            console.log('❌ Missing required fields:', { email: !!email, name: !!name })
             return badRequest(res, 'Email and name are required')
         }
 
         // Check if user already exists
-        console.log('🔍 Checking if user already exists...')
         const existingUser = await prisma.user.findUnique({ where: { email } })
         if (existingUser) {
-            console.log('❌ User already exists:', email)
             return badRequest(res, 'User with this email already exists')
         }
-        console.log('✅ User does not exist, proceeding with invitation')
 
         // Generate invitation token
         const invitationToken = crypto.randomBytes(32).toString('hex')
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
-        console.log('🔑 Generated invitation token and expiry:', { expiresAt })
 
         // Create or refresh invitation (handle duplicates gracefully)
         let invitation
         try {
-            console.log('💾 Checking for existing invitation...')
             // If an invitation already exists for this email, refresh token/expiry when pending
             const existingInvitation = await prisma.invitation.findUnique({ where: { email } })
             if (existingInvitation) {
-                console.log('🔄 Found existing invitation, status:', existingInvitation.status)
                 if (existingInvitation.status === 'pending') {
-                    console.log('🔄 Updating existing pending invitation...')
                     invitation = await prisma.invitation.update({
                         where: { email },
                         data: {
@@ -95,7 +81,6 @@ async function handler(req, res) {
                         }
                     })
                 } else {
-                    console.log('🔄 Refreshing expired/cancelled invitation...')
                     // Already accepted/expired/cancelled -> create a fresh pending invite by updating fields
                     invitation = await prisma.invitation.update({
                         where: { email },
@@ -113,7 +98,6 @@ async function handler(req, res) {
                     })
                 }
             } else {
-                console.log('🆕 Creating new invitation...')
                 invitation = await prisma.invitation.create({
                     data: {
                         email,
@@ -127,7 +111,6 @@ async function handler(req, res) {
                     }
                 })
             }
-            console.log('✅ Invitation saved to database:', invitation.id)
         } catch (dbError) {
             console.error('❌ Invitation DB write failed (will fallback):', dbError)
             // Fallback object to allow email sending and UX flow to proceed
@@ -139,22 +122,18 @@ async function handler(req, res) {
                 status: 'pending',
                 expiresAt
             }
-            console.log('⚠️ Using fallback invitation object')
         }
 
         // Generate invitation link using the ACTUAL token from the database
         // This ensures we always use the token that was actually saved, not just the one we intended to save
         const actualToken = invitation.token || invitationToken
         const invitationLink = `${getAppUrl()}/accept-invitation?token=${actualToken}`
-        console.log('🔗 Generated invitation link with token:', actualToken.substring(0, 20) + '...')
-        console.log('🔗 Full invitation link:', invitationLink)
         
         // Verify the token in the link matches what's in the database
         if (invitation.token && invitation.token !== actualToken) {
             console.warn('⚠️ Token mismatch! Database token:', invitation.token.substring(0, 20) + '...', 'Link token:', actualToken.substring(0, 20) + '...')
             // Use the database token as the source of truth
             const correctedLink = `${getAppUrl()}/accept-invitation?token=${invitation.token}`
-            console.log('🔗 Using corrected link with database token:', correctedLink)
         }
         
         // Send invitation email
@@ -163,12 +142,10 @@ async function handler(req, res) {
         let emailErrorDetails = null
         
         try {
-            console.log('📧 Attempting to send invitation email...')
             // Use the actual token from the database for the email link
             const emailLink = invitation.token 
                 ? `${getAppUrl()}/accept-invitation?token=${invitation.token}`
                 : invitationLink
-            console.log('📧 Sending email with link token:', invitation.token ? invitation.token.substring(0, 20) + '...' : 'using invitationToken')
             const emailResult = await sendInvitationEmail({
                 email: invitation.email,
                 name: invitation.name,
@@ -177,7 +154,6 @@ async function handler(req, res) {
             })
             
             emailSent = true
-            console.log('✅ Invitation email sent successfully:', emailResult.messageId)
         } catch (emailErr) {
             emailError = emailErr
             emailErrorDetails = {
@@ -193,17 +169,7 @@ async function handler(req, res) {
             }
         }
         
-        console.log('📧 Email config check:', {
-            SMTP_HOST: process.env.SMTP_HOST || 'NOT_SET',
-            SMTP_PORT: process.env.SMTP_PORT || 'NOT_SET',
-            SMTP_USER: process.env.SMTP_USER ? '***' : 'NOT_SET',
-            SMTP_PASS: process.env.SMTP_PASS ? 'SET' : 'NOT_SET',
-            SENDGRID_API_KEY: process.env.SENDGRID_API_KEY ? 'SET' : 'NOT_SET',
-            EMAIL_FROM: process.env.EMAIL_FROM || 'NOT_SET',
-            hasConfig: !!(process.env.SENDGRID_API_KEY || (process.env.SMTP_USER && process.env.SMTP_PASS))
-        })
 
-        console.log('🎉 Invitation process completed successfully')
         
         let message = 'Invitation created successfully'
         if (emailSent) {

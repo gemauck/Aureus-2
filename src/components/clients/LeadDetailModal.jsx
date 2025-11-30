@@ -81,7 +81,6 @@ const LeadDetailModal = ({
                 
                 const fetchedLead = response?.data?.lead || response?.lead;
                 if (fetchedLead) {
-                    console.log('✅ Lead fetched with proposals:', Array.isArray(fetchedLead.proposals) ? fetchedLead.proposals.length : 'not an array');
                     setLead(fetchedLead);
                     
                     // Initialize lastSavedDataRef with fetched lead data
@@ -240,8 +239,6 @@ const LeadDetailModal = ({
     
     // Debug modal state
     useEffect(() => {
-        console.log('🔍 LeadDetailModal: showIndustryModal changed to:', showIndustryModal);
-        console.log('🔍 LeadDetailModal: isAdmin:', isAdmin);
         // Reset the ref when modal state changes
         if (!showIndustryModal) {
             isOpeningIndustryModalRef.current = false;
@@ -436,18 +433,14 @@ const LeadDetailModal = ({
             // Remove modal if it exists
             const existingModal = document.getElementById('industry-management-modal-container');
             if (existingModal) {
-                console.log('🔧 LeadDetailModal: Removing modal (showIndustryModal is false)');
                 existingModal.remove();
             }
             return;
         }
-
-        console.log('🔧 LeadDetailModal: Creating modal in document.body');
         
         // Remove any existing modal first
         const existingModal = document.getElementById('industry-management-modal-container');
         if (existingModal) {
-            console.log('🔧 LeadDetailModal: Removing existing modal before creating new one');
             existingModal.remove();
         }
         
@@ -456,11 +449,6 @@ const LeadDetailModal = ({
         modalContainer.id = 'industry-management-modal-container';
         modalContainer.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99999; display: flex; align-items: center; justify-content: center; background-color: rgba(0, 0, 0, 0.5);';
         document.body.appendChild(modalContainer);
-        console.log('🔧 LeadDetailModal: Modal container appended to body', {
-            exists: !!document.getElementById('industry-management-modal-container'),
-            parent: modalContainer.parentNode?.tagName,
-            zIndex: window.getComputedStyle(modalContainer).zIndex
-        });
 
         // Create modal content
         const modalContent = document.createElement('div');
@@ -670,29 +658,21 @@ const LeadDetailModal = ({
         // Handle backdrop click
         modalContainer.onclick = (e) => {
             if (e.target === modalContainer) {
-                console.log('🔧 LeadDetailModal: Closing modal via backdrop');
                 setShowIndustryModal(false);
             }
         };
 
-        console.log('🔧 LeadDetailModal: Modal fully created', {
-            containerExists: !!document.getElementById('industry-management-modal-container'),
-            industriesCount: industries.length,
-            isLoading: isLoadingIndustries
-        });
 
         // Cleanup function - only remove if showIndustryModal becomes false
         return () => {
             // Only remove if showIndustryModal is false (checked at start of effect)
             // This prevents removal when dependencies change but modal should stay open
             if (!showIndustryModal) {
-                console.log('🔧 LeadDetailModal: Cleanup function called, removing modal (showIndustryModal is false)');
                 const modalToRemove = document.getElementById('industry-management-modal-container');
                 if (modalToRemove && modalToRemove.parentNode) {
                     modalToRemove.remove();
                 }
             } else {
-                console.log('🔧 LeadDetailModal: Cleanup function called but modal should stay open, skipping removal');
             }
         };
     }, [showIndustryModal, industries, isLoadingIndustries]);
@@ -718,7 +698,6 @@ const LeadDetailModal = ({
     useEffect(() => {
         if (lead && lead.id && isNewLeadNotSavedRef.current) {
             // Lead was just created and got an ID - clear the flag to allow auto-saves
-            console.log('✅ New lead created with ID, enabling auto-saves');
             isNewLeadNotSavedRef.current = false;
             setHasBeenSaved(true); // Mark as saved after first creation
         } else if (!lead) {
@@ -775,14 +754,12 @@ const LeadDetailModal = ({
         // This ensures LiveDataSync is stopped even if onPauseSync prop is not passed
         if (window.LiveDataSync && window.LiveDataSync.stop) {
             window.LiveDataSync.stop();
-            console.log('🛑 LeadDetailModal opened - stopping LiveDataSync directly', lead ? '(existing lead)' : '(new lead)');
         }
         
         // Also use onPauseSync callback if provided (for parent component coordination)
         // This sets isFormOpenRef to true, providing additional blocking
         if (onPauseSync && typeof onPauseSync === 'function') {
             onPauseSync(true);
-            console.log('🛑 LeadDetailModal opened - calling onPauseSync(true)');
         }
         
         // CRITICAL: LiveDataSync will ONLY restart when modal explicitly closes
@@ -790,7 +767,6 @@ const LeadDetailModal = ({
         // VERSION v2: Removed all LiveDataSync.start() calls from cleanup
         return () => {
             // Don't restart here - only restart when user explicitly closes/saves
-            console.log('🔄 LeadDetailModal unmounting - LiveDataSync will restart only on explicit close/save');
             // NO LiveDataSync.start() here - only in onClose callback
         };
     }, []); // Run on mount/unmount only - stop/start based on modal visibility
@@ -829,7 +805,6 @@ const LeadDetailModal = ({
         // CRITICAL: If lead is null (new lead), NEVER sync formData from prop
         // User is creating a new lead - formData should be completely user-controlled
         if (!lead) {
-            console.log('🚫 useEffect BLOCKED: lead is null (new lead) - formData is user-controlled');
             return;
         }
         
@@ -843,19 +818,12 @@ const LeadDetailModal = ({
         
         // CRITICAL: If user has started typing or edited fields, NEVER update formData from prop
         if (userHasStartedTypingRef.current || userEditedFieldsRef.current.size > 0) {
-            console.log('🚫 useEffect BLOCKED: user has typed/edited - formData is user-controlled', {
-                hasStartedTyping: userHasStartedTypingRef.current,
-                editedFields: Array.from(userEditedFieldsRef.current),
-                currentLeadId,
-                previousLeadId
-            });
             lastProcessedLeadRef.current = lead;
             return;
         }
         
         // CRITICAL: Block if user is currently editing or saving
         if (isEditingRef.current || isAutoSavingRef.current || isSavingProposalsRef.current || isCreatingProposalRef.current) {
-            console.log('🚫 useEffect BLOCKED: user is editing or saving');
             lastProcessedLeadRef.current = lead;
             return;
         }
@@ -879,12 +847,6 @@ const LeadDetailModal = ({
         
         // Block if DOM or formData has content (user has entered something)
         if (hasDomContent || formDataHasContent) {
-            console.log('🚫 useEffect BLOCKED: DOM or formData has content', {
-                hasDomContent,
-                formDataHasContent,
-                currentLeadId,
-                previousLeadId
-            });
             lastProcessedLeadRef.current = lead;
             return;
         }
@@ -896,7 +858,6 @@ const LeadDetailModal = ({
         
         // CRITICAL: If same lead ID (and not first time opening), NEVER sync even if form is empty (might be mid-edit)
         if (currentLeadId === previousLeadId && currentLeadId !== null && !isFirstTimeOpening) {
-            console.log('🚫 useEffect BLOCKED: same lead ID - never overwrite formData');
             lastProcessedLeadRef.current = lead;
             return;
         }
@@ -920,11 +881,6 @@ const LeadDetailModal = ({
                 thumbnail: lead.thumbnail || ''
             };
             
-            console.log('✅ Syncing formData: switching to different lead (Manufacturing pattern)', {
-                previousLeadId,
-                currentLeadId,
-                formWasEmpty: !formDataHasContent && !hasDomContent
-            });
             setFormData(parsedLead);
             // Also update input refs if they exist
             if (nameInputRef.current && parsedLead.name) {
@@ -956,11 +912,6 @@ const LeadDetailModal = ({
                 return prev;
             }
             
-            console.log('🔄 Syncing proposals from fetched lead data', {
-                fetchedCount: fetchedProposals.length,
-                currentCount: currentProposals.length,
-                leadId: lead.id
-            });
             
             return { ...prev, proposals: fetchedProposals };
         });
@@ -982,14 +933,9 @@ const LeadDetailModal = ({
         // 1. We're switching to a different lead (different ID)
         // 2. AND it's not the same lead getting an ID (original was 'new', current is real ID)
         if (currentLeadId && currentLeadId !== originalLeadId && originalLeadId !== 'new') {
-            console.log('🔄 Updating originalLeadId: switching to different lead', {
-                original: originalLeadId,
-                current: currentLeadId
-            });
             originalLeadIdRef.current = currentLeadId;
         } else if (originalLeadId === 'new' && currentLeadId) {
             // This is a new lead getting an ID - keep 'new' as the key to prevent remounting
-            console.log('🛡️ Keeping originalLeadId as "new": same lead getting ID');
         }
     }, [lead?.id]);
     
@@ -1003,11 +949,6 @@ const LeadDetailModal = ({
         
         // CRITICAL: NEVER reset if user has edited any fields
         if (userEditedFieldsRef.current.size > 0) {
-            console.log('🛡️ Preserving typing flag and edited fields: user has edited', {
-                editedFields: Array.from(userEditedFieldsRef.current),
-                currentLeadId,
-                previousLeadId
-            });
             previousLeadIdRef.current = currentLeadId;
             return; // Don't reset anything if user has edited fields
         }
@@ -1017,14 +958,8 @@ const LeadDetailModal = ({
             // Only reset if it's truly a different lead (not the same lead getting an ID)
             const isSameLeadGettingId = !previousLeadId && currentLeadId && userHasStartedTypingRef.current;
             if (!isSameLeadGettingId) {
-                console.log('🔄 Resetting typing flag: switching to different lead', {
-                    previousId: previousLeadId,
-                    currentId: currentLeadId,
-                    formDataId: currentFormDataId
-                });
                 userHasStartedTypingRef.current = false;
             } else {
-                console.log('🛡️ Preserving typing flag: same lead getting ID after save');
             }
         }
         
@@ -1177,7 +1112,6 @@ const LeadDetailModal = ({
                 projectIds: selectedProjectIds
             };
             
-            console.log('✅ Auto-saved lead data when switching tabs');
             setHasBeenSaved(true); // Mark as saved after successful save
             return true;
         } catch (error) {
@@ -1467,15 +1401,6 @@ const LeadDetailModal = ({
             const updatedFormData = { ...prev, proposals: finalProposals };
             finalFormData = updatedFormData;
             
-            console.log('💾 Saving proposals:', {
-                currentCount: currentProposals.length,
-                updatedCount: updatedProposals.length,
-                mergedCount: finalProposals.length,
-                currentIds: currentProposals.map(p => p.id),
-                updatedIds: updatedProposals.map(p => p.id),
-                finalIds: finalProposals.map(p => p.id),
-                isCreatingProposal: isCreatingProposalRef.current
-            });
             
             return updatedFormData;
         });
@@ -1495,13 +1420,10 @@ const LeadDetailModal = ({
         lastSaveTimeoutRef.current = setTimeout(async () => {
             if (onSave && finalFormData) {
                 try {
-                    console.log('📡 Calling onSave with proposals...');
                     await onSave(finalFormData, true);
-                    console.log('✅ Proposals saved successfully to API');
                     // Keep the flag set longer to prevent immediate reset when API response comes back
                     setTimeout(() => {
                         isSavingProposalsRef.current = false;
-                        console.log('🔓 Save guard released');
                     }, 3000); // Increased to 3 seconds to ensure API response is processed
                 } catch (error) {
                     console.error('❌ Error saving proposals:', error);
@@ -1515,7 +1437,7 @@ const LeadDetailModal = ({
     };
     
     // Helper function to send notifications
-    const sendNotification = async (userId, title, message, link) => {
+    const sendNotification = async (userId, title, message, link, metadata = null) => {
         try {
             const token = window.storage?.getToken?.();
             if (!token) return;
@@ -1531,7 +1453,8 @@ const LeadDetailModal = ({
                     type: 'system',
                     title,
                     message,
-                    link: link || ''
+                    link: link || '',
+                    metadata: metadata || undefined
                 })
             });
         } catch (error) {
@@ -1552,10 +1475,10 @@ const LeadDetailModal = ({
     };
     
     // Helper function to notify all assigned parties
-    const notifyAllAssignedParties = async (proposal, title, message, link) => {
+    const notifyAllAssignedParties = async (proposal, title, message, link, metadata = null) => {
         const assigneeIds = getAllAssignedParties(proposal);
         const notificationPromises = assigneeIds.map(userId => 
-            sendNotification(userId, title, message, link)
+            sendNotification(userId, title, message, link, metadata)
         );
         await Promise.all(notificationPromises);
     };
@@ -1846,21 +1769,12 @@ const LeadDetailModal = ({
             
             setFormData(updatedFormData);
             
-            console.log('💾 Saving contact with updatedFormData:', {
-                contactsCount: updatedContacts.length,
-                activityLogCount: updatedActivityLog.length,
-                hasContacts: Array.isArray(updatedContacts),
-                hasActivityLog: Array.isArray(updatedActivityLog),
-                contacts: updatedContacts,
-                activityLog: updatedActivityLog
-            });
             
             // Save contact changes immediately - stay in edit mode
             // Ensure onSave completes - it's async
             (async () => {
                 try {
                     await onSave(updatedFormData, true);
-                    console.log('✅ Contact save completed successfully');
                 } catch (error) {
                     console.error('❌ Error saving contact:', error);
                     alert('Failed to save contact. Please try again.');
@@ -1938,16 +1852,11 @@ const LeadDetailModal = ({
             
             setFormData(updatedFormData);
             
-            console.log('💾 Saving contact update with updatedFormData:', {
-                contactsCount: updatedContacts.length,
-                activityLogCount: updatedActivityLog.length
-            });
             
             // Save contact changes immediately - stay in edit mode
             (async () => {
                 try {
                     await onSave(updatedFormData, true);
-                    console.log('✅ Contact update saved successfully');
                 } catch (error) {
                     console.error('❌ Error saving contact update:', error);
                     alert('Failed to save contact update. Please try again.');
@@ -1987,7 +1896,6 @@ const LeadDetailModal = ({
             (async () => {
                 try {
                     await onSave(updatedFormData, true);
-                    console.log('✅ Contact deletion saved successfully');
                 } catch (error) {
                     console.error('❌ Error saving contact deletion:', error);
                 }
@@ -2014,22 +1922,18 @@ const LeadDetailModal = ({
         try {
             // Prevent duplicate requests
             if (isLoadingSitesRef.current) {
-                console.log('⏭️ Skipping site load - already loading');
                 return;
             }
             
             const token = window.storage?.getToken?.();
             if (!token) {
-                console.log('⚠️ No authentication token, skipping site loading');
                 return;
             }
             
             isLoadingSitesRef.current = true;
-            console.log('📡 Loading sites from database for lead:', leadId);
             const response = await window.api.getSites(leadId);
             const sites = response?.data?.sites || [];
             
-            console.log('✅ Loaded sites from database:', sites.length);
             
             // Merge database sites with any optimistic sites still pending
             setFormData(prevFormData => {
@@ -2074,7 +1978,6 @@ const LeadDetailModal = ({
                 return;
             }
             
-            console.log('🌐 Creating site via API:', newSite);
             const response = await window.api.createSite(formData.id, newSite);
             const savedSite = response?.data?.site || response?.site || response;
             
@@ -2083,7 +1986,6 @@ const LeadDetailModal = ({
                 setOptimisticSites(prev => {
                     const siteExists = prev.some(s => s.id === savedSite.id);
                     if (siteExists) {
-                        console.log('⚠️ Site already in optimistic state');
                         return prev;
                     }
                     return [...prev, savedSite];
@@ -2142,7 +2044,6 @@ const LeadDetailModal = ({
                 (async () => {
                     try {
                         await onSave(updatedFormData, true);
-                        console.log('✅ Site save completed successfully');
                     } catch (error) {
                         console.error('❌ Error saving site:', error);
                         alert('Failed to save site. Please try again.');
@@ -2229,7 +2130,6 @@ const LeadDetailModal = ({
             (async () => {
                 try {
                     await onSave(updatedFormData, true);
-                    console.log('✅ Site update saved successfully');
                 } catch (error) {
                     console.error('❌ Error saving site update:', error);
                     alert('Failed to save site update. Please try again.');
@@ -2308,7 +2208,6 @@ const LeadDetailModal = ({
                 (async () => {
                     try {
                         await onSave(updatedFormData, true);
-                        console.log('✅ Site deletion saved successfully');
                     } catch (error) {
                         console.error('❌ Error saving site deletion:', error);
                     }
@@ -2375,21 +2274,12 @@ const LeadDetailModal = ({
             
             setFormData(updatedFormData);
             
-            console.log('💾 Saving follow-up with updatedFormData:', {
-                followUpsCount: updatedFollowUps.length,
-                activityLogCount: updatedActivityLog.length,
-                hasFollowUps: Array.isArray(updatedFollowUps),
-                hasActivityLog: Array.isArray(updatedActivityLog),
-                followUps: updatedFollowUps,
-                activityLog: updatedActivityLog
-            });
             
             // Save follow-up changes immediately - stay in edit mode
             // Ensure onSave completes - it's async
             (async () => {
                 try {
                     await onSave(updatedFormData, true);
-                    console.log('✅ Follow-up save completed successfully');
                 } catch (error) {
                     console.error('❌ Error saving follow-up:', error);
                     alert('Failed to save follow-up. Please try again.');
@@ -2443,16 +2333,11 @@ const LeadDetailModal = ({
             
             setFormData(updatedFormData);
             
-            console.log('💾 Saving follow-up toggle with updatedFormData:', {
-                followUpsCount: updatedFollowUps.length,
-                activityLogCount: updatedActivityLog.length
-            });
             
             // Save follow-up toggle immediately - stay in edit mode
             (async () => {
                 try {
                     await onSave(updatedFormData, true);
-                    console.log('✅ Follow-up toggle saved successfully');
                 } catch (error) {
                     console.error('❌ Error saving follow-up toggle:', error);
                 }
@@ -2476,7 +2361,6 @@ const LeadDetailModal = ({
             (async () => {
                 try {
                     await onSave(updatedFormData, true);
-                    console.log('✅ Follow-up deletion saved successfully');
                 } catch (error) {
                     console.error('❌ Error saving follow-up deletion:', error);
                 }
@@ -2513,7 +2397,6 @@ const LeadDetailModal = ({
                             currentUser.name || currentUser.email || 'Unknown',
                             allUsers
                         );
-                        console.log('✅ @Mention notifications processed for lead comment');
                     }
                 } catch (error) {
                     console.error('❌ Error processing @mentions:', error);
@@ -2555,10 +2438,6 @@ const LeadDetailModal = ({
             
             setFormData(updatedFormData);
             
-            console.log('💾 Saving comment with updatedFormData:', {
-                commentsCount: updatedComments.length,
-                activityLogCount: updatedActivityLog.length
-            });
             
             // Log to audit trail
             if (window.AuditLogger) {
@@ -2579,7 +2458,6 @@ const LeadDetailModal = ({
             (async () => {
                 try {
                     await onSave(updatedFormData, true);
-                    console.log('✅ Comment save completed successfully');
                 } catch (error) {
                     console.error('❌ Error saving comment:', error);
                     alert('Failed to save comment. Please try again.');
@@ -2654,7 +2532,6 @@ const LeadDetailModal = ({
             (async () => {
                 try {
                     await onSave(updatedFormData, true);
-                    console.log('✅ Comment deletion saved successfully');
                 } catch (error) {
                     console.error('❌ Error saving comment deletion:', error);
                 }
@@ -2952,15 +2829,11 @@ const LeadDetailModal = ({
                                                     
                                                     // Prevent multiple rapid clicks
                                                     if (isOpeningIndustryModalRef.current || showIndustryModal) {
-                                                        console.log('🔧 LeadDetailModal: Ignoring duplicate click');
                                                         return;
                                                     }
                                                     
                                                     isOpeningIndustryModalRef.current = true;
-                                                    console.log('🔧 LeadDetailModal: Industry management button clicked');
-                                                    console.log('🔧 Current showIndustryModal:', showIndustryModal);
                                                     setShowIndustryModal(true);
-                                                    console.log('🔧 Set showIndustryModal to true');
                                                 }}
                                                 className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium transition-colors hover:bg-gray-100 cursor-pointer"
                                                 title={isAdmin ? "Manage Industries" : "Admin Only - Manage Industries"}
@@ -3141,7 +3014,6 @@ const LeadDetailModal = ({
                                             isAutoSavingRef.current = true;
                                             notifyEditingChange(false, true);
                                             
-                                            console.log('🔒 Stage change: auto-save guards set immediately', newStage);
                                                 
                                                 // Update state and get the updated formData
                                                 setFormData(prev => {
@@ -3165,13 +3037,11 @@ const LeadDetailModal = ({
                                                                 // Save to API - ensure it's awaited
                                                                 await onSave(latest, true);
                                                                 
-                                                                console.log('✅ Stage saved successfully:', newStage);
                                                         
                                             // Clear the flag and notify parent after save completes
                                                         setTimeout(() => {
                                                             isAutoSavingRef.current = false;
                                                 notifyEditingChange(false, false);
-                                                console.log('🔓 Stage change: auto-save guards released');
                                                         }, 3000);
                                                             } catch (error) {
                                                                 console.error('❌ Error saving stage:', error);
@@ -4151,7 +4021,6 @@ const LeadDetailModal = ({
                                             isCreatingProposalRef.current = true;
                                             setIsCreatingProposal(true);
                                             
-                                            console.log('🆕 Creating new proposal...');
                                             
                                             // Generate a stable ID that won't change on re-renders
                                             const proposalId = `proposal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -4318,13 +4187,6 @@ const LeadDetailModal = ({
                                             
                                             const existingProposals = checkProposals();
                                             
-                                            console.log('🔍 Checking for duplicates:', {
-                                                proposalId,
-                                                existingCount: existingProposals.length,
-                                                existingIds: existingProposals.map(p => p.id),
-                                                formDataProposalsCount: formData.proposals?.length || 0,
-                                                formDataRefProposalsCount: formDataRef.current?.proposals?.length || 0
-                                            });
                                             
                                             // Check by ID first (most reliable) - this should always be unique
                                             const proposalExistsById = existingProposals.some(p => p.id === proposalId);
@@ -4363,12 +4225,9 @@ const LeadDetailModal = ({
                                                 return;
                                             }
                                             
-                                            console.log('✅ No duplicate found, proceeding with creation');
                                             
-                                            console.log('✅ Adding proposal to state:', proposalId);
                                             // Use functional update to merge with existing proposals properly
                                             const updatedProposals = [...existingProposals, newProposal];
-                                            console.log('📝 Updated proposals count:', updatedProposals.length, 'IDs:', updatedProposals.map(p => p.id));
                                             await saveProposals(updatedProposals);
                                             
                                             // Notify all assigned parties of the new proposal
@@ -4376,14 +4235,17 @@ const LeadDetailModal = ({
                                                 newProposal,
                                                 `New Proposal Created: ${newProposal.title || newProposal.name}`,
                                                 `A new proposal "${newProposal.title || newProposal.name}" has been created for ${formData.name || 'this lead'}.`,
-                                                `#/clients?lead=${lead.id}&tab=proposals`
+                                                `#/clients?lead=${lead.id}&tab=proposals`,
+                                                {
+                                                    proposalId: newProposal.id,
+                                                    leadId: lead.id
+                                                }
                                             );
                                             
                                             // Reset flags after a delay (longer to ensure save completes)
                                             setTimeout(() => {
                                                 isCreatingProposalRef.current = false;
                                                 setIsCreatingProposal(false);
-                                                console.log('🔓 Proposal creation guard released');
                                             }, 2000);
                                         }}
                                         className={`px-4 py-2 text-sm rounded-lg transition-colors ${
@@ -4409,14 +4271,6 @@ const LeadDetailModal = ({
                                                 <p>formDataRef proposals count: {formDataRef.current?.proposals?.length || 0}</p>
                                                 <button 
                                                     onClick={() => {
-                                                        console.log('🔍 Manual Debug Check:', {
-                                                            formDataProposals: formData.proposals,
-                                                            formDataRefProposals: formDataRef.current?.proposals,
-                                                            lastSavedProposals: lastSavedDataRef.current?.proposals,
-                                                            isSavingProposals: isSavingProposalsRef.current,
-                                                            isCreatingProposal: isCreatingProposalRef.current,
-                                                            leadProposals: typeof lead?.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || [])
-                                                        });
                                                     }}
                                                     className="mt-2 px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs"
                                                 >
@@ -4454,7 +4308,11 @@ const LeadDetailModal = ({
                                                                                     updatedProposal,
                                                                                     `Proposal Updated: ${updatedProposal.title || updatedProposal.name}`,
                                                                                     `Proposal name has been changed to "${updatedProposal.title || updatedProposal.name}" by ${currentUser.name || currentUser.email || 'Unknown'}.`,
-                                                                                    `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                    `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                    {
+                                                                                        proposalId: updatedProposal.id,
+                                                                                        leadId: lead.id
+                                                                                    }
                                                                                 );
                                                                             }
                                                                             setEditingProposalName(null);
@@ -4528,7 +4386,6 @@ const LeadDetailModal = ({
                                                                                 );
                                                                                 const updatedProposal = updatedProposals[proposalIndex];
                                                                                 
-                                                                                console.log('💾 Saving working document link:', { oldLink, newLink, proposalId: updatedProposal.id });
                                                                                 await saveProposals(updatedProposals);
                                                                                 
                                                                                 // Notify all assigned parties of the document link change
@@ -4536,7 +4393,11 @@ const LeadDetailModal = ({
                                                                                     updatedProposal,
                                                                                     `Proposal Updated: ${updatedProposal.title || updatedProposal.name}`,
                                                                                     `Working document link has been ${newLink ? `updated to: ${newLink}` : 'removed'} by ${currentUser.name || currentUser.email || 'Unknown'}.`,
-                                                                                    `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                    `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                    {
+                                                                                        proposalId: updatedProposal.id,
+                                                                                        leadId: lead.id
+                                                                                    }
                                                                                 );
                                                                             }
                                                                         }}
@@ -4569,7 +4430,11 @@ const LeadDetailModal = ({
                                                                     proposal,
                                                                     `Proposal Deleted: ${proposal.title || proposal.name}`,
                                                                     `Proposal "${proposal.title || proposal.name}" has been deleted by ${currentUser.name || currentUser.email || 'Unknown'}.`,
-                                                                    `#/clients?lead=${lead.id}&tab=proposals`
+                                                                    `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                    {
+                                                                        proposalId: proposal.id,
+                                                                        leadId: lead.id
+                                                                    }
                                                                 );
                                                                 
                                                                 setFormData(prev => {
@@ -4664,7 +4529,13 @@ const LeadDetailModal = ({
                                                                                                     updatedProposal,
                                                                                                     `Proposal Assignment Updated: ${updatedProposal.title || updatedProposal.name}`,
                                                                                                     `Stage "${updatedStage.name}" has been ${updatedStage.assigneeId ? `assigned to ${selectedUser?.name || selectedUser?.email || 'a user'}` : 'unassigned'} by ${currentUser.name || currentUser.email || 'Unknown'}.`,
-                                                                                                    `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                                    `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                                    {
+                                                                                                        proposalId: updatedProposal.id,
+                                                                                                        stageId: updatedStage.id,
+                                                                                                        stageIndex: stageIndex,
+                                                                                                        leadId: lead.id
+                                                                                                    }
                                                                                                 );
                                                                                                 
                                                                                                 // Also notify the newly assigned user if they were just assigned
@@ -4673,7 +4544,13 @@ const LeadDetailModal = ({
                                                                                                         updatedStage.assigneeId,
                                                                                                         `New Assignment: ${updatedProposal.title || updatedProposal.name}`,
                                                                                                         `You have been assigned to stage "${updatedStage.name}" on proposal "${updatedProposal.title || updatedProposal.name}".`,
-                                                                                                        `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                                        `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                                        {
+                                                                                                            proposalId: updatedProposal.id,
+                                                                                                            stageId: updatedStage.id,
+                                                                                                            stageIndex: stageIndex,
+                                                                                                            leadId: lead.id
+                                                                                                        }
                                                                                                     );
                                                                                                 }
                                                                                             }}
@@ -4885,7 +4762,13 @@ const LeadDetailModal = ({
                                                                                                         updatedProposals[proposalIndex],
                                                                                                         `New Comment on Proposal: ${proposal.title || proposal.name}`,
                                                                                                         `${currentUser.name || currentUser.email || 'Unknown'} commented on stage "${stage.name}": ${newComment.text}`,
-                                                                                                        `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                                        `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                                        {
+                                                                                                            proposalId: proposal.id,
+                                                                                                            stageId: stage.id,
+                                                                                                            stageIndex: stageIndex,
+                                                                                                            leadId: lead.id
+                                                                                                        }
                                                                                                     );
                                                                                                 }
                                                                                             }}
@@ -4959,7 +4842,13 @@ const LeadDetailModal = ({
                                                                                                     updatedProposals[proposalIndex],
                                                                                                     `Proposal Stage Approved: ${proposal.title || proposal.name}`,
                                                                                                     `Stage "${stage.name}" has been approved by ${approver}.${commentText.trim() ? ` Comment: ${commentText.trim()}` : ''}`,
-                                                                                                    `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                                    `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                                    {
+                                                                                                        proposalId: proposal.id,
+                                                                                                        stageId: stage.id,
+                                                                                                        stageIndex: stageIndex,
+                                                                                                        leadId: lead.id
+                                                                                                    }
                                                                                                 );
                                                                                                 
                                                                                                 // Also notify assigned user of next stage if it exists
@@ -4970,7 +4859,13 @@ const LeadDetailModal = ({
                                                                                                             nextStage.assigneeId,
                                                                                                             `Proposal Stage Ready: ${proposal.title || proposal.name}`,
                                                                                                             `Stage "${nextStage.name}" is now ready for your review.`,
-                                                                                                            `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                                            `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                                            {
+                                                                                                                proposalId: proposal.id,
+                                                                                                                stageId: nextStage.id,
+                                                                                                                stageIndex: stageIndex + 1,
+                                                                                                                leadId: lead.id
+                                                                                                            }
                                                                                                         );
                                                                                                     }
                                                                                         }
@@ -5022,7 +4917,13 @@ const LeadDetailModal = ({
                                                                                                         updatedProposals[proposalIndex],
                                                                                                         `Proposal Stage Rejected: ${proposal.title || proposal.name}`,
                                                                                                         `Stage "${stage.name}" has been rejected by ${rejector}. Reason: ${reason}${commentText.trim() ? ` Additional comment: ${commentText.trim()}` : ''}`,
-                                                                                                        `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                                        `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                                        {
+                                                                                                            proposalId: proposal.id,
+                                                                                                            stageId: stage.id,
+                                                                                                            stageIndex: stageIndex,
+                                                                                                            leadId: lead.id
+                                                                                                        }
                                                                                                     );
                                                                                                 }
                                                                                             }}
@@ -5090,7 +4991,13 @@ const LeadDetailModal = ({
                                                                                                     updatedProposals[proposalIndex],
                                                                                                     `Proposal Stage Status Changed: ${proposal.title || proposal.name}`,
                                                                                                     `Stage "${stage.name}" has been changed from approved to rejected by ${updater}. Reason: ${reason.trim()}${commentText.trim() ? ` Additional comment: ${commentText.trim()}` : ''}`,
-                                                                                                    `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                                    `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                                    {
+                                                                                                        proposalId: proposal.id,
+                                                                                                        stageId: stage.id,
+                                                                                                        stageIndex: stageIndex,
+                                                                                                        leadId: lead.id
+                                                                                                    }
                                                                                                 );
                                                                                             }
                                                                                         }}
@@ -5154,7 +5061,13 @@ const LeadDetailModal = ({
                                                                                                 updatedProposals[proposalIndex],
                                                                                                 `Proposal Stage Status Changed: ${proposal.title || proposal.name}`,
                                                                                                 `Stage "${stage.name}" has been changed from rejected to approved by ${updater}.${commentText.trim() ? ` Comment: ${commentText.trim()}` : ''}`,
-                                                                                                `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                                `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                                {
+                                                                                                    proposalId: proposal.id,
+                                                                                                    stageId: stage.id,
+                                                                                                    stageIndex: stageIndex,
+                                                                                                    leadId: lead.id
+                                                                                                }
                                                                                             );
                                                                                             
                                                                                             // Notify assigned users of next stage
@@ -5165,7 +5078,13 @@ const LeadDetailModal = ({
                                                                                                         nextStage.assigneeId,
                                                                                                         `Proposal Stage Ready: ${proposal.title || proposal.name}`,
                                                                                                         `Stage "${nextStage.name}" is now ready for your review.`,
-                                                                                                        `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                                        `#/clients?lead=${lead.id}&tab=proposals`,
+                                                                                                        {
+                                                                                                            proposalId: proposal.id,
+                                                                                                            stageId: nextStage.id,
+                                                                                                            stageIndex: stageIndex + 1,
+                                                                                                            leadId: lead.id
+                                                                                                        }
                                                                                                     );
                                                                                                 }
                                                                                             }
@@ -5718,7 +5637,6 @@ const LeadDetailModal = ({
                                                 isAutoSavingRef.current = true;
                                                 notifyEditingChange(false, true);
                                                 
-                                                console.log('🔒 Stage change: auto-save guards set immediately', newStage);
                                                 
                                                 // Update state and get the updated formData
                                                 setFormData(prev => {
@@ -5741,13 +5659,11 @@ const LeadDetailModal = ({
                                                                 // Save to API - ensure it's awaited
                                                                 await onSave(latest, true);
                                                                 
-                                                                console.log('✅ Stage saved successfully:', newStage);
                                                                 
                                                                 // Clear the flag after a longer delay to allow API response to propagate
                                                                 setTimeout(() => {
                                                                     isAutoSavingRef.current = false;
                                                                     notifyEditingChange(false, false); // Notify parent auto-save complete
-                                                                    console.log('🔓 Stage change: auto-save guards released');
                                                                 }, 3000);
                                                             } catch (error) {
                                                                 console.error('❌ Error saving stage:', error);
@@ -5888,4 +5804,3 @@ const LeadDetailModal = ({
 
 // Make available globally
 window.LeadDetailModal = LeadDetailModal;
-console.log('✅ LeadDetailModal component registered on window.LeadDetailModal');

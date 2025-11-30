@@ -9,7 +9,6 @@ async function handler(req, res) {
   }
 
   try {
-    console.log('📡 Public locations endpoint: Fetching stock locations for job card form...')
     
     // Get all active stock locations
     const locations = await prisma.stockLocation.findMany({
@@ -30,7 +29,6 @@ async function handler(req, res) {
       }
     })
 
-    console.log(`✅ Public locations endpoint: Returning ${locations.length} stock locations`)
     
     return ok(res, {
       locations: locations,

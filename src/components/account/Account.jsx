@@ -126,7 +126,6 @@ const Account = () => {
         }
 
         try {
-            console.log('🔐 Attempting to change password...');
             const response = await fetch('/api/users/change-password', {
                 method: 'POST',
                 headers: {
@@ -139,9 +138,7 @@ const Account = () => {
                 })
             });
 
-            console.log('🔐 Password change response status:', response.status);
             const data = await response.json();
-            console.log('🔐 Password change response data:', data);
 
             if (response.ok) {
                 setSaveStatus('Password changed successfully!');

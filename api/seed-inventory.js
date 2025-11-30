@@ -16,7 +16,6 @@ async function handler(req, res) {
   }
 
   try {
-    console.log(`📦 Starting bulk import of ${stockItems.length} inventory items...`)
 
     // Get current max SKU number
     const allItems = await prisma.inventoryItem.findMany({
@@ -142,7 +141,6 @@ async function handler(req, res) {
       }
     }
 
-    console.log(`✅ Bulk import completed: ${created.length} created, ${errors.length} errors`)
     return ok(res, {
       message: `Bulk import completed: ${created.length} items created, ${errors.length} errors`,
       created: created.length,

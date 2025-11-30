@@ -6,7 +6,6 @@ const DatabaseAPI = {
         const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
         // Always use the current origin's API (works for both localhost and droplet)
         const apiBase = window.location.origin;
-        console.log('🔧 DatabaseAPI Base URL:', { hostname, isLocalhost, apiBase });
         return apiBase;
     })(),
     
@@ -180,7 +179,6 @@ const DatabaseAPI = {
                 const ttl = this._endpointCacheTTL[endpoint] || this._cacheTTL;
                 const age = Date.now() - cached.timestamp;
                 if (age < ttl) {
-                    console.log(`⚡ DatabaseAPI: Serving ${endpoint} from cache (age: ${Math.round(age/1000)}s, TTL: ${Math.round(ttl/1000)}s)`);
                     return cached.data;
                 } else {
                     // Remove expired cache entry
@@ -192,7 +190,6 @@ const DatabaseAPI = {
         // Check if there's already a pending request for this endpoint
         // Deduplicate concurrent requests
         if (this._pendingRequests.has(cacheKey)) {
-            console.log(`🔄 DatabaseAPI: Deduplicating concurrent request to ${endpoint}`);
             try {
                 const result = await this._pendingRequests.get(cacheKey);
                 return result;
@@ -240,9 +237,7 @@ const DatabaseAPI = {
             let token = window.storage?.getToken?.();
             
             if (token) {
-                console.log('🔑 Token found, length:', token.length);
             } else {
-                console.log('⚠️ No token found, attempting refresh...');
             }
 
             // If no token, attempt a silent refresh using the refresh cookie
@@ -266,7 +261,6 @@ const DatabaseAPI = {
                         const refreshData = text ? JSON.parse(text) : {};
                         const newToken = refreshData?.data?.accessToken || refreshData?.accessToken;
                         if (newToken && window.storage?.setToken) {
-                            console.log('✅ Token obtained from refresh');
                             window.storage.setToken(newToken);
                             token = newToken;
                         } else {
@@ -328,16 +322,6 @@ const DatabaseAPI = {
                 // Log POST requests for debugging
                 if (config.method === 'POST' || config.method === 'PATCH' || config.method === 'PUT') {
                     const authHeader = config.headers['Authorization'];
-                    console.log(`📤 ${config.method} request to ${endpoint}:`, {
-                        url,
-                        hasBody: !!config.body,
-                        bodyLength: config.body?.length || 0,
-                        bodyPreview: config.body ? config.body.substring(0, 200) : 'no body',
-                        hasAuthHeader: !!authHeader,
-                        authHeaderPreview: authHeader ? 
-                            (authHeader.startsWith('Bearer ') ? authHeader.substring(0, 37) + '...' : 'Invalid format') : 'missing',
-                        tokenLength: authHeader ? (authHeader.startsWith('Bearer ') ? authHeader.length - 7 : 0) : 0
-                    });
                 }
                 
                 return config;
@@ -460,7 +444,6 @@ const DatabaseAPI = {
 
                     if (!response.ok && response.status === 401) {
                     // Attempt refresh once before giving up
-                    console.log('🔄 Got 401, attempting token refresh...');
                     let refreshSucceeded = false;
                     try {
                         const refreshUrl = `${this.API_BASE}/api/auth/refresh`;
@@ -481,12 +464,10 @@ const DatabaseAPI = {
                             const refreshData = text ? JSON.parse(text) : {};
                             const newToken = refreshData?.data?.accessToken || refreshData?.accessToken;
                             if (newToken && window.storage?.setToken) {
-                                console.log('✅ Token refreshed successfully');
                                 window.storage.setToken(newToken);
                                 token = newToken;
                                 // Retry the original request with the new token
                                 response = await execute(newToken);
-                                console.log('✅ Retried request after refresh, status:', response.status);
                                 refreshSucceeded = true;
                             } else {
                                 console.error('❌ Token refresh failed: No token in response');
@@ -658,16 +639,6 @@ const DatabaseAPI = {
                 const data = await response.json();
                 // Only log for non-cached responses to reduce noise
                 if (!this._responseCache.has(`${(options.method || 'GET').toUpperCase()}:${endpoint}`)) {
-                    console.log(`📥 API Response for ${endpoint}:`, {
-                        status: response.status,
-                        hasData: !!data,
-                        dataKeys: Object.keys(data || {}),
-                        dataStructure: endpoint === '/projects' ? {
-                            hasProjects: !!(data?.data?.projects),
-                            projectsCount: data?.data?.projects?.length || 0,
-                            rawData: data
-                        } : 'other endpoint'
-                    });
                 }
                 return data;
                 } catch (error) {
@@ -754,19 +725,8 @@ const DatabaseAPI = {
 
     // CLIENT OPERATIONS
     async getClients() {
-        console.log('📡 Fetching clients from database...');
         const response = await this.makeRequest('/clients');
-        console.log('🔍 Raw clients API response structure:', {
-            hasResponse: !!response,
-            hasData: !!response?.data,
-            dataKeys: response?.data ? Object.keys(response.data) : [],
-            clientsInData: !!response?.data?.clients,
-            clientsCount: response?.data?.clients?.length || 0,
-            clientsIsArray: Array.isArray(response?.data?.clients),
-            fullResponse: JSON.stringify(response).substring(0, 500)
-        });
         const clients = response?.data?.clients || [];
-        console.log(`✅ Clients fetched from database: ${clients.length}`);
         if (clients.length === 0) {
             console.warn('⚠️ WARNING: No clients found in database response. This could indicate:');
             console.warn('   1. Database is empty (no client records exist)');
@@ -777,59 +737,39 @@ const DatabaseAPI = {
     },
 
     async getClient(id) {
-        console.log(`📡 Fetching client ${id} from database...`);
         const response = await this.makeRequest(`/clients/${id}`);
-        console.log('✅ Client fetched from database');
         return response;
     },
 
     async createClient(clientData) {
-        console.log('📡 Creating client in database...');
         const response = await this.makeRequest('/clients', {
             method: 'POST',
             body: JSON.stringify(clientData)
         });
-        console.log('✅ Client created in database');
         return response;
     },
 
     async updateClient(id, clientData) {
-        console.log(`📡 Updating client ${id} in database...`);
         const response = await this.makeRequest(`/clients/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(clientData)
         });
-        console.log('✅ Client updated in database');
         return response;
     },
 
     async deleteClient(id) {
-        console.log(`📡 Deleting client ${id} from database...`);
         const response = await this.makeRequest(`/clients/${id}`, {
             method: 'DELETE'
         });
-        console.log('✅ Client deleted from database');
         return response;
     },
 
     // LEAD OPERATIONS
     async getLeads(forceRefresh = false) {
-        console.log('📡 Fetching leads from database...', forceRefresh ? '(FORCE REFRESH)' : '');
         // If forceRefresh, we need to bypass any caching layers
         // Add cache-busting query param to bypass any HTTP/proxy caches
         const endpoint = forceRefresh ? `/leads?_t=${Date.now()}` : '/leads';
-        console.log('🔄 Lead API endpoint:', endpoint);
         const raw = await this.makeRequest(endpoint);
-        console.log('🔍 Raw leads API response structure:', {
-            hasResponse: !!raw,
-            hasData: !!raw?.data,
-            dataKeys: raw?.data ? Object.keys(raw.data) : [],
-            leadsInData: !!raw?.data?.leads,
-            leadsCount: raw?.data?.leads?.length || 0,
-            leadsIsArray: Array.isArray(raw?.data?.leads),
-            dataIsArray: Array.isArray(raw?.data),
-            fullResponse: JSON.stringify(raw).substring(0, 500)
-        });
         // Normalize payload to { data: { leads: [...] } } for downstream consumers
         const normalized = {
             data: {
@@ -840,7 +780,6 @@ const DatabaseAPI = {
                         : []
             }
         };
-        console.log('✅ Leads fetched from database:', normalized.data.leads.length);
         if (normalized.data.leads.length === 0) {
             console.warn('⚠️ WARNING: No leads found in database response. This could indicate:');
             console.warn('   1. Database is empty (no lead records exist)');
@@ -851,19 +790,15 @@ const DatabaseAPI = {
     },
 
     async getLead(id) {
-        console.log(`📡 Fetching lead ${id} from database...`);
         const response = await this.makeRequest(`/leads/${id}`);
-        console.log('✅ Lead fetched from database');
         return response;
     },
 
     async createLead(leadData) {
-        console.log('📡 Creating lead in database...');
         const response = await this.makeRequest('/leads', {
             method: 'POST',
             body: JSON.stringify(leadData)
         });
-        console.log('✅ Lead created in database');
         return response;
     },
 
@@ -891,7 +826,6 @@ const DatabaseAPI = {
             
             attachmentCount++;
             try {
-                console.log(`📤 Uploading attachment: ${attachment.name || 'unnamed'} (${(attachment.dataUrl.length / 1024).toFixed(1)}KB base64)`);
                 const token = window.storage?.getToken?.();
                 const response = await fetch(`${this.API_BASE}/api/files`, {
                     method: 'POST',
@@ -919,7 +853,6 @@ const DatabaseAPI = {
                     attachment.url = fileUrl;
                     delete attachment.dataUrl; // Remove large base64 data
                     uploadedCount++;
-                    console.log(`✅ Uploaded attachment: ${fileUrl}`);
                     return true;
                 }
             } catch (err) {
@@ -954,15 +887,12 @@ const DatabaseAPI = {
         if (attachmentCount > 0) {
             const newSize = JSON.stringify(processedData).length;
             const reduction = originalSize > 0 ? ((1 - newSize / originalSize) * 100).toFixed(1) : 0;
-            console.log(`✅ Processed ${uploadedCount}/${attachmentCount} attachments`);
-            console.log(`📊 Payload size: ${(originalSize / 1024).toFixed(1)}KB → ${(newSize / 1024).toFixed(1)}KB (${reduction}% reduction)`);
         }
         
         return processedData;
     },
 
     async updateLead(id, leadData) {
-        console.log(`📡 Updating lead ${id} in database...`);
         
         // Process attachments before sending (upload base64 attachments separately)
         // This prevents 502 errors from large payloads
@@ -975,7 +905,6 @@ const DatabaseAPI = {
         }
         
         const payloadSize = JSON.stringify(leadDataToSend).length;
-        console.log(`📦 Lead data being sent (size: ${(payloadSize / 1024).toFixed(1)}KB)`);
         
         if (payloadSize > 50000) { // Warn if still > 50KB
             console.warn(`⚠️ Payload is still large (${(payloadSize / 1024).toFixed(1)}KB). This may cause 502 errors.`);
@@ -985,52 +914,41 @@ const DatabaseAPI = {
             method: 'PATCH',
             body: JSON.stringify(leadDataToSend)
         });
-        console.log('✅ Lead updated in database');
         return response;
     },
 
     async deleteLead(id) {
-        console.log(`📡 Deleting lead ${id} from database...`);
         const response = await this.makeRequest(`/leads/${id}`, {
             method: 'DELETE'
         });
-        console.log('✅ Lead deleted from database');
         return response;
     },
 
     // PROJECT OPERATIONS
     async getProjects() {
-        console.log('📡 Fetching projects from database...');
         const response = await this.makeRequest('/projects');
         const projectsCount = response?.data?.projects?.length || response?.data?.length || response?.projects?.length || 0;
-        console.log('✅ Projects fetched from database:', projectsCount);
         return response;
     },
 
     async getProject(id) {
-        console.log(`📡 Fetching project ${id} from database...`);
         const response = await this.makeRequest(`/projects/${id}`);
-        console.log('✅ Project fetched from database');
         return response;
     },
 
     async createProject(projectData) {
-        console.log('📡 Creating project in database...');
         const response = await this.makeRequest('/projects', {
             method: 'POST',
             body: JSON.stringify(projectData)
         });
-        console.log('✅ Project created in database');
         return response;
     },
 
     async updateProject(id, projectData) {
-        console.log(`📡 Updating project ${id} in database...`);
         const response = await this.makeRequest(`/projects/${id}`, {
             method: 'PUT',
             body: JSON.stringify(projectData)
         });
-        console.log('✅ Project updated in database');
         // Invalidate project caches so subsequent loads pull fresh data
         this._responseCache.delete('GET:/projects');
         this._responseCache.delete(`GET:/projects/${id}`);
@@ -1038,12 +956,10 @@ const DatabaseAPI = {
     },
 
     async updateProjectMonthlyProgress(id, monthlyProgress) {
-        console.log(`📡 Updating project ${id} monthly progress in database...`);
         const response = await this.makeRequest(`/projects-monthly-progress/${id}`, {
             method: 'PUT',
             body: JSON.stringify({ monthlyProgress })
         });
-        console.log('✅ Project monthly progress updated in database');
         // Invalidate project caches so subsequent loads pull fresh data
         this._responseCache.delete('GET:/projects');
         this._responseCache.delete(`GET:/projects/${id}`);
@@ -1051,244 +967,189 @@ const DatabaseAPI = {
     },
 
     async deleteProject(id) {
-        console.log(`📡 Deleting project ${id} from database...`);
         const response = await this.makeRequest(`/projects/${id}`, {
             method: 'DELETE'
         });
-        console.log('✅ Project deleted from database');
         return response;
     },
 
     // INVOICE OPERATIONS
     async getInvoices() {
-        console.log('📡 Fetching invoices from database...');
         const response = await this.makeRequest('/invoices');
-        console.log('✅ Invoices fetched from database:', response.data?.length || 0);
         return response;
     },
 
     async getInvoice(id) {
-        console.log(`📡 Fetching invoice ${id} from database...`);
         const response = await this.makeRequest(`/invoices/${id}`);
-        console.log('✅ Invoice fetched from database');
         return response;
     },
 
     async createInvoice(invoiceData) {
-        console.log('📡 Creating invoice in database...');
         const response = await this.makeRequest('/invoices', {
             method: 'POST',
             body: JSON.stringify(invoiceData)
         });
-        console.log('✅ Invoice created in database');
         return response;
     },
 
     async updateInvoice(id, invoiceData) {
-        console.log(`📡 Updating invoice ${id} in database...`);
         const response = await this.makeRequest(`/invoices/${id}`, {
             method: 'PUT',
             body: JSON.stringify(invoiceData)
         });
-        console.log('✅ Invoice updated in database');
         return response;
     },
 
     async deleteInvoice(id) {
-        console.log(`📡 Deleting invoice ${id} from database...`);
         const response = await this.makeRequest(`/invoices/${id}`, {
             method: 'DELETE'
         });
-        console.log('✅ Invoice deleted from database');
         return response;
     },
 
     // TIME TRACKING OPERATIONS
     async getTimeEntries() {
-        console.log('📡 Fetching time entries from database...');
         const response = await this.makeRequest('/time-entries');
-        console.log('✅ Time entries fetched from database:', response.data?.length || 0);
         return response;
     },
 
     async createTimeEntry(timeEntryData) {
-        console.log('📡 Creating time entry in database...');
         const response = await this.makeRequest('/time-entries', {
             method: 'POST',
             body: JSON.stringify(timeEntryData)
         });
-        console.log('✅ Time entry created in database');
         return response;
     },
 
     async updateTimeEntry(id, timeEntryData) {
-        console.log(`📡 Updating time entry ${id} in database...`);
         const response = await this.makeRequest(`/time-entries/${id}`, {
             method: 'PUT',
             body: JSON.stringify(timeEntryData)
         });
-        console.log('✅ Time entry updated in database');
         return response;
     },
 
     async deleteTimeEntry(id) {
-        console.log(`📡 Deleting time entry ${id} from database...`);
         const response = await this.makeRequest(`/time-entries/${id}`, {
             method: 'DELETE'
         });
-        console.log('✅ Time entry deleted from database');
         return response;
     },
 
     // USER OPERATIONS
     async getUsers() {
-        console.log('📡 Fetching users from database...');
         const response = await this.makeRequest('/users');
         const usersCount = response.data?.users?.length || response.data?.data?.users?.length || (Array.isArray(response.data) ? response.data.length : 0);
-        console.log('✅ Users fetched from database:', usersCount);
         return response;
     },
 
     async inviteUser(userData) {
-        console.log('📡 Inviting user via database...');
         const response = await this.makeRequest('/users/invite', {
             method: 'POST',
             body: JSON.stringify(userData)
         });
-        console.log('✅ User invitation sent via database');
         return response;
     },
 
     // SETTINGS OPERATIONS
     async getSettings() {
-        console.log('📡 Fetching system settings from database...');
         const response = await this.makeRequest('/settings');
-        console.log('✅ Settings fetched from database');
         return response;
     },
 
     async updateSettings(settingsData) {
-        console.log('📡 Updating system settings in database...');
         const response = await this.makeRequest('/settings', {
             method: 'PUT',
             body: JSON.stringify(settingsData)
         });
-        console.log('✅ Settings updated in database');
         return response;
     },
 
     // BULK OPERATIONS
     async bulkUpdateClients(clientsData) {
-        console.log('📡 Bulk updating clients in database...');
         const response = await this.makeRequest('/clients/bulk', {
             method: 'PUT',
             body: JSON.stringify({ clients: clientsData })
         });
-        console.log('✅ Clients bulk updated in database');
         return response;
     },
 
     async bulkDeleteClients(clientIds) {
-        console.log('📡 Bulk deleting clients from database...');
         const response = await this.makeRequest('/clients/bulk', {
             method: 'DELETE',
             body: JSON.stringify({ ids: clientIds })
         });
-        console.log('✅ Clients bulk deleted from database');
         return response;
     },
 
     // SEARCH OPERATIONS
     async searchClients(query) {
-        console.log('📡 Searching clients in database...');
         const response = await this.makeRequest(`/clients/search?q=${encodeURIComponent(query)}`);
-        console.log('✅ Client search completed in database');
         return response;
     },
 
     async searchLeads(query) {
-        console.log('📡 Searching leads in database...');
         const response = await this.makeRequest(`/leads/search?q=${encodeURIComponent(query)}`);
-        console.log('✅ Lead search completed in database');
         return response;
     },
 
     // ANALYTICS OPERATIONS
     async getClientAnalytics() {
-        console.log('📡 Fetching client analytics from database...');
         const response = await this.makeRequest('/analytics/clients');
-        console.log('✅ Client analytics fetched from database');
         return response;
     },
 
     async getLeadAnalytics() {
-        console.log('📡 Fetching lead analytics from database...');
         const response = await this.makeRequest('/analytics/leads');
-        console.log('✅ Lead analytics fetched from database');
         return response;
     },
 
     async getRevenueAnalytics() {
-        console.log('📡 Fetching revenue analytics from database...');
         const response = await this.makeRequest('/analytics/revenue');
-        console.log('✅ Revenue analytics fetched from database');
         return response;
     },
 
     // OPPORTUNITIES OPERATIONS
     async getOpportunities() {
-        console.log('📡 Fetching opportunities from database...');
         const response = await this.makeRequest('/opportunities');
-        console.log('✅ Opportunities fetched from database:', response.data?.opportunities?.length || 0);
         return response;
     },
 
     async getOpportunitiesByClient(clientId) {
-        console.log(`📡 Fetching opportunities for client ${clientId} from database...`);
         const response = await this.makeRequest(`/opportunities/client/${clientId}`);
-        console.log('✅ Client opportunities fetched from database:', response.data?.opportunities?.length || 0);
         return response;
     },
 
     async getOpportunity(id) {
-        console.log(`📡 Fetching opportunity ${id} from database...`);
         const response = await this.makeRequest(`/opportunities/${id}`);
-        console.log('✅ Opportunity fetched from database');
         return response;
     },
 
     async createOpportunity(opportunityData) {
-        console.log('📡 Creating opportunity in database...');
         const response = await this.makeRequest('/opportunities', {
             method: 'POST',
             body: JSON.stringify(opportunityData)
         });
-        console.log('✅ Opportunity created in database');
         return response;
     },
 
     async updateOpportunity(id, opportunityData) {
-        console.log(`📡 Updating opportunity ${id} in database...`);
         const response = await this.makeRequest(`/opportunities/${id}`, {
             method: 'PUT',
             body: JSON.stringify(opportunityData)
         });
-        console.log('✅ Opportunity updated in database');
         return response;
     },
 
     async deleteOpportunity(id) {
-        console.log(`📡 Deleting opportunity ${id} from database...`);
         const response = await this.makeRequest(`/opportunities/${id}`, {
             method: 'DELETE'
         });
-        console.log('✅ Opportunity deleted from database');
         return response;
     },
 
     // MANUFACTURING OPERATIONS - INVENTORY
     async getInventory(locationId = null) {
-        console.log('📡 Fetching inventory from database...', locationId ? `(location: ${locationId})` : '(all locations)');
         const endpoint = locationId && locationId !== 'all' ? `/manufacturing/inventory?locationId=${locationId}` : '/manufacturing/inventory';
         const raw = await this.makeRequest(endpoint);
         const normalized = {
@@ -1302,36 +1163,29 @@ const DatabaseAPI = {
                             : []
             }
         };
-        console.log('✅ Inventory fetched from database:', normalized.data.inventory.length);
         return normalized;
     },
 
     async createInventoryItem(itemData) {
-        console.log('📡 Creating inventory item in database...');
         const response = await this.makeRequest('/manufacturing/inventory', {
             method: 'POST',
             body: JSON.stringify(itemData)
         });
-        console.log('✅ Inventory item created in database');
         return response;
     },
 
     async updateInventoryItem(id, itemData) {
-        console.log(`📡 Updating inventory item ${id} in database...`);
         const response = await this.makeRequest(`/manufacturing/inventory/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(itemData)
         });
-        console.log('✅ Inventory item updated in database');
         return response;
     },
 
     async deleteInventoryItem(id) {
-        console.log(`📡 Deleting inventory item ${id} from database...`);
         const response = await this.makeRequest(`/manufacturing/inventory/${id}`, {
             method: 'DELETE'
         });
-        console.log('✅ Inventory item deleted from database');
 
         // Invalidate any cached inventory responses so deleted items
         // don't "reappear" from the cache and then fail with 404s
@@ -1349,7 +1203,6 @@ const DatabaseAPI = {
                 }
                 keysToDelete.forEach(key => {
                     this._responseCache.delete(key);
-                    console.log(`🧹 Cleared inventory cache entry: ${key}`);
                 });
             }
 
@@ -1367,7 +1220,6 @@ const DatabaseAPI = {
                 }
                 pendingKeysToDelete.forEach(key => {
                     this._pendingRequests.delete(key);
-                    console.log(`🧹 Cleared pending inventory request: ${key}`);
                 });
             }
         } catch (cacheError) {
@@ -1380,7 +1232,6 @@ const DatabaseAPI = {
 
     // MANUFACTURING OPERATIONS - STOCK LOCATIONS
     async getStockLocations() {
-        console.log('📡 Fetching stock locations from database...');
         const raw = await this.makeRequest('/manufacturing/locations');
         const normalized = {
             data: {
@@ -1393,13 +1244,10 @@ const DatabaseAPI = {
                             : []
             }
         };
-        console.log('✅ Stock locations fetched from database:', normalized.data.locations.length);
         return normalized;
     },
 
     async createStockLocation(locationData) {
-        console.log('📡 Creating stock location in database...');
-        console.log('📡 Location data being sent:', locationData);
         
         try {
             const response = await this.makeRequest('/manufacturing/locations', {
@@ -1409,8 +1257,6 @@ const DatabaseAPI = {
                     'Content-Type': 'application/json'
                 }
             });
-            console.log('✅ Stock location created in database');
-            console.log('✅ API Response:', response);
             return response;
         } catch (error) {
             console.error('❌ Error in createStockLocation:', error);
@@ -1424,27 +1270,22 @@ const DatabaseAPI = {
     },
 
     async updateStockLocation(id, locationData) {
-        console.log(`📡 Updating stock location ${id} in database...`);
         const response = await this.makeRequest(`/manufacturing/locations/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(locationData)
         });
-        console.log('✅ Stock location updated in database');
         return response;
     },
 
     async deleteStockLocation(id) {
-        console.log(`📡 Deleting stock location ${id} from database...`);
         const response = await this.makeRequest(`/manufacturing/locations/${id}`, {
             method: 'DELETE'
         });
-        console.log('✅ Stock location deleted from database');
         return response;
     },
 
     // MANUFACTURING OPERATIONS - BOMs
     async getBOMs() {
-        console.log('📡 Fetching BOMs from database...');
         const raw = await this.makeRequest('/manufacturing/boms');
         const normalized = {
             data: {
@@ -1457,42 +1298,34 @@ const DatabaseAPI = {
                             : []
             }
         };
-        console.log('✅ BOMs fetched from database:', normalized.data.boms.length);
         return normalized;
     },
 
     async createBOM(bomData) {
-        console.log('📡 Creating BOM in database...');
         const response = await this.makeRequest('/manufacturing/boms', {
             method: 'POST',
             body: JSON.stringify(bomData)
         });
-        console.log('✅ BOM created in database');
         return response;
     },
 
     async updateBOM(id, bomData) {
-        console.log(`📡 Updating BOM ${id} in database...`);
         const response = await this.makeRequest(`/manufacturing/boms/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(bomData)
         });
-        console.log('✅ BOM updated in database');
         return response;
     },
 
     async deleteBOM(id) {
-        console.log(`📡 Deleting BOM ${id} from database...`);
         const response = await this.makeRequest(`/manufacturing/boms/${id}`, {
             method: 'DELETE'
         });
-        console.log('✅ BOM deleted from database');
         return response;
     },
 
     // MANUFACTURING OPERATIONS - PRODUCTION ORDERS
     async getProductionOrders() {
-        console.log('📡 Fetching production orders from database...');
         const raw = await this.makeRequest('/manufacturing/production-orders');
         const normalized = {
             data: {
@@ -1505,42 +1338,34 @@ const DatabaseAPI = {
                             : []
             }
         };
-        console.log('✅ Production orders fetched from database:', normalized.data.productionOrders.length);
         return normalized;
     },
 
     async createProductionOrder(orderData) {
-        console.log('📡 Creating production order in database...');
         const response = await this.makeRequest('/manufacturing/production-orders', {
             method: 'POST',
             body: JSON.stringify(orderData)
         });
-        console.log('✅ Production order created in database');
         return response;
     },
 
     async updateProductionOrder(id, orderData) {
-        console.log(`📡 Updating production order ${id} in database...`);
         const response = await this.makeRequest(`/manufacturing/production-orders/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(orderData)
         });
-        console.log('✅ Production order updated in database');
         return response;
     },
 
     async deleteProductionOrder(id) {
-        console.log(`📡 Deleting production order ${id} from database...`);
         const response = await this.makeRequest(`/manufacturing/production-orders/${id}`, {
             method: 'DELETE'
         });
-        console.log('✅ Production order deleted from database');
         return response;
     },
 
     // SALES ORDERS
     async getSalesOrders() {
-        console.log('📡 Fetching sales orders from database...');
         const raw = await this.makeRequest('/sales-orders');
         const normalized = {
             data: {
@@ -1553,42 +1378,34 @@ const DatabaseAPI = {
                             : []
             }
         };
-        console.log('✅ Sales orders fetched from database:', normalized.data.salesOrders.length);
         return normalized;
     },
 
     async createSalesOrder(orderData) {
-        console.log('📡 Creating sales order in database...');
         const response = await this.makeRequest('/sales-orders', {
             method: 'POST',
             body: JSON.stringify(orderData)
         });
-        console.log('✅ Sales order created in database');
         return response;
     },
 
     async updateSalesOrder(id, orderData) {
-        console.log(`📡 Updating sales order ${id} in database...`);
         const response = await this.makeRequest(`/sales-orders/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(orderData)
         });
-        console.log('✅ Sales order updated in database');
         return response;
     },
 
     async deleteSalesOrder(id) {
-        console.log(`📡 Deleting sales order ${id} from database...`);
         const response = await this.makeRequest(`/sales-orders/${id}`, {
             method: 'DELETE'
         });
-        console.log('✅ Sales order deleted from database');
         return response;
     },
 
     // MANUFACTURING OPERATIONS - STOCK MOVEMENTS
     async getStockMovements() {
-        console.log('📡 Fetching stock movements from database...');
         const raw = await this.makeRequest('/manufacturing/stock-movements');
         const normalized = {
             data: {
@@ -1601,43 +1418,35 @@ const DatabaseAPI = {
                             : []
             }
         };
-        console.log('✅ Stock movements fetched from database:', normalized.data.movements.length);
         return normalized;
     },
 
     // STOCK TRANSACTIONS (per-location aware)
     async createStockTransaction(data) {
-        console.log('📡 Creating stock transaction...', data?.type)
         const response = await this.makeRequest('/manufacturing/stock-transactions', {
             method: 'POST',
             body: JSON.stringify(data)
         })
-        console.log('✅ Stock transaction created')
         return response
     },
 
     async createStockMovement(movementData) {
-        console.log('📡 Creating stock movement in database...');
         const response = await this.makeRequest('/manufacturing/stock-movements', {
             method: 'POST',
             body: JSON.stringify(movementData)
         });
-        console.log('✅ Stock movement created in database');
         return response;
     },
 
     async deleteStockMovement(id) {
-        console.log(`📡 Deleting stock movement ${id} from database...`);
         const response = await this.makeRequest(`/manufacturing/stock-movements/${id}`, {
             method: 'DELETE'
         });
-        console.log('✅ Stock movement deleted from database');
         return response;
     },
 
     // MANUFACTURING OPERATIONS - RECEIVING AND BOM CONSUMPTION
     async receiveStock(receiptData) {
-        console.log('📡 Receiving stock via database...')
         const response = await this.makeRequest('/manufacturing/stock-movements', {
             method: 'POST',
             body: JSON.stringify({
@@ -1645,23 +1454,19 @@ const DatabaseAPI = {
                 type: 'receipt'
             })
         })
-        console.log('✅ Stock received in database')
         return response
     },
 
     async consumeBomForProduction(orderId, payload = {}) {
-        console.log(`📡 Consuming BOM for production order ${orderId}...`)
         const response = await this.makeRequest(`/manufacturing/production-orders/${orderId}/consume`, {
             method: 'POST',
             body: JSON.stringify(payload)
         })
-        console.log('✅ BOM consumption completed in database')
         return response
     },
 
     // MANUFACTURING OPERATIONS - SUPPLIERS
     async getSuppliers() {
-        console.log('📡 Fetching suppliers from database...');
         const raw = await this.makeRequest('/manufacturing/suppliers');
         const normalized = {
             data: {
@@ -1674,42 +1479,34 @@ const DatabaseAPI = {
                             : []
             }
         };
-        console.log('✅ Suppliers fetched from database:', normalized.data.suppliers.length);
         return normalized;
     },
 
     async createSupplier(supplierData) {
-        console.log('📡 Creating supplier in database...');
         const response = await this.makeRequest('/manufacturing/suppliers', {
             method: 'POST',
             body: JSON.stringify(supplierData)
         });
-        console.log('✅ Supplier created in database');
         return response;
     },
 
     async updateSupplier(id, supplierData) {
-        console.log(`📡 Updating supplier ${id} in database...`);
         const response = await this.makeRequest(`/manufacturing/suppliers/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(supplierData)
         });
-        console.log('✅ Supplier updated in database');
         return response;
     },
 
     async deleteSupplier(id) {
-        console.log(`📡 Deleting supplier ${id} from database...`);
         const response = await this.makeRequest(`/manufacturing/suppliers/${id}`, {
             method: 'DELETE'
         });
-        console.log('✅ Supplier deleted from database');
         return response;
     },
 
     // PURCHASE ORDERS OPERATIONS
     async getPurchaseOrders() {
-        console.log('📡 Fetching purchase orders from database...');
         const raw = await this._callPurchaseOrdersEndpoint();
         const normalized = {
             data: {
@@ -1722,48 +1519,39 @@ const DatabaseAPI = {
                             : []
             }
         };
-        console.log('✅ Purchase orders fetched from database:', normalized.data.purchaseOrders.length);
         return normalized;
     },
 
     async getPurchaseOrder(id) {
-        console.log(`📡 Fetching purchase order ${id} from database...`);
         const response = await this._callPurchaseOrdersEndpoint(id);
         return response;
     },
 
     async createPurchaseOrder(purchaseOrderData) {
-        console.log('📡 Creating purchase order in database...');
         const response = await this._callPurchaseOrdersEndpoint('', {
             method: 'POST',
             body: JSON.stringify(purchaseOrderData)
         });
-        console.log('✅ Purchase order created in database');
         return response;
     },
 
     async updatePurchaseOrder(id, purchaseOrderData) {
-        console.log(`📡 Updating purchase order ${id} in database...`);
         const response = await this._callPurchaseOrdersEndpoint(id, {
             method: 'PATCH',
             body: JSON.stringify(purchaseOrderData)
         });
-        console.log('✅ Purchase order updated in database');
         return response;
     },
 
     async deletePurchaseOrder(id) {
-        console.log(`📡 Deleting purchase order ${id} from database...`);
         const response = await this._callPurchaseOrdersEndpoint(id, {
             method: 'DELETE'
         });
-        console.log('✅ Purchase order deleted from database');
         return response;
     },
 
     // JOB CARDS OPERATIONS
     async getJobCards() {
-        console.log('📡 Fetching job cards from database...');
         const raw = await this.makeRequest('/jobcards');
         const normalized = {
             data: {
@@ -1776,55 +1564,42 @@ const DatabaseAPI = {
                             : []
             }
         };
-        console.log('✅ Job cards fetched from database:', normalized.data.jobCards.length);
         return normalized;
     },
 
     async getJobCard(id) {
-        console.log(`📡 Fetching job card ${id} from database...`);
         const response = await this.makeRequest(`/jobcards/${id}`);
         return response;
     },
 
     async createJobCard(jobCardData) {
-        console.log('📡 Creating job card in database...');
         const response = await this.makeRequest('/jobcards', {
             method: 'POST',
             body: JSON.stringify(jobCardData)
         });
-        console.log('✅ Job card created in database');
         // Clear cache for job cards list to ensure fresh data
         this._responseCache.delete('GET:/jobcards');
-        console.log('🗑️ Cleared job cards cache after create');
         return response;
     },
 
     async updateJobCard(id, jobCardData) {
-        console.log(`📡 Updating job card ${id} in database...`);
         const response = await this.makeRequest(`/jobcards/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(jobCardData)
         });
-        console.log('✅ Job card updated in database');
         // Clear cache for both list and individual job card
         this._responseCache.delete('GET:/jobcards');
         this._responseCache.delete(`GET:/jobcards/${id}`);
-        console.log('🗑️ Cleared job cards cache after update');
         return response;
     },
 
     async deleteJobCard(id) {
-        console.log(`📡 Deleting job card ${id} from database...`);
         const response = await this.makeRequest(`/jobcards/${id}`, {
             method: 'DELETE'
         });
-        console.log('📥 Delete response:', response);
-        console.log('📥 Delete response keys:', Object.keys(response || {}));
-        console.log('📥 Delete response data:', response?.data);
         
         // Verify deletion was successful
         if (response?.data?.deleted === true || response?.deleted === true) {
-            console.log('✅ Job card deleted from database');
         } else {
             console.warn('⚠️ Delete response does not indicate success:', response);
         }
@@ -1832,17 +1607,14 @@ const DatabaseAPI = {
         // Clear cache for job cards list and individual job card to ensure fresh data
         this._responseCache.delete('GET:/jobcards');
         this._responseCache.delete(`GET:/jobcards/${id}`);
-        console.log('🗑️ Cleared job cards cache after delete');
         return response;
     },
 
     // STAR CLIENT/LEAD
     async starClient(clientId) {
-        console.log(`⭐ Starring client/lead ${clientId}...`);
         const response = await this.makeRequest(`/starred-clients/${clientId}`, {
             method: 'PUT'
         });
-        console.log('✅ Client/lead starred');
         // Clear cache for clients and leads to refresh starred status
         this._responseCache.delete('GET:/clients');
         this._responseCache.delete('GET:/leads');
@@ -1850,11 +1622,9 @@ const DatabaseAPI = {
     },
 
     async unstarClient(clientId) {
-        console.log(`⭐ Unstarring client/lead ${clientId}...`);
         const response = await this.makeRequest(`/starred-clients/${clientId}`, {
             method: 'PUT'
         });
-        console.log('✅ Client/lead unstarred');
         // Clear cache for clients and leads to refresh starred status
         this._responseCache.delete('GET:/clients');
         this._responseCache.delete('GET:/leads');
@@ -1862,11 +1632,9 @@ const DatabaseAPI = {
     },
 
     async toggleStarClient(clientId) {
-        console.log(`⭐ Toggling star for client/lead ${clientId}...`);
         const response = await this.makeRequest(`/starred-clients/${clientId}`, {
             method: 'PUT'
         });
-        console.log('✅ Star toggled');
         // Clear cache for clients and leads to refresh starred status
         this._responseCache.delete('GET:/clients');
         this._responseCache.delete('GET:/leads');
@@ -1874,117 +1642,93 @@ const DatabaseAPI = {
     },
 
     async getStarredClients() {
-        console.log('⭐ Fetching starred clients/leads...');
         const response = await this.makeRequest('/starred-clients');
         return response;
     },
 
     // STAR OPPORTUNITY
     async starOpportunity(opportunityId) {
-        console.log(`⭐ Starring opportunity ${opportunityId}...`);
         const response = await this.makeRequest(`/starred-opportunities/${opportunityId}`, {
             method: 'PUT'
         });
-        console.log('✅ Opportunity starred');
         this._responseCache.delete('GET:/opportunities');
         return response;
     },
 
     async unstarOpportunity(opportunityId) {
-        console.log(`⭐ Unstarring opportunity ${opportunityId}...`);
         const response = await this.makeRequest(`/starred-opportunities/${opportunityId}`, {
             method: 'PUT'
         });
-        console.log('✅ Opportunity unstarred');
         this._responseCache.delete('GET:/opportunities');
         return response;
     },
 
     async toggleStarOpportunity(opportunityId) {
-        console.log(`⭐ Toggling star for opportunity ${opportunityId}...`);
         const response = await this.makeRequest(`/starred-opportunities/${opportunityId}`, {
             method: 'PUT'
         });
-        console.log('✅ Opportunity star toggled');
         this._responseCache.delete('GET:/opportunities');
         return response;
     },
 
     async getStarredOpportunities() {
-        console.log('⭐ Fetching starred opportunities...');
         const response = await this.makeRequest('/starred-opportunities');
         return response;
     },
 
     // VEHICLES
     async getVehicles() {
-        console.log('📡 Fetching vehicles from database...');
         const response = await this.makeRequest('/vehicles');
-        console.log('✅ Vehicles fetched from database');
         return response;
     },
 
     async getVehicle(id) {
-        console.log(`📡 Fetching vehicle ${id} from database...`);
         const response = await this.makeRequest(`/vehicles/${id}`);
-        console.log('✅ Vehicle fetched from database');
         return response;
     },
 
     async createVehicle(vehicleData) {
-        console.log('📡 Creating vehicle in database...');
         const response = await this.makeRequest('/vehicles', {
             method: 'POST',
             body: JSON.stringify(vehicleData)
         });
-        console.log('✅ Vehicle created in database');
         return response;
     },
 
     async updateVehicle(id, vehicleData) {
-        console.log(`📡 Updating vehicle ${id} in database...`);
         const response = await this.makeRequest(`/vehicles/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(vehicleData)
         });
-        console.log('✅ Vehicle updated in database');
         return response;
     },
 
     async deleteVehicle(id) {
-        console.log(`📡 Deleting vehicle ${id} from database...`);
         const response = await this.makeRequest(`/vehicles/${id}`, {
             method: 'DELETE'
         });
-        console.log('✅ Vehicle deleted from database');
         return response;
     },
 
     // HEALTH CHECK
     async healthCheck() {
-        console.log('📡 Checking database health...');
         const response = await this.makeRequest('/health');
-        console.log('✅ Database health check completed');
         return response;
     },
 
     // MEETING NOTES OPERATIONS
     async getMeetingNotes(monthKey = null) {
-        console.log('📡 Fetching meeting notes from database...');
         const url = monthKey ? `/meeting-notes?monthKey=${monthKey}` : '/meeting-notes';
         const response = await this.makeRequest(url);
-        console.log('✅ Meeting notes fetched from database');
         return response;
     },
 
     async createMonthlyNotes(monthKey, monthlyGoals = '') {
-        console.log('📡 Creating monthly meeting notes in database...');
         try {
             const response = await this.makeRequest('/meeting-notes', {
                 method: 'POST',
                 body: JSON.stringify({ monthKey, monthlyGoals })
             });
-            console.log('✅ Monthly meeting notes created in database');
             return response;
         } catch (error) {
             const message = (error?.message || '').toLowerCase();
@@ -2005,17 +1749,14 @@ const DatabaseAPI = {
     },
 
     async updateMonthlyNotes(id, data) {
-        console.log(`📡 Updating monthly meeting notes ${id} in database...`);
         const response = await this.makeRequest('/meeting-notes', {
             method: 'PUT',
             body: JSON.stringify({ id, ...data })
         });
-        console.log('✅ Monthly meeting notes updated in database');
         return response;
     },
 
     async deleteMonthlyNotes({ id = null, monthKey = null } = {}) {
-        console.log('📡 Deleting monthly meeting notes from database...', { id, monthKey });
         const params = new URLSearchParams();
         if (id) params.append('id', id);
         if (monthKey) params.append('monthKey', monthKey);
@@ -2026,18 +1767,15 @@ const DatabaseAPI = {
         const response = await this.makeRequest(`/meeting-notes?${query}`, {
             method: 'DELETE'
         });
-        console.log('✅ Monthly meeting notes deleted in database');
         return response;
     },
 
     async createWeeklyNotes(monthlyNotesId, weekKey, weekStart, weekEnd = null) {
-        console.log('📡 Creating weekly meeting notes in database...');
         try {
             const response = await this.makeRequest('/meeting-notes?action=weekly', {
                 method: 'POST',
                 body: JSON.stringify({ monthlyNotesId, weekKey, weekStart, weekEnd })
             });
-            console.log('✅ Weekly meeting notes created in database');
             return response;
         } catch (error) {
             const message = (error?.message || '').toLowerCase();
@@ -2070,68 +1808,55 @@ const DatabaseAPI = {
     },
 
     async deleteWeeklyNotes(weeklyNotesId) {
-        console.log(`📡 Deleting weekly meeting notes ${weeklyNotesId} from database...`);
         if (!weeklyNotesId) {
             throw new Error('weeklyNotesId is required to delete weekly meeting notes');
         }
         const response = await this.makeRequest(`/meeting-notes?action=weekly&id=${weeklyNotesId}`, {
             method: 'DELETE'
         });
-        console.log('✅ Weekly meeting notes deleted in database');
         return response;
     },
 
     async updateDepartmentNotes(id, data) {
-        console.log(`📡 Updating department notes ${id} in database...`);
         const response = await this.makeRequest('/meeting-notes?action=department', {
             method: 'PUT',
             body: JSON.stringify({ id, ...data })
         });
-        console.log('✅ Department notes updated in database');
         return response;
     },
 
     async createActionItem(data) {
-        console.log('📡 Creating action item in database...');
         const response = await this.makeRequest('/meeting-notes?action=action-item', {
             method: 'POST',
             body: JSON.stringify(data)
         });
-        console.log('✅ Action item created in database');
         return response;
     },
 
     async updateActionItem(id, data) {
-        console.log(`📡 Updating action item ${id} in database...`);
         const response = await this.makeRequest('/meeting-notes?action=action-item', {
             method: 'PUT',
             body: JSON.stringify({ id, ...data })
         });
-        console.log('✅ Action item updated in database');
         return response;
     },
 
     async deleteActionItem(id) {
-        console.log(`📡 Deleting action item ${id} from database...`);
         const response = await this.makeRequest(`/meeting-notes?action=action-item&id=${id}`, {
             method: 'DELETE'
         });
-        console.log('✅ Action item deleted from database');
         return response;
     },
 
     async createComment(data) {
-        console.log('📡 Creating comment in database...');
         const response = await this.makeRequest('/meeting-notes?action=comment', {
             method: 'POST',
             body: JSON.stringify(data)
         });
-        console.log('✅ Comment created in database');
         return response;
     },
 
     async deleteComment(commentId) {
-        console.log(`📡 Deleting comment ${commentId} from database...`);
         if (!commentId) {
             throw new Error('commentId is required to delete a comment');
         }
@@ -2144,37 +1869,30 @@ const DatabaseAPI = {
             method: 'DELETE',
             body: JSON.stringify(payload)
         });
-        console.log('✅ Comment deleted from database');
         return response;
     },
 
     async updateUserAllocation(monthlyNotesId, departmentId, userId, role = 'contributor') {
-        console.log('📡 Updating user allocation in database...');
         const response = await this.makeRequest('/meeting-notes?action=allocation', {
             method: 'POST',
             body: JSON.stringify({ monthlyNotesId, departmentId, userId, role })
         });
-        console.log('✅ User allocation updated in database');
         return response;
     },
 
     async deleteUserAllocation(monthlyNotesId, departmentId, userId) {
-        console.log('📡 Deleting user allocation from database...');
         const response = await this.makeRequest(`/meeting-notes?action=allocation&monthlyNotesId=${monthlyNotesId}&departmentId=${departmentId}&userId=${userId}`, {
             method: 'DELETE'
         });
-        console.log('✅ User allocation deleted from database');
         return response;
     },
 
     async generateMonthlyPlan(monthKey, copyFromMonthKey = null) {
-        console.log('📡 Generating monthly plan in database...');
         try {
             const response = await this.makeRequest('/meeting-notes?action=generate-month', {
                 method: 'POST',
                 body: JSON.stringify({ monthKey, copyFromMonthKey })
             });
-            console.log('✅ Monthly plan generated in database');
             return response;
         } catch (error) {
             const message = (error?.message || '').toLowerCase();
@@ -2195,11 +1913,9 @@ const DatabaseAPI = {
     },
 
     async purgeMeetingNotes() {
-        console.log('🧹 Purging all meeting notes from database...');
         const response = await this.makeRequest('/meeting-notes?action=purge&confirm=true', {
             method: 'DELETE'
         });
-        console.log('✅ Meeting notes purge request completed');
         return response;
     },
     
@@ -2309,13 +2025,11 @@ const DatabaseAPI = {
         if (this._responseCache?.has(cacheKey)) {
             this._responseCache.delete(cacheKey);
             cleared++;
-            console.log(`✅ Cleared cache for ${cacheKey}`);
         }
         
         if (this._pendingRequests?.has(cacheKey)) {
             this._pendingRequests.delete(cacheKey);
             cleared++;
-            console.log(`✅ Cleared pending request for ${cacheKey}`);
         }
         
         return cleared;
@@ -2327,10 +2041,8 @@ window.DatabaseAPI = DatabaseAPI;
 
 // Check if we need to clear cache on load (set by early cache clearing script)
 if (window.__CLEAR_DATABASE_CACHE_ON_LOAD__) {
-    console.log('🧹 Clearing DatabaseAPI cache on load (flag detected)...');
     DatabaseAPI.clearCache();
     delete window.__CLEAR_DATABASE_CACHE_ON_LOAD__;
-    console.log('✅ DatabaseAPI cache cleared on load');
 }
 
 // Update the existing API object to use database operations

@@ -48,7 +48,6 @@ async function handler(req, res) {
                 }
             })
             
-            console.log('✅ Invitation updated:', updated.id)
             
             return ok(res, {
                 success: true,
@@ -65,12 +64,6 @@ async function handler(req, res) {
     // Delete invitation (DELETE)
     if (req.method === 'DELETE') {
         try {
-            console.log('🗑️ Delete invitation request:', { 
-                invitationId, 
-                url: req.url, 
-                params: req.params,
-                method: req.method 
-            });
             
             if (!invitationId) {
                 console.error('❌ No invitation ID provided');
@@ -87,17 +80,11 @@ async function handler(req, res) {
                 return badRequest(res, 'Invitation not found')
             }
             
-            console.log('✅ Found invitation to delete:', { 
-                id: invitation.id, 
-                email: invitation.email,
-                status: invitation.status 
-            });
             
             await prisma.invitation.delete({
                 where: { id: invitationId }
             })
             
-            console.log('✅ Invitation deleted successfully:', invitationId)
             
             return ok(res, {
                 success: true,
@@ -148,8 +135,6 @@ async function handler(req, res) {
             // Generate invitation link using the token that was ACTUALLY saved to the database
             const savedToken = updated.token || newToken
             const invitationLink = `${getAppUrl()}/accept-invitation?token=${savedToken}`
-            console.log('🔗 Generated resend invitation link with token:', savedToken.substring(0, 20) + '...')
-            console.log('🔗 Full resend invitation link:', invitationLink)
             
             // Verify the token matches what was saved
             if (updated.token !== newToken) {
@@ -163,7 +148,6 @@ async function handler(req, res) {
                 const emailLink = updated.token 
                     ? `${getAppUrl()}/accept-invitation?token=${updated.token}`
                     : invitationLink
-                console.log('📧 Resending email with link token:', updated.token ? updated.token.substring(0, 20) + '...' : 'using newToken')
                 await sendInvitationEmail({
                     email: invitation.email,
                     name: invitation.name,
@@ -171,7 +155,6 @@ async function handler(req, res) {
                     invitationLink: emailLink
                 })
                 emailSent = true
-                console.log('✅ Invitation email resent successfully')
             } catch (emailError) {
                 console.error('❌ Failed to resend invitation email:', emailError.message)
             }

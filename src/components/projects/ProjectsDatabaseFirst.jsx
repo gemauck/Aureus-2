@@ -303,17 +303,14 @@ const ProjectsDatabaseFirst = () => {
 
     // Load projects from database
     const loadProjects = async () => {
-        console.log('🔄 Loading projects from database...');
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
-                console.log('⚠️ No authentication token - redirecting to login');
                 window.location.hash = '#/login';
                 return [];
             }
 
             const response = await window.api.getProjects();
-            console.log('📡 Raw API response:', response);
             
             let apiProjects = [];
             if (response?.data?.projects) {
@@ -326,7 +323,6 @@ const ProjectsDatabaseFirst = () => {
                 apiProjects = response;
             }
             
-            console.log('📡 Database returned projects:', apiProjects?.length || 0);
             
             if (!Array.isArray(apiProjects)) {
                 console.error('❌ apiProjects is not an array:', apiProjects);
@@ -339,13 +335,11 @@ const ProjectsDatabaseFirst = () => {
             
             setProjects(processedProjects);
             setIsLoading(false);
-            console.log('✅ Projects loaded from database');
             return processedProjects;
         } catch (error) {
             console.error('❌ Failed to load projects from database:', error);
             setIsLoading(false);
             if (error?.message?.includes?.('Unauthorized') || error?.message?.includes?.('401')) {
-                console.log('🔑 Authentication expired - redirecting to login');
                 window.storage?.removeToken?.();
                 window.storage?.removeUser?.();
                 window.location.hash = '#/login';
@@ -358,7 +352,6 @@ const ProjectsDatabaseFirst = () => {
 
     // Save project to database
     const handleSaveProject = async (projectData) => {
-        console.log('💾 Saving project to database...');
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
@@ -397,13 +390,11 @@ const ProjectsDatabaseFirst = () => {
                     ...comprehensiveProject,
                     clientName: comprehensiveProject.client
                 });
-                console.log('✅ Project updated in database');
             } else {
                 apiResponse = await window.api.createProject({
                     ...comprehensiveProject,
                     clientName: comprehensiveProject.client
                 });
-                console.log('✅ Project created in database');
             }
 
             const normalizedFromApi = normalizeProject(extractProjectFromResponse(apiResponse));
@@ -448,7 +439,6 @@ const ProjectsDatabaseFirst = () => {
             return;
         }
 
-        console.log(`💾 Deleting project ${projectId} from database...`);
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
@@ -457,7 +447,6 @@ const ProjectsDatabaseFirst = () => {
             }
 
             await window.api.deleteProject(projectId);
-            console.log('✅ Project deleted from database');
             
             // Update local state
             setProjects(prev => prev.filter(p => p.id !== projectId));
@@ -483,7 +472,6 @@ const ProjectsDatabaseFirst = () => {
             return;
         }
 
-        console.log(`💾 Bulk deleting ${selectedProjects.length} projects from database...`);
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
@@ -496,7 +484,6 @@ const ProjectsDatabaseFirst = () => {
                 await window.api.deleteProject(projectId);
             }
             
-            console.log('✅ Projects deleted from database');
             
             // Update local state
             setProjects(prev => prev.filter(p => !selectedProjects.includes(p.id)));

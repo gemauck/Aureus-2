@@ -283,7 +283,6 @@ const StockLocations = ({ inventory = [], onInventoryUpdate }) => {
 try {
   if (typeof window !== 'undefined') {
     window.StockLocations = StockLocations;
-    console.log('✅ StockLocations component registered on window.StockLocations');
   }
 } catch (error) {
   console.error('❌ StockLocations.jsx: Error registering component on window.StockLocations', error);

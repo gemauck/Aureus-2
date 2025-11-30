@@ -66,9 +66,7 @@ const Users = () => {
     // Debug: Verify delete buttons are rendered
     useEffect(() => {
         const deleteButtons = document.querySelectorAll('button[title="Delete"]');
-        console.log('🔴 Delete buttons found:', deleteButtons.length);
         if (deleteButtons.length > 0) {
-            console.log('✅ Delete buttons are rendered in the DOM');
         }
     }, [users, viewMode]);
 
@@ -163,9 +161,6 @@ const Users = () => {
 
     const handleDeleteUser = async (user) => {
         try {
-            console.log('🔴🔴🔴 handleDeleteUser FUNCTION CALLED');
-            console.log('🔴 handleDeleteUser called with user:', user);
-            console.log('🔴 User object keys:', user ? Object.keys(user) : 'user is null/undefined');
             
             if (!user) {
                 console.error('❌ handleDeleteUser: user is null or undefined');
@@ -179,16 +174,12 @@ const Users = () => {
                 return;
             }
             
-            console.log('🔴 Showing confirmation dialog...');
             const confirmed = confirm(`Are you sure you want to delete ${user.name || user.email || 'this user'}?`);
-            console.log('🔴 Confirmation result:', confirmed);
             
             if (!confirmed) {
-                console.log('❌ User cancelled deletion');
                 return;
             }
             
-            console.log('✅ User confirmed deletion');
 
             const token = window.storage?.getToken?.();
             if (!token) {
@@ -196,12 +187,6 @@ const Users = () => {
                 return;
             }
 
-            console.log('🗑️ Deleting user via API:', {
-                userId: user.id,
-                userName: user.name,
-                userEmail: user.email,
-                url: `/api/users/${user.id}`
-            });
             
             const response = await fetch(`/api/users/${user.id}`, {
                 method: 'DELETE',
@@ -211,11 +196,9 @@ const Users = () => {
                 }
             });
 
-            console.log('📡 Delete response status:', response.status, response.statusText);
 
             // Get response text first to see what we're dealing with
             const responseText = await response.text();
-            console.log('📡 Delete response body:', responseText);
 
             if (!response.ok) {
                 let errorData;
@@ -237,7 +220,6 @@ const Users = () => {
                 data = { success: true, message: 'User deleted successfully' };
             }
             
-            console.log('✅ User deleted successfully:', data);
 
             // Clear local storage cache to prevent stale data
             const currentUsers = users.filter(u => u.id !== user.id);
@@ -278,7 +260,6 @@ const Users = () => {
 
             if (selectedUser) {
                 // Update existing user via API
-                console.log('📝 Updating user via API:', selectedUser.id);
                 
                 // Prepare accessibleProjectIds - ensure it's an array
                 let accessibleProjectIds = userData.accessibleProjectIds || [];
@@ -322,7 +303,6 @@ const Users = () => {
                 }
 
                 const data = await response.json();
-                console.log('✅ User updated successfully:', data);
 
                 // Reload users from API
                 await loadUsers();
@@ -331,7 +311,6 @@ const Users = () => {
                 setSelectedUser(null);
             } else {
                 // Add new user via API
-                console.log('➕ Creating new user via API');
                 
                 // Prepare accessibleProjectIds - ensure it's an array
                 let accessibleProjectIds = userData.accessibleProjectIds || [];
@@ -374,7 +353,6 @@ const Users = () => {
                 }
 
                 const data = await response.json();
-                console.log('✅ User created successfully:', data);
 
                 // Reload users from API
                 await loadUsers();
@@ -395,7 +373,6 @@ const Users = () => {
                 return;
             }
 
-            console.log('📧 Sending invitation via API:', invitationData);
 
             // Call the invite API
             const response = await fetch('/api/users/invite', {
@@ -420,7 +397,6 @@ const Users = () => {
             }
 
             const data = await response.json();
-            console.log('✅ Invitation sent successfully:', data);
 
             // Reload invitations from API
             await loadInvitations();
@@ -437,12 +413,10 @@ const Users = () => {
 
 
     const handleResendInvitation = (invitation) => {
-        console.log('Resending invitation to:', invitation.email);
         alert(`Invitation resent to ${invitation.email}!`);
     };
 
     const handleCancelInvitation = async (invitationId, email) => {
-        console.log('🗑️ Cancel/Delete invitation clicked:', { invitationId, email });
         
         if (!invitationId) {
             console.error('❌ No invitation ID provided');
@@ -462,7 +436,6 @@ const Users = () => {
                 return;
             }
 
-            console.log('📤 Sending DELETE request to:', `/api/users/invitation/${invitationId}`);
             const response = await fetch(`/api/users/invitation/${invitationId}`, {
                 method: 'DELETE',
                 headers: {
@@ -470,7 +443,6 @@ const Users = () => {
                 }
             });
 
-            console.log('📡 Response status:', response.status);
 
             if (!response.ok) {
                 const errorText = await response.text();
@@ -486,7 +458,6 @@ const Users = () => {
             }
 
             const data = await response.json();
-            console.log('✅ Delete response:', data);
 
             alert('Invitation deleted successfully');
             
@@ -792,11 +763,8 @@ const Users = () => {
                                             type="button"
                                             onClick={(e) => {
                                                 try {
-                                                    console.log('🔴🔴🔴 DELETE BUTTON CLICKED (GRID) - START');
                                                     e.preventDefault();
                                                     e.stopPropagation();
-                                                    console.log('🔴 Delete button clicked (grid view) for user:', user);
-                                                    console.log('🔴 User ID:', user?.id);
                                                     if (!user || !user.id) {
                                                         console.error('❌ Invalid user object in grid view:', user);
                                                         alert('Error: Invalid user data');
@@ -920,20 +888,14 @@ const Users = () => {
                                                             type="button"
                                                             onClick={(e) => {
                                                                 try {
-                                                                    console.log('🔴🔴🔴 DELETE BUTTON CLICKED - START');
                                                                     e.preventDefault();
                                                                     e.stopPropagation();
-                                                                    console.log('🔴 Delete button clicked for user:', user);
-                                                                    console.log('🔴 User ID:', user?.id);
-                                                                    console.log('🔴 User name:', user?.name);
                                                                     if (!user || !user.id) {
                                                                         console.error('❌ Invalid user object:', user);
                                                                         alert('Error: Invalid user data');
                                                                         return;
                                                                     }
-                                                                    console.log('🔴 Calling handleDeleteUser...');
                                                                     handleDeleteUser(user);
-                                                                    console.log('🔴 handleDeleteUser called');
                                                                 } catch (error) {
                                                                     console.error('❌ Error in delete button onClick:', error);
                                                                     alert('Error clicking delete button: ' + error.message);
@@ -1001,7 +963,6 @@ const Users = () => {
                                         onClick={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
-                                            console.log('🔴 Cancel/Delete button clicked for invitation:', invitation);
                                             if (!invitation || !invitation.id) {
                                                 console.error('❌ Invalid invitation object:', invitation);
                                                 alert('Error: Invalid invitation data');
@@ -1054,14 +1015,11 @@ const Users = () => {
 // Make available globally
 try {
     window.Users = Users;
-    console.log('✅ Users.jsx loaded and registered on window.Users', typeof window.Users);
-    console.log('🔴 Users.jsx: Delete functionality version 2025-01-17 - handleDeleteUser with API call');
     
     // Dispatch ready event
     if (typeof window.dispatchEvent === 'function') {
         try {
             window.dispatchEvent(new CustomEvent('usersComponentReady'));
-            console.log('📢 Dispatched usersComponentReady event');
             
             // Also dispatch after a small delay in case listeners weren't ready
             setTimeout(() => {

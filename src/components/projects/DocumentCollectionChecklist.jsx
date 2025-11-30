@@ -130,7 +130,6 @@ const DocumentCollectionChecklist = ({ project, onBack }) => {
         // First, try to load from project prop (database)
         const projectChecklist = parseChecklist(project.documentChecklist);
         if (projectChecklist) {
-            console.log('📋 Loaded checklist from project prop:', projectChecklist.length, 'sections');
             return projectChecklist;
         }
         
@@ -141,7 +140,6 @@ const DocumentCollectionChecklist = ({ project, onBack }) => {
             if (savedData) {
                 const parsed = JSON.parse(savedData);
                 if (Array.isArray(parsed) && parsed.length > 0) {
-                    console.log('📋 Loaded checklist from localStorage:', parsed.length, 'sections');
                     return parsed;
                 }
             }
@@ -149,7 +147,6 @@ const DocumentCollectionChecklist = ({ project, onBack }) => {
             console.warn('Failed to load checklist from storage:', e);
         }
         
-        console.log('📋 Using default checklist');
         return defaultChecklist;
     });
     
@@ -159,7 +156,6 @@ const DocumentCollectionChecklist = ({ project, onBack }) => {
         
         const projectChecklist = parseChecklist(project.documentChecklist);
         if (projectChecklist && JSON.stringify(projectChecklist) !== JSON.stringify(checklist)) {
-            console.log('🔄 Syncing checklist from project prop');
             setChecklist(projectChecklist);
         }
     }, [project?.documentChecklist, project?.id]);
@@ -199,7 +195,6 @@ const DocumentCollectionChecklist = ({ project, onBack }) => {
                 throw new Error('Failed to save checklist to database');
             }
             
-            console.log('✅ Checklist saved to database');
         } catch (error) {
             console.error('Error saving checklist to database:', error);
         }
@@ -398,6 +393,5 @@ const DocumentCollectionChecklist = ({ project, onBack }) => {
 // Register component on window
 if (typeof window !== 'undefined') {
     window.DocumentCollectionChecklist = DocumentCollectionChecklist;
-    console.log('✅ DocumentCollectionChecklist component registered');
 }
 

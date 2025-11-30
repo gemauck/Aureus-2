@@ -21,19 +21,8 @@ async function handler(req, res) {
           ]
         })
         
-        console.log(`📋 Retrieved ${templates.length} document collection templates (shared across all users)`)
         if (templates.length > 0) {
-          console.log(`   - Default templates: ${templates.filter(t => t.isDefault).length}`)
-          console.log(`   - User-created templates: ${templates.filter(t => !t.isDefault).length}`)
           // Log all template names for debugging
-          console.log(`   - All template names:`, templates.map(t => ({
-            id: t.id,
-            name: t.name,
-            ownerId: t.ownerId,
-            createdBy: t.createdBy,
-            isDefault: t.isDefault,
-            createdAt: t.createdAt
-          })))
         } else {
           console.warn('⚠️ WARNING: No templates found in database!')
           console.warn('   This could mean:')
@@ -58,8 +47,6 @@ async function handler(req, res) {
           })()
         }))
         
-        console.log(`✅ Retrieved ${parsedTemplates.length} document collection templates for user: ${req.user?.email || req.user?.sub || 'unknown'}`)
-        console.log(`   All templates are shared - visible to all users regardless of ownerId`)
         
         // Prevent caching to ensure all users see newly created templates immediately
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
@@ -128,17 +115,6 @@ async function handler(req, res) {
           })()
         }
         
-        console.log(`✅ Created document collection template: ${template.id} by ${req.user?.email || req.user?.sub || 'unknown'}`)
-        console.log(`   Template "${template.name}" is now available to ALL users (shared template)`)
-        console.log(`   Template data:`, {
-          id: template.id,
-          name: template.name,
-          ownerId: template.ownerId,
-          createdBy: template.createdBy,
-          sectionsCount: parsedTemplate.sections?.length || 0,
-          isDefault: template.isDefault,
-          sectionsLength: typeof template.sections === 'string' ? template.sections.length : 'not string'
-        })
         
         // Verify the template was actually saved by querying it back
         try {
@@ -146,12 +122,9 @@ async function handler(req, res) {
             where: { id: template.id }
           })
           if (verifyTemplate) {
-            console.log(`✅ Template verified in database - ID: ${verifyTemplate.id}, Name: ${verifyTemplate.name}`)
             
             // Also verify it appears in the full list
             const allTemplates = await prisma.documentCollectionTemplate.findMany({})
-            console.log(`✅ Database now contains ${allTemplates.length} total templates (including the new one)`)
-            console.log(`   Template names in database:`, allTemplates.map(t => t.name))
           } else {
             console.error(`❌ WARNING: Template ${template.id} not found in database after creation!`)
             console.error(`   This is a critical error - template was not saved!`)

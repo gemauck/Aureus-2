@@ -1,17 +1,14 @@
 // Get dependencies from window
-console.log('🔵 ProjectDetail.jsx: Script is executing...');
 
 // ROBUST ProjectDetail Loader - Multiple layers of protection
 (function waitForDependenciesAndLoad() {
     // Prevent duplicate initialization
     if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
-        console.log('✅ ProjectDetail: Already loaded, skipping initialization');
         return;
     }
     
     // Check if we're already initializing
     if (window._projectDetailInitializing) {
-        console.log('⏳ ProjectDetail: Already initializing, waiting...');
         return;
     }
     
@@ -66,7 +63,6 @@ console.log('🔵 ProjectDetail.jsx: Script is executing...');
                 console.warn(`⚠️ ProjectDetail: Optional dependencies missing: ${optional.join(', ')}`);
                 console.warn('⚠️ ProjectDetail will continue but may have limited functionality');
             }
-            console.log(`✅ ProjectDetail: All critical dependencies available after ${attempt * baseDelay}ms`);
             initializeProjectDetail();
             return;
         }
@@ -89,15 +85,12 @@ console.log('🔵 ProjectDetail.jsx: Script is executing...');
     // Start waiting
     const { missing, optional } = checkDependencies();
     if (missing.length === 0) {
-        console.log('✅ ProjectDetail: All critical dependencies available immediately');
         if (optional.length > 0) {
             console.warn(`⚠️ ProjectDetail: Optional dependencies missing: ${optional.join(', ')}`);
         }
         initializeProjectDetail();
     } else {
-        console.log(`⏳ ProjectDetail: Waiting for dependencies: ${missing.join(', ')}`);
         if (optional.length > 0) {
-            console.log(`ℹ️ ProjectDetail: Optional dependencies missing: ${optional.join(', ')}`);
         }
         waitForDependencies();
     }
@@ -106,7 +99,6 @@ console.log('🔵 ProjectDetail.jsx: Script is executing...');
     const handleReactReady = () => {
         const { missing } = checkDependencies();
         if (missing.length === 0 && window._projectDetailInitializing) {
-            console.log('✅ ProjectDetail: Dependencies ready via event');
             window.removeEventListener('babelready', handleReactReady);
             window.removeEventListener('componentLoaded', handleComponentLoaded);
             if (!window.ProjectDetail) {
@@ -122,7 +114,6 @@ console.log('🔵 ProjectDetail.jsx: Script is executing...');
             if (requiredDependencies[compName] && requiredDependencies[compName]()) {
                 const { missing } = checkDependencies();
                 if (missing.length === 0 && window._projectDetailInitializing && !window.ProjectDetail) {
-                    console.log(`✅ ProjectDetail: Dependency ${compName} loaded, initializing now`);
                     window.removeEventListener('componentLoaded', handleComponentLoaded);
                     window.removeEventListener('babelready', handleReactReady);
                     initializeProjectDetail();
@@ -138,7 +129,6 @@ console.log('🔵 ProjectDetail.jsx: Script is executing...');
 function initializeProjectDetail() {
     // Prevent duplicate initialization
     if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
-        console.log('✅ ProjectDetail: Already initialized, skipping');
         window._projectDetailInitializing = false;
         return;
     }
@@ -153,7 +143,6 @@ function initializeProjectDetail() {
         // Set up retry mechanism
         const retryInitialization = () => {
             if (!window.ProjectDetail && window.React && window.React.useState) {
-                console.log('🔄 ProjectDetail: React now available, retrying initialization...');
                 window._projectDetailInitializing = true;
                 initializeProjectDetail();
             }
@@ -178,7 +167,6 @@ function initializeProjectDetail() {
         return;
     }
     
-    console.log('✅ ProjectDetail: Starting component initialization...');
     
     const { useState, useEffect, useRef, useCallback, useMemo } = window.React;
     const storage = window.storage;
@@ -198,15 +186,10 @@ function initializeProjectDetail() {
             activeSection,
             onBack
         }) => {
-            console.log('🔵 DocumentCollectionProcessSection rendering...');
-            console.log('  - hasDocumentCollectionProcess:', hasDocumentCollectionProcess);
-            console.log('  - activeSection:', activeSection);
             
             // Track component lifecycle
             useEffectSection(() => {
-                console.log('✅ DocumentCollectionProcessSection mounted');
                 return () => {
-                    console.log('❌ DocumentCollectionProcessSection unmounting');
                 };
             }, []);
 
@@ -221,7 +204,6 @@ function initializeProjectDetail() {
 
                 const checkComponent = () => {
                     if (window.MonthlyDocumentCollectionTracker && typeof window.MonthlyDocumentCollectionTracker === 'function') {
-                        console.log('✅ MonthlyDocumentCollectionTracker loaded!');
                         setTrackerReady(true);
                         return true;
                     }
@@ -231,7 +213,6 @@ function initializeProjectDetail() {
                 if (checkComponent()) return;
 
                 const handleViteReady = () => {
-                    console.log('📢 viteProjectsReady event received');
                     if (checkComponent()) {
                         window.removeEventListener('viteProjectsReady', handleViteReady);
                     }
@@ -261,9 +242,6 @@ function initializeProjectDetail() {
                 };
             }, [trackerReady]);
 
-            console.log('  - MonthlyDocumentCollectionTracker:', typeof MonthlyDocumentCollectionTracker);
-            console.log('  - trackerReady:', trackerReady);
-            console.log('  - loadAttempts:', loadAttempts);
 
             if (!trackerReady || !MonthlyDocumentCollectionTracker) {
                 return (
@@ -329,12 +307,6 @@ function initializeProjectDetail() {
             const propsEqual = projectIdEqual && hasDocCollectionEqual && activeSectionEqual && onBackEqual;
             
             if (!propsEqual) {
-                console.log('🔄 DocumentCollectionProcessSection: Props changed, allowing re-render', {
-                    projectId: projectIdEqual,
-                    hasDocCollection: hasDocCollectionEqual,
-                    activeSection: activeSectionEqual,
-                    onBack: onBackEqual
-                });
             }
             
             return propsEqual; // Return true if equal (skip re-render), false if different (re-render)
@@ -387,7 +359,6 @@ function initializeProjectDetail() {
     const serializeDocumentSections = (data) => JSON.stringify(parseDocumentSections(data));
 
     const ProjectDetail = ({ project, onBack, onDelete, onProjectUpdate }) => {
-        console.log('ProjectDetail rendering with project:', project);
         const ReactHooks = window.React;
         if (!ReactHooks || typeof ReactHooks.useState !== 'function') {
             console.error('❌ ProjectDetail: React hooks unavailable at render time', ReactHooks);
@@ -445,7 +416,6 @@ function initializeProjectDetail() {
             key.includes('Modal') || key.includes('View') || key.includes('Tracker') || key.includes('Popup')
         ));
     } else {
-        console.log('✅ ProjectDetail: All required components loaded');
     }
     
     // Tab navigation state
@@ -465,7 +435,6 @@ function initializeProjectDetail() {
         if (activeSection !== 'overview') {
             setActiveSection('overview');
         }
-        console.log('🔄 Project changed, forcing section to overview');
     }, [project?.id]);
 
     // If the project is opened via a deep-link to the document collection tracker
@@ -504,34 +473,19 @@ function initializeProjectDetail() {
     // But only if it hasn't been explicitly changed by the user recently
     useEffect(() => {
         const normalizedValue = normalizeHasDocumentCollectionProcess(project.hasDocumentCollectionProcess);
-        console.log('🔄 Syncing hasDocumentCollectionProcess from project prop:', {
-            raw: project.hasDocumentCollectionProcess,
-            normalized: normalizedValue,
-            currentState: hasDocumentCollectionProcess,
-            projectId: project.id,
-            wasExplicitlyChanged: hasDocumentCollectionProcessChangedRef.current
-        });
         
         // Only sync if:
         // 1. The value actually changed, AND
         // 2. It wasn't explicitly changed by the user (to prevent overwriting user changes)
         if (normalizedValue !== hasDocumentCollectionProcess && !hasDocumentCollectionProcessChangedRef.current) {
-            console.log('✅ Syncing hasDocumentCollectionProcess to:', normalizedValue);
             setHasDocumentCollectionProcess(normalizedValue);
         } else if (hasDocumentCollectionProcessChangedRef.current) {
-            console.log('⏭️ Skipping sync - hasDocumentCollectionProcess was explicitly changed by user');
         }
     }, [project.hasDocumentCollectionProcess, project.id]);
     
     // Also sync on mount to ensure we have the latest value
     useEffect(() => {
         const normalizedValue = normalizeHasDocumentCollectionProcess(project.hasDocumentCollectionProcess);
-        console.log('🔄 Mount/Project change: Syncing hasDocumentCollectionProcess:', {
-            projectId: project.id,
-            raw: project.hasDocumentCollectionProcess,
-            normalized: normalizedValue,
-            currentState: hasDocumentCollectionProcess
-        });
         setHasDocumentCollectionProcess(normalizedValue);
     }, [project.id]); // Re-sync whenever we switch to a different project
     
@@ -913,11 +867,6 @@ function initializeProjectDetail() {
     // Sync tasks when project prop changes (e.g., after reload or navigation)
     useEffect(() => {
         if (project?.tasks && Array.isArray(project.tasks)) {
-            console.log('🔄 ProjectDetail: Syncing tasks from project prop', {
-                projectId: project.id,
-                tasksCount: project.tasks.length,
-                tasksWithComments: project.tasks.filter(t => t.comments && t.comments.length > 0).length
-            });
             setTasks(project.tasks);
         }
     }, [project?.id, project?.tasks]);
@@ -968,10 +917,6 @@ function initializeProjectDetail() {
         excludeDocumentSections = true  // Default to true: don't overwrite documentSections managed by MonthlyDocumentCollectionTracker
     } = {}) => {
         try {
-            console.log('💾 ProjectDetail: Saving project data changes...');
-            console.log('  - Project ID:', project.id);
-            console.log('  - Tasks count:', nextTasks.length);
-            console.log('  - Task lists count:', nextTaskLists.length);
             
             const updatePayload = {
                 taskLists: JSON.stringify(nextTaskLists),
@@ -984,9 +929,7 @@ function initializeProjectDetail() {
             // This prevents overwriting changes made by MonthlyDocumentCollectionTracker
             if (!excludeDocumentSections) {
                 updatePayload.documentSections = serializedDocumentSections;
-                console.log('  - Including documentSections in save');
             } else {
-                console.log('  - Excluding documentSections from save (managed by MonthlyDocumentCollectionTracker)');
             }
             
             // Only include hasDocumentCollectionProcess if not excluded
@@ -995,10 +938,8 @@ function initializeProjectDetail() {
                 updatePayload.hasDocumentCollectionProcess = nextHasDocumentCollectionProcess;
             }
             
-            console.log('📡 Sending update to database:', updatePayload);
             
             const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
-            console.log('✅ Database save successful:', apiResponse);
             
             if (window.dataService && typeof window.dataService.getProjects === 'function') {
                 const savedProjects = await window.dataService.getProjects();
@@ -1021,7 +962,6 @@ function initializeProjectDetail() {
                     if (window.dataService && typeof window.dataService.setProjects === 'function') {
                         try {
                             await window.dataService.setProjects(updatedProjects);
-                            console.log('✅ localStorage updated for consistency');
                         } catch (saveError) {
                             console.warn('Failed to save projects to dataService:', saveError);
                         }
@@ -1043,7 +983,6 @@ function initializeProjectDetail() {
         // Skip save if this was triggered by manual document collection process addition
         // This prevents the debounced save from overwriting an explicit save
         if (skipNextSaveRef.current) {
-            console.log('⏭️ Skipping debounced save - manual document collection process save in progress');
             // Don't reset skipNextSaveRef here - it will be reset by the explicit save handler
             return;
         }
@@ -1070,7 +1009,6 @@ function initializeProjectDetail() {
             // This prevents race conditions where the flag might have been reset
             if (shouldIncludeHasProcess && hasDocumentCollectionProcessChangedRef.current) {
                 // Include hasDocumentCollectionProcess in save
-                console.log('💾 Debounced save: Including hasDocumentCollectionProcess:', hasDocumentCollectionProcess);
                 persistProjectData({
                     nextHasDocumentCollectionProcess: hasDocumentCollectionProcess
                 }).catch(() => {});
@@ -1078,13 +1016,11 @@ function initializeProjectDetail() {
                 hasDocumentCollectionProcessChangedRef.current = false;
             } else if (!shouldIncludeHasProcess) {
                 // Exclude hasDocumentCollectionProcess from save to prevent overwriting database value
-                console.log('⏭️ Debounced save: Excluding hasDocumentCollectionProcess to prevent overwrite');
                 persistProjectData({
                     excludeHasDocumentCollectionProcess: true
                 }).catch(() => {});
             } else {
                 // Flag was reset but we thought we should include it - skip to be safe
-                console.log('⏭️ Debounced save: Skipping hasDocumentCollectionProcess - flag was reset');
                 persistProjectData({
                     excludeHasDocumentCollectionProcess: true
                 }).catch(() => {});
@@ -1565,7 +1501,6 @@ function initializeProjectDetail() {
         try {
             if (assigneeUser && assigneeUser.id && assigneeUser.id !== currentUser.id && !mentionedUsers.some(m => m.id === assigneeUser.id)) {
                 await sendNotification(assigneeUser.id, 'assignee');
-                console.log(`✅ Comment notification sent to assignee ${assigneeUser.name}`);
             }
         } catch (assigneeError) {
             console.error('❌ Failed to send comment notification to assignee:', assigneeError);
@@ -1583,7 +1518,6 @@ function initializeProjectDetail() {
             if (subscriber) {
                 try {
                     await sendNotification(subscriber.id, 'subscriber');
-                    console.log(`✅ Comment notification sent to subscriber ${subscriber.name}`);
                 } catch (subscriberError) {
                     console.error(`❌ Failed to send comment notification to subscriber ${subscriber.name}:`, subscriberError);
                 }
@@ -2033,7 +1967,6 @@ function initializeProjectDetail() {
         // Helper function to find user by assignee value (name, email, or id)
         const findAssigneeUser = (assigneeValue) => {
             if (!assigneeValue || !users || users.length === 0) {
-                console.log('🔍 findAssigneeUser: No assignee value or users available', { assigneeValue, usersCount: users?.length });
                 return null;
             }
             
@@ -2075,7 +2008,6 @@ function initializeProjectDetail() {
             });
             
             if (matchedUser) {
-                console.log('✅ findAssigneeUser: Found user', { assigneeValue, matchedUserId: matchedUser.id, matchedUserName: matchedUser.name });
             } else {
                 console.warn('⚠️ findAssigneeUser: No user found', { assigneeValue, availableUsers: users.map(u => ({ id: u.id, name: u.name, email: u.email })) });
             }
@@ -2085,31 +2017,18 @@ function initializeProjectDetail() {
         
         // Send notification if assignee changed
         if (!isNewTask && oldTask && updatedTaskData.assignee && updatedTaskData.assignee !== oldTask.assignee) {
-            console.log('🔔 Assignment changed - sending notification', { 
-                oldAssignee: oldTask.assignee, 
-                newAssignee: updatedTaskData.assignee,
-                taskTitle: updatedTaskData.title,
-                currentUserId: currentUser.id
-            });
             
             const assigneeUser = findAssigneeUser(updatedTaskData.assignee);
             
             if (assigneeUser) {
                 // Don't notify if the user assigned the task to themselves
                 if (assigneeUser.id === currentUser.id) {
-                    console.log('⚠️ Skipping self-assignment notification - user assigned task to themselves');
                 } else {
                     try {
                         // Use hash-based routing format for email links (frontend uses hash routing)
                         const projectLink = `#/projects/${project.id}`;
                         // Build task-specific link with anchor for direct navigation to task
                         const taskLink = updatedTaskData.id ? `${projectLink}#task-${updatedTaskData.id}` : projectLink;
-                        console.log('📤 Sending task assignment notification', {
-                            userId: assigneeUser.id,
-                            userName: assigneeUser.name,
-                            type: 'task',
-                            taskTitle: updatedTaskData.title
-                        });
                         
                         const response = await window.DatabaseAPI.makeRequest('/notifications', {
                             method: 'POST',
@@ -2129,10 +2048,6 @@ function initializeProjectDetail() {
                             })
                         });
                         
-                        console.log('✅ Task assignment notification sent successfully', { 
-                            assigneeName: assigneeUser.name,
-                            response: response
-                        });
                     } catch (error) {
                         console.error('❌ Failed to send task assignment notification:', error);
                         console.error('❌ Error details:', {
@@ -2152,30 +2067,18 @@ function initializeProjectDetail() {
         
         // Send notification if this is a new task with an assignee
         if (isNewTask && updatedTaskData.assignee) {
-            console.log('🔔 New task with assignee - sending notification', { 
-                assignee: updatedTaskData.assignee,
-                taskTitle: updatedTaskData.title,
-                currentUserId: currentUser.id
-            });
             
             const assigneeUser = findAssigneeUser(updatedTaskData.assignee);
             
             if (assigneeUser) {
                 // Don't notify if the user assigned the task to themselves
                 if (assigneeUser.id === currentUser.id) {
-                    console.log('⚠️ Skipping self-assignment notification - user assigned task to themselves');
                 } else {
                     try {
                         // Use hash-based routing format for email links (frontend uses hash routing)
                         const projectLink = `#/projects/${project.id}`;
                         // Build task-specific link with anchor for direct navigation to task
                         const taskLink = updatedTaskData.id ? `${projectLink}#task-${updatedTaskData.id}` : projectLink;
-                        console.log('📤 Sending new task assignment notification', {
-                            userId: assigneeUser.id,
-                            userName: assigneeUser.name,
-                            type: 'task',
-                            taskTitle: updatedTaskData.title
-                        });
                         
                         const response = await window.DatabaseAPI.makeRequest('/notifications', {
                             method: 'POST',
@@ -2195,10 +2098,6 @@ function initializeProjectDetail() {
                             })
                         });
                         
-                        console.log('✅ New task assignment notification sent successfully', { 
-                            assigneeName: assigneeUser.name,
-                            response: response
-                        });
                     } catch (error) {
                         console.error('❌ Failed to send new task assignment notification:', error);
                         console.error('❌ Error details:', {
@@ -2278,23 +2177,8 @@ function initializeProjectDetail() {
                 })
                 : tasks.map(t => t.id === updatedTaskData.id ? updatedTaskData : t);
             
-            console.log('💾 Immediately saving task update (including checklist, comments, etc.) to database...');
-            console.log('  - Task ID:', updatedTaskData.id);
-            console.log('  - Checklist items:', updatedTaskData.checklist?.length || 0);
-            console.log('  - Comments count:', updatedTaskData.comments?.length || 0);
-            console.log('  - Attachments count:', updatedTaskData.attachments?.length || 0);
-            console.log('  - Tags count:', updatedTaskData.tags?.length || 0);
-            console.log('  - Full task data:', {
-                id: updatedTaskData.id,
-                title: updatedTaskData.title,
-                hasComments: !!updatedTaskData.comments,
-                commentsLength: updatedTaskData.comments?.length,
-                hasChecklist: !!updatedTaskData.checklist,
-                checklistLength: updatedTaskData.checklist?.length
-            });
             
             await persistProjectData({ nextTasks: updatedTasks });
-            console.log('✅ Task update (including checklist, comments, etc.) saved successfully');
         } catch (error) {
             console.error('❌ Failed to save task update:', error);
             // Don't block UI - the debounced save will retry
@@ -2317,7 +2201,6 @@ function initializeProjectDetail() {
             // Persist to database immediately
             try {
                 await persistProjectData({ nextTasks: updatedTasks });
-                console.log('✅ Task deleted successfully');
             } catch (error) {
                 console.error('❌ Failed to delete task:', error);
                 alert('Failed to delete task: ' + error.message);
@@ -2345,7 +2228,6 @@ function initializeProjectDetail() {
             // Persist to database immediately
             try {
                 await persistProjectData({ nextTasks: updatedTasks });
-                console.log('✅ Subtask deleted successfully');
             } catch (error) {
                 console.error('❌ Failed to delete subtask:', error);
                 alert('Failed to delete subtask: ' + error.message);
@@ -2362,17 +2244,12 @@ function initializeProjectDetail() {
     };
 
     const handleAddDocumentCollectionProcess = async () => {
-        console.log('🔄 Adding Document Collection Process...');
-        console.log('  - MonthlyDocumentCollectionTracker loaded:', typeof window.MonthlyDocumentCollectionTracker);
-        console.log('  - Project ID:', project.id);
-        console.log('  - Current hasDocumentCollectionProcess:', hasDocumentCollectionProcess);
         
         try {
             // Cancel any pending debounced saves to prevent overwriting
             if (saveTimeoutRef.current) {
                 clearTimeout(saveTimeoutRef.current);
                 saveTimeoutRef.current = null;
-                console.log('🛑 Cancelled pending debounced save before explicit save');
             }
             
             // Set flag to skip the useEffect save to prevent duplicates
@@ -2396,15 +2273,7 @@ function initializeProjectDetail() {
                 documentSections: sectionsToSave
             };
             
-            console.log('💾 Immediately saving document collection process to database...');
-            console.log('📦 Update payload:', updatePayload);
             const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
-            console.log('✅ Database save successful:', apiResponse);
-            console.log('🔍 API Response details:', {
-              hasData: !!apiResponse?.data,
-              project: apiResponse?.data?.project || apiResponse?.project || apiResponse?.data,
-              hasDocumentCollectionProcess: (apiResponse?.data?.project || apiResponse?.project || apiResponse?.data)?.hasDocumentCollectionProcess
-            });
             
             // Reload project from database to ensure state is in sync
             // Also clear any cache to ensure we get fresh data
@@ -2420,7 +2289,6 @@ function initializeProjectDetail() {
                         });
                         cacheKeysToDelete.forEach(key => {
                             window.DatabaseAPI._responseCache.delete(key);
-                            console.log('🗑️ Cleared cache for:', key);
                         });
                     }
                     
@@ -2434,7 +2302,6 @@ function initializeProjectDetail() {
                         });
                         projectsListCacheKeys.forEach(key => {
                             window.DatabaseAPI._responseCache.delete(key);
-                            console.log('🗑️ Cleared projects list cache:', key);
                         });
                     }
                     
@@ -2448,22 +2315,15 @@ function initializeProjectDetail() {
                         if (updatedProject) {
                             // Update the project prop by triggering a re-render with updated data
                             // This ensures the component has the latest data from the database
-                            console.log('🔄 Reloaded project from database:', {
-                                hasDocumentCollectionProcess: updatedProject.hasDocumentCollectionProcess,
-                                type: typeof updatedProject.hasDocumentCollectionProcess,
-                                isTrue: updatedProject.hasDocumentCollectionProcess === true
-                            });
                             
                             // Try to update parent component's viewingProject state if possible
                             // This ensures the prop is updated immediately
                             // The updateViewingProject function has smart comparison to prevent unnecessary re-renders
                             if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                                console.log('🔄 Updating parent viewingProject state');
                                 window.updateViewingProject(updatedProject);
                             }
                         }
                     } else {
-                        console.log('⏭️ Skipping project reload: in document collection view (managed by MonthlyDocumentCollectionTracker)');
                     }
                 } catch (reloadError) {
                     console.warn('⚠️ Failed to reload project after save:', reloadError);
@@ -2488,7 +2348,6 @@ function initializeProjectDetail() {
                     if (window.dataService && typeof window.dataService.setProjects === 'function') {
                         try {
                             await window.dataService.setProjects(updatedProjects);
-                            console.log('✅ localStorage updated for consistency');
                         } catch (saveError) {
                             console.warn('Failed to save projects to dataService:', saveError);
                         }
@@ -2496,13 +2355,11 @@ function initializeProjectDetail() {
                 }
             }
             
-            console.log('✅ Document Collection Process setup complete and persisted');
             
             // Keep the flag set for longer to prevent any debounced saves from overwriting
             // Reset flag after a delay to allow any pending useEffect to complete
             setTimeout(() => {
                 skipNextSaveRef.current = false;
-                console.log('🔄 Reset skipNextSaveRef - debounced saves can now proceed');
             }, 3000);
             
             // Keep the changed flag set for even longer to prevent sync from overwriting
@@ -2510,7 +2367,6 @@ function initializeProjectDetail() {
             // But we don't want to reset it too early, or the sync might overwrite it
             setTimeout(() => {
                 hasDocumentCollectionProcessChangedRef.current = false;
-                console.log('🔄 Reset hasDocumentCollectionProcessChangedRef - ready for sync from database');
             }, 10000); // Increased to 10 seconds to ensure navigation completes
         } catch (error) {
             console.error('❌ Error saving document collection process:', error);
@@ -2597,7 +2453,6 @@ function initializeProjectDetail() {
     
     // Handler for updating task status when dragged in kanban
     const handleUpdateTaskStatus = useCallback(async (taskId, newStatus, { isSubtask = false, parentId = null } = {}) => {
-        console.log('🔄 Kanban drag: Updating task status', { taskId, newStatus, isSubtask, parentId });
         
         // Normalize status - KanbanView passes the column label, but we need to match the actual status value
         // Try to find matching status from taskLists or use the provided status
@@ -2615,7 +2470,6 @@ function initializeProjectDetail() {
                     });
                     if (matchingStatus) {
                         normalizedStatus = matchingStatus.value || matchingStatus.label || newStatus;
-                        console.log('✅ Found matching status definition:', { original: newStatus, normalized: normalizedStatus });
                         break;
                     }
                 }
@@ -2649,7 +2503,6 @@ function initializeProjectDetail() {
         if (updatedTasks) {
             try {
                 await persistProjectData({ nextTasks: updatedTasks });
-                console.log('✅ Task status update saved successfully');
             } catch (error) {
                 console.error('❌ Failed to save task status update:', error);
                 // Revert on error
@@ -2679,14 +2532,9 @@ function initializeProjectDetail() {
 
     // List View Component
     const ListView = () => {
-        console.log('🔍 ListView rendering - Table structure version 3.0 - FORCE REFRESH');
-        console.log('🔍 ListView - viewMode check:', viewMode);
-        console.log('🔍 ListView - filteredTaskLists:', filteredTaskLists?.length);
-        console.log('🔍 ListView - Table structure is active, check DOM for table elements');
         if (typeof window !== 'undefined') {
             setTimeout(() => {
                 const tables = document.querySelectorAll('[data-task-table-version="3.0"]');
-                console.log('🔍 Found', tables.length, 'table(s) with version 3.0 in DOM');
                 if (tables.length === 0) {
                     console.error('❌ NO TABLE FOUND - OLD CODE MAY BE RUNNING');
                 }
@@ -3209,8 +3057,6 @@ function initializeProjectDetail() {
 
             {/* Section Content */}
             {(() => {
-                console.log('🟢 Rendering section content. activeSection:', activeSection);
-                console.log('  - hasDocumentCollectionProcess:', hasDocumentCollectionProcess);
                 return null;
             })()}
             
@@ -3463,9 +3309,7 @@ function initializeProjectDetail() {
                         }
                     }}
                     onDelete={async (projectId) => {
-                        console.log('🗑️ ProjectDetail: Delete requested for project:', projectId);
                         if (onDelete && typeof onDelete === 'function') {
-                            console.log('✅ ProjectDetail: Calling parent onDelete handler');
                             await onDelete(projectId);
                             setShowProjectModal(false);
                             onBack();
@@ -3589,7 +3433,6 @@ function initializeProjectDetail() {
 };
 
     // Make available globally - INSIDE initializeProjectDetail function
-    console.log('🔵 ProjectDetail.jsx: About to register on window.ProjectDetail...');
     
     // Validate component before registering
     const validateComponent = () => {
@@ -3619,8 +3462,6 @@ function initializeProjectDetail() {
         
         // Register component
         window.ProjectDetail = ProjectDetail;
-        console.log('✅ ProjectDetail component registered on window.ProjectDetail');
-        console.log('✅ ProjectDetail type:', typeof ProjectDetail);
         
         // Health check: Verify it's actually registered and callable
         if (!window.ProjectDetail) {
@@ -3631,7 +3472,6 @@ function initializeProjectDetail() {
             throw new Error(`Registration failed: window.ProjectDetail is not a function, got: ${typeof window.ProjectDetail}`);
         }
         
-        console.log('✅ ProjectDetail health check passed: Component is registered and callable');
         
         // Clear initialization flag
         window._projectDetailInitializing = false;
@@ -3641,7 +3481,6 @@ function initializeProjectDetail() {
             window.dispatchEvent(new CustomEvent('componentLoaded', { 
                 detail: { component: 'ProjectDetail' } 
             }));
-            console.log('✅ ProjectDetail component registered and event dispatched');
         } catch (error) {
             console.warn('⚠️ Failed to dispatch componentLoaded event:', error);
         }
@@ -3660,12 +3499,10 @@ function initializeProjectDetail() {
                 console.error('❌ Attempting to re-register...');
                 window.ProjectDetail = ProjectDetail;
             } else {
-                console.log(`✅ ProjectDetail health check ${healthCheckCount}/${maxHealthChecks}: Component healthy`);
             }
             
             if (healthCheckCount >= maxHealthChecks) {
                 clearInterval(healthCheckInterval);
-                console.log('✅ ProjectDetail health monitoring complete');
             }
         }, 5000);
         
@@ -3678,7 +3515,6 @@ function initializeProjectDetail() {
         try {
             if (typeof ProjectDetail !== 'undefined') {
                 window.ProjectDetail = ProjectDetail;
-                console.log('✅ ProjectDetail registered after error recovery');
                 window._projectDetailInitializing = false;
             }
         } catch (recoveryError) {

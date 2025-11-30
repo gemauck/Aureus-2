@@ -7,13 +7,6 @@ import { isConnectionError } from './_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔍 Sites API Debug:', {
-      method: req.method,
-      url: req.url,
-      params: req.params,
-      headers: req.headers,
-      user: req.user
-    });
     
     // Strip query parameters before splitting (safety fallback)
     const urlPath = req.url.split('?')[0].split('#')[0]
@@ -23,13 +16,6 @@ async function handler(req, res) {
     const clientId = req.params?.clientId || (pathSegments[1] === 'client' ? pathSegments[2] : null)
     const siteId = req.params?.siteId || (pathSegments[1] === 'client' && pathSegments.length > 3 ? pathSegments[3] : null)
     
-    console.log('🔍 Path analysis:', {
-      url: req.url,
-      pathSegments,
-      clientId,
-      siteId,
-      params: req.params
-    });
     
     // GET /api/sites/client/:clientId - Get all sites for a client
     if (req.method === 'GET' && clientId && !siteId) {
@@ -47,7 +33,6 @@ async function handler(req, res) {
           ? JSON.parse(client.sites) 
           : (Array.isArray(client.sites) ? client.sites : [])
         
-        console.log('✅ Sites retrieved for client:', clientId, '- Count:', sites.length)
         return ok(res, { sites })
       } catch (dbError) {
         console.error('❌ Database error getting sites:', dbError)
@@ -98,7 +83,6 @@ async function handler(req, res) {
           data: { sites: JSON.stringify(updatedSites) }
         })
         
-        console.log('✅ Site added to client:', clientId, '- Site:', newSite.name)
         return created(res, { site: newSite, sites: updatedSites })
       } catch (dbError) {
         console.error('❌ Database error adding site:', dbError)
@@ -143,7 +127,6 @@ async function handler(req, res) {
           data: { sites: JSON.stringify(sites) }
         })
         
-        console.log('✅ Site updated:', siteId, 'for client:', clientId)
         return ok(res, { site: sites[siteIndex], sites })
       } catch (dbError) {
         console.error('❌ Database error updating site:', dbError)
@@ -179,7 +162,6 @@ async function handler(req, res) {
           data: { sites: JSON.stringify(updatedSites) }
         })
         
-        console.log('✅ Site deleted:', siteId, 'from client:', clientId)
         return ok(res, { deleted: true, sites: updatedSites })
       } catch (dbError) {
         console.error('❌ Database error deleting site:', dbError)

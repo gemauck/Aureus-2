@@ -4,14 +4,12 @@ import { prisma } from './_lib/prisma.js';
 
 async function updateNotificationSettings() {
     try {
-        console.log('🔄 Updating notification settings for all users...');
         
         // Get all users
         const users = await prisma.user.findMany({
             select: { id: true, email: true, name: true }
         });
         
-        console.log(`📊 Found ${users.length} users`);
         
         let updated = 0;
         let created = 0;
@@ -30,10 +28,8 @@ async function updateNotificationSettings() {
                             where: { userId: user.id },
                             data: { emailTasks: true }
                         });
-                        console.log(`✅ Updated notification settings for user ${user.name || user.email} (${user.id}) - enabled emailTasks`);
                         updated++;
                     } else {
-                        console.log(`ℹ️ User ${user.name || user.email} already has emailTasks enabled`);
                     }
                 } else {
                     // Create new settings with all notifications enabled
@@ -52,7 +48,6 @@ async function updateNotificationSettings() {
                             inAppSystem: true
                         }
                     });
-                    console.log(`✅ Created notification settings for user ${user.name || user.email} (${user.id}) - all notifications enabled`);
                     created++;
                 }
             } catch (error) {
@@ -60,10 +55,6 @@ async function updateNotificationSettings() {
             }
         }
         
-        console.log(`\n✅ Update complete!`);
-        console.log(`   - Updated: ${updated} users`);
-        console.log(`   - Created: ${created} users`);
-        console.log(`   - Total: ${users.length} users`);
         
     } catch (error) {
         console.error('❌ Error updating notification settings:', error);
@@ -76,7 +67,6 @@ async function updateNotificationSettings() {
 // Run the update
 updateNotificationSettings()
     .then(() => {
-        console.log('✅ Script completed successfully');
         process.exit(0);
     })
     .catch((error) => {

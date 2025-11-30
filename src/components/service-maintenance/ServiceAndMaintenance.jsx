@@ -799,9 +799,6 @@ const JobCardFormsSection = ({ jobCard }) => {
                           onClick={() => {
                             try {
                               const hasManager = !!window.ServiceFormsManager;
-                              console.log('🧩 ServiceAndMaintenance: Open form builder clicked', {
-                                hasManager,
-                              });
 
                               // If the manager script has not been registered yet, try to load it
                               if (!hasManager) {
@@ -836,14 +833,7 @@ const JobCardFormsSection = ({ jobCard }) => {
                                     );
                                   };
                                   document.body.appendChild(script);
-                                  console.log(
-                                    '🧩 ServiceAndMaintenance: Injected ServiceFormsManager script',
-                                    finalPath
-                                  );
                                 } else {
-                                  console.log(
-                                    '🧩 ServiceAndMaintenance: ServiceFormsManager script tag already present'
-                                  );
                                 }
 
                                 // Give the loader a moment to register the component
@@ -1384,7 +1374,6 @@ const JobCardFormsSection = ({ jobCard }) => {
 try {
   window.ServiceAndMaintenance = ServiceAndMaintenance;
   window.dispatchEvent(new Event('serviceMaintenanceComponentReady'));
-  console.log('✅ ServiceAndMaintenance.jsx loaded and registered');
 } catch (error) {
   console.error('❌ ServiceAndMaintenance.jsx: Error:', error);
 }

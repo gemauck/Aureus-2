@@ -7,13 +7,6 @@ import { withLogging } from './_lib/logger.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔍 Opportunities API Debug:', {
-      method: req.method,
-      url: req.url,
-      headers: req.headers,
-      user: req.user,
-      params: req.params
-    })
     
     // Parse the URL path (handle both /api/opportunities/... and /opportunities/...)
     // Strip query parameters before splitting
@@ -25,13 +18,6 @@ async function handler(req, res) {
     }
     const id = req.params?.id || pathSegments[pathSegments.length - 1]
     
-    console.log('🔍 Path analysis:', {
-      url: req.url,
-      pathSegments,
-      id,
-      params: req.params,
-      method: req.method
-    })
 
     const userId = req.user?.sub || null
     let validUserId = null
@@ -69,7 +55,6 @@ async function handler(req, res) {
           },
           orderBy: { createdAt: 'desc' } 
         })
-        console.log('✅ Opportunities retrieved successfully:', opportunities.length)
         const normalized = opportunities.map(opportunity => {
           const { starredBy, ...rest } = opportunity
           return {
@@ -90,8 +75,6 @@ async function handler(req, res) {
     
     if (req.method === 'GET' && clientId) {
       try {
-        console.log('🔍 Opportunities API: Fetching opportunities for clientId:', clientId)
-        console.log('🔍 Prisma client available:', !!prisma, 'opportunity model available:', !!prisma?.opportunity)
         
         const opportunities = await prisma.opportunity.findMany({ 
           where: { clientId },
@@ -105,19 +88,12 @@ async function handler(req, res) {
           },
           orderBy: { createdAt: 'desc' } 
         })
-        console.log('✅ Client opportunities retrieved successfully:', opportunities.length, 'for client:', clientId)
         if (opportunities.length > 0) {
-          console.log('📋 Opportunity details:', opportunities.map(o => ({ id: o.id, title: o.title, stage: o.stage, clientId: o.clientId, value: o.value })))
         } else {
-          console.log('⚠️ No opportunities found for client:', clientId)
           // Check if ANY opportunities exist in database
           const allOpps = await prisma.opportunity.findMany({ take: 10 })
-          console.log('📊 Total opportunities in database:', allOpps.length)
           if (allOpps.length > 0) {
-            console.log('📋 All opportunities clientIds:', allOpps.map(o => ({ id: o.id, title: o.title, clientId: o.clientId })))
-            console.log('🔍 Searching for clientId match:', clientId)
             const matching = allOpps.filter(o => o.clientId === clientId)
-            console.log('🔍 Matches found:', matching.length, matching)
           }
         }
         const normalized = opportunities.map(opportunity => {
@@ -143,16 +119,6 @@ async function handler(req, res) {
     // Create Opportunity (POST /api/opportunities)
     if (req.method === 'POST' && pathSegments.length === 1 && pathSegments[0] === 'opportunities') {
       const body = req.body || {}
-      console.log('🔍 Server received opportunity creation request:', {
-        body,
-        bodyKeys: Object.keys(body),
-        title: body.title,
-        titleType: typeof body.title,
-        titleLength: body.title?.length,
-        clientId: body.clientId,
-        stage: body.stage,
-        value: body.value
-      });
       if (!body.title) return badRequest(res, 'title required')
       if (!body.clientId) return badRequest(res, 'clientId required')
 
@@ -169,14 +135,11 @@ async function handler(req, res) {
         ownerId: req.user?.sub || null
       }
 
-      console.log('🔍 Creating opportunity with data:', opportunityData)
-      console.log('🔍 Prisma client available:', !!prisma, 'opportunity model available:', !!prisma?.opportunity)
       try {
         const opportunity = await prisma.opportunity.create({
           data: opportunityData
         })
         
-        console.log('✅ Opportunity created successfully:', opportunity.id)
         return created(res, { opportunity: { ...opportunity, isStarred: false } })
       } catch (dbError) {
         console.error('❌ Database error creating opportunity:', {
@@ -195,13 +158,6 @@ async function handler(req, res) {
     const isSingleOpportunity = (pathSegments.length === 2 && pathSegments[0] === 'opportunities' && id) || 
                                (req.params?.id && pathSegments[0] === 'opportunities')
     
-    console.log('🔍 Single opportunity check:', {
-      pathSegmentsLength: pathSegments.length,
-      firstSegment: pathSegments[0],
-      id,
-      hasParamsId: !!req.params?.id,
-      isSingleOpportunity
-    })
     
     if (isSingleOpportunity) {
       if (req.method === 'GET') {
@@ -225,7 +181,6 @@ async function handler(req, res) {
             }
           })
           if (!opportunity) return notFound(res)
-          console.log('✅ Opportunity retrieved successfully:', opportunity.id)
           const { starredBy, ...rest } = opportunity
           return ok(res, { 
             opportunity: {
@@ -256,13 +211,11 @@ async function handler(req, res) {
           }
         })
         
-        console.log('🔍 Updating opportunity with data:', updateData)
         try {
           const opportunity = await prisma.opportunity.update({ 
             where: { id }, 
             data: updateData 
           })
-          console.log('✅ Opportunity updated successfully:', opportunity.id)
 
           let isStarred = false
           if (validUserId) {
@@ -294,7 +247,6 @@ async function handler(req, res) {
           await prisma.opportunity.delete({ 
             where: { id } 
           })
-          console.log('✅ Opportunity deleted successfully:', id)
           return ok(res, { deleted: true })
         } catch (dbError) {
           console.error('❌ Database error deleting opportunity:', dbError)

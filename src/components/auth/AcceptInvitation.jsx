@@ -358,7 +358,6 @@ const AcceptInvitation = () => {
 try {
     window.AcceptInvitation = AcceptInvitation;
     if (window.debug && !window.debug.performanceMode) {
-        console.log('✅ AcceptInvitation.jsx loaded and registered');
     }
 } catch (error) {
     console.error('❌ AcceptInvitation.jsx: Error registering component:', error);

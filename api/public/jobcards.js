@@ -9,7 +9,6 @@ async function handler(req, res) {
   }
 
   try {
-    console.log('📡 Public job card endpoint: Creating job card from public form...')
     
     const body = req.body || {}
     
@@ -95,7 +94,6 @@ async function handler(req, res) {
       }
     })
     
-    console.log(`✅ Public job card endpoint: Created job card ${jobCard.id} (${jobCardNumber})`)
 
     // Create service form instances if provided
     if (serviceForms.length > 0) {
@@ -131,7 +129,6 @@ async function handler(req, res) {
             }
           })
 
-          console.log(`✅ Created service form instance for template ${formData.templateId}`)
         }
       } catch (formError) {
         // Log but don't fail the job card creation if form instances fail

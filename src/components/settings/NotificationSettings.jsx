@@ -228,7 +228,6 @@ const NotificationSettings = () => {
                             if (response.ok) {
                                 const data = await response.json();
                                 alert('✅ Test notification created! Check the notification bell icon in the header.');
-                                console.log('Test notification created:', data);
                             } else {
                                 const error = await response.text();
                                 alert('Failed to create test notification: ' + error);
@@ -265,6 +264,5 @@ const NotificationSettings = () => {
 // Make available globally
 if (typeof window !== 'undefined') {
     window.NotificationSettings = NotificationSettings;
-    console.log('🔔 NotificationSettings component loaded and registered');
 }
 

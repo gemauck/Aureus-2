@@ -45,7 +45,6 @@ const Calendar = () => {
                         try {
                             const parsedNotes = JSON.parse(savedNotes);
                             setNotes(parsedNotes);
-                            console.log('📝 Loaded notes from localStorage:', Object.keys(parsedNotes).length);
                         } catch (e) {
                             console.error('Error parsing localStorage notes:', e);
                         }
@@ -69,21 +68,10 @@ const Calendar = () => {
                         });
                         if (res.ok) {
                             const data = await res.json();
-                            console.log('📋 Raw API response:', data);
-                            console.log('📋 Response structure:', {
-                                hasData: !!data,
-                                hasNotes: !!data.notes,
-                                notesType: typeof data.notes,
-                                notesKeys: data.notes ? Object.keys(data.notes) : [],
-                                dataKeys: Object.keys(data || {}),
-                                fullResponse: JSON.stringify(data, null, 2)
-                            });
                             // The API wraps response in {data: {notes: {...}}}
                             // So we need to access data.data.notes, not data.notes
                             const serverNotes = data?.data?.notes || data?.notes || {};
-                            console.log('📝 Loaded notes from server:', Object.keys(serverNotes).length, 'dates');
                             if (Object.keys(serverNotes).length > 0) {
-                                console.log('📅 Note dates found:', Object.keys(serverNotes));
                             }
                             
                             // CRITICAL: Don't overwrite if DailyNotes component is actively editing
@@ -92,7 +80,6 @@ const Calendar = () => {
                             const isSaving = sessionStorage.getItem('calendar_is_saving') === 'true';
                             
                             if (editingDate && (isSaving || document.querySelector('.daily-notes-container'))) {
-                                console.log('⚠️ Skipping Calendar refresh - note being edited for date:', editingDate);
                                 // Keep existing notes but merge other dates from server
                                 // Read current notes from localStorage (most up-to-date source)
                                 const currentNotesStr = localStorage.getItem(notesKey);
@@ -116,7 +103,6 @@ const Calendar = () => {
                             // REPLACE localStorage entirely with server data (not merge)
                             // This ensures phone gets PC's data and vice versa
                             localStorage.setItem(notesKey, JSON.stringify(serverNotes));
-                            console.log('✅ Calendar notes synchronized with server');
                             return true;
                         } else {
                             const errorText = await res.text();
@@ -175,14 +161,12 @@ const Calendar = () => {
         // Refresh when page becomes visible again (user switches back to tab/window)
         const handleVisibilityChange = () => {
             if (!document.hidden) {
-                console.log('📝 Page visible - refreshing calendar notes from server');
                 loadNotes(true); // Force refresh from server
             }
         };
         
         // Refresh when window regains focus (better for cross-device sync)
         const handleFocus = () => {
-            console.log('📝 Window focused - refreshing calendar notes from server');
             loadNotes(true); // Force refresh from server
         };
         
@@ -200,10 +184,8 @@ const Calendar = () => {
                 };
                 
                 if (!document.hidden && !checkSaving()) {
-                    console.log('📝 Periodic refresh - syncing calendar notes from server');
                     loadNotes(true);
                 } else if (checkSaving()) {
-                    console.log('⏸️ Skipping periodic refresh - save in progress');
                 }
             }, 30000); // Refresh every 30 seconds when visible
         };
@@ -241,7 +223,6 @@ const Calendar = () => {
             // Save to localStorage immediately for instant feedback
             try {
                 localStorage.setItem(notesKey, JSON.stringify(updatedNotes));
-                console.log('✅ Saved note to localStorage:', dateString);
             } catch (e) {
                 console.error('Error saving to localStorage:', e);
             }
@@ -269,7 +250,6 @@ const Calendar = () => {
                     note: noteText || '' 
                 };
                 
-                console.log('📤 Sending calendar note to server:', requestBody);
                 
                 const res = await fetch('/api/calendar-notes', {
                     method: 'POST',
@@ -284,11 +264,9 @@ const Calendar = () => {
                 
                 if (res.ok) {
                     const response = await res.json();
-                    console.log('✅ Saved note to server successfully:', dateString, response);
                     
                     // The API wraps response in {data: {saved: true, ...}}
                     const data = response?.data || response;
-                    console.log('📋 Parsed response data:', data);
                     
                     // Verify the save was successful
                     if (data?.saved !== false) {
@@ -311,31 +289,17 @@ const Calendar = () => {
                                 
                                 if (refreshRes.ok) {
                                     const refreshData = await refreshRes.json();
-                                    console.log('📋 Refresh response:', refreshData);
-                                    console.log('📋 Refresh response structure:', {
-                                        hasData: !!refreshData,
-                                        hasNotes: !!refreshData.notes,
-                                        notesType: typeof refreshData.notes,
-                                        dataKeys: Object.keys(refreshData || {}),
-                                        fullResponse: JSON.stringify(refreshData, null, 2)
-                                    });
                                     // The API wraps response in {data: {notes: {...}}}
                                     // So we need to access data.data.notes, not data.notes
                                     const serverNotes = refreshData?.data?.notes || refreshData?.notes || {};
                                     
-                                    console.log('📋 Server notes keys:', Object.keys(serverNotes));
-                                    console.log('📋 Server notes object:', serverNotes);
-                                    console.log('🔍 Looking for note on date:', dateString);
-                                    console.log('✅ Note found on server:', serverNotes[dateString] ? 'YES' : 'NO');
                                     if (serverNotes[dateString]) {
-                                        console.log('📝 Note content:', serverNotes[dateString]);
                                     }
                                     
                                     if (serverNotes[dateString]) {
                                         // Note is confirmed on server - update state
                                         setNotes(serverNotes);
                                         localStorage.setItem(notesKey, JSON.stringify(serverNotes));
-                                        console.log('✅ Calendar notes refreshed after save - verified saved:', dateString, 'YES');
                                         
                                         setIsSaving(false);
                                         sessionStorage.removeItem('calendar_is_saving');
@@ -347,7 +311,6 @@ const Calendar = () => {
                                     } else if (retryCount < maxRetries) {
                                         // Note not found yet, retry after delay
                                         retryCount++;
-                                        console.log(`⏳ Note not found yet, retrying (${retryCount}/${maxRetries})...`);
                                         setTimeout(verifyAndRefresh, 1000 * retryCount); // Exponential backoff
                                     } else {
                                         // Max retries reached, but still update with what server has
@@ -436,7 +399,6 @@ const Calendar = () => {
                             const serverNotes = verifyData?.notes || {};
                             setNotes(serverNotes);
                             localStorage.setItem(notesKey, JSON.stringify(serverNotes));
-                            console.log('✅ Calendar notes synced after network error');
                         }
                         } catch (verifyError) {
                             console.error('Error verifying save:', verifyError);
@@ -495,7 +457,6 @@ const Calendar = () => {
     const handleDayClick = (day) => {
         if (day === null) return;
         
-        console.log('📅 Calendar: Day clicked, opening DailyNotes...');
         const dateString = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
         
@@ -515,7 +476,6 @@ const Calendar = () => {
     
     // Handle opening daily notes list view
     const handleOpenDailyNotes = () => {
-        console.log('📝 Calendar: Opening Daily Notes list view...');
         
         // Check if DailyNotes is available
         if (!window.DailyNotes) {
@@ -560,16 +520,13 @@ const Calendar = () => {
     useEffect(() => {
         if (showDailyNotes && !window.DailyNotes) {
             // Manually load DailyNotes component if not already loaded
-            console.log('📥 Calendar: Loading DailyNotes component...');
             const script = document.createElement('script');
             script.src = './dist/src/components/daily-notes/DailyNotes.js';
             script.async = true;
             script.onload = () => {
-                console.log('✅ DailyNotes script loaded');
                 // Wait a bit for component to register
                 setTimeout(() => {
                     if (window.DailyNotes) {
-                        console.log('✅ DailyNotes component registered');
                         setDailyNotesLoaded(true);
                     } else {
                         console.error('❌ DailyNotes script loaded but component not registered');
@@ -587,7 +544,6 @@ const Calendar = () => {
             const checkInterval = setInterval(() => {
                 attempts++;
                 if (window.DailyNotes) {
-                    console.log('✅ DailyNotes component loaded');
                     setDailyNotesLoaded(true);
                     clearInterval(checkInterval);
                 } else if (attempts >= maxAttempts) {
@@ -791,10 +747,8 @@ const DayNotesModal = ({ date, dateString, initialNote, onSave, onClose, isDark 
     };
     
     const handleSave = async () => {
-        console.log('💾 DayNotesModal: Save button clicked, note:', note.substring(0, 50));
         try {
             await onSave(note);
-            console.log('✅ DayNotesModal: onSave completed');
         } catch (error) {
             console.error('❌ DayNotesModal: Error in onSave:', error);
             alert(`Failed to save: ${error.message || 'Unknown error'}`);

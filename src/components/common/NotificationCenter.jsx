@@ -116,7 +116,6 @@ const NotificationCenter = () => {
                     // Resume polling if it was paused
                     if (isPollingPausedRef.current) {
                         isPollingPausedRef.current = false;
-                        console.log('✅ NotificationCenter: Resuming polling after successful authentication');
                         // Restart polling with normal delay
                         if (restartPollingRef.current) restartPollingRef.current();
                     } else if (pollingDelayRef.current !== 30000) {
@@ -436,18 +435,30 @@ const NotificationCenter = () => {
                     }
                     if (stageIndex !== undefined && proposalId) {
                         selectors.push(() => {
+                            // Try multiple ways to find the proposal element
                             const proposalElement = document.querySelector(`[data-proposal-id="${proposalId}"]`) ||
-                                                  document.querySelector(`[id*="proposal"][id*="${proposalId}"]`);
+                                                  document.querySelector(`[data-proposal-id*="${proposalId}"]`) ||
+                                                  document.querySelector(`[id*="proposal"][id*="${proposalId}"]`) ||
+                                                  document.querySelector(`[id*="proposal-${proposalId}"]`);
                             if (proposalElement) {
-                                const stages = proposalElement.querySelectorAll('[data-stage-index], [class*="stage"]');
-                                return stages[stageIndex] || null;
+                                // Try to find stage by index in various ways
+                                const stages = proposalElement.querySelectorAll('[data-stage-index], [class*="stage"], [data-stage-id]');
+                                if (stages.length > stageIndex) {
+                                    return stages[stageIndex];
+                                }
+                                // Also try finding by stage ID if available
+                                if (stageId) {
+                                    const stageById = proposalElement.querySelector(`[data-stage-id="${stageId}"]`);
+                                    if (stageById) return stageById;
+                                }
                             }
                             return null;
                         });
                     }
                     
                     if (selectors.length > 0) {
-                        findAndScrollToElement(selectors);
+                        // Use more retries for proposal stages as they may take longer to render
+                        findAndScrollToElement(selectors, 15, 400);
                     }
                 }
                 
@@ -476,9 +487,11 @@ const NotificationCenter = () => {
                     const proposalId = metadata.proposalId;
                     findAndScrollToElement([
                         `[data-proposal-id="${proposalId}"]`,
+                        `[data-proposal-id*="${proposalId}"]`,
                         `#proposal-${proposalId}`,
-                        `[id*="proposal"][id*="${proposalId}"]`
-                    ]);
+                        `[id*="proposal"][id*="${proposalId}"]`,
+                        `[id*="proposal-${proposalId}"]`
+                    ], 15, 400);
                 }
             }
             
@@ -681,6 +694,5 @@ const NotificationCenter = () => {
 // Make available globally
 if (typeof window !== 'undefined') {
     window.NotificationCenter = NotificationCenter;
-    console.log('🔔 NotificationCenter component loaded and registered');
 }
 

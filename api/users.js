@@ -22,7 +22,6 @@ async function handler(req, res) {
 
             // All authenticated users get basic user info for mentions
             // Only admins get full employee profile data
-            console.log(`✅ Users endpoint: Fetching users for ${isAdmin ? 'admin' : 'regular user'}...`)
 
             let users = []
             let invitations = []
@@ -43,7 +42,6 @@ async function handler(req, res) {
                         orderBy: { name: 'asc' }
                     })
                     users = usersQuery
-                    console.log(`✅ Users endpoint: Fetched ${users.length} users for mentions`)
                 } else {
                     // Admins get full data
                     const usersQuery = await prisma.user.findMany({
@@ -83,14 +81,12 @@ async function handler(req, res) {
                         ...user,
                         permissions: user.permissions || '[]' // Use database value or default to empty array
                     }))
-                    console.log(`✅ Users endpoint: Fetched ${users.length} users with full details`)
                     
                     // Get all invitations (only for admins)
                     try {
                         invitations = await prisma.invitation.findMany({
                             orderBy: { createdAt: 'desc' }
                         })
-                        console.log(`✅ Users endpoint: Fetched ${invitations.length} invitations`)
                     } catch (invitationError) {
                         console.warn('⚠️ Invitation table not accessible, returning empty list:', invitationError.message)
                     }
@@ -181,7 +177,6 @@ async function handler(req, res) {
                 }
             })
 
-            console.log('User created with temporary password:', tempPassword)
 
             // Attempt to send a welcome email with the temporary password
             let emailSent = false
@@ -215,7 +210,6 @@ async function handler(req, res) {
                     { isProjectRelated: false }
                 )
                 emailSent = true
-                console.log('✅ New user welcome email sent:', email)
             } catch (err) {
                 emailError = err
                 console.error('❌ Failed to send new user welcome email:', err)
@@ -285,21 +279,15 @@ async function handler(req, res) {
 
             // Handle permissions updates (always persist as JSON string)
             if (permissions !== undefined && permissions !== null) {
-                console.log('🔧 [api/users.js] Processing permissions update:', {
-                    type: typeof permissions,
-                    isArray: Array.isArray(permissions)
-                })
 
                 if (Array.isArray(permissions)) {
                     processedUpdates.permissions = JSON.stringify(permissions)
-                    console.log('✅ [api/users.js] Permissions array stringified:', processedUpdates.permissions)
                 } else if (typeof permissions === 'string') {
                     try {
                         const parsed = JSON.parse(permissions)
                         processedUpdates.permissions = Array.isArray(parsed)
                             ? permissions
                             : JSON.stringify([parsed])
-                        console.log('✅ [api/users.js] Permissions string processed:', processedUpdates.permissions)
                     } catch (err) {
                         console.warn('⚠️ [api/users.js] Invalid permissions string, defaulting to []', err)
                         processedUpdates.permissions = '[]'
@@ -312,21 +300,15 @@ async function handler(req, res) {
 
             // Handle accessibleProjectIds the same way (persist as JSON string)
             if (accessibleProjectIds !== undefined && accessibleProjectIds !== null) {
-                console.log('🔧 [api/users.js] Processing accessibleProjectIds update:', {
-                    type: typeof accessibleProjectIds,
-                    isArray: Array.isArray(accessibleProjectIds)
-                })
 
                 if (Array.isArray(accessibleProjectIds)) {
                     processedUpdates.accessibleProjectIds = JSON.stringify(accessibleProjectIds)
-                    console.log('✅ [api/users.js] accessibleProjectIds array stringified:', processedUpdates.accessibleProjectIds)
                 } else if (typeof accessibleProjectIds === 'string') {
                     try {
                         const parsed = JSON.parse(accessibleProjectIds)
                         processedUpdates.accessibleProjectIds = Array.isArray(parsed)
                             ? accessibleProjectIds
                             : JSON.stringify([parsed])
-                        console.log('✅ [api/users.js] accessibleProjectIds string processed:', processedUpdates.accessibleProjectIds)
                     } catch (err) {
                         console.warn('⚠️ [api/users.js] Invalid accessibleProjectIds string, defaulting to []', err)
                         processedUpdates.accessibleProjectIds = '[]'
@@ -347,7 +329,6 @@ async function handler(req, res) {
                 ...allowedUpdates
             } = processedUpdates
 
-            console.log('📋 [api/users.js] Final allowedUpdates payload:', allowedUpdates)
 
             // Update user
             const user = await prisma.user.update({
@@ -510,7 +491,6 @@ async function handler(req, res) {
                 timeout: 10000 // 10 second timeout for the transaction
             })
 
-            console.log(`✅ User deleted successfully: ${userId}`)
             return ok(res, { success: true, message: 'User deleted successfully' })
 
         } catch (error) {

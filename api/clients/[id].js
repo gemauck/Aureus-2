@@ -8,12 +8,6 @@ import { searchAndSaveNewsForClient } from '../client-news/search.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔍 Client [id] API Debug:', {
-      method: req.method,
-      url: req.url,
-      headers: req.headers,
-      user: req.user
-    })
     
     // Extract ID from req.params (set by server routing) or fallback to URL parsing
     let id = req.params?.id
@@ -23,7 +17,6 @@ async function handler(req, res) {
       id = pathSegments[pathSegments.length - 1] // Get the ID from the URL
     }
     
-    console.log('🔍 ID from params:', req.params?.id, 'Extracted ID:', id)
 
     if (!id) {
       return badRequest(res, 'Client ID required')
@@ -79,8 +72,6 @@ async function handler(req, res) {
           parsedClient.tags = []
         }
         
-        console.log('✅ Client retrieved successfully:', client.id)
-        console.log('✅ Parsed proposals count:', Array.isArray(parsedClient.proposals) ? parsedClient.proposals.length : 'not an array')
         return ok(res, { client: parsedClient })
       } catch (dbError) {
         console.error('❌ Database error getting client:', dbError)
@@ -126,14 +117,9 @@ async function handler(req, res) {
         }
       })
 
-      console.log('🔍 Updating client with data:', JSON.stringify(updateData, null, 2))
-      console.log('🔍 Comments value:', updateData.comments, 'type:', typeof updateData.comments, 'length:', updateData.comments?.length)
-      console.log('🔍 FollowUps value:', updateData.followUps, 'type:', typeof updateData.followUps, 'length:', updateData.followUps?.length)
-      console.log('🔍 ActivityLog value:', updateData.activityLog, 'type:', typeof updateData.activityLog, 'length:', updateData.activityLog?.length)
       
       // Log the actual strings being saved
       if (updateData.comments) {
-        console.log('🔍 Comments string preview:', updateData.comments.substring(0, 100))
       }
       
       try {
@@ -169,7 +155,6 @@ async function handler(req, res) {
                     isActive: true
                   }
                 })
-                console.log(`✅ Created industry "${industryName}" from client update`)
               } catch (createError) {
                 // Ignore unique constraint violations (race condition)
                 if (!createError.message.includes('Unique constraint') && createError.code !== 'P2002') {
@@ -182,7 +167,6 @@ async function handler(req, res) {
                 where: { id: existingIndustry.id },
                 data: { isActive: true }
               })
-              console.log(`✅ Reactivated industry "${industryName}"`)
             }
           } catch (industryError) {
             // Don't block the client update if industry sync fails
@@ -190,15 +174,10 @@ async function handler(req, res) {
           }
         }
         
-        console.log('🔍 Calling Prisma update with ID:', id)
         const client = await prisma.client.update({
           where: { id },
           data: updateData
         })
-        console.log('✅ Client updated successfully:', client.id)
-        console.log('🔍 Saved client comments:', client.comments)
-        console.log('🔍 Comments type after save:', typeof client.comments, 'length:', client.comments?.length)
-        console.log('🔍 Comments preview:', client.comments?.substring(0, 100))
         
         // Log to file
         const fs = await import('fs')
@@ -207,7 +186,6 @@ async function handler(req, res) {
         
         // If name changed, trigger RSS feed update (async, don't wait)
         if (updateData.name !== undefined && oldName && oldName !== client.name) {
-          console.log(`📰 Client name changed from "${oldName}" to "${client.name}" - triggering RSS feed update`)
           // Trigger RSS search asynchronously (don't block the response)
           searchAndSaveNewsForClient(client.id, client.name, client.website || oldWebsite || '').catch(error => {
             console.error('❌ Error updating RSS feed after name change:', error)
@@ -234,7 +212,6 @@ async function handler(req, res) {
           }
         }
         
-        console.log('✅ Client updated with parsed JSON fields, services count:', Array.isArray(parsedClient.services) ? parsedClient.services.length : 0)
         return ok(res, { client: parsedClient })
       } catch (dbError) {
         console.error('❌ Database error updating client:', dbError)
@@ -246,32 +223,27 @@ async function handler(req, res) {
     if (req.method === 'DELETE') {
       try {
         // First, delete all related records to avoid foreign key constraints
-        console.log('🔍 Checking for related records before deleting client:', id)
         
         // Delete opportunities
         const opportunitiesDeleted = await prisma.opportunity.deleteMany({
           where: { clientId: id }
         })
-        console.log('🗑️ Deleted opportunities:', opportunitiesDeleted.count)
         
         // Delete invoices
         const invoicesDeleted = await prisma.invoice.deleteMany({
           where: { clientId: id }
         })
-        console.log('🗑️ Deleted invoices:', invoicesDeleted.count)
         
         // Delete sales orders
         const salesOrdersDeleted = await prisma.salesOrder.deleteMany({
           where: { clientId: id }
         })
-        console.log('🗑️ Deleted sales orders:', salesOrdersDeleted.count)
         
         // Update projects to remove client reference (set clientId to null)
         const projectsUpdated = await prisma.project.updateMany({
           where: { clientId: id },
           data: { clientId: null }
         })
-        console.log('🔄 Updated projects (removed client reference):', projectsUpdated.count)
         
         // Update service calls to remove client reference (set clientId to null) if ServiceCall model exists
         let serviceCallsUpdated = { count: 0 }
@@ -280,16 +252,13 @@ async function handler(req, res) {
             where: { clientId: id },
             data: { clientId: null }
           })
-          console.log('🔄 Updated service calls (removed client reference):', serviceCallsUpdated.count)
         } catch (error) {
           // ServiceCall model might not exist, ignore error
-          console.log('ℹ️ ServiceCall model not found or no service calls to update')
         }
         
         // ClientNews, ClientTag, and StarredClient have onDelete: Cascade, so they'll be deleted automatically
         // Now delete the client
         await prisma.client.delete({ where: { id } })
-        console.log('✅ Client deleted successfully:', id)
         return ok(res, { 
           message: `Client deleted successfully. Also deleted ${opportunitiesDeleted.count} opportunities, ${invoicesDeleted.count} invoices, ${salesOrdersDeleted.count} sales orders, and updated ${projectsUpdated.count} projects.`
         })

@@ -65,13 +65,6 @@ async function sendViaSendGridAPI(mailOptions, apiKey) {
         });
     }
     
-    console.log('📧 SendGrid API payload:', {
-        to: mailOptions.to,
-        from: { email: fromEmail, name: fromName },
-        subject: mailOptions.subject,
-        hasHtml: !!mailOptions.html,
-        hasText: !!mailOptions.text
-    });
     
     const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
         method: 'POST',
@@ -128,8 +121,6 @@ function getTransporter() {
                           (host === 'smtp.sendgrid.net' && sendGridKey && sendGridKey.startsWith('SG.'));
         
         if (isSendGrid) {
-            console.log('📧 Using SendGrid HTTP API (bypasses SMTP port blocking)');
-            console.log('📧 SendGrid API Key:', sendGridKey ? `${sendGridKey.substring(0, 5)}...` : 'NOT SET');
             useSendGridHTTP = true;
             transporter = { useHTTP: true, apiKey: sendGridKey }; // Flag to use HTTP API
             return transporter;
@@ -143,13 +134,6 @@ function getTransporter() {
 
             const user = process.env.SMTP_USER || process.env.GMAIL_USER;
 
-            console.log('📧 Initializing email transporter...', {
-                host,
-                port,
-                secure,
-                hasUser: !!user,
-                hasPass: !!pass
-            });
 
             transporter = nodemailer.createTransport({
                 host,
@@ -180,7 +164,6 @@ function getTransporter() {
                         });
                         console.error('⚠️ Email sending will fail. Check your SMTP configuration in environment variables.');
                     } else {
-                        console.log('✅ Email service ready to send messages');
                     }
                 });
             }
@@ -325,14 +308,6 @@ export const sendInvitationEmail = async (invitationData) => {
             throw new Error('Email configuration not available. Please configure SENDGRID_API_KEY or SMTP settings in your .env file.');
         }
         
-        console.log('📧 Sending email with options:', {
-            from: mailOptions.from,
-            to: mailOptions.to,
-            subject: mailOptions.subject,
-            method: useSendGridHTTP ? 'SendGrid HTTP API' : 'SMTP',
-            hasSendGridKey: !!sendGridKey,
-            configWarning: configWarning
-        });
         
         // Use SendGrid HTTP API if configured
         // Priority: SendGrid API key takes precedence over SMTP
@@ -353,7 +328,6 @@ export const sendInvitationEmail = async (invitationData) => {
             throw new Error('No email transporter available. Please configure SENDGRID_API_KEY or SMTP settings.');
         }
         
-        console.log('✅ Invitation email sent successfully:', result.messageId);
         return { success: true, messageId: result.messageId };
     } catch (error) {
         console.error('❌ Failed to send invitation email:', error);
@@ -435,7 +409,6 @@ export const sendPasswordResetEmail = async ({ email, name, resetLink }) => {
         } else {
             result = await emailTransporter.sendMail(mailOptions);
         }
-        console.log('✅ Password reset email sent:', result.messageId);
         return { success: true, messageId: result.messageId };
     } catch (error) {
         console.error('❌ Failed to send password reset email:', error);
@@ -631,21 +604,11 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
             throw new Error(errorMsg);
         }
         
-        console.log('📧 Sending notification email with options:', {
-            from: mailOptions.from,
-            to: mailOptions.to,
-            subject: mailOptions.subject,
-            method: useSendGridHTTP ? 'SendGrid HTTP API' : 'SMTP',
-            hasSendGridKey: !!sendGridKey,
-            hasEmailTransporter: !!emailTransporter,
-            configError: configError?.message
-        });
         
         // Use SendGrid HTTP API if configured
         // Priority: SendGrid API key takes precedence over SMTP
         let result;
         if (sendGridKey && (useSendGridHTTP || emailTransporter?.useHTTP)) {
-            console.log('📧 Using SendGrid HTTP API for notification email');
             mailOptions.fromName = 'Abcotronics';
             // Extract email from "Name <email>" format if needed
             const fromEmail = mailOptions.from.includes('<') 
@@ -654,7 +617,6 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
             mailOptions.from = fromEmail; // SendGrid API expects just email
             result = await sendViaSendGridAPI(mailOptions, sendGridKey);
         } else if (emailTransporter && typeof emailTransporter.sendMail === 'function') {
-            console.log('📧 Using SMTP for notification email');
             // Use Promise.race to prevent long timeouts
             const sendPromise = emailTransporter.sendMail(mailOptions);
             const timeoutPromise = new Promise((_, reject) => 
@@ -667,12 +629,6 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
             throw new Error(errorMsg);
         }
         
-        console.log('✅ Notification email sent successfully:', {
-            messageId: result?.messageId,
-            success: result?.success,
-            to: mailOptions.to,
-            subject: mailOptions.subject
-        });
         return { success: true, messageId: result?.messageId || result?.messageId || 'unknown' };
     } catch (error) {
         console.error('❌ Failed to send notification email:', error);

@@ -3,7 +3,6 @@ import { ok, serverError } from './_lib/response.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔍 Database health check requested')
     
     // Test basic database connection
     const startTime = Date.now()
@@ -13,7 +12,6 @@ async function handler(req, res) {
       await prisma.$queryRaw`SELECT 1 as test`
       const connectionTime = Date.now() - startTime
       
-      console.log(`✅ Database connection test successful (${connectionTime}ms)`)
       
       // Test if tables exist
       const tableCount = await prisma.$queryRaw`

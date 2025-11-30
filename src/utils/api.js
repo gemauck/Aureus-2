@@ -476,7 +476,6 @@ const api = {
   // Clients
   async listClients() {
     const res = await request('/clients')
-    console.log('🔍 listClients response:', JSON.stringify(res, null, 2))
     return res
   },
 
@@ -486,9 +485,7 @@ const api = {
   },
 
   async createClient(clientData) {
-    console.log('🔍 Creating client with data:', clientData)
     const res = await request('/clients', { method: 'POST', body: JSON.stringify(clientData) })
-    console.log('🔍 createClient response:', JSON.stringify(res, null, 2))
     return res
   },
 
@@ -753,19 +750,4 @@ window.api = api
 
 // Debug function to check if API is loaded
 window.debugAPI = () => {
-  console.log('🔍 API Debug:', {
-    hasUpdateClient: typeof window.api.updateClient === 'function',
-    hasCreateClient: typeof window.api.createClient === 'function',
-    hasListClients: typeof window.api.listClients === 'function',
-    hasCreateLead: typeof window.api.createLead === 'function',
-    hasUpdateLead: typeof window.api.updateLead === 'function',
-    hasListLeads: typeof window.api.listLeads === 'function',
-    hasCreateEmployee: typeof window.api.createEmployee === 'function',
-    hasUpdateEmployee: typeof window.api.updateEmployee === 'function',
-    hasListEmployees: typeof window.api.listEmployees === 'function',
-    hasCreateOpportunity: typeof window.api.createOpportunity === 'function',
-    hasUpdateOpportunity: typeof window.api.updateOpportunity === 'function',
-    hasListOpportunities: typeof window.api.listOpportunities === 'function',
-    apiMethods: Object.keys(window.api)
-  })
 }

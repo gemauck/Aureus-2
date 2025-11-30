@@ -10,14 +10,6 @@ import { logDatabaseError } from './_lib/dbErrorHandler.js'
 async function handler(req, res) {
   try {
     // Log all calendar-notes requests for debugging
-    console.log('📅 Calendar notes handler called:', {
-      method: req.method,
-      url: req.url,
-      pathname: req.url.split('?')[0],
-      hasBody: !!req.body,
-      bodyKeys: req.body ? Object.keys(req.body) : [],
-      userId: req.user?.sub
-    })
     
     // Parse the URL path and query (already has /api/ stripped by server)
     const url = new URL(req.url, 'http://localhost')
@@ -40,7 +32,6 @@ async function handler(req, res) {
 
         let whereClause = { userId }
         
-        console.log('📅 GET calendar notes - userId:', userId, 'whereClause:', JSON.stringify(whereClause))
         
         if (startDate && endDate) {
           whereClause.date = {
@@ -54,14 +45,7 @@ async function handler(req, res) {
           orderBy: { date: 'desc' }
         })
 
-        console.log('✅ Calendar notes retrieved successfully:', notes.length)
         if (notes.length > 0) {
-          console.log('📅 Sample note dates:', notes.slice(0, 3).map(n => ({
-            rawDate: n.date,
-            isoString: n.date.toISOString(),
-            dateStr: n.date.toISOString().split('T')[0],
-            noteLength: n.note?.length || 0
-          })))
         }
         
         // Return as object keyed by date string for easy lookup
@@ -76,26 +60,10 @@ async function handler(req, res) {
           const dateStr = `${year}-${month}-${day}`
           notesByDate[dateStr] = note.note
           
-          console.log('📝 Processing note:', {
-            rawDate: note.date,
-            dateStr,
-            notePreview: note.note?.substring(0, 20) || 'empty'
-          })
         })
         
-        console.log('📅 Returning notesByDate:', {
-          keys: Object.keys(notesByDate),
-          count: Object.keys(notesByDate).length,
-          sample: Object.keys(notesByDate).slice(0, 3)
-        })
         
         const responseData = { notes: notesByDate }
-        console.log('📤 Response data structure:', {
-          hasNotes: !!responseData.notes,
-          notesType: typeof responseData.notes,
-          notesKeys: Object.keys(responseData.notes || {}),
-          notesCount: Object.keys(responseData.notes || {}).length
-        })
         
         return ok(res, responseData)
       } catch (dbError) {
@@ -130,7 +98,6 @@ async function handler(req, res) {
           return ok(res, { note: '' })
         }
 
-        console.log('✅ Calendar note retrieved successfully for date:', dateStr)
         return ok(res, { note: note.note, id: note.id })
       } catch (dbError) {
         console.error('❌ Database error getting calendar note:', dbError)
@@ -140,25 +107,9 @@ async function handler(req, res) {
 
     // Create or Update note for specific date (POST/PUT /api/calendar-notes)
     if ((req.method === 'POST' || req.method === 'PUT') && pathSegments.length === 1 && pathSegments[0] === 'calendar-notes') {
-      console.log('📝 Calendar notes POST/PUT request received:', {
-        method: req.method,
-        url: req.url,
-        hasBody: !!req.body,
-        bodyType: typeof req.body,
-        bodyKeys: req.body ? Object.keys(req.body) : [],
-        rawBody: req.body
-      })
       
       const body = await parseJsonBody(req)
       
-      console.log('📝 Calendar notes POST request parsed:', {
-        method: req.method,
-        body: body,
-        hasDate: !!body.date,
-        dateValue: body.date,
-        noteLength: body.note?.length || 0,
-        bodyKeys: Object.keys(body)
-      })
       
       if (!body.date) {
         console.error('❌ Calendar note save failed: date is missing', { body, userId })
@@ -178,12 +129,6 @@ async function handler(req, res) {
       const noteText = body.note || ''
       const userId = req.user?.sub
 
-      console.log('📅 Saving calendar note:', {
-        userId,
-        dateStr,
-        date: date.toISOString(),
-        noteLength: noteText.length
-      })
 
       try {
         // Validate userId exists in database
@@ -216,13 +161,6 @@ async function handler(req, res) {
           }
         })
 
-        console.log('✅ Calendar note saved successfully:', {
-          id: note.id,
-          userId: note.userId,
-          date: note.date.toISOString(),
-          dateStr: note.date.toISOString().split('T')[0],
-          noteLength: note.note.length
-        })
         
         // Return the saved note with proper formatting
         const responseData = {
@@ -278,7 +216,6 @@ async function handler(req, res) {
           }
         })
 
-        console.log('✅ Calendar note deleted successfully for date:', dateStr)
         return ok(res, { deleted: true })
       } catch (dbError) {
         // If note doesn't exist, that's okay

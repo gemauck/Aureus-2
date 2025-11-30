@@ -5,33 +5,24 @@ import { authRequired } from './_lib/authRequired.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔧 Applying database performance indexes...')
     
     // Client table indexes
     await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "Client_createdAt_idx" ON "Client"("createdAt")`
-    console.log('✅ Created Client_createdAt_idx')
     
     await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "Client_type_idx" ON "Client"("type")`
-    console.log('✅ Created Client_type_idx')
     
     await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "Client_status_idx" ON "Client"("status")`
-    console.log('✅ Created Client_status_idx')
     
     await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "Client_ownerId_idx" ON "Client"("ownerId")`
-    console.log('✅ Created Client_ownerId_idx')
     
     // Project table indexes
     await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "Project_clientId_idx" ON "Project"("clientId")`
-    console.log('✅ Created Project_clientId_idx')
     
     await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "Project_status_idx" ON "Project"("status")`
-    console.log('✅ Created Project_status_idx')
     
     await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "Project_ownerId_idx" ON "Project"("ownerId")`
-    console.log('✅ Created Project_ownerId_idx')
     
     await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "Project_createdAt_idx" ON "Project"("createdAt")`
-    console.log('✅ Created Project_createdAt_idx')
     
     // Verify indexes were created
     const clientIndexes = await prisma.$queryRaw`
@@ -46,8 +37,6 @@ async function handler(req, res) {
       WHERE tablename = 'Project' AND indexname LIKE 'Project_%'
     `
     
-    console.log(`✅ Created ${clientIndexes.length} Client indexes`)
-    console.log(`✅ Created ${projectIndexes.length} Project indexes`)
     
     return ok(res, {
       success: true,

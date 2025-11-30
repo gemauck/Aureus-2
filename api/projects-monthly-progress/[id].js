@@ -75,10 +75,6 @@ async function handler(req, res) {
         data: { monthlyProgress: monthlyProgressString }
       })
 
-      console.log('✅ Project monthlyProgress updated via dedicated endpoint:', {
-        id: project.id,
-        monthlyProgressPreview: project.monthlyProgress?.substring(0, 200)
-      })
 
       return ok(res, { project })
     } catch (error) {

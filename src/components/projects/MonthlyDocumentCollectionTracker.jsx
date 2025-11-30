@@ -286,11 +286,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             let normalized = normalizedFromProp;
             
             const yearKeys = Object.keys(normalizedFromProp || {});
-            console.log('✅ Loaded sections map from project prop.', {
-                years: yearKeys,
-                selectedYear,
-                hasDataForSelectedYear: Array.isArray(normalizedFromProp?.[selectedYear]) && normalizedFromProp[selectedYear].length > 0
-            });
             
             // If prop has no data but we have a local snapshot, restore from snapshot
             if ((!normalizedFromProp || yearKeys.length === 0) && snapshotKey && window.localStorage) {
@@ -301,10 +296,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         const snapshotMap = normalizeSectionsByYear(snapshotParsed);
                         const snapshotYears = Object.keys(snapshotMap || {});
                         if (snapshotYears.length > 0) {
-                            console.log('🩹 Restoring document sections from local snapshot.', {
-                                snapshotYears,
-                                selectedYear
-                            });
                             normalized = snapshotMap;
                         }
                     }
@@ -351,7 +342,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         const snapshotMap = normalizeSectionsByYear(snapshotParsed);
                         const snapshotYears = Object.keys(snapshotMap || {});
                         if (snapshotYears.length > 0) {
-                            console.log('🩹 DB returned empty documentSections. Restoring from local snapshot and re‑applying.');
                             normalized = snapshotMap;
                         }
                     }
@@ -370,14 +360,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 // 2. Database matches what we last saved (database hasn't changed, safe to update), OR
                 // 3. Force update requested
                 if (!hasUnsavedChanges || freshSnapshot === lastSavedSnapshotRef.current || forceUpdate) {
-                    console.log('🔄 Updating sections map from fresh database data. Years:', yearKeys);
                     setSectionsByYear(normalized);
                     // Update snapshot reference to match database state
                     if (freshSnapshot === lastSavedSnapshotRef.current || !hasUnsavedChanges) {
                         lastSavedSnapshotRef.current = freshSnapshot;
                     }
                 } else {
-                    console.log('⏸️ Skipping database update: unsaved local changes detected. Will retry after save.');
                 }
             } else {
                 // Data matches, update snapshot reference if needed
@@ -401,10 +389,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
         if (isNewProject || !hasUnsavedChanges) {
-            console.log('📋 Loading document sections from prop for project:', project.id);
             loadFromProjectProp();
         } else {
-            console.log('⏸️ Skipping prop load due to unsaved changes');
         }
         
         refreshFromDatabase();
@@ -462,7 +448,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     async function saveToDatabase(options = {}) {
         if (isSavingRef.current) {
-            console.log('⏭️ Save already in progress, skipping');
             return;
         }
         if (!project?.id) {
@@ -470,7 +455,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return;
         }
         if (isLoading) {
-            console.log('⏭️ Still loading data, skipping save');
             return;
         }
 
@@ -483,17 +467,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             (yearSections) => Array.isArray(yearSections) && yearSections.length > 0
         );
         if (!hasAnySections && serialized === lastSavedSnapshotRef.current) {
-            console.log('⏭️ Skipping save: sections payload is empty and matches last saved snapshot – nothing to persist');
             return;
         }
         if (!hasAnySections && serialized !== lastSavedSnapshotRef.current) {
-            console.log('💾 All sections cleared for all years – saving empty state to persist deletions');
         }
 
         isSavingRef.current = true;
         
         try {
-            console.log('💾 Saving sections map to database. Years:', Object.keys(payload));
             
             if (apiRef.current && typeof apiRef.current.saveDocumentSections === 'function') {
                 await apiRef.current.saveDocumentSections(project.id, payload, options.skipParentUpdate);
@@ -513,12 +494,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             if (snapshotKey && window.localStorage) {
                 try {
                     window.localStorage.setItem(snapshotKey, serialized);
-                    console.log('🧷 Document collection snapshot saved locally for resilience.');
                 } catch (storageError) {
                     console.warn('⚠️ Failed to save document collection snapshot to localStorage:', storageError);
                 }
             }
-            console.log('✅ Save successful');
             
             // Refresh from database after save to get any concurrent updates
             // Use a small delay to ensure the save has been fully committed
@@ -560,7 +539,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         return () => {
             const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
             if (hasUnsavedChanges && !isSavingRef.current) {
-                console.log('💾 Component unmount: flushing pending document collection changes to database');
                 // Fire-and-forget save on unmount; parent update is optional here
                 saveToDatabase({ skipParentUpdate: true });
             }
@@ -572,7 +550,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // ============================================================
     
     const loadTemplates = async () => {
-        console.log('📂 Loading templates from database...');
         setIsLoadingTemplates(true);
         
         try {
@@ -605,7 +582,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 sections: parseSections(t.sections)
             }));
             
-            console.log('✅ Loaded', parsedTemplates.length, 'templates from database');
             setTemplates(parsedTemplates);
         } catch (error) {
             console.error('❌ Error loading templates:', error);
@@ -665,7 +641,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     throw new Error('Failed to update template');
                 }
                 
-                console.log('✅ Template updated in database');
             } else {
                 // Create new template in database
                 const response = await fetch('/api/document-collection-templates', {
@@ -685,13 +660,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     throw new Error('Failed to create template');
                 }
                 
-                console.log('✅ Template created in database');
             }
             
             // Reload templates from database to get fresh data
             await loadTemplates();
             
-            console.log('✅ Template saved successfully');
             setEditingTemplate(null);
             setPrefilledTemplate(null);
             setShowTemplateList(true);
@@ -733,12 +706,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 throw new Error(errorMessage);
             }
             
-            console.log('✅ Template deleted from database');
             
             // Reload templates from database
             await loadTemplates();
             
-            console.log('✅ Template deleted successfully');
         } catch (error) {
             console.error('❌ Error deleting template:', error);
             alert('Failed to delete template: ' + error.message);
@@ -751,7 +722,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return;
         }
         
-        console.log('🎨 Applying template:', template.name);
         
         // Create new sections from template
         const newSections = template.sections.map(section => ({
@@ -770,7 +740,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         // Merge with existing sections
         setSections(prev => [...prev, ...newSections]);
         
-        console.log('✅ Template applied:', newSections.length, 'sections added');
         setShowApplyTemplateModal(false);
         
         // Save will happen automatically via useEffect
@@ -815,7 +784,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return;
         }
         
-        console.log(`📅 Year changed to: ${year}`);
         setSelectedYear(year);
         if (project?.id && typeof window !== 'undefined') {
             localStorage.setItem(`${YEAR_STORAGE_PREFIX}${project.id}`, String(year));
@@ -904,7 +872,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             setSections(prev => prev.map(s => 
                 s.id === editingSection.id ? { ...s, ...sectionData } : s
             ));
-            console.log('📝 Updated section:', sectionData.name);
         } else {
             const newSection = {
                 id: Date.now(),
@@ -912,7 +879,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 documents: []
             };
             setSections(prev => [...prev, newSection]);
-            console.log('➕ Added section:', sectionData.name);
         }
         
         setShowSectionModal(false);
@@ -936,7 +902,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         setSections(prev => {
             const filtered = prev.filter(s => String(s.id) !== normalizedSectionId);
-            console.log('🗑️ Deleted section:', section.name, 'Remaining sections:', filtered.length);
             return filtered;
         });
     };
@@ -1027,7 +992,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         setSections(prev => prev.map(section => {
             if (String(section.id) === normalizedSectionId) {
                 const filteredDocuments = section.documents.filter(doc => String(doc.id) !== normalizedDocumentId);
-                console.log('🗑️ Deleted document:', document.name, 'from section:', section.name, 'Remaining documents:', filteredDocuments.length);
                 return {
                     ...section,
                     documents: filteredDocuments
@@ -1063,7 +1027,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             });
             
             // Log status change for debugging
-            console.log(`📝 Status updated: ${documentId} - ${month} ${selectedYear} = ${status}`);
             
             return updated;
         });
@@ -1141,7 +1104,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         allUsers,
                         projectInfo
                     ).then(() => {
-                        console.log('✅ @Mention notifications processed for document collection comment');
                     }).catch(error => {
                         console.error('❌ Error processing @mentions for document collection comment:', error);
                     });
@@ -1738,7 +1700,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                             onClick={(e) => {
                                                                 e.preventDefault();
                                                                 e.stopPropagation();
-                                                                console.log('🗑️ Delete button clicked for template:', template.id);
                                                                 deleteTemplate(template.id);
                                                             }}
                                                             className="px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded"
@@ -2457,4 +2418,3 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
 // Make available globally
 window.MonthlyDocumentCollectionTracker = MonthlyDocumentCollectionTracker;
-console.log('✅ MonthlyDocumentCollectionTracker component loaded (OVERHAULED VERSION)');

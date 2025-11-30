@@ -116,7 +116,6 @@ async function handler(req, res) {
 
             const { name, email, role = 'user', department = '', phone = '', status = 'active', accessibleProjectIds = [] } = req.body || {}
             
-            console.log('📝 Creating user with data:', { name, email, role, department, phone, status, accessibleProjectIds });
             
             if (!name || !email) {
                 return badRequest(res, 'Name and email are required')
@@ -130,10 +129,8 @@ async function handler(req, res) {
 
             // Create user with a default temporary password
             const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8).toUpperCase()
-            console.log('🔐 Generated temp password:', tempPassword);
             
             const passwordHash = await bcrypt.hash(tempPassword, 10)
-            console.log('🔐 Password hashed successfully');
 
             // Prepare accessibleProjectIds - ensure it's a JSON string
             let accessibleProjectIdsJson = '[]';
@@ -164,7 +161,6 @@ async function handler(req, res) {
                 }
             })
 
-            console.log('✅ User created successfully:', newUser.id);
 
             return ok(res, { 
                 success: true, 
@@ -197,12 +193,6 @@ async function handler(req, res) {
 
             const { userId, name, email, role, status, department, phone, accessibleProjectIds, permissions } = req.body || {}
             
-            console.log('📝 PUT /api/users - Received update request:', {
-                userId,
-                hasPermissions: permissions !== undefined,
-                permissionsType: typeof permissions,
-                permissionsValue: permissions
-            })
             
             if (!userId) {
                 return badRequest(res, 'User ID is required')
@@ -234,10 +224,8 @@ async function handler(req, res) {
             
             // Handle permissions - ALWAYS process if provided (even if empty array)
             if (permissions !== undefined && permissions !== null) {
-                console.log('🔧 Processing permissions update:', { permissions, type: typeof permissions });
                 if (Array.isArray(permissions)) {
                     updateData.permissions = JSON.stringify(permissions);
-                    console.log('✅ Permissions is array, stringified to:', updateData.permissions);
                 } else if (typeof permissions === 'string') {
                     // Validate it's valid JSON
                     try {
@@ -245,11 +233,9 @@ async function handler(req, res) {
                         // If it parses to an array, use the stringified version
                         if (Array.isArray(parsed)) {
                             updateData.permissions = permissions; // Already a valid JSON string
-                            console.log('✅ Permissions is valid JSON string:', updateData.permissions);
                         } else {
                             // If it's not an array, wrap it
                             updateData.permissions = JSON.stringify([parsed]);
-                            console.log('⚠️ Permissions parsed to non-array, wrapped:', updateData.permissions);
                         }
                     } catch (e) {
                         console.warn('❌ Invalid permissions JSON, defaulting to empty array:', e);
@@ -260,34 +246,24 @@ async function handler(req, res) {
                     updateData.permissions = '[]';
                 }
             } else {
-                console.log('ℹ️ No permissions field in request body (undefined or null)');
             }
             
             // Log what we're about to update
-            console.log('📋 Final updateData:', JSON.stringify(updateData, null, 2));
             
             // Handle accessibleProjectIds if provided
             if (accessibleProjectIds !== undefined && accessibleProjectIds !== null) {
-                console.log('🔧 Processing accessibleProjectIds update:', { 
-                    accessibleProjectIds, 
-                    type: typeof accessibleProjectIds,
-                    isArray: Array.isArray(accessibleProjectIds)
-                });
                 
                 if (Array.isArray(accessibleProjectIds)) {
                     updateData.accessibleProjectIds = JSON.stringify(accessibleProjectIds);
-                    console.log('✅ accessibleProjectIds is array, stringified to:', updateData.accessibleProjectIds);
                 } else if (typeof accessibleProjectIds === 'string') {
                     // Validate it's valid JSON
                     try {
                         const parsed = JSON.parse(accessibleProjectIds);
                         if (Array.isArray(parsed)) {
                             updateData.accessibleProjectIds = accessibleProjectIds; // Already a valid JSON string
-                            console.log('✅ accessibleProjectIds is valid JSON string:', updateData.accessibleProjectIds);
                         } else {
                             // If it's not an array, wrap it
                             updateData.accessibleProjectIds = JSON.stringify([parsed]);
-                            console.log('⚠️ accessibleProjectIds parsed to non-array, wrapped:', updateData.accessibleProjectIds);
                         }
                     } catch (e) {
                         console.warn('❌ Invalid accessibleProjectIds JSON, defaulting to empty array:', e);
@@ -298,7 +274,6 @@ async function handler(req, res) {
                     updateData.accessibleProjectIds = '[]';
                 }
             } else {
-                console.log('ℹ️ No accessibleProjectIds field in request body (undefined or null)');
             }
 
             // Final safety: ensure permissions & accessibleProjectIds are JSON strings before persisting
@@ -322,8 +297,6 @@ async function handler(req, res) {
                 }
             }
 
-            console.log('💾 Updating user with data:', JSON.stringify(updateData, null, 2));
-            console.log('🔍 Permissions in updateData:', updateData.permissions, 'Type:', typeof updateData.permissions);
             
             // Update user
             let updatedUser;
@@ -345,7 +318,6 @@ async function handler(req, res) {
                     }
                 })
                 
-                console.log('💾 Database update completed. Permissions in response:', updatedUser.permissions, 'Type:', typeof updatedUser.permissions);
             } catch (dbError) {
                 console.error('❌ Database update error:', {
                     message: dbError.message,
@@ -359,12 +331,6 @@ async function handler(req, res) {
                 throw dbError;
             }
 
-            console.log('✅ User updated successfully:', {
-                id: updatedUser.id,
-                email: updatedUser.email,
-                permissions: updatedUser.permissions,
-                permissionsType: typeof updatedUser.permissions
-            })
 
             // Parse permissions from JSON string to array for response
             let parsedPermissions = [];
@@ -528,7 +494,6 @@ async function handler(req, res) {
                 })
             })
 
-            console.log('✅ User deleted successfully:', userId)
 
             return ok(res, { success: true, message: 'User deleted successfully' })
 

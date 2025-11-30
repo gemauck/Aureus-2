@@ -46,7 +46,6 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                 const response = await window.api.getOpportunity(opportunityId);
                 const fetchedOpportunity = response?.data?.opportunity || response?.opportunity;
                 if (fetchedOpportunity) {
-                    console.log('✅ Opportunity fetched with proposals:', Array.isArray(fetchedOpportunity.proposals) ? fetchedOpportunity.proposals.length : 'not an array');
                     setOpportunity(fetchedOpportunity);
                 }
             } catch (error) {
@@ -203,11 +202,6 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
             const updatedFormData = { ...prev, proposals: finalProposals };
             finalFormData = updatedFormData;
             
-            console.log('💾 Saving proposals:', {
-                currentCount: currentProposals.length,
-                updatedCount: updatedProposals.length,
-                mergedCount: finalProposals.length
-            });
             
             return updatedFormData;
         });
@@ -222,12 +216,9 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
         lastSaveTimeoutRef.current = setTimeout(async () => {
             if (finalFormData && opportunityId) {
                 try {
-                    console.log('📡 Calling API to update opportunity with proposals...');
                     await window.api.updateOpportunity(opportunityId, finalFormData);
-                    console.log('✅ Proposals saved successfully to API');
                     setTimeout(() => {
                         isSavingProposalsRef.current = false;
-                        console.log('🔓 Save guard released');
                     }, 3000);
                 } catch (error) {
                     console.error('❌ Error saving proposals:', error);
@@ -307,7 +298,6 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
         const release = () => {
             isCreatingProposalRef.current = false;
             setIsCreatingProposal(false);
-            console.log('🔓 Proposal creation guard released');
         };
 
         if (delay > 0) {
@@ -327,7 +317,6 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
         setIsCreatingProposal(true);
 
         try {
-            console.log('🆕 Creating new proposal...');
 
             const currentFormData = formDataRef.current || formData || {};
             const baseTitle = currentFormData.title || formData.title || clientName || 'this opportunity';
@@ -489,13 +478,6 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
 
             const existingProposals = gatherExistingProposals();
 
-            console.log('🔍 Checking for duplicates:', {
-                proposalId,
-                existingCount: existingProposals.length,
-                existingIds: existingProposals.map(p => p.id),
-                formDataProposalsCount: formData.proposals?.length || 0,
-                formDataRefProposalsCount: formDataRef.current?.proposals?.length || 0
-            });
 
             const proposalExistsById = existingProposals.some(p => p.id === proposalId);
             const now = Date.now();
@@ -527,11 +509,8 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                 return;
             }
 
-            console.log('✅ No duplicate found, proceeding with creation');
-            console.log('✅ Adding proposal to state:', proposalId);
 
             const updatedProposals = [...existingProposals, newProposal];
-            console.log('📝 Updated proposals count:', updatedProposals.length, 'IDs:', updatedProposals.map(p => p.id));
             await saveProposals(updatedProposals);
 
             await notifyAllAssignedParties(
@@ -806,7 +785,6 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                                                                                     idx === proposalIndex ? { ...p, workingDocumentLink: newLink } : p
                                                                                 );
                                                                                 
-                                                                                console.log('💾 Saving working document link:', { oldLink, newLink, proposalId: updatedProposals[proposalIndex].id });
                                                                                 await saveProposals(updatedProposals);
                                                                             }
                                                                         }}
@@ -1444,7 +1422,6 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                                                                                 idx === proposalIndex ? { ...p, workingDocumentLink: newLink } : p
                                                                             );
                                                                             
-                                                                            console.log('💾 Saving working document link:', { oldLink, newLink, proposalId: updatedProposals[proposalIndex].id });
                                                                             await saveProposals(updatedProposals);
                                                                         }
                                                                     }}

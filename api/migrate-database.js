@@ -6,7 +6,6 @@ import { withLogging } from './_lib/logger.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔧 Running database migration to fix schema...')
     
     // Run the migration SQL
     const migrationSQL = `
@@ -43,7 +42,6 @@ async function handler(req, res) {
     `
     
     await prisma.$executeRawUnsafe(migrationSQL)
-    console.log('✅ Database migration completed successfully')
     
     // Test that the migration worked
     const testClient = await prisma.client.create({
@@ -56,7 +54,6 @@ async function handler(req, res) {
     })
     
     await prisma.client.delete({ where: { id: testClient.id } })
-    console.log('✅ Migration test passed')
     
     return ok(res, { 
       message: 'Database migration completed successfully',

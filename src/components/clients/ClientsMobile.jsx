@@ -35,7 +35,6 @@ const ClientsMobile = () => {
             const token = storage.getToken();
             if (token) {
                 const apiResponse = await window.api.getClients();
-                console.log('API response:', apiResponse);
                 
                 // Extract clients from response - handle different response structures
                 let apiClients = [];
@@ -49,14 +48,12 @@ const ClientsMobile = () => {
                     apiClients = apiResponse.data;
                 }
                 
-                console.log('Extracted clients:', apiClients.length, apiClients);
                 
                 if (apiClients && apiClients.length > 0) {
                     // Filter to only include clients (type === 'client' or null/undefined for legacy)
                     const clientsOnly = apiClients.filter(c => 
                         c.type === 'client' || c.type === null || c.type === undefined
                     );
-                    console.log(`✅ Filtered ${clientsOnly.length} clients from ${apiClients.length} total items`);
                     setClients(clientsOnly);
                 } else {
                     // If API returns no clients, use localStorage clients
@@ -66,7 +63,6 @@ const ClientsMobile = () => {
                         const clientsOnly = savedClients.filter(c => 
                             c.type === 'client' || c.type === null || c.type === undefined
                         );
-                        console.log('✅ No API clients, using localStorage clients:', clientsOnly.length);
                         setClients(clientsOnly);
                         return;
                     }
@@ -127,19 +123,12 @@ const ClientsMobile = () => {
 
     // Initialize data
     useEffect(() => {
-        console.log('🔄 ClientsMobile: Initializing, viewMode:', viewMode);
         loadClients();
         loadLeads();
     }, []);
     
     // Debug: Log when clients/leads change
     useEffect(() => {
-        console.log('📊 ClientsMobile: State update', {
-            viewMode,
-            clientsCount: clients.length,
-            leadsCount: leads.length,
-            filteredClientsCount: filteredClients.length
-        });
     }, [viewMode, clients.length, leads.length, filteredClients.length]);
 
     // Save data

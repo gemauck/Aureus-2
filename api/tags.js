@@ -8,12 +8,6 @@ import { isConnectionError } from './_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔍 Tags API Debug:', {
-      method: req.method,
-      url: req.url,
-      headers: req.headers,
-      user: req.user
-    })
     
     const url = new URL(req.url, `http://${req.headers.host}`)
     const pathSegments = url.pathname.split('/').filter(Boolean)
@@ -25,7 +19,6 @@ async function handler(req, res) {
         const tags = await prisma.tag.findMany({
           orderBy: { name: 'asc' }
         })
-        console.log('✅ Tags retrieved successfully:', tags.length)
         return ok(res, { tags })
       } catch (dbError) {
         console.error('❌ Database error getting tags:', dbError)
@@ -50,7 +43,6 @@ async function handler(req, res) {
           }
         })
         if (!tag) return notFound(res)
-        console.log('✅ Tag retrieved successfully:', tag.id)
         return ok(res, { tag })
       } catch (dbError) {
         console.error('❌ Database error getting tag:', dbError)
@@ -89,7 +81,6 @@ async function handler(req, res) {
             ownerId: req.user?.id
           }
         })
-        console.log('✅ Tag created successfully:', tag.id)
         return created(res, { tag })
       } catch (dbError) {
         console.error('❌ Database error creating tag:', dbError)
@@ -136,7 +127,6 @@ async function handler(req, res) {
           where: { id },
           data: updateData
         })
-        console.log('✅ Tag updated successfully:', tag.id)
         return ok(res, { tag })
       } catch (dbError) {
         console.error('❌ Database error updating tag:', dbError)
@@ -158,7 +148,6 @@ async function handler(req, res) {
 
         // Delete the tag (cascade will handle ClientTag deletions)
         await prisma.tag.delete({ where: { id } })
-        console.log('✅ Tag deleted successfully:', id)
         return ok(res, { message: 'Tag deleted successfully' })
       } catch (dbError) {
         console.error('❌ Database error deleting tag:', dbError)

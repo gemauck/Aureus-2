@@ -25,7 +25,6 @@ class StateManagementTestSuite {
 
     // Run all tests
     async runAllTests() {
-        console.log('🧪 Starting Comprehensive State Management Test Suite...');
         
         const tests = [
             { name: 'Create Operations', fn: this.testCreateOperation },
@@ -49,7 +48,6 @@ class StateManagementTestSuite {
 
     // Run individual test
     async runTest(testName, testFunction) {
-        console.log(`\n🧪 Running test: ${testName}`);
         this.currentTest = testName;
         
         const startTime = Date.now();
@@ -70,7 +68,6 @@ class StateManagementTestSuite {
                 error: null
             });
             
-            console.log(`✅ ${testName} PASSED (${duration}ms)`);
             
         } catch (error) {
             const duration = Date.now() - startTime;
@@ -86,7 +83,6 @@ class StateManagementTestSuite {
             // Retry failed tests
             if (this.retryCount < this.maxRetries) {
                 this.retryCount++;
-                console.log(`🔄 Retrying ${testName} (attempt ${this.retryCount})`);
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 await this.runTest(testName, testFunction);
             }
@@ -166,7 +162,6 @@ class StateManagementTestSuite {
             throw new Error('Created lead not found in state');
         }
 
-        console.log('✅ Create operations test completed successfully');
     }
 
     // Test update operations
@@ -212,7 +207,6 @@ class StateManagementTestSuite {
             throw new Error('State not updated with new name');
         }
 
-        console.log('✅ Update operations test completed successfully');
     }
 
     // Test delete operations
@@ -247,7 +241,6 @@ class StateManagementTestSuite {
             throw new Error('Deleted client still found in state');
         }
 
-        console.log('✅ Delete operations test completed successfully');
     }
 
     // Test concurrent operations
@@ -308,7 +301,6 @@ class StateManagementTestSuite {
             throw new Error(`Expected ${clientCount} updated clients, found ${updatedFoundClients.length}`);
         }
 
-        console.log('✅ Concurrent operations test completed successfully');
     }
 
     // Test optimistic updates
@@ -354,7 +346,6 @@ class StateManagementTestSuite {
             window.fetch = originalFetch;
         }
 
-        console.log('✅ Optimistic updates test completed successfully');
     }
 
     // Test conflict resolution
@@ -387,7 +378,6 @@ class StateManagementTestSuite {
             throw new Error('Conflict resolution not working correctly');
         }
 
-        console.log('✅ Conflict resolution test completed successfully');
     }
 
     // Test error handling
@@ -426,7 +416,6 @@ class StateManagementTestSuite {
             window.fetch = originalFetch;
         }
 
-        console.log('✅ Error handling test completed successfully');
     }
 
     // Test data validation
@@ -472,7 +461,6 @@ class StateManagementTestSuite {
             throw new Error('Valid data should pass validation');
         }
 
-        console.log('✅ Data validation test completed successfully');
     }
 
     // Test offline mode
@@ -508,7 +496,6 @@ class StateManagementTestSuite {
             window.fetch = originalFetch;
         }
 
-        console.log('✅ Offline mode test completed successfully');
     }
 
     // Test real-time sync
@@ -540,7 +527,6 @@ class StateManagementTestSuite {
         // Unsubscribe
         unsubscribe();
 
-        console.log('✅ Real-time sync test completed successfully');
     }
 
     // Generate test report
@@ -550,29 +536,17 @@ class StateManagementTestSuite {
         const failedTests = totalTests - passedTests;
         const totalDuration = this.testResults.reduce((sum, r) => sum + r.duration, 0);
         
-        console.log('\n📊 TEST REPORT');
-        console.log('==============');
-        console.log(`Total Tests: ${totalTests}`);
-        console.log(`Passed: ${passedTests}`);
-        console.log(`Failed: ${failedTests}`);
-        console.log(`Success Rate: ${((passedTests / totalTests) * 100).toFixed(1)}%`);
-        console.log(`Total Duration: ${totalDuration}ms`);
-        console.log(`Average Duration: ${(totalDuration / totalTests).toFixed(1)}ms`);
         
         if (failedTests > 0) {
-            console.log('\n❌ FAILED TESTS:');
             this.testResults
                 .filter(r => r.status === 'FAILED')
                 .forEach(r => {
-                    console.log(`  - ${r.name}: ${r.error}`);
                 });
         }
         
-        console.log('\n✅ PASSED TESTS:');
         this.testResults
             .filter(r => r.status === 'PASSED')
             .forEach(r => {
-                console.log(`  - ${r.name} (${r.duration}ms)`);
             });
         
         // Store results globally for debugging

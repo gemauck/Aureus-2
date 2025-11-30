@@ -39,7 +39,6 @@ async function handler(req, res) {
                 skip: skip
             });
 
-            console.log(`✅ Messages endpoint: Retrieved ${messages.length} messages`)
             return ok(res, { messages: messages.reverse() }) // Reverse to show oldest first
         } catch (error) {
             console.error('❌ Failed to get messages:', error)
@@ -86,7 +85,6 @@ async function handler(req, res) {
                 }
             })
 
-            console.log(`✅ Messages endpoint: Message created by ${req.user.sub}`)
             return ok(res, { message }, 201)
         } catch (error) {
             console.error('❌ Failed to create message:', error)

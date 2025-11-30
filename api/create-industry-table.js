@@ -38,7 +38,6 @@ async function handler(req, res) {
       CREATE INDEX IF NOT EXISTS "Industry_isActive_idx" ON "Industry"("isActive");
     `
     
-    console.log('✅ Industry table created successfully via API')
     
     return ok(res, { 
       message: 'Industry table created successfully',

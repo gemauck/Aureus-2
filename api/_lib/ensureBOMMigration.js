@@ -31,14 +31,10 @@ export async function ensureBOMMigration() {
         try {
           await prisma.$executeRaw`ALTER TABLE "BOM" ADD COLUMN "inventoryItemId" TEXT;`
           await prisma.$executeRaw`CREATE INDEX "BOM_inventoryItemId_idx" ON "BOM"("inventoryItemId");`
-          console.log('✅ Applied BOM inventoryItemId migration')
         } catch (migrationError) {
           if (migrationError.message.includes('duplicate column') || 
               migrationError.message.includes('already exists')) {
-            console.log('✅ BOM migration already applied')
           } else {
-            console.log('⚠️ Could not apply BOM migration automatically:', migrationError.message)
-            console.log('⚠️ Migration file is ready in prisma/migrations/ - will apply on deploy')
           }
         }
       }
@@ -55,15 +51,11 @@ export async function ensureBOMMigration() {
           return // Column exists
         }
         // Column doesn't exist - migration needed
-        console.log('⚠️ BOM inventoryItemId column not found - migration needed')
-        console.log('⚠️ Run: npx prisma migrate deploy')
       } catch (error) {
-        console.log('⚠️ Could not verify BOM migration:', error.message)
       }
     }
   } catch (error) {
     // Don't break the app if migration check fails
-    console.log('⚠️ BOM migration check failed (non-critical):', error.message)
   }
 }
 

@@ -7,7 +7,6 @@ export function authRequired(handler) {
       const auth = req.headers['authorization'] || ''
       const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
       if (!token) {
-        console.log('❌ No token provided')
         // Ensure response hasn't been sent before attempting to send
         if (!res.headersSent && !res.writableEnded) {
           return unauthorized(res)
@@ -15,11 +14,9 @@ export function authRequired(handler) {
         return
       }
       
-      console.log('🔍 Verifying token:', token.substring(0, 20) + '...')
       const payload = verifyToken(token)
       
       if (!payload || !payload.sub) {
-        console.log('❌ Invalid or expired token')
         // Ensure response hasn't been sent before attempting to send
         if (!res.headersSent && !res.writableEnded) {
           return unauthorized(res)
@@ -27,7 +24,6 @@ export function authRequired(handler) {
         return
       }
       
-      console.log('✅ Token verified for user:', payload.sub)
       req.user = payload
       
       // Await the handler to properly catch async errors

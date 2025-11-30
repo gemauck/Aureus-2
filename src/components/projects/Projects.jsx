@@ -156,14 +156,12 @@ const Projects = () => {
             // Try to wait for storage to be available
             const checkStorage = () => {
                 if (window.storage) {
-                    console.log('✅ Projects: Storage became available');
                 } else {
                     setTimeout(checkStorage, 100);
                 }
             };
             checkStorage();
         } else {
-            console.log('✅ Projects: Storage is available');
         }
     }, []);
     
@@ -178,7 +176,6 @@ const Projects = () => {
             // Listen for componentLoaded event
             const handleComponentLoaded = (event) => {
                 if (event.detail && event.detail.component === 'ProjectProgressTracker') {
-                    console.log('✅ ProjectProgressTracker loaded via componentLoaded event');
                     setWaitingForTracker(false);
                     setForceRender(prev => prev + 1);
                 }
@@ -192,7 +189,6 @@ const Projects = () => {
                     window.removeEventListener('componentLoaded', handleComponentLoaded);
                     setWaitingForTracker(false);
                     if (window.ProjectProgressTracker) {
-                        console.log('✅ ProjectProgressTracker became available');
                     } else {
                         console.error('❌ ProjectProgressTracker still not available after waiting');
                     }
@@ -229,7 +225,6 @@ const Projects = () => {
                     return;
                 }
 
-                console.log('🔄 Projects: Loading projects from database');
                 
                 // Wait for DatabaseAPI to be available (with timeout - max 5 seconds)
                 let waitAttempts = 0;
@@ -241,7 +236,6 @@ const Projects = () => {
                     
                     // Log progress every 10 attempts (1 second)
                     if (waitAttempts % 10 === 0) {
-                        console.log(`⏳ Projects: Waiting for DatabaseAPI... (${waitAttempts * 100}ms elapsed)`);
                     }
                 }
                 
@@ -271,7 +265,6 @@ const Projects = () => {
                     return;
                 }
                 
-                console.log('✅ DatabaseAPI.getProjects is available, making request...');
                 let response;
                 try {
                     response = await window.DatabaseAPI.getProjects();
@@ -287,18 +280,6 @@ const Projects = () => {
                         throw new Error(`API returned error: ${errorMsg}`);
                     }
                     
-                    console.log('📡 Raw response from database:', response);
-                    console.log('📡 Response structure check:', {
-                        hasData: !!response?.data,
-                        hasProjects: !!response?.data?.projects,
-                        isProjectsArray: Array.isArray(response?.data?.projects),
-                        projectsLength: response?.data?.projects?.length || 0,
-                        dataKeys: response?.data ? Object.keys(response.data) : [],
-                        responseKeys: Object.keys(response || {}),
-                        responseType: typeof response,
-                        dataType: typeof response?.data,
-                        fullResponse: JSON.stringify(response).substring(0, 500)
-                    });
                 } catch (apiError) {
                     console.error('❌ Projects: DatabaseAPI.getProjects threw an error:', apiError);
                     console.error('❌ API Error details:', {
@@ -315,27 +296,22 @@ const Projects = () => {
                 // Try response.data.projects first (most common format)
                 if (response?.data?.projects && Array.isArray(response.data.projects)) {
                     apiProjects = response.data.projects;
-                    console.log('✅ Using response.data.projects, count:', apiProjects.length);
                 } 
                 // Try response.data.data.projects (nested data wrapper)
                 else if (response?.data?.data?.projects && Array.isArray(response.data.data.projects)) {
                     apiProjects = response.data.data.projects;
-                    console.log('✅ Using response.data.data.projects, count:', apiProjects.length);
                 }
                 // Try response.projects (direct projects array)
                 else if (response?.projects && Array.isArray(response.projects)) {
                     apiProjects = response.projects;
-                    console.log('✅ Using response.projects, count:', apiProjects.length);
                 } 
                 // Try response.data as array
                 else if (Array.isArray(response?.data)) {
                     apiProjects = response.data;
-                    console.log('✅ Using response.data as array, count:', apiProjects.length);
                 } 
                 // Try response as array
                 else if (Array.isArray(response)) {
                     apiProjects = response;
-                    console.log('✅ Using response as array, count:', apiProjects.length);
                 } 
                 // Last resort: try to find any array in the response
                 else {
@@ -359,7 +335,6 @@ const Projects = () => {
                     const foundProjects = findProjectsInObject(response);
                     if (foundProjects) {
                         apiProjects = foundProjects;
-                        console.log('✅ Found projects in nested structure, count:', apiProjects.length);
                     } else {
                         console.error('❌ Could not find projects array in response');
                         console.error('❌ Full response structure:', JSON.stringify(response, null, 2).substring(0, 1000));
@@ -371,9 +346,7 @@ const Projects = () => {
                     }
                 }
                 
-                console.log('📡 Database returned projects:', apiProjects?.length || 0);
                 if (apiProjects.length > 0) {
-                    console.log('📡 First project sample:', apiProjects[0]);
                 } else if (response && !response.error) {
                     console.warn('⚠️ Projects: API returned empty array (no projects found)');
                 }
@@ -391,7 +364,6 @@ const Projects = () => {
                     }
                 });
                 
-                console.log('📡 Normalized projects:', normalizedProjects?.length || 0);
                 
                 // Ensure we always set an array (only if component is still mounted)
                 if (isMounted) {
@@ -459,7 +431,6 @@ const Projects = () => {
     useEffect(() => {
         // Check if already available
         if (window.ProjectDetail) {
-            console.log('✅ Projects: ProjectDetail already available on mount');
             setProjectDetailAvailable(true);
             return;
         }
@@ -467,7 +438,6 @@ const Projects = () => {
         // Wait a bit for lazy loader to finish, then check again
         const checkForProjectDetail = () => {
             if (window.ProjectDetail) {
-                console.log('✅ Projects: ProjectDetail loaded by lazy loader');
                 setProjectDetailAvailable(true);
                 return true;
             }
@@ -485,7 +455,6 @@ const Projects = () => {
             if (checkForProjectDetail() || attempts >= maxAttempts) {
                 clearInterval(checkInterval);
                 if (!window.ProjectDetail && attempts >= maxAttempts) {
-                    console.log('📥 Projects: ProjectDetail not loaded by lazy loader, loading manually...');
                     // Try to load manually
                     loadProjectDetail().catch(err => {
                         console.warn('⚠️ Projects: Failed to proactively load ProjectDetail (will retry when needed):', err.message);
@@ -502,7 +471,6 @@ const Projects = () => {
         const maxRetries = 3;
         
         if (window.ProjectDetail) {
-            console.log('✅ ProjectDetail already available');
             setProjectDetailAvailable(true);
             return true;
         }
@@ -510,13 +478,11 @@ const Projects = () => {
         // Strategy 0: Wait for existing script to finish
         const existingScript = document.querySelector(`script[src*="ProjectDetail.js"]`);
         if (existingScript && !existingScript.complete) {
-            console.log('⏳ ProjectDetail script already loading, waiting...');
             return new Promise((resolve) => {
                 let attempts = 0;
                 const checkInterval = setInterval(() => {
                     attempts++;
                     if (window.ProjectDetail) {
-                        console.log('✅ ProjectDetail loaded from existing script');
                         setProjectDetailAvailable(true);
                         clearInterval(checkInterval);
                         resolve(true);
@@ -533,7 +499,6 @@ const Projects = () => {
         // Strategy 1: Try blob URL method (most reliable)
         const tryBlobMethod = async (path) => {
             try {
-                console.log(`📥 Strategy 1 (Blob): Loading ProjectDetail from ${path}...`);
                 const response = await fetch(path, { cache: 'no-cache' });
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -562,7 +527,6 @@ const Projects = () => {
                     const checkInterval = setInterval(() => {
                         attempts++;
                         if (window.ProjectDetail) {
-                            console.log('✅ Strategy 1 (Blob): ProjectDetail registered successfully');
                             clearTimeout(timeout);
                             clearInterval(checkInterval);
                             URL.revokeObjectURL(blobUrl);
@@ -593,7 +557,6 @@ const Projects = () => {
         // Strategy 2: Direct script tag (fallback)
         const tryDirectMethod = async (path) => {
             try {
-                console.log(`📥 Strategy 2 (Direct): Loading ProjectDetail from ${path}...`);
                 return new Promise((resolve, reject) => {
                     const script = document.createElement('script');
                     script.src = path;
@@ -609,7 +572,6 @@ const Projects = () => {
                     const checkInterval = setInterval(() => {
                         attempts++;
                         if (window.ProjectDetail) {
-                            console.log('✅ Strategy 2 (Direct): ProjectDetail registered successfully');
                             clearTimeout(timeout);
                             clearInterval(checkInterval);
                             setProjectDetailAvailable(true);
@@ -675,7 +637,6 @@ const Projects = () => {
         
         // If all strategies failed and we have retries left, wait and retry
         if (retryCount < maxRetries) {
-            console.log(`🔄 All strategies failed, retrying in 1 second... (${retryCount + 1}/${maxRetries})`);
             await new Promise(resolve => setTimeout(resolve, 1000));
             return loadProjectDetail(retryCount + 1);
         }
@@ -740,7 +701,6 @@ const Projects = () => {
         const checkProjectDetail = () => {
             if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
                 if (!projectDetailAvailable) {
-                    console.log('✅ ProjectDetail became available, updating state');
                     setProjectDetailAvailable(true);
                     setWaitingForProjectDetail(false);
                     setForceRender(prev => prev + 1);
@@ -766,7 +726,6 @@ const Projects = () => {
         // Listen for custom event when components are loaded
         const handleComponentLoaded = (event) => {
             if (event.detail && event.detail.component === 'ProjectDetail') {
-                console.log('✅ ProjectDetail loaded via componentLoaded event - forcing re-render');
                 checkProjectDetail();
                 setForceRender(prev => prev + 1);
             }
@@ -786,12 +745,10 @@ const Projects = () => {
         try {
             // Don't sync if clients API is failing - skip silently to prevent crashes
             if (!window.dataService) {
-                console.log('⚠️ Projects: dataService not available, skipping client sync');
                 return;
             }
             
             if (typeof window.dataService.getClients !== 'function' || typeof window.dataService.setClients !== 'function') {
-                console.log('⚠️ Projects: dataService methods not available, skipping client sync');
                 return;
             }
             
@@ -808,7 +765,6 @@ const Projects = () => {
             });
             
             if (!clients || !Array.isArray(clients)) {
-                console.log('⚠️ Projects: No clients available for sync, skipping');
                 return;
             }
             
@@ -919,20 +875,10 @@ const Projects = () => {
     };
 
     const handleViewProject = async (project) => {
-        console.log('Viewing project:', project);
-        console.log('ProjectDetail component exists:', !!window.ProjectDetail, 'type:', typeof window.ProjectDetail);
-        console.log('🔍 ProjectDetail initialization state:', {
-            exists: !!window.ProjectDetail,
-            type: typeof window.ProjectDetail,
-            isFunction: typeof window.ProjectDetail === 'function',
-            initializing: !!window._projectDetailInitializing,
-            projectDetailAvailable: projectDetailAvailable
-        });
         
         // BULLETPROOF: ALWAYS check if ProjectDetail is loaded AND initialized
         // The lazy loader might say it's loaded, but initialization might still be waiting for dependencies
         if (!window.ProjectDetail || typeof window.ProjectDetail !== 'function') {
-            console.log('🔵 handleViewProject: ProjectDetail not available, loading NOW with all strategies...');
             
             // Reset the flag if component isn't actually available
             if (projectDetailAvailable) {
@@ -946,29 +892,24 @@ const Projects = () => {
             // Strategy 1: Wait for initialization to complete (up to 5 seconds)
             // ProjectDetail might be loading but waiting for dependencies
             let loaded = false;
-            console.log('⏳ Strategy 1: Waiting for ProjectDetail initialization to complete...');
             for (let i = 0; i < 50; i++) {
                 if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
-                    console.log(`✅ ProjectDetail found after ${i * 100}ms wait (initialization completed)`);
                     loaded = true;
                     break;
                 }
                 // Check if it's still initializing
                 if (window._projectDetailInitializing) {
-                    console.log(`⏳ ProjectDetail still initializing... (attempt ${i + 1}/50)`);
                 }
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
             
             // Strategy 2: Use the bulletproof loader
             if (!loaded) {
-                console.log('🚀 Strategy 2: Using bulletproof loader...');
                 loaded = await loadProjectDetail();
             }
             
             // Strategy 3: Direct script injection as fallback
             if (!loaded && (!window.ProjectDetail || typeof window.ProjectDetail !== 'function')) {
-                console.log('🚀 Strategy 3: Direct script injection...');
                 loaded = await new Promise((resolve) => {
                     const script = document.createElement('script');
                     script.src = '/dist/src/components/projects/ProjectDetail.js';
@@ -979,7 +920,6 @@ const Projects = () => {
                         const checkInit = setInterval(() => {
                             initAttempts++;
                             if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
-                                console.log('✅ Direct script injection successful, ProjectDetail initialized');
                                 clearInterval(checkInit);
                                 resolve(true);
                             } else if (initAttempts >= 50) {
@@ -998,7 +938,6 @@ const Projects = () => {
             }
             
             if (loaded && window.ProjectDetail && typeof window.ProjectDetail === 'function') {
-                console.log('✅ handleViewProject: ProjectDetail loaded and initialized successfully');
                 setProjectDetailAvailable(true);
                 setWaitingForProjectDetail(false);
                 setForceRender(prev => prev + 1);
@@ -1014,7 +953,6 @@ const Projects = () => {
         } else {
             // Component exists, ensure flag is set
             if (!projectDetailAvailable) {
-                console.log('✅ ProjectDetail is available, updating flag');
                 setProjectDetailAvailable(true);
                 setWaitingForProjectDetail(false);
             }
@@ -1030,7 +968,6 @@ const Projects = () => {
                 if (window.DatabaseAPI && 
                     window.DatabaseAPI.getProject && 
                     typeof window.DatabaseAPI.getProject === 'function') {
-                    console.log('✅ Using window.DatabaseAPI.getProject');
                     response = await window.DatabaseAPI.getProject(project.id);
                 } else {
                     throw new Error('DatabaseAPI.getProject not available');
@@ -1042,13 +979,11 @@ const Projects = () => {
                     if (window.api && 
                         window.api.getProject && 
                         typeof window.api.getProject === 'function') {
-                        console.log('✅ Using window.api.getProject');
                         response = await window.api.getProject(project.id);
                     } else {
                         throw new Error('window.api.getProject not available');
                     }
                 } catch (api2Error) {
-                    console.log('✅ Using direct fetch fallback');
                     // Final fallback: fetch directly
                     const fetchResponse = await fetch(`/api/projects/${project.id}`, {
                         headers: {
@@ -1089,36 +1024,15 @@ const Projects = () => {
                     return false;
                 })()
             };
-            console.log('Normalized project for ProjectDetail:', normalizedProject);
-            console.log('🔍 hasDocumentCollectionProcess value:', {
-                raw: fullProject.hasDocumentCollectionProcess,
-                normalized: normalizedProject.hasDocumentCollectionProcess,
-                type: typeof fullProject.hasDocumentCollectionProcess,
-                isTrue: fullProject.hasDocumentCollectionProcess === true,
-                isStringTrue: fullProject.hasDocumentCollectionProcess === 'true',
-                fullProjectKeys: Object.keys(fullProject).filter(k => k.includes('Document') || k.includes('document'))
-            });
-            console.log('🔍 Full API response structure:', {
-                hasData: !!response?.data,
-                hasProject: !!response?.data?.project,
-                responseKeys: Object.keys(response || {}),
-                dataKeys: response?.data ? Object.keys(response.data) : [],
-                projectKeys: response?.data?.project ? Object.keys(response.data.project).filter(k => k.includes('Document') || k.includes('document')) : []
-            });
             
             // Expose a function to update viewingProject from child components
             // This allows ProjectDetail to refresh the project data after saving
             window.updateViewingProject = (updatedProject) => {
                 // Skip update if skipDocumentSectionsUpdate flag is set (prevents remounting during auto-save)
                 if (updatedProject.skipDocumentSectionsUpdate) {
-                    console.log('⏭️ Skipping viewingProject update: skipDocumentSectionsUpdate flag set');
                     return;
                 }
                 
-                console.log('🔄 Updating viewingProject from child component:', {
-                    id: updatedProject.id,
-                    hasDocumentCollectionProcess: updatedProject.hasDocumentCollectionProcess
-                });
                 
                 // Normalize the project the same way we do in handleViewProject
                 const normalized = {
@@ -1154,17 +1068,14 @@ const Projects = () => {
                     });
                     
                     if (!hasChanges) {
-                        console.log('⏭️ Skipping viewingProject update: project data unchanged');
                         return prev; // Return previous object to prevent re-render
                     }
-                    console.log('🔄 Updating viewingProject: project data changed');
                     return normalized;
                 });
             };
             
             // Only set viewingProject if ProjectDetail is available
             if (window.ProjectDetail) {
-                console.log('✅ ProjectDetail is available, setting viewingProject');
                 // Only update if the project actually changed (prevent unnecessary re-renders)
                 setViewingProject(prev => {
                     // If it's the same project ID, check if data actually changed
@@ -1178,12 +1089,9 @@ const Projects = () => {
                         });
                         
                         if (!hasChanges) {
-                            console.log('⏭️ Skipping viewingProject update: same project, no changes detected');
                             return prev; // Return previous object to prevent re-render
                         }
-                        console.log('🔄 Updating viewingProject: project data changed');
                     } else {
-                        console.log('🔄 Updating viewingProject: new project or no previous project');
                     }
                     return { ...normalizedProject };
                 });
@@ -1213,10 +1121,6 @@ const Projects = () => {
     };
 
     const handleSaveProject = async (projectData) => {
-        console.log('💾 handleSaveProject called:');
-        console.log('  - projectData.name:', projectData?.name);
-        console.log('  - projectData.client:', projectData?.client);
-        console.log('  - full projectData:', JSON.stringify(projectData, null, 2));
         
         // Validate required fields
         if (!projectData || !projectData.name || projectData.name.trim() === '') {
@@ -1236,10 +1140,8 @@ const Projects = () => {
 
             if (selectedProject) {
                 // Editing existing project
-                console.log('🌐 Updating project in database:', selectedProject.id);
                 const updatedProject = { ...selectedProject, ...projectData };
                 const apiResponse = await window.DatabaseAPI.updateProject(selectedProject.id, updatedProject);
-                console.log('📥 Update API Response:', apiResponse);
                 
                 // Extract the project from the response structure { data: { project: {...} } }
                 const updatedProjectFromAPI = apiResponse?.data?.project || apiResponse?.project || apiResponse?.data;
@@ -1286,18 +1188,11 @@ const Projects = () => {
                     notes: ''
                 };
                 
-                console.log('🌐 Creating project in database:');
-                console.log('  - name:', newProject.name);
-                console.log('  - clientName:', newProject.clientName);
-                console.log('  - type:', newProject.type);
-                console.log('  - full project data:', JSON.stringify(newProject, null, 2));
                 
                 const apiResponse = await window.DatabaseAPI.createProject(newProject);
-                console.log('📥 API Response:', apiResponse);
                 
                 // Extract the project from the response structure { data: { project: {...} } }
                 const savedProject = apiResponse?.data?.project || apiResponse?.project || apiResponse?.data;
-                console.log('📥 Extracted project:', savedProject);
                 
                 if (savedProject && savedProject.id) {
                     // Normalize: map clientName to client for frontend compatibility
@@ -1377,16 +1272,13 @@ const Projects = () => {
 
             const projectToDelete = projects.find(p => p.id === projectId);
             
-            console.log('🗑️ Deleting project from database:', projectId);
             
             // Call the delete API
             const result = await window.DatabaseAPI.deleteProject(projectId);
-            console.log('✅ Delete API response:', result);
             
             // Update local state - remove the deleted project
             setProjects(prevProjects => {
                 const updated = prevProjects.filter(p => p.id !== projectId);
-                console.log(`✅ Updated projects list: ${prevProjects.length} -> ${updated.length}`);
                 return updated;
             });
             
@@ -1419,7 +1311,6 @@ const Projects = () => {
                         client: p.clientName || p.client || ''
                     }));
                     setProjects(normalizedProjects);
-                    console.log('✅ Projects reloaded after deletion');
                 } catch (reloadError) {
                     console.error('❌ Error reloading projects:', reloadError);
                 }
@@ -1460,9 +1351,6 @@ const Projects = () => {
 
     // Function to render Progress Tracker
     const renderProgressTracker = () => {
-        console.log('🔍 Projects: showProgressTracker is true, checking component availability...');
-        console.log('🔍 window.ProjectProgressTracker:', window.ProjectProgressTracker);
-        console.log('🔍 typeof window.ProjectProgressTracker:', typeof window.ProjectProgressTracker);
         
         // Wrap in ErrorBoundary for additional safety
         // Use React.createElement to avoid JSX issues with window components
@@ -1471,16 +1359,12 @@ const Projects = () => {
         
         // Validate component before rendering
         // Handle both function components and React.memo wrapped components
-        console.log('🔍 Validating ProjectProgressTracker component...');
-        console.log('🔍 ProjectProgressTracker type:', typeof ProjectProgressTracker);
-        console.log('🔍 ProjectProgressTracker value:', ProjectProgressTracker);
         
         const isValidComponent = ProjectProgressTracker && (
             typeof ProjectProgressTracker === 'function' ||
             (typeof ProjectProgressTracker === 'object' && (ProjectProgressTracker.$$typeof || ProjectProgressTracker.type))
         );
         
-        console.log('🔍 isValidComponent:', isValidComponent);
         
         if (!isValidComponent) {
             console.error('❌ ProjectProgressTracker is not a valid component:', typeof ProjectProgressTracker, ProjectProgressTracker);
@@ -1521,7 +1405,6 @@ const Projects = () => {
         if (typeof ProjectProgressTracker === 'object' && ProjectProgressTracker.type) {
             // It's a React.memo or forwardRef component - use the .type
             ComponentToRender = ProjectProgressTracker.type;
-            console.log('🔍 Using ProjectProgressTracker.type (React.memo/forwardRef detected)');
         }
         
         if (typeof ComponentToRender !== 'function') {
@@ -1547,14 +1430,10 @@ const Projects = () => {
         }
         
         try {
-            console.log('🔍 Creating ProjectProgressTracker element...');
-            console.log('🔍 React available:', !!React);
-            console.log('🔍 ComponentToRender type:', typeof ComponentToRender);
             
             // Create the props object - ensure all values are primitives or valid React elements
             const trackerProps = {
                 onBack: () => {
-                    console.log('🔍 ProjectProgressTracker onBack called');
                     clearProgressTrackerHash();
                 },
                 focusProjectId: trackerFocus?.projectId || null,
@@ -1571,14 +1450,11 @@ const Projects = () => {
                 onFocusHandled: () => setTrackerFocus(null)
             };
             
-            console.log('🔍 Tracker props:', trackerProps);
             
             // Use React.createElement (the correct way to render components)
             let trackerElement;
             try {
-                console.log('🔍 Creating element with React.createElement...');
                 trackerElement = React.createElement(ComponentToRender, trackerProps);
-                console.log('✅ ProjectProgressTracker element created:', trackerElement);
                 
                 // Validate the element
                 if (!trackerElement || typeof trackerElement !== 'object') {
@@ -1598,7 +1474,6 @@ const Projects = () => {
                     null,
                     trackerElement
                 );
-                console.log('✅ Wrapped in ErrorBoundary:', wrappedElement);
             } catch (wrapError) {
                 console.error('❌ Error wrapping in ErrorBoundary:', wrapError);
                 // If ErrorBoundary fails, just return the tracker element directly
@@ -1706,7 +1581,6 @@ const Projects = () => {
         
         // If ProjectDetail is missing, try loading immediately
         if (!window.ProjectDetail) {
-            console.log('🔵 Effect: ProjectDetail missing while viewing project, loading NOW...');
             setWaitingForProjectDetail(true);
             
             // Try loading with aggressive retries
@@ -1716,14 +1590,12 @@ const Projects = () => {
             const attemptLoad = () => {
                 loadProjectDetail().then(loaded => {
                     if (loaded && window.ProjectDetail) {
-                        console.log('✅ Effect: ProjectDetail loaded successfully');
                         setProjectDetailAvailable(true);
                         setWaitingForProjectDetail(false);
                         // Force re-render
                         setViewingProject({ ...viewingProject });
                     } else if (retryCount < maxRetries) {
                         retryCount++;
-                        console.log(`🔄 Effect: Load failed, retrying in 500ms... (${retryCount}/${maxRetries})`);
                         setTimeout(attemptLoad, 500);
                     } else {
                         console.error('❌ Effect: All load attempts exhausted');
@@ -1739,7 +1611,6 @@ const Projects = () => {
         const checkInterval = setInterval(() => {
             if (window.ProjectDetail) {
                 if (!projectDetailAvailable) {
-                    console.log('✅ Effect: ProjectDetail found during polling!');
                     setProjectDetailAvailable(true);
                     setWaitingForProjectDetail(false);
                     setViewingProject({ ...viewingProject });
@@ -1766,14 +1637,12 @@ const Projects = () => {
         if (!viewingProject || window.ProjectDetail) return;
         
         // Immediate aggressive check - try multiple times quickly
-        console.log('⚡ LayoutEffect: Immediate ProjectDetail check for viewingProject');
         let attempts = 0;
         let cancelled = false;
         const quickCheck = () => {
             if (cancelled) return;
             attempts++;
             if (window.ProjectDetail) {
-                console.log('✅ LayoutEffect: ProjectDetail found!', attempts);
                 setProjectDetailAvailable(true);
                 setWaitingForProjectDetail(false);
                 return;
@@ -1786,11 +1655,9 @@ const Projects = () => {
                     if (prev) return prev; // Already loading
                     return true; // Set to true immediately
                 });
-                console.log('🚀 LayoutEffect: Triggering full ProjectDetail load...');
                 loadProjectDetail().then(loaded => {
                     if (cancelled) return;
                     if (loaded && window.ProjectDetail) {
-                        console.log('✅ LayoutEffect: ProjectDetail loaded successfully');
                         setProjectDetailAvailable(true);
                         setWaitingForProjectDetail(false);
                         setViewingProject(prev => prev ? { ...prev } : null);
@@ -1814,7 +1681,6 @@ const Projects = () => {
         
         const checkInterval = setInterval(() => {
             if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
-                console.log('✅ ProjectDetail detected in render check, forcing re-render');
                 setProjectDetailAvailable(true);
                 setWaitingForProjectDetail(false);
                 setForceRender(prev => prev + 1);
@@ -1852,7 +1718,6 @@ const Projects = () => {
                 // This handles the race condition where lazy loader resolves but component isn't registered yet
                 if (window.ProjectDetail && typeof window.ProjectDetail === 'function' && !waitingForProjectDetail) {
                     // Component just became available - update state and re-render
-                    console.log('✅ Render: ProjectDetail just became available!');
                     setProjectDetailAvailable(true);
                     setWaitingForProjectDetail(false);
                     setForceRender(prev => prev + 1);
@@ -1869,10 +1734,8 @@ const Projects = () => {
                 
                 // Try to load ProjectDetail if not already loading
                 if (!waitingForProjectDetail) {
-                    console.log('🚀 Triggering ProjectDetail load from render...');
                     loadProjectDetail().then(loaded => {
                         if (loaded && window.ProjectDetail) {
-                            console.log('✅ ProjectDetail loaded successfully from render');
                             setProjectDetailAvailable(true);
                             setWaitingForProjectDetail(false);
                             setForceRender(prev => prev + 1);
@@ -1896,7 +1759,6 @@ const Projects = () => {
                         </p>
                         <button 
                             onClick={() => {
-                                console.log('🔄 Manual reload button clicked');
                                 window.location.reload();
                             }}
                             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium mr-2"
@@ -1951,7 +1813,6 @@ const Projects = () => {
                 );
             }
             
-            console.log('✅ Rendering ProjectDetail component with project:', viewingProject.id);
             return <ProjectDetailComponent 
                 project={viewingProject} 
                 onBack={() => setViewingProject(null)}
@@ -2017,12 +1878,9 @@ const Projects = () => {
                     </div>
                     <button 
                         onClick={() => {
-                            console.log('🔍 Progress Tracker button clicked');
-                            console.log('🔍 window.ProjectProgressTracker before setShowProgressTracker:', window.ProjectProgressTracker);
                             openProgressTrackerHash();
                             // Also log after state update
                             setTimeout(() => {
-                                console.log('🔍 window.ProjectProgressTracker after setShowProgressTracker:', window.ProjectProgressTracker);
                             }, 100);
                         }}
                         className="px-3 py-1.5 border border-primary-600 text-primary-600 rounded-lg hover:bg-primary-50 transition-colors flex items-center text-sm font-medium"
@@ -2360,17 +2218,12 @@ try {
     // Clear any old version first and force replacement
     const oldVersion = window.Projects?._version;
     if (window.Projects) {
-        console.log(`🔄 Replacing existing Projects component (old version: ${oldVersion || 'unknown'}) with new version`);
         // Delete the old version to ensure clean replacement
         delete window.Projects;
     }
     window.Projects = Projects;
     window.Projects._version = '20251112-list-view';
     window.Projects._hasListView = true;
-    console.log('✅ Projects component registered on window.Projects (version: 20251112-list-view)');
-    console.log('✅ Projects component includes list view toggle buttons');
-    console.log('✅ Projects component version:', window.Projects._version);
-    console.log('✅ Projects component has list view:', window.Projects._hasListView);
     
     // Dispatch event to notify that Projects component is ready
     if (typeof window.dispatchEvent === 'function') {

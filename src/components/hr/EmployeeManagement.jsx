@@ -18,7 +18,6 @@ const EmployeeManagement = () => {
 
     const loadEmployees = async () => {
         try {
-            console.log('📡 Loading employees (users) from database...');
             // Load users - they ARE the employees
             const token = window.storage?.getToken?.();
             if (!token) {
@@ -36,7 +35,6 @@ const EmployeeManagement = () => {
             if (response.ok) {
                 const responseData = await response.json();
                 const userData = responseData.data?.users || responseData.users || [];
-                console.log('✅ Loaded employees from users:', userData.length);
                 setEmployees(userData);
             } else {
                 console.error('❌ Failed to load users:', response);
@@ -54,7 +52,6 @@ const EmployeeManagement = () => {
         try {
             if (selectedEmployee) {
                 // Update existing user/employee via API
-                console.log('📝 Updating employee (user) via API:', selectedEmployee.id);
                 const token = window.storage?.getToken?.();
                 
                 const response = await fetch('/api/users', {
@@ -94,7 +91,6 @@ const EmployeeManagement = () => {
                 }
             } else {
                 // When creating a new employee, we should use the User invitation flow
-                console.log('✨ Creating new employee requires User invitation');
                 alert('To add a new employee, please use the User Management section to invite them. Once they accept, they will appear here as employees.');
                 return;
             }
@@ -111,7 +107,6 @@ const EmployeeManagement = () => {
             
             try {
                 // Delete user via API
-                console.log('🗑️ Deleting employee (user) via API:', id);
                 const token = window.storage?.getToken?.();
                 
                 const response = await fetch(`/api/users/${id}`, {
@@ -744,4 +739,3 @@ const EmployeeManagement = () => {
 
 // Make available globally
 window.EmployeeManagement = EmployeeManagement;
-console.log('✅ EmployeeManagement component loaded (synced with Users)');

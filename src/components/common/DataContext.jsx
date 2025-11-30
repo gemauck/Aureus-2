@@ -429,11 +429,6 @@ const DataProvider = ({ children }) => {
     // Expose debug function
     useEffect(() => {
         window.debugDataContext = () => {
-            console.log('📊 Data Context Status:');
-            console.log('Cache Status:', getCacheStatus());
-            console.log('Initial Load Complete:', initialLoadComplete);
-            console.log('Global Loading:', globalLoading);
-            console.log('Fetching:', Array.from(fetchingRef.current));
         };
     }, [getCacheStatus, initialLoadComplete, globalLoading]);
 
@@ -479,7 +474,6 @@ try {
     window.DataProvider = DataProvider;
     window.useData = useData;
     if (window.debug && !window.debug.performanceMode) {
-        console.log('✅ DataContext.jsx loaded and registered', typeof window.DataProvider);
     }
     
     // Verify React is available

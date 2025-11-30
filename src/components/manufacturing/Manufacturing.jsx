@@ -1,7 +1,4 @@
 // Use React from window
-console.log('🏭 Manufacturing.jsx: Starting to load...');
-console.log('🏭 React available:', typeof window.React !== 'undefined');
-console.log('🏭 useAuth available:', typeof window.useAuth !== 'undefined');
 
 // Safely access React hooks from the global window.React without throwing
 // If React isn't ready yet, we fall back to an empty object so the script
@@ -94,7 +91,6 @@ const Manufacturing = () => {
   const [movements, setMovements] = useState(() => {
     try {
       const cached = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
-      console.log('📋 Initialized movements from cache:', cached.length);
       return cached;
     } catch (e) {
       console.error('Error loading cached movements:', e);
@@ -212,31 +208,24 @@ const Manufacturing = () => {
 
         if (cachedInventory.length > 0) {
           setInventory(cachedInventory);
-          console.log('⚡ Manufacturing: Loaded inventory from cache:', cachedInventory.length);
         }
         if (cachedBOMs.length > 0) {
           setBoms(cachedBOMs);
-          console.log('⚡ Manufacturing: Loaded BOMs from cache:', cachedBOMs.length);
         }
         if (cachedProductionOrders.length > 0) {
           setProductionOrders(cachedProductionOrders);
-          console.log('⚡ Manufacturing: Loaded production orders from cache:', cachedProductionOrders.length);
         }
         if (cachedSalesOrders.length > 0) {
           setSalesOrders(cachedSalesOrders);
-          console.log('⚡ Manufacturing: Loaded sales orders from cache:', cachedSalesOrders.length);
         }
         if (cachedPurchaseOrders.length > 0) {
           setPurchaseOrders(cachedPurchaseOrders);
-          console.log('⚡ Manufacturing: Loaded purchase orders from cache:', cachedPurchaseOrders.length);
         }
         if (cachedMovements.length > 0) {
           setMovements(cachedMovements);
-          console.log('⚡ Manufacturing: Loaded movements from cache:', cachedMovements.length);
         }
         if (cachedSuppliers.length > 0) {
           setSuppliers(cachedSuppliers);
-          console.log('⚡ Manufacturing: Loaded suppliers from cache:', cachedSuppliers.length);
         }
 
         // Load stock locations from localStorage first, then sync from API
@@ -264,7 +253,6 @@ const Manufacturing = () => {
           return;
         }
 
-        console.log('🔄 Manufacturing: Starting parallel data load from API...');
         const startTime = performance.now();
 
         // Create parallel API calls
@@ -278,7 +266,6 @@ const Manufacturing = () => {
                 const locData = locResponse?.data?.locations || [];
                 setStockLocations(locData);
                 localStorage.setItem('stock_locations', JSON.stringify(locData));
-                console.log('✅ Manufacturing: Stock locations synced:', locData.length);
                 
                 // Ensure main warehouse exists (LOC001)
                 const mainWarehouse = locData.find(loc => loc.code === 'LOC001');
@@ -310,7 +297,6 @@ const Manufacturing = () => {
                 const processed = invData.map(item => ({ ...item, id: item.id }));
                 setInventory(processed);
                 localStorage.setItem('manufacturing_inventory', JSON.stringify(processed));
-                console.log('✅ Manufacturing: Inventory synced:', processed.length);
                 return { type: 'inventory', data: processed };
               })
               .catch(error => {
@@ -333,7 +319,6 @@ const Manufacturing = () => {
                 }));
                 setBoms(processed);
                 localStorage.setItem('manufacturing_boms', JSON.stringify(processed));
-                console.log('✅ Manufacturing: BOMs synced:', processed.length);
                 return { type: 'boms', data: processed };
               })
               .catch(error => {
@@ -352,7 +337,6 @@ const Manufacturing = () => {
                 const processed = ordersData.map(order => ({ ...order, id: order.id }));
                 setProductionOrders(processed);
                 localStorage.setItem('manufacturing_production_orders', JSON.stringify(processed));
-                console.log('✅ Manufacturing: Production orders synced:', processed.length);
                 return { type: 'productionOrders', data: processed };
               })
               .catch(error => {
@@ -371,7 +355,6 @@ const Manufacturing = () => {
                 const processed = ordersData.map(order => ({ ...order, id: order.id }));
                 setSalesOrders(processed);
                 localStorage.setItem('manufacturing_sales_orders', JSON.stringify(processed));
-                console.log('✅ Manufacturing: Sales orders synced:', processed.length);
                 return { type: 'salesOrders', data: processed };
               })
               .catch(error => {
@@ -390,7 +373,6 @@ const Manufacturing = () => {
                 const processed = ordersData.map(order => ({ ...order, id: order.id }));
                 setPurchaseOrders(processed);
                 localStorage.setItem('manufacturing_purchase_orders', JSON.stringify(processed));
-                console.log('✅ Manufacturing: Purchase orders synced:', processed.length);
                 return { type: 'purchaseOrders', data: processed };
               })
               .catch(error => {
@@ -413,11 +395,6 @@ const Manufacturing = () => {
                   acc[m.type] = (acc[m.type] || 0) + 1;
                   return acc;
                 }, {});
-                console.log('✅ Manufacturing: Stock movements synced:', {
-                  total: processed.length,
-                  types: typeBreakdown,
-                  allMovements: processed.map(m => ({ id: m.id, type: m.type, quantity: m.quantity }))
-                });
                 
                 setMovements(processed);
                 localStorage.setItem('manufacturing_movements', JSON.stringify(processed));
@@ -444,7 +421,6 @@ const Manufacturing = () => {
                 }));
                 setSuppliers(processed);
                 localStorage.setItem('manufacturing_suppliers', JSON.stringify(processed));
-                console.log('✅ Manufacturing: Suppliers synced:', processed.length);
                 return { type: 'suppliers', data: processed };
               })
               .catch(error => {
@@ -480,7 +456,6 @@ const Manufacturing = () => {
                   return (status === 'active' || status === '') && (type === 'client' || type === '');
                 });
                 setClients(activeClients);
-                console.log('✅ Manufacturing: Clients loaded:', activeClients.length, 'from', processed.length, 'total');
                 return { type: 'clients', data: activeClients };
               })
               .catch(error => {
@@ -495,7 +470,6 @@ const Manufacturing = () => {
                       return (status === 'active' || status === '') && (type === 'client' || type === '');
                     });
                     setClients(activeClients);
-                    console.log('✅ Manufacturing: Clients loaded from cache:', activeClients.length);
                   }
                 } catch (cacheError) {
                   console.error('Error loading clients from cache:', cacheError);
@@ -512,7 +486,6 @@ const Manufacturing = () => {
               .then(usersResponse => {
                 const usersData = usersResponse?.data?.users || usersResponse?.data || [];
                 setUsers(Array.isArray(usersData) ? usersData : []);
-                console.log('✅ Manufacturing: Users loaded:', Array.isArray(usersData) ? usersData.length : 0);
                 return { type: 'users', data: usersData };
               })
               .catch(error => {
@@ -527,8 +500,6 @@ const Manufacturing = () => {
           const results = await Promise.all(apiCalls);
           const endTime = performance.now();
           const loadTime = ((endTime - startTime) / 1000).toFixed(2);
-          console.log(`⚡ Manufacturing: All data loaded in parallel (${loadTime}s)`);
-          console.log('📊 Manufacturing: Results:', results.map(r => `${r.type}: ${r.data?.length || 0} items`).join(', '));
         }
       } catch (error) {
         console.error('Error loading manufacturing data:', error);
@@ -542,7 +513,6 @@ const Manufacturing = () => {
   const refreshAllManufacturingData = async () => {
     try {
       setIsRefreshing(true);
-      console.log('🔄 Manufacturing: Refreshing all data in parallel...');
       const startTime = performance.now();
 
       const apiCalls = [];
@@ -635,7 +605,6 @@ const Manufacturing = () => {
         await Promise.all(apiCalls);
         const endTime = performance.now();
         const loadTime = ((endTime - startTime) / 1000).toFixed(2);
-        console.log(`✅ Manufacturing: Refresh completed in parallel (${loadTime}s)`);
       }
     } catch (e) {
       console.error('Error refreshing manufacturing data:', e);
@@ -1018,7 +987,6 @@ const Manufacturing = () => {
   useEffect(() => {
     // CRITICAL: Skip reload if user is actively typing in an input field
     if (isUserTypingRef.current) {
-      console.log('🚫 Skipping inventory reload - user is typing');
       return;
     }
     
@@ -1039,7 +1007,6 @@ const Manufacturing = () => {
           
           setInventory(processed);
           localStorage.setItem('manufacturing_inventory', JSON.stringify(processed));
-          console.log(`✅ Inventory loaded for location ${selectedLocationId}:`, processed.length);
           
           // Restore focus after state update if user was typing
           if (wasInputFocused) {
@@ -1086,7 +1053,6 @@ const Manufacturing = () => {
           const locData = locResponse?.data?.locations || [];
           setStockLocations(locData);
           localStorage.setItem('stock_locations', JSON.stringify(locData));
-          console.log('✅ Stock locations refreshed for inventory tab:', locData.length);
         } catch (error) {
           console.error('Error loading stock locations:', error);
         }
@@ -1102,7 +1068,6 @@ const Manufacturing = () => {
       if (updatedLocations.length > 0) {
         setStockLocations(updatedLocations);
         localStorage.setItem('stock_locations', JSON.stringify(updatedLocations));
-        console.log('✅ Stock locations updated via event:', updatedLocations.length);
       }
     };
 
@@ -1122,11 +1087,9 @@ const Manufacturing = () => {
       if (prevConfig.key === key) {
         // Toggle direction if same column
         const newDirection = prevConfig.direction === 'asc' ? 'desc' : 'asc';
-        console.log('Sorting by', key, 'direction:', newDirection);
         return { key, direction: newDirection };
       } else {
         // New column, default to ascending
-        console.log('Sorting by', key, 'direction: asc');
         return { key, direction: 'asc' };
       }
     });
@@ -2628,7 +2591,6 @@ const Manufacturing = () => {
           const updatedInventory = response.data.inventory.map(item => ({ ...item, id: item.id }));
           setInventory(updatedInventory);
           localStorage.setItem('manufacturing_inventory', JSON.stringify(updatedInventory));
-          console.log('✅ Refreshed inventory for BOM creation:', updatedInventory.length, 'items');
         }
       }
     } catch (error) {
@@ -2875,12 +2837,6 @@ const Manufacturing = () => {
         // No duplicates found, proceed with creation
         const response = await safeCallAPI('createInventoryItem', createData);
         if (response?.data?.item) {
-          console.log('✅ Created inventory item (debug):', {
-            id: response.data.item.id,
-            sku: response.data.item.sku,
-            hasThumbnail: !!response.data.item.thumbnail,
-            thumbnailPreview: (response.data.item.thumbnail || '').slice(0, 64)
-          });
           const updatedInventory = [...inventory, { ...response.data.item, id: response.data.item.id }];
           setInventory(updatedInventory);
           localStorage.setItem('manufacturing_inventory', JSON.stringify(updatedInventory));
@@ -2903,12 +2859,6 @@ const Manufacturing = () => {
     try {
       const response = await safeCallAPI('createInventoryItem', pendingCreateData);
       if (response?.data?.item) {
-        console.log('✅ Created inventory item (debug):', {
-          id: response.data.item.id,
-          sku: response.data.item.sku,
-          hasThumbnail: !!response.data.item.thumbnail,
-          thumbnailPreview: (response.data.item.thumbnail || '').slice(0, 64)
-        });
         const updatedInventory = [...inventory, { ...response.data.item, id: response.data.item.id }];
         setInventory(updatedInventory);
         localStorage.setItem('manufacturing_inventory', JSON.stringify(updatedInventory));
@@ -3097,7 +3047,6 @@ const Manufacturing = () => {
   };
 
   const openAddSalesOrderModal = () => {
-    console.log('🔵 Opening Sales Order modal...');
     setFormData({
       clientId: '',
       clientName: '',
@@ -3116,7 +3065,6 @@ const Manufacturing = () => {
     setNewSalesOrderItem({ sku: '', name: '', quantity: 1, unitPrice: 0 });
     setModalType('add_sales');
     setShowModal(true);
-    console.log('🔵 Modal state set:', { modalType: 'add_sales', showModal: true });
   };
 
   const handleAddSalesOrderItem = () => {
@@ -3193,11 +3141,6 @@ const Manufacturing = () => {
         
         // Create stock movements for each item (consumption - items being sold)
         if (salesOrderItems && salesOrderItems.length > 0) {
-          console.log('📦 Creating stock movements for sales order:', {
-            orderNumber: orderNumber,
-            itemsCount: salesOrderItems.length,
-            items: salesOrderItems
-          });
           
           try {
             // Get default warehouse location (main warehouse)
@@ -3230,13 +3173,11 @@ const Manufacturing = () => {
                 date: new Date().toISOString()
               };
 
-              console.log('📝 Creating stock movement:', movementData);
 
               // Try to create stock movement via API
               if (window.DatabaseAPI?.createStockMovement) {
                 try {
                   const movementResponse = await safeCallAPI('createStockMovement', movementData);
-                  console.log(`✅ Stock movement created successfully for ${orderItem.name}:`, movementResponse);
                 } catch (error) {
                   console.error(`❌ Failed to create stock movement for ${orderItem.name}:`, error);
                   console.error('Error details:', {
@@ -3252,7 +3193,6 @@ const Manufacturing = () => {
                     synced: false
                   });
                   localStorage.setItem('manufacturing_movements', JSON.stringify(cachedMovements));
-                  console.log(`📦 Stock movement saved to localStorage for later sync: ${orderItem.name}`);
                 }
               } else {
                 // Offline mode - store in localStorage for later sync
@@ -3263,10 +3203,8 @@ const Manufacturing = () => {
                   synced: false
                 });
                 localStorage.setItem('manufacturing_movements', JSON.stringify(cachedMovements));
-                console.log(`📦 Stock movement queued for sync (offline mode): ${orderItem.name}`);
               }
             }
-            console.log('✅ Stock movement creation process completed');
             
             // Refresh inventory to show updated quantities
             if (window.DatabaseAPI && window.DatabaseAPI.getInventory) {
@@ -3275,7 +3213,6 @@ const Manufacturing = () => {
                 const invData = invResponse?.data?.inventory || [];
                 setInventory(invData);
                 localStorage.setItem('manufacturing_inventory', JSON.stringify(invData));
-                console.log('✅ Inventory refreshed after sales order');
               } catch (invError) {
                 console.error('❌ Failed to refresh inventory:', invError);
               }
@@ -3287,7 +3224,6 @@ const Manufacturing = () => {
             console.warn('⚠️ Sales order will be saved but stock movements may not have been recorded');
           }
         } else {
-          console.log('ℹ️ No items in sales order to create stock movements for');
         }
 
         const updatedOrders = [...salesOrders, { ...createdOrder, id: createdOrder.id }];
@@ -3308,10 +3244,8 @@ const Manufacturing = () => {
   };
 
   const openAddPurchaseOrderModal = () => {
-    console.log('🔵 Opening Purchase Order modal...');
     // Get default warehouse location
     const mainWarehouse = stockLocations.find(loc => loc.code === 'LOC001' || loc.type === 'warehouse') || stockLocations[0];
-    console.log('🔵 Main warehouse:', mainWarehouse);
     setFormData({
       supplierId: '',
       supplierName: '',
@@ -3330,7 +3264,6 @@ const Manufacturing = () => {
     setNewPurchaseOrderItem({ sku: '', name: '', quantity: 1, unitPrice: 0, supplierPartNumber: '' });
     setModalType('add_purchase');
     setShowModal(true);
-    console.log('🔵 Modal state set:', { modalType: 'add_purchase', showModal: true });
   };
 
   const handleAddPurchaseOrderItem = () => {
@@ -3448,7 +3381,6 @@ const Manufacturing = () => {
     
     if (confirm(`Are you sure you want to delete this stock movement?\n\n${movementInfo}\n\nThis action cannot be undone.`)) {
       try {
-        console.log('🗑️ Deleting stock movement:', movementId);
         
         // Use the API endpoint directly
         const token = window.storage?.getToken?.();
@@ -3472,7 +3404,6 @@ const Manufacturing = () => {
         setMovements(updatedMovements);
         localStorage.setItem('manufacturing_movements', JSON.stringify(updatedMovements));
         
-        console.log('✅ Stock movement deleted successfully');
       } catch (error) {
         console.error('❌ Error deleting stock movement:', error);
         alert(`Failed to delete stock movement: ${error.message}`);
@@ -3499,7 +3430,6 @@ const Manufacturing = () => {
     }
 
     try {
-      console.log('🔄 Purging all stock movements...');
       
       // Use bulk delete API endpoint
       const token = window.storage?.getToken?.();
@@ -3530,7 +3460,6 @@ const Manufacturing = () => {
       }
 
       const result = await response.json();
-      console.log('📥 API Response:', result);
       const deletedCount = result?.count || result?.data?.count || count;
       
       if (deletedCount === 0) {
@@ -3541,7 +3470,6 @@ const Manufacturing = () => {
       setMovements([]);
       localStorage.removeItem('manufacturing_movements');
       
-      console.log(`✅ Successfully deleted ${deletedCount} stock movements`);
       alert(`✅ Successfully purged ${deletedCount} stock movements from the database.`);
       
       // Reload data to ensure consistency
@@ -3558,7 +3486,6 @@ const Manufacturing = () => {
   };
 
   const openAddMovementModal = (prefill = {}) => {
-    console.log('📝 openAddMovementModal called');
     try {
       setFormData({
         type: prefill.type || 'receipt',
@@ -3640,7 +3567,6 @@ const Manufacturing = () => {
         date: formData.date || new Date().toISOString().split('T')[0]
       };
 
-      console.log('📤 Creating stock movement:', movementData);
       
       // Retry logic for API call
       let response;
@@ -3661,13 +3587,11 @@ const Manufacturing = () => {
         }
       }
       
-      console.log('📥 Stock movement response:', response);
       
       // Check if movement was created successfully (handle various response structures)
       const createdMovement = response?.data?.movement || response?.movement || response?.data;
       
       if (createdMovement || response?.data || response?.success !== false) {
-        console.log('✅ Stock movement created successfully, refreshing movements list...');
         
         // Wait for database commit
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -3707,7 +3631,6 @@ const Manufacturing = () => {
           }
         }
         
-        console.log('📋 Fetched movements:', movementsData.length, 'total movements');
         
         const processedMovements = movementsData.map(movement => ({
           ...movement,
@@ -3898,7 +3821,6 @@ const Manufacturing = () => {
         
         if (isNotFound) {
           // Supplier already deleted on server, just update local state
-          console.log('ℹ️ Supplier not found on server (already deleted), removing from local state');
           const updatedSuppliers = suppliers.filter(s => s.id !== supplierId);
           setSuppliers(updatedSuppliers);
           localStorage.setItem('manufacturing_suppliers', JSON.stringify(updatedSuppliers));
@@ -3914,7 +3836,6 @@ const Manufacturing = () => {
 
   const handleSaveProductionOrder = async () => {
     try {
-      console.log('🔍 Starting production order save...', { formData });
       const selectedBom = boms.find(b => b.id === formData.bomId);
       if (!selectedBom) {
         alert('Please select a BOM/Product');
@@ -3968,12 +3889,9 @@ const Manufacturing = () => {
       if (formData.startDate) orderData.startDate = formData.startDate;
       if (formData.targetDate) orderData.targetDate = formData.targetDate;
 
-      console.log('📤 Sending production order data:', orderData);
       const response = await safeCallAPI('createProductionOrder', orderData);
-      console.log('📥 API Response:', response);
       
       if (response?.data?.order) {
-        console.log('✅ Production order created successfully:', response.data.order);
         const updatedOrders = [...productionOrders, { ...response.data.order, id: response.data.order.id }];
         setProductionOrders(updatedOrders);
         localStorage.setItem('manufacturing_production_orders', JSON.stringify(updatedOrders));
@@ -4015,17 +3933,8 @@ const Manufacturing = () => {
         completedDate: newStatus === 'completed' ? new Date().toISOString().split('T')[0] : (selectedItem.completedDate || null)
       };
 
-      console.log('📤 Updating production order:', {
-        id: selectedItem.id,
-        oldStatus: oldStatus,
-        newStatus: newStatus,
-        willDeductStock: (newStatus === 'in_production' && oldStatus === 'requested'),
-        hasBomId: !!orderData.bomId,
-        orderData
-      });
 
       const response = await safeCallAPI('updateProductionOrder', selectedItem.id, orderData);
-      console.log('📥 Update response:', response);
       if (response?.data?.order) {
         const updatedOrders = productionOrders.map(order => 
           order.id === selectedItem.id ? response.data.order : order
@@ -4034,13 +3943,11 @@ const Manufacturing = () => {
         localStorage.setItem('manufacturing_production_orders', JSON.stringify(updatedOrders));
         
         // Always refresh inventory after production order update to show latest stock levels
-        console.log('🔄 Refreshing inventory after production order update...');
         try {
           const inventoryResponse = await safeCallAPI('getInventory');
           if (inventoryResponse?.data?.inventory) {
             setInventory(inventoryResponse.data.inventory);
             localStorage.setItem('manufacturing_inventory', JSON.stringify(inventoryResponse.data.inventory));
-            console.log('✅ Inventory refreshed:', inventoryResponse.data.inventory.length, 'items');
           }
         } catch (invError) {
           console.error('⚠️ Failed to refresh inventory:', invError);
@@ -4106,7 +4013,6 @@ const Manufacturing = () => {
   };
 
   const renderModal = () => {
-    console.log('🔵 renderModal called:', { modalType, showModal, selectedItem: !!selectedItem });
     
     // Debug: Check if modal should be visible
     if (!showModal) {
@@ -4710,10 +4616,6 @@ const Manufacturing = () => {
                       <option value="">-- Select finished product inventory item --</option>
                       {(() => {
                         // Debug: Log inventory state
-                        console.log('🔍 BOM Form - Inventory check:', {
-                          totalInventory: inventory.length,
-                          items: inventory.map(i => ({ id: i.id, sku: i.sku, name: i.name, type: i.type, category: i.category }))
-                        });
                         
                         // More flexible filtering - show final products first, then all items as fallback
                         const finalProducts = inventory.filter(item => {
@@ -5209,13 +5111,6 @@ const Manufacturing = () => {
       const totalCost = selectedBom ? selectedBom.totalCost * (formData.quantity || 0) : 0;
       
       // Debug form state
-      console.log('🔍 Rendering production order modal:', {
-        bomId: formData.bomId,
-        quantity: formData.quantity,
-        startDate: formData.startDate,
-        assignedTo: formData.assignedTo,
-        modalType
-      });
 
       return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -5429,14 +5324,6 @@ const Manufacturing = () => {
               </button>
               <button
                 onClick={() => {
-                  console.log('🔘 Create/Update Order button clicked', { modalType, formData });
-                  console.log('🔍 Button state check:', {
-                    bomId: !!formData.bomId,
-                    quantity: !!formData.quantity,
-                    startDate: !!formData.startDate,
-                    assignedTo: !!formData.assignedTo,
-                    allValid: !formData.bomId || !formData.quantity || !formData.startDate || !formData.assignedTo ? false : true
-                  });
                   if (modalType === 'add_production') {
                     handleSaveProductionOrder();
                   } else if (modalType === 'edit_production') {
@@ -6437,7 +6324,6 @@ const Manufacturing = () => {
 
     // ADD SALES ORDER
     if (modalType === 'add_sales') {
-      console.log('🔵 Rendering add_sales modal');
       // Calculate totals from items
       const subtotal = salesOrderItems.reduce((sum, item) => sum + (item.total || 0), 0);
       const tax = formData.tax || 0;
@@ -6811,7 +6697,6 @@ const Manufacturing = () => {
 
     // ADD PURCHASE ORDER
     if (modalType === 'add_purchase') {
-      console.log('🔵 Rendering add_purchase modal');
       // Calculate totals from items
       const subtotal = purchaseOrderItems.reduce((sum, item) => sum + (item.total || 0), 0);
       const tax = formData.tax || 0;
@@ -7317,8 +7202,6 @@ const Manufacturing = () => {
               <button
                 onClick={() => {
                   alert('Button click works! Function type: ' + typeof openAddPurchaseOrderModal);
-                  console.log('Direct test - openAddPurchaseOrderModal:', openAddPurchaseOrderModal);
-                  console.log('Direct test - typeof:', typeof openAddPurchaseOrderModal);
                 }}
                 className="px-2 py-1 text-xs bg-yellow-500 text-white rounded"
                 title="Test button"
@@ -7327,8 +7210,6 @@ const Manufacturing = () => {
               </button>
               <button
                 onClick={() => {
-                  console.log('🔵 Purchase Order button clicked');
-                  console.log('🔵 openAddPurchaseOrderModal available:', typeof openAddPurchaseOrderModal);
                   try {
                     if (typeof openAddPurchaseOrderModal === 'function') {
                       openAddPurchaseOrderModal();
@@ -7359,7 +7240,6 @@ const Manufacturing = () => {
               <p className="text-xs text-gray-500 mb-4">Create your first purchase order to get started</p>
                         <button
                           onClick={() => {
-                            console.log('🔵 Purchase Order button clicked (empty state)');
                             openAddPurchaseOrderModal();
                           }}
                           className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 mx-auto"
@@ -7468,7 +7348,6 @@ const Manufacturing = () => {
                         <p className="text-xs text-gray-500 mb-4">Create your first purchase order to get started</p>
                         <button
                           onClick={() => {
-                            console.log('🔵 Purchase Order button clicked (table empty state)');
                             openAddPurchaseOrderModal();
                           }}
                           className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
@@ -7662,12 +7541,9 @@ const Manufacturing = () => {
       e?.preventDefault();
       e?.stopPropagation();
       
-      console.log('🔵 Record Movement button clicked');
-      console.log('🔵 onRecordMovement type:', typeof onRecordMovement);
       
       // Call the parent function directly
       if (onRecordMovement && typeof onRecordMovement === 'function') {
-        console.log('✅ Calling onRecordMovement...');
         onRecordMovement();
       } else {
         console.error('❌ onRecordMovement not available, trying direct call...');
@@ -7687,7 +7563,6 @@ const Manufacturing = () => {
           });
           setModalType('add_movement');
           setShowModal(true);
-          console.log('✅ Modal opened via direct state setters');
         } catch (error) {
           console.error('❌ Error:', error);
           alert('Error opening modal: ' + error.message);
@@ -7697,7 +7572,6 @@ const Manufacturing = () => {
 
     const handleRefreshMovements = async () => {
       try {
-        console.log('🔄 Manually refreshing stock movements...');
         if (window.DatabaseAPI?.getStockMovements) {
           const movementsResponse = await window.DatabaseAPI.getStockMovements();
           const movementsData = movementsResponse?.data?.movements || [];
@@ -7707,11 +7581,6 @@ const Manufacturing = () => {
             acc[m.type] = (acc[m.type] || 0) + 1;
             return acc;
           }, {});
-          console.log('📋 Refreshed movements:', {
-            total: movementsData.length,
-            types: typeBreakdown,
-            allTypes: Object.keys(typeBreakdown)
-          });
           
           const processed = movementsData.map(movement => ({ ...movement, id: movement.id }));
           setMovements(processed);
@@ -7765,7 +7634,6 @@ const Manufacturing = () => {
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  console.log('🔵 Button clicked directly');
                   handleRecordClick(e);
                 }}
                 onMouseDown={(e) => e.preventDefault()}
@@ -7809,14 +7677,6 @@ const Manufacturing = () => {
                 ) : (
                   (() => {
                     // Log all movements being displayed
-                    console.log('📊 Displaying movements in table:', {
-                      total: movements.length,
-                      types: movements.reduce((acc, m) => {
-                        acc[m.type] = (acc[m.type] || 0) + 1;
-                        return acc;
-                      }, {}),
-                      movements: movements.map(m => ({ id: m.id, type: m.type, quantity: m.quantity, itemName: m.itemName }))
-                    });
                     return movements.map(movement => (
                       <tr key={movement.id} className="hover:bg-gray-50">
                         <td className="px-3 py-2 text-sm font-medium text-gray-900">{movement.movementId || movement.id}</td>
@@ -7861,7 +7721,6 @@ const Manufacturing = () => {
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                console.log('🗑️ Delete button clicked for movement:', movement.id);
                                 handleDeleteMovement(movement.id);
                               }}
                               className="inline-flex items-center justify-center w-8 h-8 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors cursor-pointer border border-red-200"
@@ -8956,21 +8815,15 @@ const Manufacturing = () => {
 };
 
 // Make available globally - Register immediately
-console.log('🏭 Manufacturing.jsx: About to register component...');
-console.log('🏭 Manufacturing function type:', typeof Manufacturing);
-console.log('🏭 Manufacturing is defined:', typeof Manufacturing !== 'undefined');
 
 try {
     if (typeof Manufacturing !== 'undefined') {
         window.Manufacturing = Manufacturing;
-        console.log('✅ Manufacturing component registered on window.Manufacturing', typeof window.Manufacturing);
-        console.log('✅ window.Manufacturing now equals:', window.Manufacturing);
         
         // Dispatch ready event
         if (typeof window.dispatchEvent === 'function') {
             try {
                 window.dispatchEvent(new CustomEvent('manufacturingComponentReady'));
-                console.log('📢 Dispatched manufacturingComponentReady event');
                 
                 // Also dispatch after a small delay in case listeners weren't ready
                 setTimeout(() => {
@@ -9010,7 +8863,6 @@ setTimeout(() => {
     if (typeof Manufacturing !== 'undefined' && !window.Manufacturing) {
         console.warn('⚠️ Manufacturing not registered initially, trying delayed registration...');
         window.Manufacturing = Manufacturing;
-        console.log('✅ Manufacturing component registered on window.Manufacturing (delayed)', typeof window.Manufacturing);
         
         // Dispatch event after delayed registration
         if (typeof window.dispatchEvent === 'function') {

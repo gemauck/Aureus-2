@@ -21,7 +21,6 @@ async function handler(req, res) {
   }
 
   try {
-    console.log('📡 Public service forms endpoint: Fetching active templates for job card form...')
     
     // Get only active templates
     const templates = await prisma.serviceFormTemplate.findMany({

@@ -445,12 +445,6 @@ if (typeof window !== 'undefined') {
 
 // Debug function to check if storage is loaded
 window.debugStorage = () => {
-    console.log('🔍 Storage Debug:', {
-        hasGetProjects: typeof window.storage?.getProjects === 'function',
-        hasGetClients: typeof window.storage?.getClients === 'function',
-        hasGetLeads: typeof window.storage?.getLeads === 'function',
-        storageMethods: Object.keys(window.storage || {})
-    });
 };
 
 // Ensure storage is available immediately and robustly
@@ -503,7 +497,6 @@ if (typeof window !== 'undefined') {
                 manual: true
             }
         }));
-        console.log('📡 Storage ready event manually triggered');
     };
     
     // Add a safety check that runs periodically to ensure storage is available

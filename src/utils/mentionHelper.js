@@ -115,14 +115,6 @@ const MentionHelper = {
      * @returns {Promise} - API response
      */
     async createMentionNotification(mentionedUserId, mentionedByName, contextTitle, contextLink, commentText, projectInfo = {}) {
-        console.log('🔔 MentionHelper: Creating notification for user:', mentionedUserId);
-        console.log('🔔 Notification details:', {
-            mentionedByName,
-            contextTitle,
-            contextLink,
-            projectInfo,
-            commentLength: commentText.length
-        });
         
         try {
             // Use DatabaseAPI.makeRequest() which handles token refresh automatically
@@ -186,11 +178,6 @@ const MentionHelper = {
                 metadata: metadata
             };
             
-            console.log('📤 Sending mention notification request:', {
-                endpoint: '/notifications',
-                method: 'POST',
-                payload: notificationPayload
-            });
             
             // Use DatabaseAPI.makeRequest() which automatically handles:
             // - Token extraction from storage
@@ -201,16 +188,10 @@ const MentionHelper = {
                 body: JSON.stringify(notificationPayload)
             });
             
-            console.log('📥 Mention notification API response:', response);
             
             // DatabaseAPI.makeRequest returns { data: {...} } structure
             if (response && (response.data || response)) {
                 const notification = response.data || response;
-                console.log(`✅ Mention notification created successfully for user ${mentionedUserId}`, {
-                    notificationId: notification?.id || notification?.notification?.id,
-                    created: notification?.created !== false,
-                    response
-                });
                 return notification;
             } else {
                 console.error('❌ Unexpected response structure from DatabaseAPI:', response);
@@ -293,7 +274,6 @@ const MentionHelper = {
                 
                 // Don't notify if the user mentioned themselves
                 if (isSelfMention) {
-                    console.log(`⚠️ Skipping self-mention for ${matchedUser.name}`);
                     continue;
                 }
                 

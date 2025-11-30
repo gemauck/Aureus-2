@@ -156,7 +156,6 @@ async function checkSarsWebsite() {
 
   try {
     // Check announcements page (most likely to have updates)
-    console.log('🔍 Checking SARS announcements page...')
     const announcementsHtml = await fetchSarsPage(SARS_URLS.announcements)
     const announcements = extractAnnouncements(announcementsHtml, SARS_URLS.announcements)
     
@@ -233,7 +232,6 @@ async function checkSarsWebsite() {
             priority: change.priority
           })
 
-          console.log(`✅ New change detected: ${announcement.title}`)
         }
       } catch (error) {
         console.error(`Error processing announcement: ${announcement.title}`, error)

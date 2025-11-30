@@ -10,7 +10,6 @@ async function handler(req, res) {
     const userEmail = req.user?.email || 'unknown'
     const userId = req.user?.sub || 'unknown'
     
-    console.log(`🔍 DEBUG: User ${userEmail} (${userId}) requesting debug info`)
     
     // Get ALL leads from database (no filtering)
     const allLeadsRaw = await prisma.$queryRaw`
@@ -99,8 +98,6 @@ async function handler(req, res) {
       timestamp: new Date().toISOString()
     }
     
-    console.log(`📊 DEBUG: User ${userEmail} - Leads: ${rawLeadsCount} (raw) vs ${prismaLeadsCount} (Prisma)`)
-    console.log(`📊 DEBUG: User ${userEmail} - Clients: ${rawClientsCount} (raw) vs ${prismaClientsCount} (Prisma)`)
     
     if (!debugInfo.leads.match) {
       console.error(`❌ MISMATCH: Leads count differs for ${userEmail}!`)

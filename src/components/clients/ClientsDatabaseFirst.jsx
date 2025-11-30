@@ -34,17 +34,14 @@ const ClientsDatabaseFirst = () => {
 
     // Database-first data loading
     const loadClients = async () => {
-        console.log('🔄 Loading clients from database...');
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
-                console.log('⚠️ No authentication token - redirecting to login');
                 window.location.hash = '#/login';
                 return;
             }
 
             const apiClients = await window.DatabaseAPI.getClients();
-            console.log('📡 Database returned clients:', apiClients.length);
             
             const processedClients = apiClients.map(c => ({
                 id: c.id,
@@ -76,12 +73,10 @@ const ClientsDatabaseFirst = () => {
             }));
             
             setClients(processedClients);
-            console.log('✅ Clients loaded from database');
             
         } catch (error) {
             console.error('❌ Failed to load clients from database:', error);
             if (error.message.includes('Unauthorized') || error.message.includes('401')) {
-                console.log('🔑 Authentication expired - redirecting to login');
                 window.storage.removeToken();
                 window.storage.removeUser();
                 window.location.hash = '#/login';
@@ -93,19 +88,14 @@ const ClientsDatabaseFirst = () => {
 
     // Load leads from database
     const loadLeads = async () => {
-        console.log('🔄 Loading leads from database...');
         try {
             const token = window.storage?.getToken?.();
             if (!token) return;
 
             const apiLeads = await window.DatabaseAPI.getLeads();
-            console.log('📡 Database returned leads:', apiLeads.length);
             
             // Parse JSON fields from database
             const parsedLeads = (apiLeads?.data?.leads || []).map(lead => {
-                console.log('🔍 Parsing lead:', lead.id, lead.name);
-                console.log('🔍 Raw contacts field:', typeof lead.contacts, lead.contacts);
-                console.log('🔍 Raw followUps field:', typeof lead.followUps, lead.followUps);
                 
                 return {
                     ...lead,
@@ -120,10 +110,7 @@ const ClientsDatabaseFirst = () => {
                 };
             });
             
-            console.log('✅ Parsed leads:', parsedLeads.length);
-            console.log('📊 Sample lead contacts:', parsedLeads[0]?.contacts);
             setLeads(parsedLeads);
-            console.log('✅ Leads loaded from database');
             
         } catch (error) {
             console.error('❌ Failed to load leads from database:', error);
@@ -132,17 +119,14 @@ const ClientsDatabaseFirst = () => {
 
     // Load projects from database
     const loadProjects = async () => {
-        console.log('🔄 Loading projects from database...');
         try {
             const token = window.storage?.getToken?.();
             if (!token) return;
 
             const projectsRes = await window.api.getProjects?.();
             const apiProjects = projectsRes?.data || [];
-            console.log('📡 Database returned projects:', apiProjects.length);
             
             setProjects(apiProjects);
-            console.log('✅ Projects loaded from database');
             
         } catch (error) {
             console.error('❌ Failed to load projects from database:', error);
@@ -165,7 +149,6 @@ const ClientsDatabaseFirst = () => {
 
     // Save client to database
     const handleSaveClient = async (clientFormData, stayInEditMode = false) => {
-        console.log('💾 Saving client to database...');
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
@@ -206,7 +189,6 @@ const ClientsDatabaseFirst = () => {
             if (selectedClient) {
                 // Update existing client
                 await window.api.updateClient(comprehensiveClient.id, comprehensiveClient);
-                console.log('✅ Client updated in database');
                 
                 // Update local state
                 const updated = clients.map(c => c.id === selectedClient.id ? comprehensiveClient : c);
@@ -218,11 +200,9 @@ const ClientsDatabaseFirst = () => {
                     setSelectedClient(comprehensiveClient);
                 }
                 
-                console.log('✅ Client state updated locally');
             } else {
                 // Create new client
                 const newClient = await window.api.createClient(comprehensiveClient);
-                console.log('✅ Client created in database');
                 
                 // Add to local state
                 setClients(prev => [...prev, newClient]);
@@ -245,8 +225,6 @@ const ClientsDatabaseFirst = () => {
 
     // Save lead to database
     const handleSaveLead = async (leadFormData, stayInEditMode = false) => {
-        console.log('💾 Saving lead to database...');
-        console.log('📦 leadFormData received:', JSON.stringify(leadFormData, null, 2));
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
@@ -272,10 +250,8 @@ const ClientsDatabaseFirst = () => {
                     proposals: leadFormData.proposals || selectedLead.proposals || []
                 };
                 
-                console.log('📦 Final updatedLead being sent to API:', JSON.stringify(updatedLead, null, 2));
                 
                 await window.api.updateLead(updatedLead.id, updatedLead);
-                console.log('✅ Lead updated in database');
                 
                 const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
                 setLeads(updatedLeads);
@@ -286,7 +262,6 @@ const ClientsDatabaseFirst = () => {
                     setSelectedLead(updatedLead);
                 }
                 
-                console.log('✅ Lead state updated locally');
             } else {
                 // Create new lead - don't include ID, let database generate it
                 // Get current user info
@@ -307,7 +282,6 @@ const ClientsDatabaseFirst = () => {
                 };
                 
                 const createdLead = await window.api.createLead(newLeadData);
-                console.log('✅ Lead created in database');
                 
                 // Use the lead returned from the API with proper database ID
                 const savedLead = createdLead?.data?.lead || createdLead?.lead || createdLead;

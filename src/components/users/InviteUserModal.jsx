@@ -34,13 +34,6 @@ const InviteUserModal = ({ onClose, onSave, roleDefinitions, departments }) => {
         setIsLoading(true);
         
         try {
-            console.log('InviteUserModal: Submitting invitation with data:', {
-                email: formData.email,
-                name: formData.name,
-                role: formData.role,
-                accessibleProjectIds: formData.accessibleProjectIds,
-                accessibleProjectIdsLength: formData.accessibleProjectIds?.length || 0
-            });
             
             // Simulate API call delay
             await new Promise(resolve => setTimeout(resolve, 1000));
@@ -131,7 +124,6 @@ const InviteUserModal = ({ onClose, onSave, roleDefinitions, departments }) => {
                         }
                     }
                     
-                    console.log('Loaded projects for guest invitation:', projects.length);
                     setAvailableProjects(projects);
                 } catch (error) {
                     console.error('Error loading projects:', error);
@@ -294,24 +286,15 @@ const InviteUserModal = ({ onClose, onSave, roleDefinitions, departments }) => {
                                                             const wasChecked = isSelected;
                                                             const willBeChecked = e.target.checked;
                                                             
-                                                            console.log('Project checkbox changed:', {
-                                                                projectId: project.id,
-                                                                projectName: project.name,
-                                                                wasChecked,
-                                                                willBeChecked,
-                                                                currentIds: formData.accessibleProjectIds
-                                                            });
                                                             
                                                             if (willBeChecked) {
                                                                 const newIds = [...formData.accessibleProjectIds, project.id];
-                                                                console.log('Adding project, new IDs:', newIds);
                                                                 setFormData({
                                                                     ...formData,
                                                                     accessibleProjectIds: newIds
                                                                 });
                                                             } else {
                                                                 const newIds = formData.accessibleProjectIds.filter(id => id !== project.id);
-                                                                console.log('Removing project, new IDs:', newIds);
                                                                 setFormData({
                                                                     ...formData,
                                                                     accessibleProjectIds: newIds

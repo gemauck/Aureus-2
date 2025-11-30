@@ -9,7 +9,6 @@ async function handler(req, res) {
     if (req.method !== 'POST') return badRequest(res, 'Invalid method')
     
     try {
-        console.log('🎯 Processing invitation acceptance...')
         
         const { token, password, name, phone = '', department = '', jobTitle = '' } = req.body || {}
         
@@ -166,7 +165,6 @@ async function handler(req, res) {
             console.error('⚠️ Failed to update invitation status (user already created):', dbError.message)
         }
 
-        console.log('✅ User account created successfully:', newUser.id)
 
         return ok(res, {
             success: true,

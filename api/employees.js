@@ -14,7 +14,6 @@ async function handler(req, res) {
       const employees = await prisma.employee.findMany({
         orderBy: { createdAt: 'desc' }
       })
-      console.log('✅ Listed employees:', employees.length)
       return ok(res, { employees })
     } catch (error) {
       console.error('❌ Failed to list employees:', error)
@@ -83,7 +82,6 @@ async function handler(req, res) {
         }
       })
       
-      console.log('✅ Created employee:', employee.id)
       return created(res, { employee })
     } catch (error) {
       console.error('❌ Failed to create employee:', error)
@@ -123,7 +121,6 @@ async function handler(req, res) {
         data: updateData
       })
       
-      console.log('✅ Updated employee:', id)
       return ok(res, { employee })
     } catch (error) {
       console.error('❌ Failed to update employee:', error)
@@ -144,7 +141,6 @@ async function handler(req, res) {
         where: { id } 
       })
       
-      console.log('✅ Deleted employee:', id)
       return ok(res, { deleted: true })
     } catch (error) {
       console.error('❌ Failed to delete employee:', error)

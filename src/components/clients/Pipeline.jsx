@@ -496,14 +496,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
             }));
 
             setClients(clientsWithoutOpportunities);
-            console.log(
-                `⚡ Pipeline: Loaded cached clients IMMEDIATELY: ${clientsWithoutOpportunities.length} clients (opportunities will load from API with correct stages)`
-            );
         }
 
         if (normalizedSavedLeads.length > 0) {
             setLeads(normalizedSavedLeads);
-            console.log('⚡ Pipeline: Loaded cached leads immediately:', normalizedSavedLeads.length, 'leads');
         }
     }, []);
 
@@ -568,14 +564,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     (client) => Array.isArray(client.opportunities) && client.opportunities.length > 0
                 )
             );
-            console.log(
-                `⚡ Pipeline: Showing ${normalizedCachedClients.length} cached clients with cached opportunities while API refreshes`
-            );
         }
 
         if (normalizedCachedLeads.length > 0) {
             setLeads(normalizedCachedLeads);
-            console.log('⚡ Pipeline: Loaded cached leads immediately:', normalizedCachedLeads.length, 'leads');
         }
 
         try {
@@ -585,10 +577,8 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 if (normalizedCachedClients.length === 0) {
                     setIsLoading(true);
                 } else {
-                    console.log('⚡ Pipeline: Using cached data, refreshing from API in background...');
                 }
 
-                console.log('🔄 Pipeline: Refreshing data from API...');
 
                 const [clientsResponse, leadsResponse, opportunitiesResponse] =
                     await Promise.allSettled([
@@ -608,7 +598,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     apiClients = (clientPayload || [])
                         .map(normalizeClientForState)
                         .filter(Boolean);
-                    console.log('✅ Pipeline: Loaded clients from API:', apiClients.length);
                 }
 
                 let apiLeads = [];
@@ -620,7 +609,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     apiLeads = (leadPayload || [])
                         .map(normalizeLeadForState)
                         .filter(Boolean);
-                    console.log('✅ Pipeline: Loaded leads from API:', apiLeads.length);
                 }
 
                 let allOpportunities = [];
@@ -634,9 +622,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         .map((opp) => normalizeOpportunityForState(opp))
                         .filter(Boolean);
 
-                    console.log(
-                        `✅ Pipeline: Loaded ${allOpportunities.length} opportunities from parallel fetch`
-                    );
                 } else {
                     console.warn(
                         '⚠️ Pipeline: Failed to load opportunities from API, using cached opportunities'
@@ -667,11 +652,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         .filter(Boolean);
 
                     if (clientOpportunities.length > 0) {
-                        console.log(
-                            `   📊 ${client.name}: ${clientOpportunities.length} opportunities from API (normalized stages)`
-                        );
                     } else if (opportunitiesResponse.status === 'fulfilled') {
-                        console.log(`   ✅ ${client.name}: No opportunities from API (client has none)`);
                     }
 
                     return {
@@ -683,9 +664,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 let finalClients = clientsWithOpportunities;
 
                 if (opportunitiesResponse.status !== 'fulfilled' && cachedOpportunities.length > 0) {
-                    console.log(
-                        `⚠️ Pipeline: API opportunities failed, using cached data (stages may be stale)`
-                    );
 
                     finalClients = clientsWithOpportunities.map((client) => {
                         const clientIdKey =
@@ -720,7 +698,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         };
                     });
                 } else if (opportunitiesResponse.status === 'fulfilled') {
-                    console.log('✅ Pipeline: API opportunities loaded successfully - using API stages only');
                 }
 
                 const totalOpportunities = finalClients.reduce(
@@ -728,9 +705,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     0
                 );
 
-                console.log(
-                    `✅ Pipeline: Total opportunities loaded: ${totalOpportunities} across ${finalClients.length} clients`
-                );
 
                 setClients(finalClients);
                 setLeads(apiLeads);
@@ -743,7 +717,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     storage.setLeads(apiLeads);
                 }
 
-                console.log('✅ Pipeline: API data refreshed and cached with opportunities');
                 setIsLoading(false);
                 setDataLoaded(true);
                 setUsingCachedOpportunities(false);
@@ -761,17 +734,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     (client) => Array.isArray(client.opportunities) && client.opportunities.length > 0
                 )
             );
-            console.log(
-                '✅ Pipeline: Using cached data - Clients:',
-                normalizedCachedClients.length,
-                'Leads:',
-                normalizedCachedLeads.length
-            );
         } else {
             setClients([]);
             setLeads([]);
             setUsingCachedOpportunities(false);
-            console.log('📭 Pipeline: No cached data available');
         }
 
         setIsLoading(false);
@@ -796,7 +762,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
             const mappedStage = normalizeStageToAida(originalStage);
             
             if (originalStage && originalStage !== mappedStage) {
-                console.log(`🔄 Pipeline: Mapped lead stage "${originalStage}" → "${mappedStage}" for ${lead.name || lead.id}`);
             }
             
             return {
@@ -841,7 +806,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     const mappedStage = normalizeStageToAida(originalStage);
                     
                     if (originalStage && originalStage !== mappedStage) {
-                        console.log(`🔄 Pipeline: Mapped opportunity stage "${originalStage}" → "${mappedStage}" for ${opp.title || opp.id}`);
                     }
                     
                     opportunityItems.push({
@@ -871,14 +835,7 @@ function doesOpportunityBelongToClient(opportunity, client) {
         });
         
         if (opportunityItems.length > 0) {
-            console.log(`✅ Pipeline: Processed ${opportunityItems.length} opportunity items for display:`, opportunityItems.map(opp => ({
-                name: opp.name,
-                stage: opp.stage,
-                value: opp.value,
-                clientName: opp.clientName
-            })));
         } else {
-            console.log(`📭 Pipeline: No opportunity items to display. Total clients: ${clients.length}, Clients with opportunities: ${clients.filter(c => c.opportunities?.length > 0).length}`);
         }
 
         return [...leadItems, ...opportunityItems];
@@ -994,12 +951,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
             event.dataTransfer.setData('pipelineItemType', String(type || item.type || ''));
             event.dataTransfer.effectAllowed = 'move';
         }
-        console.log('🎯 Pipeline: dragStart', {
-            id: item?.id,
-            type: type || item?.type,
-            stage: item?.stage,
-            hasDataTransfer: !!event?.dataTransfer
-        });
         setDraggedItem(item);
         setDraggedType(type || item.type || null); // Store type in state for recovery
         setIsDragging(true);
@@ -1118,7 +1069,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 const toggleFn = window.api?.toggleStarClient || window.DatabaseAPI?.toggleStarClient;
                 if (toggleFn && item.id) {
                     toggleFn(item.id).then(() => {
-                        console.log(`⭐ Lead ${currentStarred ? 'unstarred' : 'starred'} successfully`);
                         // Clear cache but don't refetch - optimistic update is sufficient
                         if (window.DatabaseAPI?.clearCache) {
                             window.DatabaseAPI.clearCache('/leads');
@@ -1137,7 +1087,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 const toggleOpportunityFn = window.api?.toggleStarOpportunity || window.DatabaseAPI?.toggleStarOpportunity;
                 if (toggleOpportunityFn && item.id) {
                     toggleOpportunityFn(item.id).then(() => {
-                        console.log(`⭐ Opportunity ${currentStarred ? 'unstarred' : 'starred'} successfully`);
                         // Clear cache but don't refetch - optimistic update is sufficient
                         if (window.DatabaseAPI?.clearCache) {
                             window.DatabaseAPI.clearCache('/clients');
@@ -1263,7 +1212,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     if (token && window.DatabaseAPI) {
                         try {
                             await window.DatabaseAPI.updateLead(item.id, { stage: targetStage });
-                            console.log('✅ Pipeline: Lead stage updated via touch drag');
                             
                             // Update local state after successful API call
                             const updatedLeads = leads.map(lead => 
@@ -1291,7 +1239,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     if (token && window.api?.updateOpportunity) {
                         try {
                             await window.api.updateOpportunity(item.id, { stage: targetStage });
-                            console.log('✅ Pipeline: Opportunity stage updated via touch drag:', targetStage);
                             
                             // Update local state after successful API call
                             const updatedClients = clients.map(client => {
@@ -1317,7 +1264,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                     } else if (token && window.DatabaseAPI?.updateOpportunity) {
                         try {
                             await window.DatabaseAPI.updateOpportunity(item.id, { stage: targetStage });
-                            console.log('✅ Pipeline: Opportunity stage updated via touch drag (DatabaseAPI)');
                             
                             // Update local state after successful API call
                             const updatedClients = clients.map(client => {
@@ -1357,7 +1303,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                 await window.DatabaseAPI.updateClient(item.clientId, { 
                                     opportunities: clientToUpdate.opportunities 
                                 });
-                                console.log('✅ Pipeline: Client opportunities updated via touch drag');
                                 
                                 setClients(updatedClients);
                                 storage.setClients(updatedClients);
@@ -1818,7 +1763,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 <div className="flex gap-3">
                     <button
                         onClick={() => {
-                            console.log('🔄 Pipeline: Manual refresh triggered');
                             schedulePipelineRefresh();
                         }}
                         className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition text-sm font-medium"

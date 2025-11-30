@@ -41,7 +41,6 @@ class OpportunityBackup {
             }
             
             localStorage.setItem(this.BACKUP_KEY, JSON.stringify(backups));
-            console.log('💾 Opportunity backed up:', opportunity.title);
             
             return backupEntry;
         } catch (error) {
@@ -65,7 +64,6 @@ class OpportunityBackup {
                 };
                 
                 localStorage.setItem(this.BACKUP_KEY, JSON.stringify(backups));
-                console.log('💾 Opportunity backup updated:', updatedOpportunity.title);
                 return true;
             }
             
@@ -84,7 +82,6 @@ class OpportunityBackup {
             
             if (filteredBackups.length !== backups.length) {
                 localStorage.setItem(this.BACKUP_KEY, JSON.stringify(filteredBackups));
-                console.log('💾 Opportunity backup removed:', opportunityId);
                 return true;
             }
             
@@ -137,14 +134,12 @@ class OpportunityBackup {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         
-        console.log('💾 Backups exported:', backups.length, 'opportunities');
     }
 
     // Clear all backups
     clearBackups() {
         try {
             localStorage.removeItem(this.BACKUP_KEY);
-            console.log('💾 All backups cleared');
             return true;
         } catch (error) {
             console.error('❌ Error clearing backups:', error);
@@ -177,7 +172,6 @@ window.OpportunityBackup = new OpportunityBackup();
 
 // Test the backup system
 window.testOpportunityBackup = () => {
-    console.log('🧪 Testing Opportunity Backup System...');
     
     // Test 1: Add backup
     const testOpportunity = {
@@ -189,26 +183,19 @@ window.testOpportunityBackup = () => {
     };
     
     const backup = window.OpportunityBackup.addBackup(testOpportunity);
-    console.log('✅ Test 1 - Add backup:', backup ? 'PASS' : 'FAIL');
     
     // Test 2: Get backups
     const backups = window.OpportunityBackup.getBackups();
-    console.log('✅ Test 2 - Get backups:', backups.length > 0 ? 'PASS' : 'FAIL');
     
     // Test 3: Update backup
     const updated = window.OpportunityBackup.updateBackup('test_123', { ...testOpportunity, title: 'Updated Test' });
-    console.log('✅ Test 3 - Update backup:', updated ? 'PASS' : 'FAIL');
     
     // Test 4: Get stats
     const stats = window.OpportunityBackup.getBackupStats();
-    console.log('✅ Test 4 - Get stats:', stats.totalBackups > 0 ? 'PASS' : 'FAIL');
     
     // Test 5: Remove backup
     const removed = window.OpportunityBackup.removeBackup('test_123');
-    console.log('✅ Test 5 - Remove backup:', removed ? 'PASS' : 'FAIL');
     
-    console.log('🧪 Backup system test completed');
     return { backups: window.OpportunityBackup.getBackups(), stats: window.OpportunityBackup.getBackupStats() };
 };
 
-console.log('💾 Opportunity Backup System loaded');

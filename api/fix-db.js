@@ -5,15 +5,12 @@ import { withHttp } from './_lib/withHttp.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔧 Running direct database migration...')
     
     // Add the missing type column
     await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "type" TEXT DEFAULT 'client'`
-    console.log('✅ Added type column')
     
     // Update existing records
     await prisma.$executeRaw`UPDATE "Client" SET "type" = 'client' WHERE "type" IS NULL`
-    console.log('✅ Updated existing clients')
     
     // Test creating a client
     const testClient = await prisma.client.create({
@@ -25,7 +22,6 @@ async function handler(req, res) {
     })
     
     await prisma.client.delete({ where: { id: testClient.id } })
-    console.log('✅ Migration test passed')
     
     return ok(res, { message: 'Migration successful', success: true })
   } catch (e) {

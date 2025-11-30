@@ -9,24 +9,12 @@ async function handler(req, res) {
     if (req.method !== 'POST') return badRequest(res, 'Invalid method')
     
     try {
-        console.log('🧪 Starting email test...')
         
         const { email = 'gemauck@gmail.com', name = 'Test User', role = 'user' } = req.body || {}
         
-        console.log('📧 Testing email configuration...')
-        console.log('📧 Environment variables:', {
-            SMTP_HOST: process.env.SMTP_HOST,
-            SMTP_PORT: process.env.SMTP_PORT,
-            SMTP_SECURE: process.env.SMTP_SECURE,
-            SMTP_USER: process.env.SMTP_USER ? '***' : 'NOT_SET',
-            SMTP_PASS: process.env.SMTP_PASS ? '***' : 'NOT_SET',
-            EMAIL_FROM: process.env.EMAIL_FROM,
-            APP_URL: process.env.APP_URL
-        })
         
         const testInvitationLink = `${getAppUrl()}/accept-invitation?token=test-token-123`
         
-        console.log('📧 Attempting to send test email...')
         const result = await sendInvitationEmail({
             email,
             name,
@@ -34,7 +22,6 @@ async function handler(req, res) {
             invitationLink: testInvitationLink
         })
         
-        console.log('✅ Test email sent successfully!')
         
         return ok(res, {
             success: true,

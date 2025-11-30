@@ -24,7 +24,6 @@ async function handler(req, res) {
           },
           orderBy: { name: 'asc' }
         })
-        console.log('✅ Vehicles retrieved successfully:', vehicles.length)
         return ok(res, { vehicles })
       } catch (dbError) {
         console.error('❌ Database error listing vehicles:', dbError)
@@ -83,7 +82,6 @@ async function handler(req, res) {
             ownerId: req.user.id
           }
         })
-        console.log('✅ Vehicle created successfully:', vehicle.id)
         return created(res, { vehicle })
       } catch (dbError) {
         console.error('❌ Database error creating vehicle:', dbError)
@@ -131,7 +129,6 @@ async function handler(req, res) {
             ...(status !== undefined && { status })
           }
         })
-        console.log('✅ Vehicle updated successfully:', vehicle.id)
         return ok(res, { vehicle })
       } catch (dbError) {
         console.error('❌ Database error updating vehicle:', dbError)
@@ -172,7 +169,6 @@ async function handler(req, res) {
         await prisma.vehicle.delete({
           where: { id }
         })
-        console.log('✅ Vehicle deleted successfully:', id)
         return ok(res, { message: 'Vehicle deleted successfully' })
       } catch (dbError) {
         console.error('❌ Database error deleting vehicle:', dbError)

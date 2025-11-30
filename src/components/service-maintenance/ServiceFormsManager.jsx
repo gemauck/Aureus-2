@@ -766,7 +766,6 @@ const ServiceFormsManager = ({ isOpen, onClose }) => {
 try {
   if (typeof window !== 'undefined') {
     window.ServiceFormsManager = ServiceFormsManager;
-    console.log('✅ ServiceFormsManager registered on window');
   }
 } catch (error) {
   console.error('❌ ServiceFormsManager: Error registering global component', error);

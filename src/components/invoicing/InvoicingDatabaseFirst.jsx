@@ -15,18 +15,15 @@ const InvoicingDatabaseFirst = () => {
 
     // Load invoices from database
     const loadInvoices = async () => {
-        console.log('🔄 Loading invoices from database...');
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
-                console.log('⚠️ No authentication token - redirecting to login');
                 window.location.hash = '#/login';
                 return;
             }
 
             const response = await window.api.getInvoices();
             const apiInvoices = response?.data || [];
-            console.log('📡 Database returned invoices:', apiInvoices.length);
             
             // Process invoices data
             const processedInvoices = apiInvoices.map(i => ({
@@ -58,12 +55,10 @@ const InvoicingDatabaseFirst = () => {
             }));
             
             setInvoices(processedInvoices);
-            console.log('✅ Invoices loaded from database');
             
         } catch (error) {
             console.error('❌ Failed to load invoices from database:', error);
             if (error.message.includes('Unauthorized') || error.message.includes('401')) {
-                console.log('🔑 Authentication expired - redirecting to login');
                 window.storage.removeToken();
                 window.storage.removeUser();
                 window.location.hash = '#/login';
@@ -75,7 +70,6 @@ const InvoicingDatabaseFirst = () => {
 
     // Save invoice to database
     const handleSaveInvoice = async (invoiceData) => {
-        console.log('💾 Saving invoice to database...');
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
@@ -114,7 +108,6 @@ const InvoicingDatabaseFirst = () => {
             if (selectedInvoice) {
                 // Update existing invoice
                 await window.api.updateInvoice(comprehensiveInvoice.id, comprehensiveInvoice);
-                console.log('✅ Invoice updated in database');
                 
                 // Update local state
                 const updated = invoices.map(i => i.id === selectedInvoice.id ? comprehensiveInvoice : i);
@@ -123,7 +116,6 @@ const InvoicingDatabaseFirst = () => {
             } else {
                 // Create new invoice
                 const newInvoice = await window.api.createInvoice(comprehensiveInvoice);
-                console.log('✅ Invoice created in database');
                 
                 // Add to local state
                 setInvoices(prev => [...prev, newInvoice]);
@@ -147,7 +139,6 @@ const InvoicingDatabaseFirst = () => {
             return;
         }
 
-        console.log(`💾 Deleting invoice ${invoiceId} from database...`);
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
@@ -156,7 +147,6 @@ const InvoicingDatabaseFirst = () => {
             }
 
             await window.api.deleteInvoice(invoiceId);
-            console.log('✅ Invoice deleted from database');
             
             // Update local state
             setInvoices(prev => prev.filter(i => i.id !== invoiceId));
@@ -450,7 +440,6 @@ const InvoicingDatabaseFirst = () => {
                 <PaymentModal
                     onSave={(paymentData) => {
                         // Handle payment saving
-                        console.log('Payment saved:', paymentData);
                         setShowModal(false);
                     }}
                     onClose={() => {

@@ -8,11 +8,6 @@ import { isConnectionError } from './_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔍 Industries API Debug:', {
-      method: req.method,
-      url: req.url,
-      user: req.user
-    })
     
     const url = new URL(req.url, `http://${req.headers.host}`)
     const pathSegments = url.pathname.split('/').filter(Boolean)
@@ -89,7 +84,6 @@ async function handler(req, res) {
               skipDuplicates: true
             })
             syncedCount = industriesToCreate.length
-            console.log(`✅ Batch synced ${syncedCount} new industries from clients/leads`)
           } catch (batchError) {
             // Fallback to individual creates if batch fails
             console.warn('⚠️ Batch create failed, falling back to individual creates:', batchError.message)
@@ -124,7 +118,6 @@ async function handler(req, res) {
               })
             )
           )
-          console.log(`✅ Reactivated ${deactivatedToReactivate.length} industries`)
         }
         
         lastSyncTime = now
@@ -176,7 +169,6 @@ async function handler(req, res) {
           console.warn('⚠️ Background industry sync failed:', err.message)
         })
         
-        console.log('✅ Industries retrieved successfully:', industries.length)
         return ok(res, { industries })
       } catch (dbError) {
         console.error('❌ Database error getting industries:', dbError)
@@ -194,7 +186,6 @@ async function handler(req, res) {
           where: { id }
         })
         if (!industry) return notFound(res)
-        console.log('✅ Industry retrieved successfully:', industry.id)
         return ok(res, { industry })
       } catch (dbError) {
         console.error('❌ Database error getting industry:', dbError)
@@ -231,7 +222,6 @@ async function handler(req, res) {
             isActive: body.isActive !== undefined ? Boolean(body.isActive) : true
           }
         })
-        console.log('✅ Industry created successfully:', industry.id)
         return created(res, { industry })
       } catch (dbError) {
         console.error('❌ Database error creating industry:', dbError)
@@ -277,7 +267,6 @@ async function handler(req, res) {
           where: { id },
           data: updateData
         })
-        console.log('✅ Industry updated successfully:', industry.id)
         return ok(res, { industry })
       } catch (dbError) {
         console.error('❌ Database error updating industry:', dbError)
@@ -308,13 +297,11 @@ async function handler(req, res) {
             where: { id },
             data: { isActive: false }
           })
-          console.log('✅ Industry deactivated (clients still using it):', id)
           return ok(res, { message: 'Industry deactivated (clients still using it)' })
         }
 
         // Safe to delete if no clients are using it
         await prisma.industry.delete({ where: { id } })
-        console.log('✅ Industry deleted successfully:', id)
         return ok(res, { message: 'Industry deleted successfully' })
       } catch (dbError) {
         console.error('❌ Database error deleting industry:', dbError)

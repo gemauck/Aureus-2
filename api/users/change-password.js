@@ -10,23 +10,14 @@ async function handler(req, res) {
     if (req.method !== 'POST') return badRequest(res, 'Invalid method')
     
     try {
-        console.log('📥 Change password request body:', req.body)
-        console.log('📥 Change password user:', req.user)
         
         const { currentPassword, newPassword } = req.body || {}
         
-        console.log('📥 Parsed passwords:', { 
-            currentPassword: currentPassword ? '***' : 'empty', 
-            newPassword: newPassword ? '***' : 'empty',
-            currentPasswordLength: currentPassword?.length,
-            newPasswordLength: newPassword?.length
-        })
         
         // New password is always required
         if (!newPassword || 
             typeof newPassword !== 'string' ||
             newPassword.trim() === '') {
-            console.log('❌ Invalid password data: new password required')
             return badRequest(res, 'New password is required')
         }
 
@@ -37,7 +28,6 @@ async function handler(req, res) {
         // Get current user (use sub from JWT payload as the user ID)
         const userId = req.user.sub || req.user.id
         if (!userId) {
-            console.log('❌ No user ID found in token')
             return unauthorized(res, 'Invalid user token')
         }
         
@@ -46,7 +36,6 @@ async function handler(req, res) {
         })
 
         if (!user) {
-            console.log('❌ User not found:', userId)
             return unauthorized(res, 'User not found')
         }
 
@@ -56,27 +45,14 @@ async function handler(req, res) {
             if (!currentPassword || 
                 typeof currentPassword !== 'string' ||
                 currentPassword.trim() === '') {
-                console.log('❌ Current password required for users with existing password')
                 return badRequest(res, 'Current password is required')
             }
-            console.log('🔍 Verifying password:', {
-                userId: user.id,
-                email: user.email,
-                hasPasswordHash: !!user.passwordHash,
-                passwordHashLength: user.passwordHash?.length,
-                currentPasswordLength: currentPassword.trim().length,
-                passwordHashPrefix: user.passwordHash?.substring(0, 10) + '...'
-            })
             const valid = await bcrypt.compare(currentPassword.trim(), user.passwordHash)
-            console.log('🔍 Bcrypt compare result:', valid)
             if (!valid) {
-                console.log('❌ Current password is incorrect')
                 return unauthorized(res, 'Current password is incorrect')
             }
-            console.log('✅ Current password verified')
         } else {
             // Users without passwordHash (OAuth users or new users) can set password without current password
-            console.log('🔄 Setting password for user without existing password:', user.email)
         }
 
         // Hash new password
@@ -91,7 +67,6 @@ async function handler(req, res) {
             }
         })
 
-        console.log('✅ Password changed successfully for user:', req.user.email || user.email)
 
         return ok(res, { 
             success: true, 

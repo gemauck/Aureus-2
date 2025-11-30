@@ -15,7 +15,6 @@ const AuthProvider = ({ children }) => {
     const refreshUser = useCallback(async () => {
         // Prevent multiple simultaneous refresh calls
         if (isRefreshingRef.current) {
-            console.log('🔄 refreshUser: Already refreshing, skipping duplicate call');
             return null;
         }
         
@@ -28,7 +27,6 @@ const AuthProvider = ({ children }) => {
             
             const token = window.storage.getToken();
             if (token && window.api && window.api.me) {
-                console.log('🔄 refreshUser: Calling API.me()...');
                 const meResponse = await window.api.me();
                 console.error('🚨 refreshUser: API.me() response:', meResponse);
                 if (meResponse) {
@@ -38,7 +36,6 @@ const AuthProvider = ({ children }) => {
                     if (user) {
                         storage.setUser(user);
                         setUser(user);
-                        console.log('✅ refreshUser: User updated, role:', user.role);
                         return user;
                     }
                 }
@@ -47,7 +44,6 @@ const AuthProvider = ({ children }) => {
                 // Fallback to storage
                 const storedUser = storage.getUser();
                 if (storedUser) {
-                    console.log('🔄 refreshUser: Using stored user, role:', storedUser.role);
                     setUser(storedUser);
                     return storedUser;
                 }
@@ -57,7 +53,6 @@ const AuthProvider = ({ children }) => {
             // Fallback to storage
             const storedUser = storage.getUser();
             if (storedUser) {
-                console.log('🔄 refreshUser: Error fallback to stored user, role:', storedUser.role);
                 setUser(storedUser);
                 return storedUser;
             }
@@ -76,7 +71,6 @@ const AuthProvider = ({ children }) => {
                 const token = urlParams.get('token');
                 
                 if (loginSuccess === 'success' && token) {
-                    console.log('🔐 Google OAuth login detected, processing token...');
                     // Save token
                     if (window.storage && window.storage.setToken) {
                         window.storage.setToken(token);
@@ -92,7 +86,6 @@ const AuthProvider = ({ children }) => {
                                 if (user) {
                                     storage.setUser(user);
                                     setUser(user);
-                                    console.log('✅ User loaded from OAuth:', user.name, user.email);
                                     
                                     // Clean up URL
                                     window.history.replaceState({}, document.title, window.location.pathname);
@@ -224,7 +217,6 @@ const AuthProvider = ({ children }) => {
             
             // No token means we should already be logged out
             if (!token) {
-                console.log('🔐 No token found - forcing logout');
                 if (window.forceLogout) {
                     window.forceLogout('NO_TOKEN');
                 }
@@ -251,13 +243,11 @@ const AuthProvider = ({ children }) => {
                         storage.setUser(validatedUser);
                         setUser(validatedUser);
                         lastValidationTime = now;
-                        console.log('✅ Session validated successfully');
                         return;
                     }
                 }
                 
                 // If we got here with no user data, session is invalid
-                console.log('🔐 Session validation returned no user - forcing logout');
                 if (window.forceLogout) {
                     window.forceLogout('SESSION_INVALID');
                 }
@@ -266,7 +256,6 @@ const AuthProvider = ({ children }) => {
                 
                 // 401/Unauthorized means session expired - force logout
                 if (errorMessage.includes('401') || errorMessage.includes('Unauthorized') || errorMessage.includes('User not found')) {
-                    console.log('🔐 Session expired or invalid - forcing logout');
                     if (window.forceLogout) {
                         window.forceLogout('SESSION_EXPIRED');
                     }
@@ -301,7 +290,6 @@ const AuthProvider = ({ children }) => {
                 
                 // If page was hidden for more than the threshold, validate session
                 if (hiddenDuration >= STALE_SESSION_THRESHOLD) {
-                    console.log(`🔍 Page was hidden for ${Math.round(hiddenDuration / 1000)}s - validating session...`);
                     validateSession();
                 }
             }
@@ -312,7 +300,6 @@ const AuthProvider = ({ children }) => {
             if (user && window.storage?.getToken?.()) {
                 const timeSinceValidation = Date.now() - lastValidationTime;
                 if (timeSinceValidation >= STALE_SESSION_THRESHOLD) {
-                    console.log(`🔍 Window focused after ${Math.round(timeSinceValidation / 1000)}s - validating session...`);
                     validateSession();
                 }
             }
@@ -375,7 +362,6 @@ const AuthProvider = ({ children }) => {
 
     const login = async (email, password) => {
         try {
-            console.log('🔐 Attempting login for:', email);
             const loginResult = await window.api.login(email, password);
             
             // Check if login response contains an error
@@ -388,10 +374,8 @@ const AuthProvider = ({ children }) => {
                 throw new Error('No access token received from login');
             }
             
-            console.log('✅ Login API successful, token received');
             
             const meResponse = await window.api.me();
-            console.log('✅ Me API successful:', meResponse);
             
             // Extract user from response (API returns { user: {...} } or direct user object)
             const user = meResponse.user || meResponse?.data?.user || meResponse?.data || meResponse;
@@ -413,13 +397,11 @@ const AuthProvider = ({ children }) => {
                 }, 100);
             }
             
-            console.log('🎉 Login flow completed successfully');
             
             // Check if password change is required (from login response or user data)
             const requiresPasswordChange = loginResult.mustChangePassword || user.mustChangePassword;
             
             if (requiresPasswordChange) {
-                console.log('🔒 Password change required for user:', email);
                 // Trigger password change modal
                 setTimeout(() => {
                     if (window.triggerPasswordChangeModal) {
@@ -529,7 +511,6 @@ try {
     window.AuthProvider = AuthProvider;
     window.useAuth = useAuth;
     if (window.debug && !window.debug.performanceMode) {
-        console.log('✅ AuthProvider.jsx loaded and registered', typeof window.AuthProvider);
     }
     
     // Verify storage is available

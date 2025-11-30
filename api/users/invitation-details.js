@@ -14,7 +14,6 @@ async function handler(req, res) {
             return badRequest(res, 'Token is required')
         }
 
-        console.log('🔍 Looking up invitation token:', token.substring(0, 20) + '...')
         
         // Verify database connection first
         try {
@@ -58,7 +57,6 @@ async function handler(req, res) {
         }
 
         if (!invitation) {
-            console.log('❌ Invitation not found for token:', token.substring(0, 20) + '...')
             // Check if token format is valid (64 hex characters)
             if (!/^[a-f0-9]{64}$/i.test(token)) {
                 return badRequest(res, 'Invalid invitation token format')
@@ -80,7 +78,6 @@ async function handler(req, res) {
             return badRequest(res, 'Invalid invitation token. This invitation may have expired or been cancelled. Please request a new invitation link.')
         }
         
-        console.log('✅ Invitation found:', invitation.email, 'Status:', invitation.status)
 
         if (new Date() > invitation.expiresAt) {
             return badRequest(res, 'Invitation has expired')

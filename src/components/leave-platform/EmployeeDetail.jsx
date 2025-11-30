@@ -159,7 +159,6 @@ const EmployeeDetail = (props) => {
             if (formData.address !== undefined) updateData.address = formData.address || null;
             if (formData.emergencyContact !== undefined) updateData.emergencyContact = formData.emergencyContact || null;
             
-            console.log('💾 Saving employee data:', updateData);
             
             const response = await fetch(`/api/users/${employeeId}`, {
                 method: 'PUT',
@@ -768,7 +767,6 @@ const EmployeeDetail = (props) => {
 (function() {
     if (typeof window !== 'undefined') {
         window.EmployeeDetail = EmployeeDetail;
-        console.log('✅ EmployeeDetail component registered on window');
         
         // Dispatch event to notify that component is loaded
         if (typeof window.dispatchEvent !== 'undefined') {

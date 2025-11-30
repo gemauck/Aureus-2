@@ -182,11 +182,9 @@ const DatabaseAPI = {
                 // Clear localStorage to prevent stale data across users
                 if (cacheKey === '/leads' && window.storage?.removeLeads) {
                     window.storage.removeLeads();
-                    console.log('🗑️ Cleared localStorage for leads');
                 }
                 if (cacheKey === '/clients' && window.storage?.removeClients) {
                     window.storage.removeClients();
-                    console.log('🗑️ Cleared localStorage for clients');
                 }
             }
             
@@ -220,7 +218,6 @@ const DatabaseAPI = {
         // CRITICAL: Clear ALL caches immediately after creation
         this.clearCache('/clients');
         this.clearCache('/leads'); // Clients and leads are related
-        console.log('🗑️ Cleared ALL caches after client creation');
         return result;
     },
 
@@ -232,7 +229,6 @@ const DatabaseAPI = {
         // CRITICAL: Clear ALL caches immediately after update
         this.clearCache('/clients');
         this.clearCache('/leads'); // Clients and leads are related
-        console.log('🗑️ Cleared ALL caches after client update');
         return result;
     },
 
@@ -275,7 +271,6 @@ const DatabaseAPI = {
         // CRITICAL: Clear ALL caches immediately after creation
         this.clearCache('/leads');
         this.clearCache('/clients'); // Leads are in clients table too
-        console.log('🗑️ Cleared ALL caches after lead creation');
         return result;
     },
 

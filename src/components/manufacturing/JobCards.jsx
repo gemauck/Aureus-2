@@ -1125,7 +1125,6 @@ try {
   if (typeof window !== 'undefined') {
     window.JobCards = JobCards;
     window.dispatchEvent(new Event('jobcardsComponentReady'));
-    console.log('✅ JobCards.jsx loaded and registered');
   }
 } catch (error) {
   console.error('❌ JobCards.jsx: Error registering global component:', error);

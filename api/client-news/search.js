@@ -57,7 +57,6 @@ function parseRSS(xmlText) {
 // Search news for a client using Google News RSS (no API key required)
 export async function searchNewsForClient(clientName, website) {
   try {
-    console.log(`📰 Searching news for client: ${clientName}`)
     
     // Build search query - use client name and website if available
     let searchQuery = clientName
@@ -83,7 +82,6 @@ export async function searchNewsForClient(clientName, website) {
     const encodedQuery = encodeURIComponent(searchQuery)
     const rssUrl = `https://news.google.com/rss/search?q=${encodedQuery}&hl=en&gl=US&ceid=US:en`
     
-    console.log(`   Fetching: ${rssUrl}`)
     
     // Fetch RSS feed
     const response = await fetch(rssUrl, {
@@ -100,7 +98,6 @@ export async function searchNewsForClient(clientName, website) {
     const xmlText = await response.text()
     const articles = parseRSS(xmlText)
     
-    console.log(`   ✅ Found ${articles.length} articles`)
     return articles.slice(0, 10) // Limit to top 10 results
     
   } catch (error) {
@@ -112,7 +109,6 @@ export async function searchNewsForClient(clientName, website) {
 // Helper function to search and save news for a specific client
 export async function searchAndSaveNewsForClient(clientId, clientName, website) {
   try {
-    console.log(`📰 Searching and saving news for client: ${clientName} (${clientId})`)
     
     // Check if client is subscribed to RSS feeds
     const client = await prisma.client.findUnique({
@@ -127,7 +123,6 @@ export async function searchAndSaveNewsForClient(clientId, clientName, website) 
     
     // Only search if subscribed
     if (client.rssSubscribed === false) {
-      console.log(`⏭️ Client ${clientName} is not subscribed to RSS feeds, skipping search`)
       return { success: true, articlesFound: 0, skipped: true }
     }
     
@@ -168,7 +163,6 @@ export async function searchAndSaveNewsForClient(clientId, clientName, website) 
           }
         })
         articlesSaved++
-        console.log(`   ✅ Saved article: ${article.title}`)
       } else if (existing && isNew && !existing.isNew) {
         // Update isNew flag if article was previously marked as old
         await prisma.clientNews.update({
@@ -178,7 +172,6 @@ export async function searchAndSaveNewsForClient(clientId, clientName, website) 
       }
     }
     
-    console.log(`✅ News search completed for ${clientName}. Found ${articlesSaved} new articles`)
     return { success: true, articlesFound: articlesSaved }
     
   } catch (error) {
@@ -189,10 +182,6 @@ export async function searchAndSaveNewsForClient(clientId, clientName, website) 
 
 async function handler(req, res) {
   try {
-    console.log('🔍 Client News Search API:', {
-      method: req.method,
-      url: req.url
-    })
 
     // POST /api/client-news/search - Trigger news search for all clients
     if (req.method === 'POST') {
@@ -224,7 +213,6 @@ async function handler(req, res) {
           }
         })
 
-        console.log(`📰 Searching news for ${clients.length} clients and leads`)
 
         const allArticles = []
         const today = new Date()
@@ -271,7 +259,6 @@ async function handler(req, res) {
           }
         })
 
-        console.log(`✅ News search completed. Found ${allArticles.length} new articles`)
         return ok(res, {
           success: true,
           articlesFound: allArticles.length,

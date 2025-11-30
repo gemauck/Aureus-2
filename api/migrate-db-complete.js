@@ -5,7 +5,6 @@ import { withHttp } from './_lib/withHttp.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔧 Running comprehensive database migration...')
     
     const migrationSteps = []
     
@@ -80,7 +79,6 @@ async function handler(req, res) {
       migrationSteps.push(`❌ Migration test failed: ${error.message}`)
     }
     
-    console.log('✅ Database migration completed')
     
     return ok(res, { 
       message: 'Database migration completed successfully',

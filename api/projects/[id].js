@@ -7,18 +7,11 @@ import { withLogging } from '../_lib/logger.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔍 Project [id] API Debug:', {
-      method: req.method,
-      url: req.url,
-      headers: req.headers,
-      user: req.user
-    })
     
     const url = new URL(req.url, `http://${req.headers.host}`)
     const pathSegments = url.pathname.split('/').filter(Boolean)
     const id = req.params?.id || pathSegments[pathSegments.length - 1] // Get the ID from params or URL
 
-    console.log('🔍 Path segments:', pathSegments, 'ID:', id)
 
     if (!id) {
       return badRequest(res, 'Project ID required')
@@ -27,37 +20,13 @@ async function handler(req, res) {
     // Get Single Project (GET /api/projects/[id])
     if (req.method === 'GET') {
       try {
-        console.log('📥 API: FETCHING project from database:', {
-          projectId: id,
-          user: req.user?.email || req.user?.sub || 'unknown',
-          timestamp: new Date().toISOString()
-        });
         
         const project = await prisma.project.findUnique({ where: { id } })
         if (!project) {
-          console.log('❌ API: Project not found:', id);
           return notFound(res);
         }
         
-        console.log('📥 API: Retrieved project from database:', {
-          id: project.id,
-          user: req.user?.email || req.user?.sub || 'unknown',
-          hasDocumentCollectionProcess: project.hasDocumentCollectionProcess,
-          hasDocumentSections: !!project.documentSections,
-          documentSectionsType: typeof project.documentSections,
-          documentSectionsLength: typeof project.documentSections === 'string' ? 
-            project.documentSections.length : 'not string',
-          documentSectionsPreview: typeof project.documentSections === 'string' ? 
-            project.documentSections.substring(0, 200) : 'not string',
-          timestamp: new Date().toISOString()
-        });
         // Also log the raw Prisma result to see what's actually in the database
-        console.log('🔍 Raw Prisma project object (hasDocumentCollectionProcess field):', {
-          fieldExists: 'hasDocumentCollectionProcess' in project,
-          value: project.hasDocumentCollectionProcess,
-          valueType: typeof project.hasDocumentCollectionProcess,
-          valueConstructor: project.hasDocumentCollectionProcess?.constructor?.name
-        })
         
         // Check if user is guest and has access to this project
         const userRole = req.user?.role?.toLowerCase();
@@ -75,7 +44,6 @@ async function handler(req, res) {
             
             // Check if project ID is in accessible projects
             if (!accessibleProjectIds || !accessibleProjectIds.includes(project.id)) {
-              console.log('❌ Guest user does not have access to project:', project.id);
               return notFound(res); // Return not found to hide project existence
             }
           } catch (parseError) {
@@ -84,7 +52,6 @@ async function handler(req, res) {
           }
         }
         
-        console.log('✅ Project retrieved successfully:', project.id)
         return ok(res, { project })
       } catch (dbError) {
         console.error('❌ Database error getting project:', dbError)
@@ -111,7 +78,6 @@ async function handler(req, res) {
 
       body = body || {}
 
-      console.log('🔍 PUT/PATCH request body:', body)
       
       // Find or create client by name if clientName is provided
       let clientId = null;
@@ -123,7 +89,6 @@ async function handler(req, res) {
           
           // If client doesn't exist, create it
           if (!client) {
-            console.log('Creating new client:', body.clientName);
             client = await prisma.client.create({
               data: {
                 name: body.clientName,
@@ -170,15 +135,6 @@ async function handler(req, res) {
       // Handle documentSections separately if provided - ensure it's properly saved
       if (body.documentSections !== undefined && body.documentSections !== null) {
         try {
-          console.log('💾 API: RECEIVED documentSections for saving:', {
-            projectId: id,
-            user: req.user?.email || req.user?.sub || 'unknown',
-            type: typeof body.documentSections,
-            isString: typeof body.documentSections === 'string',
-            length: typeof body.documentSections === 'string' ? body.documentSections.length : 'N/A',
-            preview: typeof body.documentSections === 'string' ? body.documentSections.substring(0, 200) : 'N/A',
-            timestamp: new Date().toISOString()
-          });
           
           if (typeof body.documentSections === 'string') {
             // Already a string, validate it's valid JSON
@@ -192,7 +148,6 @@ async function handler(req, res) {
                 const parsed = JSON.parse(trimmed);
                 // If it parsed successfully, use it as-is (it's already a stringified JSON)
                 updateData.documentSections = trimmed;
-                console.log('✅ API: documentSections validated (string), sections count:', Array.isArray(parsed) ? parsed.length : 'not array');
               } catch (parseError) {
                 console.error('❌ Invalid documentSections JSON string:', parseError);
                 // If string is invalid JSON, stringify it (might be double-encoded or corrupted)
@@ -202,29 +157,18 @@ async function handler(req, res) {
           } else if (Array.isArray(body.documentSections)) {
             // It's an array, stringify it
             updateData.documentSections = JSON.stringify(body.documentSections);
-            console.log('✅ API: documentSections is array, stringified, sections count:', body.documentSections.length);
           } else if (typeof body.documentSections === 'object') {
             // It's an object, stringify it
             updateData.documentSections = JSON.stringify(body.documentSections);
-            console.log('✅ API: documentSections is object, stringified');
           } else {
             // It's something else (number, boolean, etc.), stringify it
             updateData.documentSections = JSON.stringify(body.documentSections);
-            console.log('✅ API: documentSections is other type, stringified');
           }
-          console.log('✅ API: documentSections will be saved to database:', {
-            projectId: id,
-            user: req.user?.email || req.user?.sub || 'unknown',
-            finalLength: updateData.documentSections.length,
-            finalPreview: updateData.documentSections.substring(0, 200),
-            timestamp: new Date().toISOString()
-          });
         } catch (error) {
           console.error('❌ Error processing documentSections:', error);
           // Don't fail the entire update, but log the error
         }
       } else {
-        console.log('⚠️ API: documentSections not provided in update - will not be updated');
       }
       
       // Handle monthlyProgress separately if provided - with validation for safety
@@ -284,13 +228,6 @@ async function handler(req, res) {
         }
       })
       
-      console.log('🔍 API: Updating project with data:', {
-        projectId: id,
-        user: req.user?.email || req.user?.sub || 'unknown',
-        hasDocumentSections: !!updateData.documentSections,
-        documentSectionsLength: updateData.documentSections?.length || 0,
-        timestamp: new Date().toISOString()
-      });
       
       try {
         const project = await prisma.project.update({ 
@@ -298,16 +235,6 @@ async function handler(req, res) {
           data: updateData 
         });
         
-        console.log('✅ API: Project updated successfully in database:', {
-          projectId: project.id,
-          user: req.user?.email || req.user?.sub || 'unknown',
-          hasDocumentSections: !!project.documentSections,
-          documentSectionsLength: typeof project.documentSections === 'string' ? 
-            project.documentSections.length : 'not string',
-          documentSectionsPreview: typeof project.documentSections === 'string' ? 
-            project.documentSections.substring(0, 200) : 'not string',
-          timestamp: new Date().toISOString()
-        });
         
         return ok(res, { project })
       } catch (dbError) {
@@ -320,7 +247,6 @@ async function handler(req, res) {
     if (req.method === 'DELETE') {
       try {
         // Ensure referential integrity by removing dependents first, then the project
-        console.log('🔍 Deleting project and related records:', id)
         
         // Delete all related records in a transaction
         await prisma.$transaction(async (tx) => {
@@ -330,26 +256,20 @@ async function handler(req, res) {
             where: { projectId: id },
             data: { parentTaskId: null }
           })
-          console.log('🔄 Updated tasks to remove parent references:', tasksUpdated.count)
           
           // Now delete all tasks (they no longer have parent references)
           const tasksDeleted = await tx.task.deleteMany({ where: { projectId: id } })
-          console.log('🗑️ Deleted tasks:', tasksDeleted.count)
           
           // Delete invoices
           const invoicesDeleted = await tx.invoice.deleteMany({ where: { projectId: id } })
-          console.log('🗑️ Deleted invoices:', invoicesDeleted.count)
           
           // Delete time entries
           const timeEntriesDeleted = await tx.timeEntry.deleteMany({ where: { projectId: id } })
-          console.log('🗑️ Deleted time entries:', timeEntriesDeleted.count)
           
           // Delete the project
           await tx.project.delete({ where: { id } })
-          console.log('✅ Project deleted successfully:', id)
         })
         
-        console.log('✅ Project and related records deleted successfully:', id)
         return ok(res, { 
           deleted: true,
           message: `Project deleted successfully`

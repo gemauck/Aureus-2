@@ -12,17 +12,12 @@ async function handler(req, res) {
     const { email, password } = req.body || {}
     if (!email || !password) return badRequest(res, 'Email and password required')
 
-    console.log('🔐 Login attempt:', email)
     const user = await prisma.user.findUnique({ where: { email } })
-    console.log('🔐 User found:', !!user, user ? `has passwordHash: ${!!user.passwordHash}` : 'N/A')
     if (!user || !user.passwordHash) return unauthorized(res)
 
-    console.log('🔐 Comparing password...')
     const valid = await bcrypt.compare(password, user.passwordHash)
-    console.log('🔐 Password valid:', valid)
     if (!valid) return unauthorized(res)
     
-    console.log('✅ Login successful for:', email)
 
     const payload = { sub: user.id, email: user.email, role: user.role }
     const accessToken = signAccessToken(payload)

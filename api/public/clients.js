@@ -9,7 +9,6 @@ async function handler(req, res) {
   }
 
   try {
-    console.log('📡 Public clients endpoint: Fetching active clients for job card form...')
     
     // Get only active clients (type = 'client')
     // Status can be 'active', 'Active', or empty - all are considered active for job cards
@@ -48,7 +47,6 @@ async function handler(req, res) {
       }
     })
 
-    console.log(`✅ Public clients endpoint: Returning ${clientsWithParsedSites.length} active clients`)
     
     return ok(res, {
       clients: clientsWithParsedSites,

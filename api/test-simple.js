@@ -1,8 +1,5 @@
 // Simple test endpoint to debug API routing
 export default async function handler(req, res) {
-  console.log('🔍 Test Simple API: Handler called');
-  console.log('🔍 Test Simple API: Method:', req.method);
-  console.log('🔍 Test Simple API: URL:', req.url);
   
   try {
     res.setHeader('Content-Type', 'application/json');

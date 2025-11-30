@@ -9,7 +9,6 @@ async function handler(req, res) {
   }
 
   try {
-    console.log('📡 Public users endpoint: Fetching active users for job card form...')
     
     // Get only active users (not inactive or suspended)
     const users = await prisma.user.findMany({
@@ -30,7 +29,6 @@ async function handler(req, res) {
       }
     })
 
-    console.log(`✅ Public users endpoint: Returning ${users.length} active users`)
     
     return ok(res, {
       users: users,

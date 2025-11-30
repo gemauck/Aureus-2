@@ -84,7 +84,6 @@ export const usePersistence = (storageKey, apiMethods, options = {}) => {
       // STEP 1: Load from localStorage first (instant UI)
       const cachedData = storageHelper.get();
       if (cachedData && cachedData.length > 0) {
-        console.log(`📁 Loading ${cachedData.length} ${storageKey} from cache`);
         setData(cachedData);
         setIsLoading(false);
       }
@@ -92,11 +91,9 @@ export const usePersistence = (storageKey, apiMethods, options = {}) => {
       // STEP 2: Try to fetch from API
       if (isAuthenticated() && apiMethods.list) {
         try {
-          console.log(`🌐 Fetching ${storageKey} from API...`);
           const response = await apiMethods.list();
           const apiData = response?.data?.[storageKey] || response?.[storageKey] || response?.data || response || [];
           
-          console.log(`✅ API returned ${apiData.length} ${storageKey}`);
           
           // STEP 3: Update both state and localStorage
           setData(apiData);
@@ -116,7 +113,6 @@ export const usePersistence = (storageKey, apiMethods, options = {}) => {
           }
         }
       } else if (!cachedData || cachedData.length === 0) {
-        console.log(`📭 No cached ${storageKey} and not authenticated`);
       }
     } catch (error) {
       console.error(`❌ Failed to load ${storageKey}:`, error);
@@ -137,7 +133,6 @@ export const usePersistence = (storageKey, apiMethods, options = {}) => {
       updatedAt: new Date().toISOString()
     };
 
-    console.log(`➕ Creating ${storageKey} (optimistic):`, newItem);
 
     // STEP 1 & 2: Optimistic update + localStorage
     setData(prev => [...prev, newItem]);
@@ -149,14 +144,12 @@ export const usePersistence = (storageKey, apiMethods, options = {}) => {
     if (isAuthenticated() && apiMethods.create) {
       try {
         setIsSyncing(true);
-        console.log(`🌐 Creating ${storageKey} via API...`);
         const response = await apiMethods.create(itemData);
         const serverItem = response?.data?.[storageKey.slice(0, -1)] || 
                           response?.[storageKey.slice(0, -1)] || 
                           response?.data ||
                           response;
 
-        console.log(`✅ ${storageKey} created, server response:`, serverItem);
 
         // STEP 4: Replace temp item with server version
         setData(prev => prev.map(item => 
@@ -190,7 +183,6 @@ export const usePersistence = (storageKey, apiMethods, options = {}) => {
         setIsSyncing(false);
       }
     } else {
-      console.log(`💾 ${storageKey} created offline`);
       pendingOps.current.push({
         type: 'create',
         data: itemData,
@@ -204,7 +196,6 @@ export const usePersistence = (storageKey, apiMethods, options = {}) => {
 
   // Update item
   const update = useCallback(async (id, updates) => {
-    console.log(`✏️ Updating ${storageKey}/${id} (optimistic):`, updates);
 
     // STEP 1: Optimistic update
     const updatedItem = {
@@ -228,14 +219,12 @@ export const usePersistence = (storageKey, apiMethods, options = {}) => {
     if (isAuthenticated() && apiMethods.update) {
       try {
         setIsSyncing(true);
-        console.log(`🌐 Updating ${storageKey}/${id} via API...`);
         const response = await apiMethods.update(id, updates);
         const serverItem = response?.data?.[storageKey.slice(0, -1)] || 
                           response?.[storageKey.slice(0, -1)] || 
                           response?.data ||
                           response;
 
-        console.log(`✅ ${storageKey}/${id} updated via API`);
 
         // STEP 4: Update with server response
         if (conflictStrategy === 'server-wins' && serverItem) {
@@ -269,7 +258,6 @@ export const usePersistence = (storageKey, apiMethods, options = {}) => {
         setIsSyncing(false);
       }
     } else {
-      console.log(`💾 ${storageKey}/${id} updated offline`);
       pendingOps.current.push({
         type: 'update',
         id,
@@ -283,7 +271,6 @@ export const usePersistence = (storageKey, apiMethods, options = {}) => {
 
   // Delete item
   const remove = useCallback(async (id) => {
-    console.log(`🗑️ Deleting ${storageKey}/${id} (optimistic)`);
 
     // STEP 1: Optimistic update
     setData(prev => prev.filter(item => item.id !== id));
@@ -297,10 +284,8 @@ export const usePersistence = (storageKey, apiMethods, options = {}) => {
     if (isAuthenticated() && apiMethods.delete) {
       try {
         setIsSyncing(true);
-        console.log(`🌐 Deleting ${storageKey}/${id} via API...`);
         await apiMethods.delete(id);
         
-        console.log(`✅ ${storageKey}/${id} deleted via API`);
         setSyncStatus('synced');
         setLastSyncTime(Date.now());
         
@@ -321,7 +306,6 @@ export const usePersistence = (storageKey, apiMethods, options = {}) => {
         setIsSyncing(false);
       }
     } else {
-      console.log(`💾 ${storageKey}/${id} deleted offline`);
       pendingOps.current.push({
         type: 'delete',
         id,
@@ -336,7 +320,6 @@ export const usePersistence = (storageKey, apiMethods, options = {}) => {
   const processPendingOperations = useCallback(async () => {
     if (pendingOps.current.length === 0) return;
     
-    console.log(`🔄 Processing ${pendingOps.current.length} pending operations for ${storageKey}...`);
     const remaining = [];
     
     for (const op of pendingOps.current) {
@@ -366,7 +349,6 @@ export const usePersistence = (storageKey, apiMethods, options = {}) => {
 
   // Manual sync
   const sync = useCallback(async () => {
-    console.log(`🔄 Manual sync triggered for ${storageKey}`);
     await loadData();
     await processPendingOperations();
   }, [loadData, processPendingOperations, storageKey]);
@@ -376,7 +358,6 @@ export const usePersistence = (storageKey, apiMethods, options = {}) => {
     if (syncInterval > 0 && isAuthenticated()) {
       syncTimer.current = setInterval(() => {
         if (syncStatus === 'dirty' || pendingOps.current.length > 0) {
-          console.log(`⏰ Background sync for ${storageKey}`);
           sync();
         }
       }, syncInterval);
@@ -399,7 +380,6 @@ export const usePersistence = (storageKey, apiMethods, options = {}) => {
     const subscriberId = `${storageKey}-persistence-hook`;
     const handler = (message) => {
       if (message?.type === 'data' && message.dataType === storageKey) {
-        console.log(`📡 Real-time update for ${storageKey}:`, message.data?.length, 'items');
         const freshData = Array.isArray(message.data) ? message.data : [];
         setData(freshData);
         storageHelper.set(freshData, { syncStatus: 'synced' });

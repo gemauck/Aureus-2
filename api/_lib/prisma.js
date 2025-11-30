@@ -10,12 +10,9 @@ if (global.__prisma) {
     // Ignore disconnect errors
   }
   delete global.__prisma
-  console.log('🔄 Cleared cached Prisma client')
 }
 
 try {
-  console.log('🔍 [PRISMA INIT] Starting Prisma initialization...')
-  console.log('🔍 [PRISMA INIT] process.env.DATABASE_URL exists:', !!process.env.DATABASE_URL)
   
   if (!process.env.DATABASE_URL) {
     console.error('❌ DATABASE_URL is not set')
@@ -24,8 +21,6 @@ try {
   
   // Log the DATABASE_URL immediately for debugging
   const dbUrlForLog = process.env.DATABASE_URL.replace(/:([^:@]+)@/, ':***@')
-  console.log('🔍 [PRISMA INIT] DATABASE_URL value:', dbUrlForLog)
-  console.log('🔍 [PRISMA INIT] DATABASE_URL hostname:', process.env.DATABASE_URL.match(/@([^:]+):/)?.[1] || 'NOT FOUND')
   
   // Prohibit local database connections
   const dbUrl = process.env.DATABASE_URL.toLowerCase()
@@ -45,8 +40,6 @@ try {
   
   // Force use of process.env.DATABASE_URL - ensure it's the correct one
   const databaseUrl = process.env.DATABASE_URL
-  console.log('🔍 [PRISMA INIT] Checking hostname in:', databaseUrl ? databaseUrl.replace(/:([^:@]+)@/, ':***@') : 'NOT SET')
-  console.log('🔍 [PRISMA INIT] Contains nov-3-backup5:', databaseUrl ? databaseUrl.includes('nov-3-backup5-do-user-28031752-0') : 'N/A')
   
   if (!databaseUrl || !databaseUrl.includes('nov-3-backup5-do-user-28031752-0')) {
     console.error('❌ ERROR: DATABASE_URL does not contain correct hostname!')
@@ -56,7 +49,6 @@ try {
     throw new Error('DATABASE_URL must contain correct hostname: nov-3-backup5-do-user-28031752-0')
   }
   
-  console.log('🔗 Creating new Prisma client with DATABASE_URL:', dbUrlForLog)
   
   global.__prisma = new PrismaClient({
     log: ['error', 'warn'],
@@ -74,8 +66,6 @@ try {
       }
     }
   })
-  console.log('✅ Prisma client initialized')
-  console.log(`🔗 DATABASE_URL: ${process.env.DATABASE_URL.substring(0, 80)}${process.env.DATABASE_URL.length > 80 ? '...' : ''}`)
 } catch (error) {
   console.error('❌ Failed to create Prisma client:', error)
   throw error
@@ -111,7 +101,6 @@ async function ensureConnected() {
         await prismaGlobal.$connect()
         isConnected = true
         connectionAttempted = true
-        console.log('✅ Prisma database connection established')
         connectionPromise = null
         return true
       } catch (error) {

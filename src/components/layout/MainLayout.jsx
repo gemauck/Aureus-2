@@ -1,6 +1,5 @@
 // Use React from window
 if (window.debug && !window.debug.performanceMode) {
-    console.log('🔍 MainLayout-mobile-fixed.jsx: Script is executing...');
 }
 const { useState } = React;
 
@@ -218,7 +217,6 @@ const MainLayout = () => {
                 (typeof ClientsComponent === 'object' && ClientsComponent.$$typeof)
             );
             if (isValidComponent && !clientsComponentReady) {
-                console.log('✅ MainLayout: Clients component became available');
                 setClientsComponentReady(true);
                 return true;
             }
@@ -268,7 +266,6 @@ const MainLayout = () => {
             const NotificationCenterComponent = window.NotificationCenter;
             const isValidComponent = NotificationCenterComponent && typeof NotificationCenterComponent === 'function';
             if (isValidComponent && !notificationCenterReady) {
-                console.log('✅ MainLayout: NotificationCenter component became available');
                 setNotificationCenterReady(true);
                 return true;
             }
@@ -376,7 +373,6 @@ const MainLayout = () => {
                 if (fallbackProjects) {
                     console.warn('⚠️ MainLayout: Using fallback Projects component (old Vite module version). Prefer ProjectsDatabaseFirst or ProjectsSimple.');
                 } else {
-                    console.log('✅ MainLayout: Projects component became available');
                 }
                 setProjectsComponentReady(true);
             }
@@ -420,7 +416,6 @@ const MainLayout = () => {
             const UsersComponent = window.Users || window.UserManagement;
             const isValidComponent = UsersComponent && typeof UsersComponent === 'function';
             if (isValidComponent && !usersComponentReady) {
-                console.log('✅ MainLayout: Users component became available');
                 setUsersComponentReady(true);
                 return true;
             }
@@ -469,7 +464,6 @@ const MainLayout = () => {
             const ManufacturingComponent = window.Manufacturing;
             const isValidComponent = ManufacturingComponent && typeof ManufacturingComponent === 'function';
             if (isValidComponent && !manufacturingComponentReady) {
-                console.log('✅ MainLayout: Manufacturing component became available');
                 setManufacturingComponentReady(true);
                 return true;
             }
@@ -538,7 +532,6 @@ const MainLayout = () => {
             const component = window.ServiceAndMaintenance;
             if (component && typeof component === 'function') {
                 if (!serviceMaintenanceReady) {
-                    console.log('✅ MainLayout: ServiceAndMaintenance component became available');
                     setServiceMaintenanceReady(true);
                 }
                 return true;
@@ -547,7 +540,6 @@ const MainLayout = () => {
         };
 
         const handleComponentReady = () => {
-            console.log('✅ MainLayout: Received serviceMaintenanceComponentReady event');
             setServiceMaintenanceReady(true);
         };
 
@@ -610,7 +602,6 @@ const MainLayout = () => {
             script.defer = true;
             script.src = `/dist/src/components/service-maintenance/ServiceAndMaintenance.js?v=sm-${Date.now()}`;
             script.onload = () => {
-                console.log('✅ ServiceAndMaintenance component loaded dynamically');
             };
             script.onerror = (error) => {
                 console.error('❌ Failed to dynamically load ServiceAndMaintenance component:', error);
@@ -643,7 +634,6 @@ const MainLayout = () => {
         const checkLeavePlatform = () => {
             const LeavePlatformComponent = window.LeavePlatform;
             if (LeavePlatformComponent && typeof LeavePlatformComponent === 'function' && !leavePlatformReady) {
-                console.log('✅ MainLayout: LeavePlatform component became available');
                 setLeavePlatformReady(true);
                 return true;
             }
@@ -652,7 +642,6 @@ const MainLayout = () => {
         
         // Listen for component ready event
         const handleLeavePlatformReady = () => {
-            console.log('✅ MainLayout: Received leavePlatformComponentReady event');
             if (!leavePlatformReady) {
                 setLeavePlatformReady(true);
             }
@@ -687,7 +676,6 @@ const MainLayout = () => {
     const LeavePlatform = React.useMemo(() => {
         const component = window.LeavePlatform;
         if (component && typeof component === 'function') {
-            console.log('✅ MainLayout: LeavePlatform component available in useMemo');
             return component;
         }
         console.warn('⚠️ MainLayout: LeavePlatform component not available, using fallback');
@@ -731,11 +719,9 @@ const MainLayout = () => {
         if (hasUser && !user.role && window.useAuth && !refreshingRole) {
             const { refreshUser } = window.useAuth();
             if (refreshUser) {
-                console.log('🔄 User missing role, refreshing from API...');
                 setRefreshingRole(true);
                 refreshUser().then((refreshedUser) => {
                     if (refreshedUser?.role) {
-                        console.log('✅ Role refreshed:', refreshedUser.role);
                     }
                     setTimeout(() => setRefreshingRole(false), 3000);
                 }).catch(() => {
@@ -768,12 +754,6 @@ const MainLayout = () => {
                     const hasAccess = permissionChecker.hasPermission(permissionKey);
                     // Log for debugging
                     if (!hasAccess && (item.permission === 'ACCESS_CRM' || item.permission === 'ACCESS_PROJECTS' || item.permission === 'ACCESS_SERVICE_MAINTENANCE')) {
-                        console.log(`⚠️ Permission check failed for ${item.label}:`, {
-                            permission: item.permission,
-                            permissionKey,
-                            userRole,
-                            hasAccess
-                        });
                     }
                     return hasAccess;
                 }
@@ -875,8 +855,6 @@ const MainLayout = () => {
                 case 'time-tracking': 
                     return <ErrorBoundary key="time-tracking"><TimeTracking /></ErrorBoundary>;
                 case 'leave-platform': 
-                    console.log('🔄 MainLayout: Rendering leave-platform, component type:', typeof LeavePlatform);
-                    console.log('🔄 MainLayout: window.LeavePlatform exists:', typeof window.LeavePlatform);
                     if (!window.LeavePlatform) {
                         console.warn('⚠️ MainLayout: window.LeavePlatform is not available!');
                         return <div key="leave-platform-error" className="p-8 text-center">
@@ -1159,7 +1137,6 @@ const MainLayout = () => {
 // Make available globally
 try {
     window.MainLayout = MainLayout;
-    console.log('✅ MainLayout-mobile-fixed.jsx loaded and registered');
 } catch (error) {
     console.error('❌ MainLayout-mobile-fixed.jsx: Error:', error);
 }

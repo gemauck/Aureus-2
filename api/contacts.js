@@ -21,13 +21,6 @@ function getContactsArray(rawContacts) {
 
 async function handler(req, res) {
   try {
-    console.log('🔍 Contacts API Debug:', {
-      method: req.method,
-      url: req.url,
-      params: req.params,
-      headers: req.headers,
-      user: req.user
-    });
     
     // Strip query parameters before splitting (safety fallback)
     const urlPath = req.url.split('?')[0].split('#')[0]
@@ -37,13 +30,6 @@ async function handler(req, res) {
     const clientId = req.params?.clientId || (pathSegments[1] === 'client' ? pathSegments[2] : null)
     const contactId = req.params?.contactId || (pathSegments[1] === 'client' && pathSegments.length > 3 ? pathSegments[3] : null)
     
-    console.log('🔍 Path analysis:', {
-      url: req.url,
-      pathSegments,
-      clientId,
-      contactId,
-      params: req.params
-    });
     
     // GET /api/contacts/client/:clientId - Get all contacts for a client
     if (req.method === 'GET' && clientId && !contactId) {
@@ -59,8 +45,6 @@ async function handler(req, res) {
         
         const contacts = getContactsArray(client.contacts)
         
-        console.log('✅ Contacts retrieved for client:', clientId, '- Count:', contacts.length)
-        console.log('📤 Returning contacts:', JSON.stringify(contacts, null, 2))
         return ok(res, { contacts })
       } catch (dbError) {
         console.error('❌ Database error getting contacts:', dbError)
@@ -112,8 +96,6 @@ async function handler(req, res) {
           data: { contacts: JSON.stringify(updatedContacts) }
         })
         
-        console.log('✅ Contact added to client:', clientId, '- Contact:', newContact.name)
-        console.log('📤 Returning contact:', JSON.stringify(newContact, null, 2))
         return created(res, { contact: newContact, contacts: updatedContacts })
       } catch (dbError) {
         console.error('❌ Database error adding contact:', dbError)
@@ -157,7 +139,6 @@ async function handler(req, res) {
           data: { contacts: JSON.stringify(contacts) }
         })
         
-        console.log('✅ Contact updated:', contactId, 'for client:', clientId)
         return ok(res, { contact: contacts[contactIndex], contacts })
       } catch (dbError) {
         console.error('❌ Database error updating contact:', dbError)
@@ -191,7 +172,6 @@ async function handler(req, res) {
           data: { contacts: JSON.stringify(updatedContacts) }
         })
         
-        console.log('✅ Contact deleted:', contactId, 'from client:', clientId)
         return ok(res, { deleted: true, contacts: updatedContacts })
       } catch (dbError) {
         console.error('❌ Database error deleting contact:', dbError)

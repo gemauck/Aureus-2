@@ -44,5 +44,4 @@ window.ComponentCache = window.ComponentCache || {
     }
 };
 
-console.log('✅ ComponentCache loaded');
 

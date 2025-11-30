@@ -6,7 +6,6 @@ import { withHttp } from './_lib/withHttp.js'
 
 async function handler(req, res) {
   try {
-    console.log('👤 Creating initial admin user...')
     
     // Check if admin user already exists
     const existingAdmin = await prisma.user.findUnique({ 
@@ -14,7 +13,6 @@ async function handler(req, res) {
     })
     
     if (existingAdmin) {
-      console.log('✅ Admin user already exists')
       return ok(res, { 
         message: 'Admin user already exists',
         user: { email: existingAdmin.email, role: existingAdmin.role }
@@ -35,7 +33,6 @@ async function handler(req, res) {
       }
     })
     
-    console.log('✅ Admin user created successfully:', adminUser.id)
     
     return ok(res, { 
       message: 'Admin user created successfully',

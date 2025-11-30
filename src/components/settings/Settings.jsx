@@ -63,12 +63,10 @@ const Settings = () => {
                 // Get saved settings from response
                 savedSettings = response?.data?.settings || settings;
                 saved = true;
-                console.log('✅ Settings saved to database via DatabaseAPI');
             } else if (window.api?.updateSettings) {
                 const response = await window.api.updateSettings(settings);
                 savedSettings = response?.data?.settings || settings;
                 saved = true;
-                console.log('✅ Settings saved to database via api');
             } else {
                 // Fallback: save to localStorage
                 localStorage.setItem('systemSettings', JSON.stringify(settings));
@@ -956,4 +954,3 @@ const Settings = () => {
 window.Settings = Settings;
 
 // Log that Settings component is loaded
-console.log('✅ Settings component loaded and exported to window.Settings');

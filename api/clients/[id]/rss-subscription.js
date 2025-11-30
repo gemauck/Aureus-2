@@ -15,12 +15,6 @@ async function handler(req, res) {
       return pathParts[0]
     })()
     
-    console.log('🔍 RSS Subscription API:', {
-      method: req.method,
-      url: req.url,
-      clientId,
-      params: req.params
-    })
 
     if (!clientId) {
       return badRequest(res, 'Client ID required')
@@ -51,7 +45,6 @@ async function handler(req, res) {
           select: { id: true, name: true, rssSubscribed: true }
         })
 
-        console.log(`🔄 Updating RSS subscription for ${currentClient?.name}: ${currentClient?.rssSubscribed} -> ${subscribed}`)
 
         // Update client's RSS subscription status
         const updated = await prisma.client.update({
@@ -67,7 +60,6 @@ async function handler(req, res) {
         })
 
         // Verify the update was successful
-        console.log(`✅ RSS subscription updated for ${updated.name}: ${updated.rssSubscribed} (was: ${currentClient?.rssSubscribed})`)
         
         return ok(res, { 
           client: updated,

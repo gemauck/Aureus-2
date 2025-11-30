@@ -18,7 +18,6 @@
         
         log(...args) {
             if (!this.performanceMode && this.enabled) {
-                console.log(...args);
             }
         },
         

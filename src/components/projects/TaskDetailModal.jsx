@@ -69,13 +69,6 @@ const TaskDetailModal = ({
     // Sync all task data when task prop changes - CRITICAL for persistence
     useEffect(() => {
         if (task) {
-            console.log('🔄 TaskDetailModal: Syncing task data from prop', {
-                taskId: task.id,
-                commentsCount: task.comments?.length || 0,
-                attachmentsCount: task.attachments?.length || 0,
-                checklistCount: task.checklist?.length || 0,
-                tagsCount: task.tags?.length || 0
-            });
             
             // Sync comments
             if (Array.isArray(task.comments)) {
@@ -417,7 +410,6 @@ const TaskDetailModal = ({
                                 }
                             })
                         });
-                        console.log(`✅ Comment notification sent to assignee ${assigneeUser.name}`);
                     }
                 }
                 
@@ -450,7 +442,6 @@ const TaskDetailModal = ({
                                     }
                                 })
                             });
-                            console.log(`✅ Comment notification sent to subscriber ${subscriber.name}`);
                         } catch (error) {
                             console.error(`❌ Failed to send comment notification to subscriber ${subscriber.name}:`, error);
                         }

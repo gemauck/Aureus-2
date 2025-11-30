@@ -11,7 +11,6 @@ import { sendEmail } from '../_lib/email.js'
 
 async function sendDailyLeaveNotifications() {
   try {
-    console.log('📧 Starting daily leave notification process...')
 
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -42,7 +41,6 @@ async function sendDailyLeaveNotifications() {
     })
 
     if (leaveApplications.length === 0) {
-      console.log('✅ No employees on leave today')
       return
     }
 
@@ -111,8 +109,6 @@ async function sendDailyLeaveNotifications() {
 
     await Promise.all(emailPromises)
 
-    console.log(`✅ Daily leave notification sent to ${allUsers.length} users`)
-    console.log(`📊 ${leaveApplications.length} employee(s) on leave today`)
   } catch (error) {
     console.error('❌ Error sending daily leave notifications:', error)
     throw error
@@ -123,7 +119,6 @@ async function sendDailyLeaveNotifications() {
 if (import.meta.url === `file://${process.argv[1]}`) {
   sendDailyLeaveNotifications()
     .then(() => {
-      console.log('✅ Daily leave notification process completed')
       process.exit(0)
     })
     .catch(error => {

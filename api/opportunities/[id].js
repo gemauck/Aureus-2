@@ -7,11 +7,6 @@ import { withLogging } from '../_lib/logger.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔍 [ID] Handler called:', {
-      method: req.method,
-      url: req.url,
-      params: req.params
-    })
     
     // Extract ID from params or URL (strip query parameters)
     const urlPath = req.url.split('?')[0].split('#')[0]
@@ -21,7 +16,6 @@ async function handler(req, res) {
       return badRequest(res, 'Opportunity ID required')
     }
     
-    console.log('🔍 Processing opportunity ID:', id)
     
     const userId = req.user?.sub || null
     let validUserId = null
@@ -74,8 +68,6 @@ async function handler(req, res) {
           parsedOpportunity.proposals = []
         }
         
-        console.log('✅ Opportunity retrieved successfully:', opportunity.id)
-        console.log('✅ Parsed proposals count:', Array.isArray(parsedOpportunity.proposals) ? parsedOpportunity.proposals.length : 'not an array')
         return ok(res, { opportunity: parsedOpportunity })
       } catch (dbError) {
         console.error('❌ Database error getting opportunity:', dbError)
@@ -85,14 +77,6 @@ async function handler(req, res) {
     
     if (req.method === 'PUT') {
       const body = req.body || {}
-      console.log('🔍 [ID] PUT Request received:', {
-        id,
-        body,
-        bodyKeys: Object.keys(body),
-        stage: body.stage,
-        stageType: typeof body.stage,
-        rawBody: JSON.stringify(body)
-      })
       
       const updateData = {
         title: body.title,
@@ -110,8 +94,6 @@ async function handler(req, res) {
         }
       })
       
-      console.log('🔍 Updating opportunity with data:', updateData)
-      console.log('🔍 Final updateData keys:', Object.keys(updateData))
       
       try {
         // First, check if opportunity exists
@@ -120,21 +102,10 @@ async function handler(req, res) {
           console.error('❌ Opportunity not found:', id)
           return notFound(res, `Opportunity with ID ${id} not found`)
         }
-        console.log('✅ Opportunity found:', {
-          id: existing.id,
-          currentStage: existing.stage,
-          newStage: updateData.stage
-        })
         
         const opportunity = await prisma.opportunity.update({ 
           where: { id }, 
           data: updateData 
-        })
-        console.log('✅ Opportunity updated successfully:', {
-          id: opportunity.id,
-          oldStage: existing.stage,
-          newStage: opportunity.stage,
-          title: opportunity.title
         })
         
         // Parse proposals before returning
@@ -176,12 +147,10 @@ async function handler(req, res) {
     }
     
     if (req.method === 'DELETE') {
-      console.log('🗑️ Deleting opportunity:', id)
       try {
         await prisma.opportunity.delete({ 
           where: { id } 
         })
-        console.log('✅ Opportunity deleted successfully:', id)
         return ok(res, { deleted: true })
       } catch (dbError) {
         console.error('❌ Database error deleting opportunity:', dbError)

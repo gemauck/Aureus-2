@@ -83,12 +83,10 @@ if (typeof window !== 'undefined') {
         if (!window.storage) {
             console.error('❌ CRITICAL: window.storage not available after core bundle');
         } else {
-            console.log('✅ window.storage available:', Object.keys(window.storage));
         }
         if (!window.PERMISSION_CATEGORIES) {
             console.warn('⚠️ PERMISSION_CATEGORIES not loaded - permissions modal may not work correctly');
         } else {
-            console.log('✅ PERMISSION_CATEGORIES loaded:', Object.keys(window.PERMISSION_CATEGORIES).length, 'categories');
         }
     } catch (error) {
         console.error('❌ Core bundle diagnostics failed:', error);

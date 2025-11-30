@@ -1,6 +1,5 @@
 // Use React from window
 if (window.debug && !window.debug.performanceMode) {
-    console.log('🔍 MainLayout.jsx: Script is executing...');
 }
 const { useState } = React;
 
@@ -104,7 +103,6 @@ const MainLayout = () => {
     // Handle browser back/forward buttons
     React.useEffect(() => {
         const handlePopState = (event) => {
-            console.log('🔄 MainLayout: Browser navigation:', event.state);
             if (event.state && event.state.page) {
                 setCurrentPage(event.state.page);
             } else {
@@ -176,7 +174,6 @@ const MainLayout = () => {
             );
             if (isValidComponent) {
                 if (!clientsComponentReady) {
-                    console.log('✅ MainLayout: Clients component became available', ClientsComponent);
                     setClientsComponentReady(true);
                 }
                 return true;
@@ -237,7 +234,6 @@ const MainLayout = () => {
             const isValidComponent = NotificationCenterComponent && typeof NotificationCenterComponent === 'function';
             if (isValidComponent) {
                 if (!notificationCenterReady) {
-                    console.log('✅ MainLayout: NotificationCenter component became available');
                     setNotificationCenterReady(true);
                 }
                 return true;
@@ -298,7 +294,6 @@ const MainLayout = () => {
         const checkProjects = () => {
             const ProjectsComponent = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple;
             if (ProjectsComponent && !projectsComponentReady) {
-                console.log('✅ MainLayout: Projects component became available');
                 setProjectsComponentReady(true);
             }
         };
@@ -333,12 +328,6 @@ const MainLayout = () => {
     // Log component availability on mount (only in debug mode)
     React.useEffect(() => {
         if (window.debug && !window.debug.performanceMode) {
-            console.log('🔍 MainLayout: Users component check', {
-                hasUserManagement: typeof window.UserManagement !== 'undefined',
-                hasUsers: typeof window.Users !== 'undefined',
-                currentUser: user,
-                userRole: user?.role
-            });
         }
     }, []);
     const PasswordChangeModal = window.PasswordChangeModal;
@@ -378,11 +367,9 @@ const MainLayout = () => {
         if (hasUser && !user.role && window.useAuth && !refreshingRole) {
             const { refreshUser } = window.useAuth();
             if (refreshUser) {
-                console.log('🔄 User missing role, refreshing from API...');
                 setRefreshingRole(true);
                 refreshUser().then((refreshedUser) => {
                     if (refreshedUser?.role) {
-                        console.log('✅ Role refreshed:', refreshedUser.role);
                     }
                     // Stop allowing fallback after 3 seconds
                     setTimeout(() => setRefreshingRole(false), 3000);
@@ -644,7 +631,6 @@ const MainLayout = () => {
                         {/* Hamburger Menu Button - Show on mobile, toggle sidebar */}
                         <button 
                             onClick={() => {
-                                console.log('🍔 Hamburger clicked, sidebarOpen:', sidebarOpen, 'isMobile:', isMobile, 'window.innerWidth:', window.innerWidth);
                                 // Toggle sidebar on mobile - when open, clicking closes it
                                 const newState = !sidebarOpen;
                                 setSidebarOpen(newState);
@@ -868,7 +854,6 @@ const MainLayout = () => {
 // Make available globally
 try {
     window.MainLayout = MainLayout;
-    console.log('✅ MainLayout.jsx loaded and registered on window.MainLayout', typeof window.MainLayout);
     
     // Verify dependencies
     if (!window.React) console.error('❌ React not available when MainLayout.jsx executed');

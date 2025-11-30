@@ -404,7 +404,6 @@ try {
     window.dispatchEvent(new CustomEvent('componentLoaded', { 
         detail: { component: 'SarsMonitoring' } 
     }));
-    console.log('✅ SarsMonitoring component registered and event dispatched');
 } catch (error) {
     console.warn('⚠️ Failed to dispatch componentLoaded event:', error);
 }

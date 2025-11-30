@@ -8,7 +8,6 @@ class SystemTestRunner {
 
     // Run comprehensive system tests
     async runSystemTests() {
-        console.log('🧪 Starting Comprehensive System Tests...');
         this.isRunning = true;
         
         try {
@@ -52,7 +51,6 @@ class SystemTestRunner {
 
     // Test Enhanced State Manager Initialization
     async testStateManagerInitialization() {
-        console.log('\n🧪 Testing Enhanced State Manager Initialization...');
         
         try {
             if (!window.EnhancedStateManager) {
@@ -76,7 +74,6 @@ class SystemTestRunner {
                 throw new Error('Operation status not working correctly');
             }
             
-            console.log('✅ Enhanced State Manager initialization test passed');
             this.testResults.push({ test: 'State Manager Initialization', status: 'PASSED' });
             
         } catch (error) {
@@ -87,7 +84,6 @@ class SystemTestRunner {
 
     // Test Enhanced API Wrapper Initialization
     async testAPIWrapperInitialization() {
-        console.log('\n🧪 Testing Enhanced API Wrapper Initialization...');
         
         try {
             if (!window.EnhancedAPIWrapper) {
@@ -108,7 +104,6 @@ class SystemTestRunner {
                 throw new Error('Request ID generation not working correctly');
             }
             
-            console.log('✅ Enhanced API Wrapper initialization test passed');
             this.testResults.push({ test: 'API Wrapper Initialization', status: 'PASSED' });
             
         } catch (error) {
@@ -119,7 +114,6 @@ class SystemTestRunner {
 
     // Test Data Validation
     async testDataValidation() {
-        console.log('\n🧪 Testing Data Validation...');
         
         try {
             const stateManager = window.EnhancedStateManager;
@@ -149,7 +143,6 @@ class SystemTestRunner {
                 throw new Error('Invalid client data passed validation');
             }
             
-            console.log('✅ Data validation test passed');
             this.testResults.push({ test: 'Data Validation', status: 'PASSED' });
             
         } catch (error) {
@@ -160,7 +153,6 @@ class SystemTestRunner {
 
     // Test CRUD Operations
     async testCRUDOperations() {
-        console.log('\n🧪 Testing CRUD Operations...');
         
         try {
             const stateManager = window.EnhancedStateManager;
@@ -214,7 +206,6 @@ class SystemTestRunner {
                 throw new Error('Client not deleted from state');
             }
             
-            console.log('✅ CRUD operations test passed');
             this.testResults.push({ test: 'CRUD Operations', status: 'PASSED' });
             
         } catch (error) {
@@ -225,7 +216,6 @@ class SystemTestRunner {
 
     // Test Optimistic Updates
     async testOptimisticUpdates() {
-        console.log('\n🧪 Testing Optimistic Updates...');
         
         try {
             const stateManager = window.EnhancedStateManager;
@@ -255,7 +245,6 @@ class SystemTestRunner {
                 throw new Error('Optimistic update data mismatch');
             }
             
-            console.log('✅ Optimistic updates test passed');
             this.testResults.push({ test: 'Optimistic Updates', status: 'PASSED' });
             
         } catch (error) {
@@ -266,7 +255,6 @@ class SystemTestRunner {
 
     // Test Error Handling
     async testErrorHandling() {
-        console.log('\n🧪 Testing Error Handling...');
         
         try {
             const stateManager = window.EnhancedStateManager;
@@ -302,7 +290,6 @@ class SystemTestRunner {
                 window.fetch = originalFetch;
             }
             
-            console.log('✅ Error handling test passed');
             this.testResults.push({ test: 'Error Handling', status: 'PASSED' });
             
         } catch (error) {
@@ -313,7 +300,6 @@ class SystemTestRunner {
 
     // Test Offline Mode
     async testOfflineMode() {
-        console.log('\n🧪 Testing Offline Mode...');
         
         try {
             const apiWrapper = window.EnhancedAPIWrapper;
@@ -337,7 +323,6 @@ class SystemTestRunner {
                 window.fetch = originalFetch;
             }
             
-            console.log('✅ Offline mode test passed');
             this.testResults.push({ test: 'Offline Mode', status: 'PASSED' });
             
         } catch (error) {
@@ -348,7 +333,6 @@ class SystemTestRunner {
 
     // Test Concurrent Operations
     async testConcurrentOperations() {
-        console.log('\n🧪 Testing Concurrent Operations...');
         
         try {
             const stateManager = window.EnhancedStateManager;
@@ -389,7 +373,6 @@ class SystemTestRunner {
                 throw new Error(`Expected ${clientCount} clients in state, found ${foundClients.length}`);
             }
             
-            console.log('✅ Concurrent operations test passed');
             this.testResults.push({ test: 'Concurrent Operations', status: 'PASSED' });
             
         } catch (error) {
@@ -400,7 +383,6 @@ class SystemTestRunner {
 
     // Test Real-time Sync
     async testRealTimeSync() {
-        console.log('\n🧪 Testing Real-time Sync...');
         
         try {
             const stateManager = window.EnhancedStateManager;
@@ -434,7 +416,6 @@ class SystemTestRunner {
             // Unsubscribe
             unsubscribe();
             
-            console.log('✅ Real-time sync test passed');
             this.testResults.push({ test: 'Real-time Sync', status: 'PASSED' });
             
         } catch (error) {
@@ -445,7 +426,6 @@ class SystemTestRunner {
 
     // Test UI Integration
     async testUIIntegration() {
-        console.log('\n🧪 Testing UI Integration...');
         
         try {
             // Check if Clients component is available
@@ -456,7 +436,6 @@ class SystemTestRunner {
             // Check if enhanced save functions are available
             const clientsElement = document.querySelector('[data-testid="clients-component"]');
             if (!clientsElement) {
-                console.log('⚠️ Clients component not found in DOM, but component exists');
             }
             
             // Test if enhanced state management is integrated
@@ -468,7 +447,6 @@ class SystemTestRunner {
                 throw new Error('Enhanced API wrapper not integrated');
             }
             
-            console.log('✅ UI integration test passed');
             this.testResults.push({ test: 'UI Integration', status: 'PASSED' });
             
         } catch (error) {
@@ -483,27 +461,17 @@ class SystemTestRunner {
         const passedTests = this.testResults.filter(r => r.status === 'PASSED').length;
         const failedTests = totalTests - passedTests;
         
-        console.log('\n📊 SYSTEM TEST REPORT');
-        console.log('====================');
-        console.log(`Total Tests: ${totalTests}`);
-        console.log(`Passed: ${passedTests}`);
-        console.log(`Failed: ${failedTests}`);
-        console.log(`Success Rate: ${((passedTests / totalTests) * 100).toFixed(1)}%`);
         
         if (failedTests > 0) {
-            console.log('\n❌ FAILED TESTS:');
             this.testResults
                 .filter(r => r.status === 'FAILED')
                 .forEach(r => {
-                    console.log(`  - ${r.test}: ${r.error}`);
                 });
         }
         
-        console.log('\n✅ PASSED TESTS:');
         this.testResults
             .filter(r => r.status === 'PASSED')
             .forEach(r => {
-                console.log(`  - ${r.test}`);
             });
         
         // Store results globally for debugging

@@ -25,12 +25,6 @@ const loadJobCards = async () => {
             .replace(/\s*inc\.?/gi, '')
             .trim();
         
-        console.log('🔍 Loading job cards for client:', {
-            clientId: clientIdToMatch,
-            clientName: client.name,
-            normalizedName: normalizedClientName,
-            baseName: baseName
-        });
         
         // ALWAYS fetch ALL job cards for maximum reliability
         let allJobCards = [];
@@ -45,7 +39,6 @@ const loadJobCards = async () => {
             if (response.ok) {
                 const data = await response.json();
                 allJobCards = data.jobCards || [];
-                console.log(`📋 Fetched ALL job cards: ${allJobCards.length} total`);
             } else {
                 console.error('Failed to fetch job cards:', response.statusText);
                 setJobCards([]);
@@ -61,7 +54,6 @@ const loadJobCards = async () => {
         const clientJobCards = allJobCards.filter(jc => {
             // 1. Exact clientId match (highest priority)
             if (jc.clientId === clientIdToMatch) {
-                console.log('✅ Matched by clientId:', jc.jobCardNumber, '(', jc.clientId, ')');
                 return true;
             }
             
@@ -73,7 +65,6 @@ const loadJobCards = async () => {
             
             // 3. Exact case-insensitive name match
             if (normalizedJcClientName === normalizedClientName) {
-                console.log('✅ Matched by exact name:', jc.jobCardNumber, '(', jcClientName, ')');
                 return true;
             }
             
@@ -86,31 +77,26 @@ const loadJobCards = async () => {
                     .trim();
                 
                 if (jcBaseName === baseName && jcBaseName.length > 0) {
-                    console.log('✅ Matched by base name:', jc.jobCardNumber, '(', jcClientName, '→', jcBaseName, ')');
                     return true;
                 }
             }
             
             // 5. Substring matches (minimum 5 chars to avoid false positives)
             if (normalizedClientName.length >= 5 && normalizedJcClientName.includes(normalizedClientName)) {
-                console.log('✅ Matched by substring:', jc.jobCardNumber, '(', jcClientName, 'contains', client.name, ')');
                 return true;
             }
             
             if (normalizedJcClientName.length >= 5 && normalizedClientName.includes(normalizedJcClientName)) {
-                console.log('✅ Matched by reverse substring:', jc.jobCardNumber);
                 return true;
             }
             
             if (baseName && baseName.length >= 5 && normalizedJcClientName.includes(baseName)) {
-                console.log('✅ Matched by base substring:', jc.jobCardNumber);
                 return true;
             }
             
             return false;
         });
         
-        console.log(`✅ Final result: ${clientJobCards.length} job cards found for client`);
         
         if (clientJobCards.length === 0 && allJobCards.length > 0) {
             console.warn('⚠️ No matches found. Sample job cards in DB:', allJobCards.slice(0, 5).map(jc => ({

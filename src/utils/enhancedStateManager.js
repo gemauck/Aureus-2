@@ -58,7 +58,6 @@ class EnhancedStateManager {
             timestamp: new Date().toISOString()
         });
         
-        console.log(`🔄 State updated for ${entityType}:`, data.length, 'items');
     }
 
     // Enhanced entity update with optimistic updates and conflict resolution
@@ -71,7 +70,6 @@ class EnhancedStateManager {
             skipConflictResolution = false
         } = options;
 
-        console.log(`🔄 Updating ${entityType} ${id}:`, updateData);
 
         // Validate data before processing
         if (validateBeforeSave) {
@@ -129,7 +127,6 @@ class EnhancedStateManager {
             generateId = true
         } = options;
 
-        console.log(`🆕 Creating ${entityType}:`, createData);
 
         // Validate data before processing
         if (validateBeforeSave) {
@@ -182,7 +179,6 @@ class EnhancedStateManager {
             cascade = true
         } = options;
 
-        console.log(`🗑️ Deleting ${entityType} ${id}`);
 
         // Get current entity
         const currentEntities = this.getState(entityType);
@@ -249,7 +245,6 @@ class EnhancedStateManager {
             timestamp: new Date().toISOString()
         });
 
-        console.log(`✨ Optimistic update applied for ${entityType} ${entityId}`);
     }
 
     // Rollback optimistic update
@@ -273,7 +268,6 @@ class EnhancedStateManager {
         }
 
         this.optimisticUpdates.delete(operationId);
-        console.log(`🔄 Rolled back optimistic update for ${entityType} ${entityId}`);
     }
 
     // Process operation queue
@@ -296,11 +290,9 @@ class EnhancedStateManager {
         const { id, type, entityType, entityId, data, retryOnFailure } = operation;
 
         try {
-            console.log(`🔄 Executing ${type} operation for ${entityType} ${entityId}`);
 
             // Check if sync is in progress for this entity type
             if (this.syncInProgress.get(entityType)) {
-                console.log(`⏳ Sync in progress for ${entityType}, queuing operation`);
                 this.operationQueue.unshift(operation); // Put back at front
                 return;
             }
@@ -328,7 +320,6 @@ class EnhancedStateManager {
             // Update last sync timestamp
             this.lastSyncTimestamp.set(entityType, new Date().toISOString());
 
-            console.log(`✅ Operation ${type} completed for ${entityType} ${entityId}`);
 
         } catch (error) {
             console.error(`❌ Operation ${type} failed for ${entityType} ${entityId}:`, error);
@@ -338,7 +329,6 @@ class EnhancedStateManager {
                 operation.retryCount++;
                 this.retryAttempts.set(id, operation.retryCount);
                 
-                console.log(`🔄 Retrying operation ${type} for ${entityType} ${entityId} (attempt ${operation.retryCount})`);
                 
                 // Add delay before retry
                 setTimeout(() => {
@@ -450,7 +440,6 @@ class EnhancedStateManager {
 
         // For now, prioritize server data (last-write-wins)
         // In a production system, you might want to implement more sophisticated conflict resolution
-        console.log(`⚠️ Conflict detected for ${entityType} ${localData.id}, using server data`);
         
         return serverData;
     }
@@ -511,7 +500,6 @@ class EnhancedStateManager {
             this.auditLog = this.auditLog.slice(-1000);
         }
 
-        console.log(`📝 Audit: ${action} on ${entityType}`, details);
     }
 
     // Subscribe to state changes
@@ -521,7 +509,6 @@ class EnhancedStateManager {
         }
         this.subscribers.get(entityType).add(callback);
         
-        console.log(`📡 Subscribed to ${entityType} updates`);
     }
 
     // Unsubscribe from state changes
@@ -530,7 +517,6 @@ class EnhancedStateManager {
             this.subscribers.get(entityType).delete(callback);
         }
         
-        console.log(`📡 Unsubscribed from ${entityType} updates`);
     }
 
     // Notify subscribers
@@ -565,7 +551,6 @@ class EnhancedStateManager {
 
     // Force sync all data
     async forceSyncAll() {
-        console.log('🔄 Force syncing all data...');
         
         const entityTypes = ['clients', 'leads', 'projects', 'invoices', 'timeEntries', 'users'];
         
@@ -574,7 +559,6 @@ class EnhancedStateManager {
                 this.syncInProgress.set(entityType, true);
                 const data = await this.syncWithServer('GET', `/${entityType}`);
                 this.setState(entityType, data.data || data[entityType] || []);
-                console.log(`✅ Synced ${entityType}:`, data.data?.length || data[entityType]?.length || 0);
             } catch (error) {
                 console.error(`❌ Failed to sync ${entityType}:`, error);
             } finally {
@@ -582,7 +566,6 @@ class EnhancedStateManager {
             }
         }
         
-        console.log('✅ Force sync completed');
     }
 
     // Clear all data
@@ -599,7 +582,6 @@ class EnhancedStateManager {
         
         // Debugging disabled
         if (window.debug && window.debug.enabled) {
-            console.log('🧹 All state cleared');
         }
     }
 }
@@ -610,7 +592,6 @@ window.EnhancedStateManager = new EnhancedStateManager();
 // Debug function - disabled by default
 window.debugEnhancedState = () => {
     // Debugging disabled - uncomment to enable:
-    // console.log('🔍 Enhanced State Manager Debug:', window.EnhancedStateManager.getOperationStatus());
 };
 
 export default EnhancedStateManager;

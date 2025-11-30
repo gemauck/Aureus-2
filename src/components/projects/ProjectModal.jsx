@@ -41,9 +41,7 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
         const loadClients = async () => {
             try {
                 if (window.dataService && typeof window.dataService.getClients === 'function') {
-                    console.log('🔍 ProjectModal: Loading clients from dataService');
                     const savedClients = await window.dataService.getClients() || [];
-                    console.log('📋 ProjectModal: Clients loaded:', savedClients.length, savedClients);
                     setClients(savedClients);
                 } else {
                     console.warn('DataService not available for loading clients');
@@ -74,22 +72,13 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
         }
         
         setIsSaving(true);
-        console.log('💾 Saving project data:');
-        console.log('  - name:', formData.name);
-        console.log('  - client:', formData.client);
-        console.log('  - type:', formData.type);
-        console.log('  - hasName:', !!formData.name);
-        console.log('  - nameLength:', formData.name?.length);
-        console.log('  - full formData:', JSON.stringify(formData, null, 2));
         
         try {
             // If user is entering a new client name
             if (showNewClientInput && newClientName.trim()) {
                 const dataToSave = {...formData, client: newClientName.trim()};
-                console.log('💾 Saving with new client:', dataToSave);
                 await onSave(dataToSave);
             } else {
-                console.log('💾 Saving with existing client:', formData);
                 await onSave(formData);
             }
         } catch (error) {
@@ -102,13 +91,11 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
 
     const handleClientChange = (e) => {
         const value = e.target.value;
-        console.log('🔍 Client changed:', value);
         if (value === '__new__') {
             setShowNewClientInput(true);
             setNewClientName('');
         } else {
             setShowNewClientInput(false);
-            console.log('📝 Setting formData.client to:', value);
             setFormData({...formData, client: value});
         }
     };
@@ -319,7 +306,6 @@ try {
     window.dispatchEvent(new CustomEvent('componentLoaded', { 
         detail: { component: 'ProjectModal' } 
     }));
-    console.log('✅ ProjectModal component registered and event dispatched');
 } catch (error) {
     console.warn('⚠️ Failed to dispatch componentLoaded event:', error);
 }

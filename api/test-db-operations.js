@@ -5,10 +5,8 @@ import { withLogging } from './_lib/logger.js'
 
 async function handler(req, res) {
   try {
-    console.log('🧪 Testing basic database operations...')
     
     // First, run migration to fix schema issues
-    console.log('🔧 Running database migration to fix schema...')
     
     try {
       // Add missing columns to Client table
@@ -36,14 +34,11 @@ async function handler(req, res) {
       await prisma.$executeRaw`UPDATE "Project" SET "tasksList" = '[]' WHERE "tasksList" IS NULL`
       await prisma.$executeRaw`UPDATE "Project" SET "team" = '[]' WHERE "team" IS NULL`
       
-      console.log('✅ Database migration completed successfully')
     } catch (migrationError) {
-      console.log('Migration error (may be expected):', migrationError.message)
     }
     
     // Test 1: Simple query
     const userCount = await prisma.user.count()
-    console.log('✅ User count:', userCount)
     
     // Test 2: Try to create a minimal client
     const testClient = await prisma.client.create({
@@ -74,11 +69,9 @@ async function handler(req, res) {
         ownerId: null
       }
     })
-    console.log('✅ Test client created:', testClient.id)
     
     // Test 3: Clean up - delete the test client
     await prisma.client.delete({ where: { id: testClient.id } })
-    console.log('✅ Test client deleted')
     
     return ok(res, { 
       message: 'All database operations working!',

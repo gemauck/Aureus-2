@@ -18,11 +18,6 @@ const oauth2Client = new google.auth.OAuth2(
 
 async function handler(req, res) {
   try {
-    console.log('📅 Google Calendar API:', {
-      method: req.method,
-      url: req.url,
-      user: req.user?.sub
-    })
 
     const url = new URL(req.url, `http://${req.headers.host}`)
     const pathSegments = url.pathname.split('/').filter(Boolean)
@@ -133,7 +128,6 @@ async function handler(req, res) {
           resource: event
         })
 
-        console.log('✅ Google Calendar event created:', response.data.id)
 
         return ok(res, { 
           event: response.data,
