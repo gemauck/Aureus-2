@@ -3320,68 +3320,6 @@ const LeadDetailModal = ({
                                     ></textarea>
                                 </div>
 
-                                {/* Sites Section */}
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Sites</label>
-                                    <div className="space-y-2">
-                                        {((formData && formData.sites) || []).map((site, index) => (
-                                            <div key={index} className="flex gap-2">
-                                                <input 
-                                                    type="text" 
-                                                    value={typeof site === 'string' ? site : site.name || ''}
-                                                    onChange={(e) => {
-                                                        setFormData(prev => {
-                                                            const currentSites = prev?.sites || [];
-                                                            const newSites = [...currentSites];
-                                                            if (typeof site === 'string') {
-                                                                newSites[index] = e.target.value;
-                                                            } else {
-                                                                newSites[index] = { ...site, name: e.target.value };
-                                                            }
-                                                            const updated = {...prev, sites: newSites};
-                                                            formDataRef.current = updated;
-                                                            return updated;
-                                                        });
-                                                    }}
-                                                    className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
-                                                    placeholder="Site name or location"
-                                                />
-                                                <button 
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setFormData(prev => {
-                                                            const currentSites = prev?.sites || [];
-                                                            const newSites = currentSites.filter((_, i) => i !== index);
-                                                            const updated = {...prev, sites: newSites};
-                                                            formDataRef.current = updated;
-                                                            return updated;
-                                                        });
-                                                    }}
-                                                    className="px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                >
-                                                    <i className="fas fa-trash"></i>
-                                                </button>
-                                            </div>
-                                        ))}
-                                        <button 
-                                            type="button"
-                                            onClick={() => {
-                                                setFormData(prev => {
-                                                    const currentSites = prev?.sites || [];
-                                                    const newSites = [...currentSites, ''];
-                                                    const updated = {...prev, sites: newSites};
-                                                    formDataRef.current = updated;
-                                                    return updated;
-                                                });
-                                            }}
-                                            className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                                        >
-                                            <i className="fas fa-plus mr-1"></i>
-                                            Add Site
-                                        </button>
-                                    </div>
-                                </div>
-
                                 {/* RSS News Feed Subscription */}
                                 <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                                     <div className="flex items-center justify-between">
