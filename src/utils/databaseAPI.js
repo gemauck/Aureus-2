@@ -976,7 +976,7 @@ const DatabaseAPI = {
 
     // TASK OPERATIONS
     async getTasks(status = null, projectId = null) {
-        let endpoint = '/api/tasks';
+        let endpoint = '/tasks';
         const params = [];
         if (status) params.push(`status=${encodeURIComponent(status)}`);
         if (projectId) params.push(`projectId=${encodeURIComponent(projectId)}`);
