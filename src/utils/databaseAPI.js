@@ -35,6 +35,7 @@ const DatabaseAPI = {
     _lastRequestTimestamp: 0,
     _rateLimitResumeAt: 0,
     _rateLimitCount: 0, // Track consecutive rate limit errors
+    _lastRateLimitLog: null, // Track last time we logged rate limit message
     
     // Clear old cache entries periodically
     _cleanCache() {
@@ -61,10 +62,20 @@ const DatabaseAPI = {
             // Check if we're in a global rate limit backoff period
             if (this._rateLimitResumeAt > now) {
                 const waitTime = this._rateLimitResumeAt - now;
-                const waitSeconds = Math.round(waitTime / 1000);
-                console.log(`⏸️ Global rate limit active. Waiting ${waitSeconds}s before allowing requests...`);
+                // Only log occasionally to reduce noise (every 5 seconds)
+                if (!this._lastRateLimitLog || (now - this._lastRateLimitLog) > 5000) {
+                    const waitSeconds = Math.round(waitTime / 1000);
+                    const log = window.debug?.log || (() => {});
+                    log(`⏸️ Global rate limit active. Waiting ${waitSeconds}s before allowing requests...`);
+                    this._lastRateLimitLog = now;
+                }
                 setTimeout(() => tryAcquire(resolve), Math.min(waitTime, 1000)); // Check every second
                 return;
+            }
+            
+            // Reset rate limit log timestamp when no longer rate limited
+            if (this._lastRateLimitLog && this._rateLimitResumeAt <= now) {
+                this._lastRateLimitLog = null;
             }
             
             const nextAllowedTime = Math.max(
@@ -385,6 +396,12 @@ const DatabaseAPI = {
                     // Track rate limit occurrences
                     this._rateLimitCount += 1;
                     
+                    // Reduce concurrent requests when rate limited
+                    if (this._rateLimitCount >= 2) {
+                        this._maxConcurrentRequests = 1; // Reduce to 1 concurrent request
+                        this._minRequestInterval = 1000; // Increase to 1 second between requests
+                    }
+                    
                     const retryAfterHeader = response.headers.get('Retry-After');
                     let retryDelay = this._parseRetryAfter(retryAfterHeader);
                     
@@ -405,7 +422,14 @@ const DatabaseAPI = {
                     const errorMessage = await this._readErrorMessage(response);
                     const finalMessage = errorMessage || 'Rate limit exceeded. Please try again shortly.';
                     const retrySeconds = Math.round(retryDelay / 1000);
-                    console.warn(`⏳ Rate limit encountered on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}, consecutive: ${this._rateLimitCount}). Retrying in ${retrySeconds}s...`, finalMessage);
+                    
+                    // Only log first rate limit error to reduce noise - use debug log for subsequent ones
+                    const log = window.debug?.log || (() => {});
+                    if (this._rateLimitCount === 1 || attempt === 0) {
+                        console.warn(`⏳ Rate limit encountered on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}, consecutive: ${this._rateLimitCount}). Retrying in ${retrySeconds}s...`, finalMessage);
+                    } else {
+                        log(`⏳ Rate limit encountered on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}, consecutive: ${this._rateLimitCount}). Retrying in ${retrySeconds}s...`);
+                    }
                     
                     if (attempt < maxRetries) {
                         await this._sleep(retryDelay);
@@ -417,8 +441,20 @@ const DatabaseAPI = {
                     throw new Error(finalMessage);
                 }
                 
-                // Reset rate limit count on successful request
+                // Reset rate limit count and restore normal limits on successful request
                 if (response.ok) {
+                    if (this._rateLimitCount > 0) {
+                        // Gradually restore normal limits after successful requests
+                        if (this._rateLimitCount > 3) {
+                            // After many rate limits, restore slowly
+                            this._maxConcurrentRequests = 1;
+                            this._minRequestInterval = 750;
+                        } else {
+                            // Restore to normal after a few successful requests
+                            this._maxConcurrentRequests = 2;
+                            this._minRequestInterval = 500;
+                        }
+                    }
                     this._rateLimitCount = 0;
                 }
 
@@ -2168,22 +2204,55 @@ const DatabaseAPI = {
     },
     
     // Clear all caches - useful for forcing fresh data loads
-    // Added throttling to prevent excessive cache clearing
+    // Added throttling and batching to prevent excessive cache clearing
     _lastCacheClear: 0,
     _cacheClearThrottle: 2000, // Minimum 2 seconds between cache clears
-    clearCache() {
+    _pendingCacheClear: null,
+    _cacheClearDebounceTimer: null,
+    clearCache(endpoint = null) {
         const now = Date.now();
         const timeSinceLastClear = now - this._lastCacheClear;
         
+        // If specific endpoint provided, use endpoint cache clearing instead
+        if (endpoint) {
+            return this.clearEndpointCache(endpoint);
+        }
+        
         // Throttle cache clearing to prevent excessive API calls
         if (timeSinceLastClear < this._cacheClearThrottle) {
-            const waitTime = Math.round((this._cacheClearThrottle - timeSinceLastClear) / 1000);
-            console.log(`⏸️ Cache clear throttled. Please wait ${waitTime}s before clearing again.`);
+            // Silently throttle - reduce log noise
+            // Only log if it's been more than 5 seconds (unusual situation)
+            if (timeSinceLastClear > 5000) {
+                const waitTime = Math.round((this._cacheClearThrottle - timeSinceLastClear) / 1000);
+                const log = window.debug?.log || (() => {});
+                log(`⏸️ Cache clear throttled. Please wait ${waitTime}s before clearing again.`);
+            }
+            
+            // Schedule a deferred clear for when throttle period expires
+            if (!this._pendingCacheClear) {
+                const waitTime = this._cacheClearThrottle - timeSinceLastClear;
+                this._pendingCacheClear = setTimeout(() => {
+                    this._pendingCacheClear = null;
+                    this._lastCacheClear = Date.now();
+                    this._performCacheClear();
+                }, waitTime);
+            }
             return 0;
         }
         
+        // Clear any pending deferred clear
+        if (this._pendingCacheClear) {
+            clearTimeout(this._pendingCacheClear);
+            this._pendingCacheClear = null;
+        }
+        
         this._lastCacheClear = now;
-        console.log('🧹 Clearing DatabaseAPI caches...');
+        return this._performCacheClear();
+    },
+    
+    _performCacheClear() {
+        const log = window.debug?.log || (() => {});
+        log('🧹 Clearing DatabaseAPI caches...');
         let cleared = 0;
         
         if (this._responseCache) {
@@ -2201,7 +2270,7 @@ const DatabaseAPI = {
             this.cache.clear();
         }
         
-        console.log(`✅ DatabaseAPI cache cleared (${cleared} entries)`);
+        log(`✅ DatabaseAPI cache cleared (${cleared} entries)`);
         return cleared;
     },
     
