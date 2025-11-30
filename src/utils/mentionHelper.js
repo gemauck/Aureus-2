@@ -174,9 +174,11 @@ const MentionHelper = {
             if (window.EntityUrl) {
                 // Try to generate URL from metadata
                 if (metadata.projectId) {
-                    // If we have a task, link to the task; otherwise link to project
+                    // If we have a task, link to the task with parent project; otherwise link to project
                     if (metadata.taskId) {
                         entityUrl = window.EntityUrl.getEntityUrl('task', metadata.taskId, {
+                            parentId: metadata.projectId,
+                            parentType: 'project',
                             tab: 'comments'
                         });
                     } else {
@@ -190,6 +192,8 @@ const MentionHelper = {
                     });
                 } else if (metadata.opportunityId) {
                     entityUrl = window.EntityUrl.getEntityUrl('opportunity', metadata.opportunityId, {
+                        parentId: metadata.clientId,
+                        parentType: 'client',
                         tab: 'comments'
                     });
                 }

@@ -392,10 +392,12 @@ const TaskDetailModal = ({
                     );
                     
                     if (assigneeUser && assigneeUser.id !== currentUser.id && !mentionedUsers.find(m => m.id === assigneeUser.id)) {
-                        // Generate entity URL for the task
+                        // Generate entity URL for the task (nested under project)
                         let entityUrl = taskLink; // Fallback to old format
-                        if (window.EntityUrl && taskId) {
+                        if (window.EntityUrl && taskId && project?.id) {
                             entityUrl = window.EntityUrl.getEntityUrl('task', taskId, {
+                                parentId: project.id,
+                                parentType: 'project',
                                 tab: 'comments'
                             });
                         }

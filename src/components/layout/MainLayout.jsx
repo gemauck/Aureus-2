@@ -3,7 +3,7 @@ if (window.debug && !window.debug.performanceMode) {
 }
 const { useState } = React;
 
-const VALID_PAGES = ['dashboard', 'clients', 'projects', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking', 'my-tasks'];
+const VALID_PAGES = ['dashboard', 'clients', 'projects', 'tasks', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking', 'my-tasks'];
 const PUBLIC_ROUTES = ['/job-card', '/jobcard', '/accept-invitation', '/reset-password'];
 
 const MainLayout = () => {
@@ -91,9 +91,11 @@ const MainLayout = () => {
             setCurrentPage(nextPage);
             
             // Check if route contains an entity ID and open it
+            // Handle both simple URLs (/projects/123) and nested URLs (/projects/123/tasks/task456)
             if (route.segments && route.segments.length > 0 && window.EntityUrl) {
-                const entityId = route.segments[0];
-                const parsed = window.EntityUrl.parseEntityUrl(`/${nextPage}/${entityId}`);
+                // Build full path for parsing
+                const fullPath = `/${nextPage}/${route.segments.join('/')}`;
+                const parsed = window.EntityUrl.parseEntityUrl(fullPath);
                 if (parsed) {
                     // Dispatch event to open entity
                     setTimeout(() => {
@@ -101,12 +103,13 @@ const MainLayout = () => {
                             detail: {
                                 entityType: parsed.entityType,
                                 entityId: parsed.entityId,
-                                url: `/${nextPage}/${entityId}`,
+                                url: fullPath,
                                 options: {
                                     ...parsed.options,
                                     // Parse query params for tab/section
                                     tab: route.search?.get('tab') || parsed.options?.tab,
-                                    section: route.search?.get('section') || parsed.options?.section
+                                    section: route.search?.get('section') || parsed.options?.section,
+                                    commentId: route.search?.get('commentId') || parsed.options?.commentId
                                 }
                             }
                         }));
@@ -120,10 +123,10 @@ const MainLayout = () => {
         // Check if current route contains an entity ID and open it
         const currentRoute = routeState.getRoute();
         if (currentRoute.segments && currentRoute.segments.length > 0) {
-            // Check if this looks like an entity URL
+            // Check if this looks like an entity URL (supports nested URLs)
             if (window.EntityUrl) {
-                const entityId = currentRoute.segments[0];
-                const parsed = window.EntityUrl.parseEntityUrl(`/${currentRoute.page}/${entityId}`);
+                const fullPath = `/${currentRoute.page}/${currentRoute.segments.join('/')}`;
+                const parsed = window.EntityUrl.parseEntityUrl(fullPath);
                 if (parsed) {
                     // Dispatch event to open entity
                     setTimeout(() => {
@@ -131,8 +134,13 @@ const MainLayout = () => {
                             detail: {
                                 entityType: parsed.entityType,
                                 entityId: parsed.entityId,
-                                url: `/${currentRoute.page}/${entityId}`,
-                                options: parsed.options
+                                url: fullPath,
+                                options: {
+                                    ...parsed.options,
+                                    tab: currentRoute.search?.get('tab') || parsed.options?.tab,
+                                    section: currentRoute.search?.get('section') || parsed.options?.section,
+                                    commentId: currentRoute.search?.get('commentId') || parsed.options?.commentId
+                                }
                             }
                         }));
                     }, 100);

@@ -1544,10 +1544,12 @@ function initializeProjectDetail() {
                 return;
             }
             
-            // Generate entity URL for the task
+            // Generate entity URL for the task (nested under project)
             let entityUrl = taskLink; // Fallback to old format
-            if (window.EntityUrl && finalTaskId) {
+            if (window.EntityUrl && finalTaskId && project?.id) {
                 entityUrl = window.EntityUrl.getEntityUrl('task', finalTaskId, {
+                    parentId: project.id,
+                    parentType: 'project',
                     tab: 'comments'
                 });
             }

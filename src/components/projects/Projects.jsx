@@ -196,10 +196,10 @@ const Projects = () => {
                 }
             } else if (entityType === 'task') {
                 // For tasks, we need to find the parent project first
-                // This will be handled by ProjectDetail component when it loads
-                // We can navigate to the project and let ProjectDetail handle task selection
-                if (options?.projectId) {
-                    const project = projects.find(p => p.id === options.projectId);
+                // Tasks can be nested: /projects/{projectId}/tasks/{taskId}
+                const projectId = options?.projectId || options?.parentId;
+                if (projectId) {
+                    const project = projects.find(p => p.id === projectId);
                     if (project) {
                         setSelectedProject(project);
                         setViewingProject(project);
@@ -208,10 +208,42 @@ const Projects = () => {
                         // Dispatch event for ProjectDetail to handle task selection
                         setTimeout(() => {
                             window.dispatchEvent(new CustomEvent('openTask', {
-                                detail: { taskId: entityId, tab: options.tab || 'comments' }
+                                detail: { 
+                                    taskId: entityId, 
+                                    tab: options.tab || 'comments',
+                                    commentId: options.commentId
+                                }
                             }));
                         }, 200);
+                    } else {
+                        // Project not found, try to fetch it
+                        console.log(`Project ${projectId} not found in cache for task ${entityId}, attempting to fetch...`);
+                        try {
+                            if (window.DatabaseAPI?.getProject) {
+                                const response = await window.DatabaseAPI.getProject(projectId);
+                                const projectData = response?.data?.project || response?.project;
+                                if (projectData) {
+                                    setSelectedProject(projectData);
+                                    setViewingProject(projectData);
+                                    setShowModal(false);
+                                    
+                                    setTimeout(() => {
+                                        window.dispatchEvent(new CustomEvent('openTask', {
+                                            detail: { 
+                                                taskId: entityId, 
+                                                tab: options.tab || 'comments',
+                                                commentId: options.commentId
+                                            }
+                                        }));
+                                    }, 200);
+                                }
+                            }
+                        } catch (error) {
+                            console.error('Failed to load project for task:', error);
+                        }
                     }
+                } else {
+                    console.warn(`Task ${entityId} navigation: No project ID provided in options`);
                 }
             }
         };
