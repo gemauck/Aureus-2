@@ -280,31 +280,55 @@ const Teams = () => {
         if (currentTab === 'meeting-notes' && newTab !== 'meeting-notes') {
             const meetingNotesRef = window.ManagementMeetingNotesRef;
             if (meetingNotesRef?.current?.hasPendingSaves?.() || meetingNotesRef?.current?.isBlockingNavigation?.()) {
+                console.log('🚫 Tab switch BLOCKED - saves in progress...');
                 
                 // Show blocking state if not already shown
                 if (meetingNotesRef?.current?.flushPendingSaves) {
                     try {
-                        // Wait for saves to complete (with longer timeout)
-                        await Promise.race([
-                            meetingNotesRef.current.flushPendingSaves(),
-                            new Promise(resolve => setTimeout(resolve, 10000)) // 10 second timeout
-                        ]);
-                        // Wait a bit more to ensure all saves are fully processed
-                        await new Promise(resolve => setTimeout(resolve, 500));
+                        // Wait for saves to complete - NO TIMEOUT, wait for actual completion
+                        await meetingNotesRef.current.flushPendingSaves();
+                        
+                        // Verify saves are complete
+                        let verifyAttempts = 0;
+                        while ((meetingNotesRef?.current?.hasPendingSaves?.() || 
+                               meetingNotesRef?.current?.isBlockingNavigation?.()) && 
+                               verifyAttempts < 10) {
+                            await new Promise(resolve => setTimeout(resolve, 200));
+                            verifyAttempts++;
+                        }
+                        
+                        // Only switch if truly complete
+                        if (!meetingNotesRef?.current?.hasPendingSaves?.() && 
+                            !meetingNotesRef?.current?.isBlockingNavigation?.()) {
+                            console.log('✅ VERIFIED: All saves completed, switching tab');
+                            await new Promise(resolve => setTimeout(resolve, 300));
+                            setActiveTabState(newTab);
+                        } else {
+                            console.error('❌ BLOCKED: Saves not complete, preventing tab switch');
+                            // Don't switch - keep on meeting-notes tab
+                        }
                     } catch (error) {
                         console.error('Error waiting for saves before tab switch:', error);
+                        // On error, don't switch to be safe
                     }
                 } else {
-                    // If flushPendingSaves not available, wait a bit and check again
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    if (meetingNotesRef?.current?.hasPendingSaves?.()) {
+                    // If flushPendingSaves not available, wait and check
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    if (meetingNotesRef?.current?.hasPendingSaves?.() || 
+                        meetingNotesRef?.current?.isBlockingNavigation?.()) {
                         console.warn('⚠️ Still has pending saves after wait, blocking tab switch');
                         return; // Don't switch tabs
                     }
+                    setActiveTabState(newTab);
                 }
+            } else {
+                // No pending saves, allow immediate switch
+                setActiveTabState(newTab);
             }
+        } else {
+            // Not switching away from meeting-notes, allow immediate switch
+            setActiveTabState(newTab);
         }
-        setActiveTabState(newTab);
     }, []);
     const [selectedTeam, setSelectedTeam] = useState(() => {
         // Initialize from URL if available
