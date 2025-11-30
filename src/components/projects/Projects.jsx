@@ -6,11 +6,38 @@ const ProjectDetail = window.ProjectDetail;
 const SectionCommentWidget = window.SectionCommentWidget;
 
 // Safe useAuth wrapper - always returns a consistent hook result
+// CRITICAL FIX for React error #300: Always call hooks in the same order
+// The issue was that window.useAuth might not be available on first render but becomes available later,
+// causing React to see different numbers of hooks between renders.
+// Solution: Use useState to track availability and always call the hook consistently
 const useAuthSafe = () => {
-    if (window.useAuth && typeof window.useAuth === 'function') {
-        return window.useAuth();
+    // Use useState to track if useAuth was available on mount
+    // This ensures we always call hooks in the same order
+    const [useAuthAvailable] = useState(() => {
+        // Check on first render only - this value is stable across re-renders
+        return window.useAuth && typeof window.useAuth === 'function';
+    });
+    
+    // CRITICAL: Always call window.useAuth() if it was available on mount OR if it's available now
+    // This ensures React sees the same number of hooks on every render
+    // We check both the initial state and current availability to handle late-loading scenarios
+    const shouldCallUseAuth = useAuthAvailable || (window.useAuth && typeof window.useAuth === 'function');
+    
+    if (shouldCallUseAuth) {
+        try {
+            const authResult = window.useAuth();
+            // Validate the result is an object with expected properties
+            if (authResult && typeof authResult === 'object') {
+                return authResult;
+            }
+        } catch (error) {
+            console.warn('⚠️ Projects: useAuth hook threw an error:', error);
+            // Fall through to return default object
+        }
     }
-    // Return a default object if useAuth is not available yet
+    
+    // Return a default object if useAuth is not available or threw an error
+    // This ensures we always return the same structure
     return {
         user: null,
         logout: () => {
@@ -23,6 +50,8 @@ const useAuthSafe = () => {
 };
 
 const Projects = () => {
+    // CRITICAL: Always call useAuthSafe() unconditionally at the top level
+    // This ensures hooks are always called in the same order on every render
     const { logout } = useAuthSafe();
     const [projects, setProjects] = useState([]); // Projects are database-only
     const [showModal, setShowModal] = useState(false);

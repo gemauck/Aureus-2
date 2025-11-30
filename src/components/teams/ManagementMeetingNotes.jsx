@@ -2717,52 +2717,7 @@ const ManagementMeetingNotes = () => {
     return (
         <div className="space-y-4 relative">
             {/* Blocking Overlay - Prevents all navigation until saves complete */}
-            {isBlockingNavigation && (
-                <div 
-                    className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[99999]"
-                    style={{ pointerEvents: 'all' }}
-                    onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                    }}
-                >
-                    <div className={`bg-white rounded-lg p-8 max-w-md mx-4 text-center ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
-                        <div className="mb-4">
-                            <i className="fas fa-circle-notch fa-spin text-4xl text-blue-600"></i>
-                        </div>
-                        <h3 className={`text-xl font-bold mb-2 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
-                            Saving Your Changes
-                        </h3>
-                        <p className={`text-sm mb-4 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                            Please wait while we save all your changes to the database. Navigation is blocked to prevent data loss.
-                        </p>
-                        <div className="flex items-center justify-center gap-2 text-xs text-gray-500 mb-4">
-                            <span>Active saves: {activeSavePromises.current.size}</span>
-                            {pendingSaves.current.size > 0 && (
-                                <span>• Pending: {pendingSaves.current.size}</span>
-                            )}
-                            {Object.keys(pendingValues.current).length > 0 && pendingSaves.current.size === 0 && (
-                                <span>• Queued: {Object.keys(pendingValues.current).length}</span>
-                            )}
-                        </div>
-                        <button
-                            onClick={() => {
-                                console.warn('⚠️ User force-unblocked navigation');
-                                setIsBlockingNavigation(false);
-                                // Clear pending saves to prevent immediate re-blocking
-                                pendingSaves.current.clear();
-                            }}
-                            className={`px-4 py-2 text-sm rounded-lg font-medium transition ${
-                                isDark 
-                                    ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' 
-                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            }`}
-                        >
-                            Force Continue (May lose unsaved changes)
-                        </button>
-                    </div>
-                </div>
-            )}
+            {/* Navigation blocking happens silently - no messages shown */}
             
             {/* Header */}
             <div className={`rounded-xl border p-4 ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-white border-gray-200 shadow-sm'}`}>
