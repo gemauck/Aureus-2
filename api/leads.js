@@ -154,6 +154,7 @@ async function handler(req, res) {
                     tag: true
                   }
                 },
+                // Only include externalAgent if the column exists (check error code)
                 externalAgent: true,
                 // Include starredBy relation only if we have a valid userId
                 // If no validUserId, starredBy will be undefined and isStarred will be false
@@ -172,16 +173,65 @@ async function handler(req, res) {
               orderBy: { createdAt: 'desc' } 
             })
           } catch (relationError) {
-            // If relations fail, try query without relations
-            console.warn('⚠️ Query with relations failed, trying without relations:', relationError.message)
-            leads = await prisma.client.findMany({ 
-              where: { 
-                type: 'lead'
-              },
-              orderBy: { createdAt: 'desc' } 
-            })
-            // Add empty tags array to each lead
-            leads = leads.map(l => ({ ...l, tags: [], externalAgent: null }))
+            // Check if it's the externalAgentId column missing error
+            const isMissingColumnError = relationError.code === 'P2022' && 
+                                       relationError.message?.includes('externalAgentId')
+            
+            if (isMissingColumnError) {
+              // Try query without externalAgent relation
+              console.warn('⚠️ externalAgentId column missing, querying without externalAgent relation:', relationError.message)
+              try {
+                leads = await prisma.client.findMany({ 
+                  where: { 
+                    type: 'lead'
+                  },
+                  include: {
+                    tags: {
+                      include: {
+                        tag: true
+                      }
+                    },
+                    // Skip externalAgent relation
+                    ...(validUserId ? {
+                      starredBy: {
+                        where: {
+                          userId: validUserId
+                        },
+                        select: {
+                          id: true,
+                          userId: true
+                        }
+                      }
+                    } : {})
+                  },
+                  orderBy: { createdAt: 'desc' } 
+                })
+                // Add null externalAgent to each lead
+                leads = leads.map(l => ({ ...l, externalAgent: null }))
+              } catch (fallbackError) {
+                // If that also fails, try minimal query
+                console.warn('⚠️ Query with tags failed, trying minimal query:', fallbackError.message)
+                leads = await prisma.client.findMany({ 
+                  where: { 
+                    type: 'lead'
+                  },
+                  orderBy: { createdAt: 'desc' } 
+                })
+                // Add empty tags array and null externalAgent to each lead
+                leads = leads.map(l => ({ ...l, tags: [], externalAgent: null }))
+              }
+            } else {
+              // Other relation errors - try query without relations
+              console.warn('⚠️ Query with relations failed, trying without relations:', relationError.message)
+              leads = await prisma.client.findMany({ 
+                where: { 
+                  type: 'lead'
+                },
+                orderBy: { createdAt: 'desc' } 
+              })
+              // Add empty tags array to each lead
+              leads = leads.map(l => ({ ...l, tags: [], externalAgent: null }))
+            }
           }
           
           // DEBUG: Also check raw SQL to verify what's actually in database
@@ -257,6 +307,7 @@ async function handler(req, res) {
                       tag: true
                     }
                   },
+                  // Skip externalAgent relation in fallback (column may not exist)
                   ...(validUserId ? {
                     starredBy: {
                       where: {
@@ -281,25 +332,84 @@ async function handler(req, res) {
                 // If type is null/undefined/empty, skip (legacy data without type should not be treated as leads)
                 return false
               })
+              // Add null externalAgent to each lead
+              leads = leads.map(l => ({ ...l, externalAgent: null }))
               // Log lead details for debugging visibility issues
               if (leads.length > 0) {
                 const leadDetails = leads.map(l => ({ id: l.id, name: l.name, ownerId: l.ownerId || 'null' }))
               }
             } catch (fallbackRelationError) {
-              // Last resort: query without any relations
-              console.warn('⚠️ Fallback query with relations failed, trying minimal query:', fallbackRelationError.message)
-              const allRecords = await prisma.client.findMany({
-                orderBy: { createdAt: 'desc' }
-              })
-              // Filter to only leads and add empty tags
-              leads = allRecords
-                .filter(record => {
-                  if (record.type !== null && record.type !== undefined && record.type !== '') {
-                    return record.type === 'lead'
-                  }
-                  return false
+              // Check if it's the externalAgentId column missing error
+              const isMissingColumnError = fallbackRelationError.code === 'P2022' && 
+                                         fallbackRelationError.message?.includes('externalAgentId')
+              
+              if (isMissingColumnError) {
+                // Try query without externalAgent relation
+                console.warn('⚠️ externalAgentId column missing in fallback, querying without externalAgent relation')
+                try {
+                  const allRecords = await prisma.client.findMany({
+                    include: {
+                      tags: {
+                        include: {
+                          tag: true
+                        }
+                      },
+                      // Skip externalAgent relation
+                      ...(validUserId ? {
+                        starredBy: {
+                          where: {
+                            userId: validUserId
+                          },
+                          select: {
+                            id: true,
+                            userId: true
+                          }
+                        }
+                      } : {})
+                    },
+                    orderBy: { createdAt: 'desc' }
+                  })
+                  // Filter to only leads and add null externalAgent
+                  leads = allRecords
+                    .filter(record => {
+                      if (record.type !== null && record.type !== undefined && record.type !== '') {
+                        return record.type === 'lead'
+                      }
+                      return false
+                    })
+                    .map(l => ({ ...l, externalAgent: null }))
+                } catch (minimalError) {
+                  // Last resort: query without any relations
+                  console.warn('⚠️ Fallback query with tags failed, trying minimal query:', minimalError.message)
+                  const allRecords = await prisma.client.findMany({
+                    orderBy: { createdAt: 'desc' }
+                  })
+                  // Filter to only leads and add empty tags and null externalAgent
+                  leads = allRecords
+                    .filter(record => {
+                      if (record.type !== null && record.type !== undefined && record.type !== '') {
+                        return record.type === 'lead'
+                      }
+                      return false
+                    })
+                    .map(l => ({ ...l, tags: [], externalAgent: null }))
+                }
+              } else {
+                // Last resort: query without any relations
+                console.warn('⚠️ Fallback query with relations failed, trying minimal query:', fallbackRelationError.message)
+                const allRecords = await prisma.client.findMany({
+                  orderBy: { createdAt: 'desc' }
                 })
-                .map(l => ({ ...l, tags: [] }))
+                // Filter to only leads and add empty tags
+                leads = allRecords
+                  .filter(record => {
+                    if (record.type !== null && record.type !== undefined && record.type !== '') {
+                      return record.type === 'lead'
+                    }
+                    return false
+                  })
+                  .map(l => ({ ...l, tags: [], externalAgent: null }))
+              }
             }
           } catch (fallbackError) {
             console.error('❌ Fallback query also failed:', {
