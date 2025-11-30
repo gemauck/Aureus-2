@@ -1886,17 +1886,64 @@ async function handler(req, res) {
             const newQuantity = (finishedProduct.quantity || 0) + quantityProduced
             const newTotalValue = newQuantity * unitCost
             
-            // Update inventory item with new quantity and cost
-            await tx.inventoryItem.update({
-              where: { id: finishedProduct.id },
-              data: {
-                quantity: newQuantity,
-                unitCost: unitCost, // Set to sum of parts
-                totalValue: newTotalValue,
-                status: newQuantity > (finishedProduct.reorderPoint || 0) ? 'in_stock' : (newQuantity > 0 ? 'low_stock' : 'out_of_stock'),
-                lastRestocked: new Date()
+            // Get default location (main warehouse) for finished product
+            let toLocationId = finishedProduct.locationId || null
+            if (!toLocationId) {
+              const mainWarehouse = await tx.stockLocation.findFirst({ 
+                where: { code: 'LOC001' } 
+              })
+              if (mainWarehouse) toLocationId = mainWarehouse.id
+            }
+            
+            // Helper to update LocationInventory
+            async function upsertLocationInventory(locationId, sku, itemName, quantityDelta, unitCost, reorderPoint) {
+              if (!locationId) return null
+              
+              let li = await tx.locationInventory.findUnique({ 
+                where: { locationId_sku: { locationId, sku } } 
+              })
+              
+              if (!li) {
+                li = await tx.locationInventory.create({ 
+                  data: {
+                    locationId,
+                    sku,
+                    itemName,
+                    quantity: 0,
+                    unitCost: unitCost || 0,
+                    reorderPoint: reorderPoint || 0,
+                    status: 'out_of_stock'
+                  }
+                })
               }
-            })
+              
+              const newQty = (li.quantity || 0) + quantityDelta
+              const status = getStatusFromQuantity(newQty, li.reorderPoint || reorderPoint || 0)
+              
+              return await tx.locationInventory.update({
+                where: { id: li.id },
+                data: {
+                  quantity: newQty,
+                  unitCost: unitCost !== undefined ? unitCost : li.unitCost,
+                  reorderPoint: reorderPoint !== undefined ? reorderPoint : li.reorderPoint,
+                  status,
+                  itemName: itemName || li.itemName,
+                  lastRestocked: quantityDelta > 0 ? new Date() : li.lastRestocked
+                }
+              })
+            }
+            
+            // Update LocationInventory for finished product
+            if (toLocationId) {
+              await upsertLocationInventory(
+                toLocationId,
+                finishedProduct.sku,
+                finishedProduct.name,
+                quantityProduced, // positive quantity for receipt
+                unitCost,
+                finishedProduct.reorderPoint || 0
+              )
+            }
             
             // Create stock movement record for production
             const lastMovement = await tx.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
@@ -1911,12 +1958,31 @@ async function handler(req, res) {
                 type: 'receipt', // Finished product receipt (increases stock)
                 itemName: finishedProduct.name,
                 sku: finishedProduct.sku,
-                quantity: quantityProduced,
+                quantity: quantityProduced, // positive for receipt
                 fromLocation: '',
-                toLocation: '',
+                toLocation: toLocationId ? (await tx.stockLocation.findUnique({ where: { id: toLocationId } }))?.code || '' : '',
                 reference: orderInTx.workOrderNumber || id,
                 performedBy: req.user?.name || 'System',
                 notes: `Production completion for ${orderInTx.productName} - Cost: ${unitCost.toFixed(2)} per unit (sum of parts)`
+              }
+            })
+            
+            // Recalculate master aggregate from all locations
+            const totalAtLocations = await tx.locationInventory.aggregate({ 
+              _sum: { quantity: true }, 
+              where: { sku: finishedProduct.sku } 
+            })
+            const aggQty = totalAtLocations._sum.quantity || 0
+            
+            // Update inventory item with aggregated quantity
+            await tx.inventoryItem.update({
+              where: { id: finishedProduct.id },
+              data: {
+                quantity: aggQty,
+                unitCost: unitCost, // Set to sum of parts
+                totalValue: aggQty * unitCost,
+                status: aggQty > (finishedProduct.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock'),
+                lastRestocked: new Date()
               }
             })
             
