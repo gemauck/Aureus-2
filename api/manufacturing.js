@@ -1437,30 +1437,10 @@ async function handler(req, res) {
       }
 
       try {
-        // Validate that the inventory item exists with timeout protection
-        let inventoryItem
-        try {
-          inventoryItem = await Promise.race([
-            prisma.inventoryItem.findUnique({
-              where: { id: body.inventoryItemId }
-            }),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Database query timeout')), 10000)
-            )
-          ])
-        } catch (dbError) {
-          console.error('❌ Database error validating inventory item:', {
-            error: dbError.message,
-            code: dbError.code,
-            inventoryItemId: body.inventoryItemId
-          })
-          // Check if it's a connection/timeout error
-          if (dbError.code === 'P1001' || dbError.code === 'P1002' || dbError.code === 'P1008' || 
-              dbError.message?.includes('timeout') || dbError.message?.includes('connection')) {
-            return serverError(res, 'Database connection timeout. Please try again.', 'DATABASE_TIMEOUT')
-          }
-          throw dbError
-        }
+        // Validate that the inventory item exists
+        const inventoryItem = await prisma.inventoryItem.findUnique({
+          where: { id: body.inventoryItemId }
+        })
         
         if (!inventoryItem) {
           return badRequest(res, 'Inventory item not found. Please create the finished product inventory item first.')
@@ -1477,52 +1457,27 @@ async function handler(req, res) {
         const overheadCost = parseFloat(body.overheadCost) || 0
         const totalCost = totalMaterialCost + laborCost + overheadCost
         
-        // Create BOM with timeout protection
-        let bom
-        try {
-          bom = await Promise.race([
-            prisma.bOM.create({
-              data: {
-                productSku: body.productSku,
-                productName: body.productName,
-                inventoryItemId: body.inventoryItemId,
-                version: body.version || '1.0',
-                status: body.status || 'active',
-                effectiveDate: body.effectiveDate ? new Date(body.effectiveDate) : new Date(),
-                laborCost,
-                overheadCost,
-                totalMaterialCost,
-                totalCost,
-                estimatedTime: parseInt(body.estimatedTime) || 0,
-                components: JSON.stringify(components),
-                notes: body.notes || '',
-                thumbnail: body.thumbnail || '',
-                instructions: body.instructions || '',
-                ownerId: null
-              }
-            }),
-            new Promise((_, reject) => 
-              setTimeout(() => reject(new Error('Database create timeout')), 10000)
-            )
-          ])
-        } catch (dbError) {
-          console.error('❌ Database error creating BOM:', {
-            error: dbError.message,
-            code: dbError.code,
+        // Create BOM
+        const bom = await prisma.bOM.create({
+          data: {
             productSku: body.productSku,
-            inventoryItemId: body.inventoryItemId
-          })
-          // Check if it's a connection/timeout error
-          if (dbError.code === 'P1001' || dbError.code === 'P1002' || dbError.code === 'P1008' || 
-              dbError.message?.includes('timeout') || dbError.message?.includes('connection')) {
-            return serverError(res, 'Database connection timeout. Please try again.', 'DATABASE_TIMEOUT')
+            productName: body.productName,
+            inventoryItemId: body.inventoryItemId,
+            version: body.version || '1.0',
+            status: body.status || 'active',
+            effectiveDate: body.effectiveDate ? new Date(body.effectiveDate) : new Date(),
+            laborCost,
+            overheadCost,
+            totalMaterialCost,
+            totalCost,
+            estimatedTime: parseInt(body.estimatedTime) || 0,
+            components: JSON.stringify(components),
+            notes: body.notes || '',
+            thumbnail: body.thumbnail || '',
+            instructions: body.instructions || '',
+            ownerId: null
           }
-          // Check for unique constraint violations
-          if (dbError.code === 'P2002') {
-            return badRequest(res, 'A BOM with this product SKU already exists.')
-          }
-          throw dbError
-        }
+        })
         
         return created(res, { 
           bom: {
@@ -1537,10 +1492,28 @@ async function handler(req, res) {
         console.error('❌ Failed to create BOM:', {
           error: error.message,
           code: error.code,
+          name: error.name,
           stack: error.stack?.substring(0, 500),
           productSku: body.productSku,
-          inventoryItemId: body.inventoryItemId
+          inventoryItemId: body.inventoryItemId,
+          meta: error.meta
         })
+        
+        // Handle specific Prisma errors
+        if (error.code === 'P1001' || error.code === 'P1002' || error.code === 'P1008') {
+          return serverError(res, 'Database connection error. Please try again.', 'DATABASE_CONNECTION_ERROR')
+        }
+        
+        if (error.code === 'P2002') {
+          const field = error.meta?.target?.[0] || 'field'
+          return badRequest(res, `A BOM with this ${field} already exists.`)
+        }
+        
+        if (error.code === 'P2025') {
+          return badRequest(res, 'Referenced inventory item not found.')
+        }
+        
+        // Generic error response
         return serverError(res, 'Failed to create BOM', error.message)
       }
     }
