@@ -358,8 +358,8 @@ const TaskDetailModal = ({
                 const taskId = editedTask.id || task?.id;
                 // Use hash-based routing format for email links (frontend uses hash routing)
                 const projectLink = project ? `#/projects/${project.id}` : '#/projects';
-                // Build task-specific link with anchor for direct navigation to task
-                const taskLink = taskId ? `${projectLink}#task-${taskId}` : projectLink;
+                // Build task-specific link with query parameter for direct navigation to task
+                const taskLink = taskId ? `${projectLink}?task=${taskId}` : projectLink;
                 const taskTitle = editedTask.title || task?.title || 'Untitled Task';
                 const projectName = project?.name || 'Project';
                 

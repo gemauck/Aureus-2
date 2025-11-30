@@ -293,20 +293,22 @@ async function handler(req, res) {
                                     }
                                     
                                     // Build comment link - include task ID if available for direct navigation
-                                    // Check if link already has a task anchor to avoid duplication
+                                    // Check if link already has a task query parameter to avoid duplication
                                     if (metadataObj?.taskId) {
-                                        // If link is already provided and contains task anchor, use it as-is
-                                        if (link && link.includes('#task-')) {
+                                        // If link is already provided and contains task parameter, use it as-is
+                                        if (link && (link.includes('?task=') || link.includes('&task='))) {
                                             commentLink = link;
                                         } else {
-                                            // Build task-specific link with anchor
+                                            // Build task-specific link with query parameter
                                             // Use hash-based routing format for frontend navigation
                                             const baseLink = link || `#/projects/${projectId}`;
-                                            // Only add task anchor if not already present
-                                            if (baseLink.includes('#task-')) {
+                                            // Only add task parameter if not already present
+                                            if (baseLink.includes('?task=') || baseLink.includes('&task=')) {
                                                 commentLink = baseLink;
                                             } else {
-                                                commentLink = `${baseLink}#task-${metadataObj.taskId}`;
+                                                // Add task as query parameter
+                                                const separator = baseLink.includes('?') ? '&' : '?';
+                                                commentLink = `${baseLink}${separator}task=${metadataObj.taskId}`;
                                             }
                                         }
                                     } else {

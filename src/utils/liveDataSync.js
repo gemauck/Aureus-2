@@ -402,8 +402,17 @@ class LiveDataSync {
                                  errorMessage.includes('Database connection failed') ||
                                  errorMessage.includes('unreachable');
             
-            // Only log non-network errors (network errors are expected when DB is down)
-            if (!isNetworkError) {
+            // Check if it's a server error (5xx)
+            const isServerError = errorMessage.includes('502') ||
+                                 errorMessage.includes('503') ||
+                                 errorMessage.includes('504') ||
+                                 errorMessage.includes('500') ||
+                                 errorMessage.includes('Bad Gateway') ||
+                                 errorMessage.includes('Service Unavailable') ||
+                                 errorMessage.toLowerCase().includes('bad gateway');
+            
+            // Only log non-network/server errors (network/server errors are expected when server/DB is down)
+            if (!isNetworkError && !isServerError) {
                 console.error('❌ Live data sync failed:', error);
             }
             
@@ -418,8 +427,8 @@ class LiveDataSync {
                 errorCount: this.errorCount
             });
             
-            // Stop sync if too many errors (but allow more retries for network errors)
-            if (this.errorCount >= this.maxErrors * (isNetworkError ? 2 : 1)) {
+            // Stop sync if too many errors (but allow more retries for network/server errors)
+            if (this.errorCount >= this.maxErrors * ((isNetworkError || isServerError) ? 2 : 1)) {
                 console.error('🛑 Too many sync errors, stopping live sync');
                 this.stop();
             }
@@ -529,6 +538,17 @@ class LiveDataSync {
                                  errorMessage.includes('ECONNREFUSED') ||
                                  errorMessage.includes('ETIMEDOUT');
             
+            // Check if it's a server error (5xx) - Bad Gateway, Service Unavailable, etc.
+            const isServerError = errorMessage.includes('502') ||
+                                 errorMessage.includes('503') ||
+                                 errorMessage.includes('504') ||
+                                 errorMessage.includes('500') ||
+                                 errorMessage.includes('Bad Gateway') ||
+                                 errorMessage.includes('Service Unavailable') ||
+                                 errorMessage.includes('Gateway Timeout') ||
+                                 errorMessage.toLowerCase().includes('bad gateway') ||
+                                 errorMessage.toLowerCase().includes('service unavailable');
+            
             // Check if it's a rate limit error
             const isRateLimit = errorMessage.includes('Too many requests') || 
                               errorMessage.includes('429') || 
@@ -537,10 +557,10 @@ class LiveDataSync {
             
             if (isRateLimit) {
                 log(`🚫 Rate limit error syncing ${dataType} - API is throttling requests`);
-            } else if (isNetworkError) {
-                log(`⚠️ Network/database error syncing ${dataType} - API may be unavailable`);
+            } else if (isNetworkError || isServerError) {
+                log(`⚠️ Network/server error syncing ${dataType} - API may be unavailable`);
             } else {
-                // Only log non-network errors to console (network errors are expected)
+                // Only log non-network/server errors to console (network/server errors are expected)
                 console.error(`❌ Failed to sync ${dataType}:`, error);
             }
             

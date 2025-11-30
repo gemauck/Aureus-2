@@ -521,8 +521,21 @@
                     (allErrorText.includes('opportunities') && (allErrorText.includes('500') || allErrorText.includes('server error'))) ||
                     (allErrorText.includes('/opportunities') && (allErrorText.includes('500') || allErrorText.includes('internal server error')));
                 
-                // Only log non-database and non-opportunities-api errors
-                if (!isDatabaseError && !isOpportunitiesApiError) {
+                // Check for server errors (5xx) - Bad Gateway, Service Unavailable, Gateway Timeout, etc.
+                // These are server-side issues that the client can't fix, so suppress them
+                const isServerError = 
+                    allErrorText.includes('502') ||
+                    allErrorText.includes('503') ||
+                    allErrorText.includes('504') ||
+                    allErrorText.includes('500') ||
+                    allErrorText.includes('bad gateway') ||
+                    allErrorText.includes('service unavailable') ||
+                    allErrorText.includes('gateway timeout') ||
+                    allErrorText.includes('internal server error') ||
+                    (allErrorText.includes('server') && (allErrorText.includes('unavailable') || allErrorText.includes('error')));
+                
+                // Only log non-database, non-opportunities-api, and non-server errors
+                if (!isDatabaseError && !isOpportunitiesApiError && !isServerError) {
                     console.error('🚨 Unhandled Promise Rejection:', {
                         reason: error,
                         promise: event.promise,
@@ -534,7 +547,7 @@
                         timestamp: new Date().toISOString()
                     });
                 }
-                // Database errors are silently suppressed - they're expected when DB is down
+                // Database errors and server errors are silently suppressed - they're expected when server/DB is down
                 
                 // Prevent default browser error handling
                 event.preventDefault();

@@ -7759,12 +7759,20 @@ const Manufacturing = () => {
       return (movements || [])
         .filter(m => m.sku === item.sku)
         .sort((a, b) => {
+          // Primary sort: by date (oldest first)
           const dateA = new Date(a.date || a.createdAt || 0);
           const dateB = new Date(b.date || b.createdAt || 0);
           if (dateA.getTime() !== dateB.getTime()) {
             return dateA.getTime() - dateB.getTime();
           }
-          return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+          // Secondary sort: by createdAt (oldest first) for same date
+          const createdAtA = new Date(a.createdAt || a.id || 0);
+          const createdAtB = new Date(b.createdAt || b.id || 0);
+          if (createdAtA.getTime() !== createdAtB.getTime()) {
+            return createdAtA.getTime() - createdAtB.getTime();
+          }
+          // Tertiary sort: by ID (for absolute ordering)
+          return (a.id || '').localeCompare(b.id || '');
         });
     }, [movements, item?.sku]);
 

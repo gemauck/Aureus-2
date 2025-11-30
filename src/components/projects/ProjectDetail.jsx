@@ -457,6 +457,52 @@ function initializeProjectDetail() {
         }
     }, [project?.id]);
     
+    // If the project is opened via a deep-link to a specific task
+    // (for example from an email notification), open the task modal
+    useEffect(() => {
+        if (!project?.id || !tasks || tasks.length === 0) return;
+        try {
+            const search = window.location.search || '';
+            if (!search) return;
+            const params = new URLSearchParams(search);
+            const taskId = params.get('task');
+            if (taskId) {
+                // Find the task in the tasks array (including subtasks)
+                let foundTask = tasks.find(t => t.id === taskId || String(t.id) === String(taskId));
+                let foundParent = null;
+                
+                // If not found in main tasks, check subtasks
+                if (!foundTask) {
+                    for (const task of tasks) {
+                        if (task.subtasks && Array.isArray(task.subtasks)) {
+                            const subtask = task.subtasks.find(st => st.id === taskId || String(st.id) === String(taskId));
+                            if (subtask) {
+                                foundTask = subtask;
+                                foundParent = task;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                if (foundTask) {
+                    setViewingTask(foundTask);
+                    setViewingTaskParent(foundParent);
+                    setShowTaskDetailModal(true);
+                    // Remove the task parameter from URL to clean it up
+                    params.delete('task');
+                    const newSearch = params.toString();
+                    const newHash = window.location.hash.split('?')[0] + (newSearch ? `?${newSearch}` : '');
+                    if (window.history && window.history.replaceState) {
+                        window.history.replaceState(null, '', newHash);
+                    }
+                }
+            }
+        } catch (error) {
+            console.warn('⚠️ ProjectDetail: failed to apply task deep-link:', error);
+        }
+    }, [project?.id, tasks]);
+    
     // Track if document collection process exists
     // Normalize the value from project prop (handle boolean, string, number, undefined)
     const normalizeHasDocumentCollectionProcess = (value) => {
@@ -1437,8 +1483,8 @@ function initializeProjectDetail() {
         // Use hash-based routing format for email links (frontend uses hash routing)
         const projectLink = project ? `#/projects/${project.id}` : '#/projects';
         const finalTaskId = updatedTargetTask.id || taskId;
-        // Build task-specific link with anchor for direct navigation to task
-        const taskLink = finalTaskId ? `${projectLink}#task-${finalTaskId}` : projectLink;
+        // Build task-specific link with query parameter for direct navigation to task
+        const taskLink = finalTaskId ? `${projectLink}?task=${finalTaskId}` : projectLink;
         const taskTitle = updatedTargetTask.title || originalTask.title || 'Task';
         const projectName = project?.name || 'Project';
 
@@ -2033,8 +2079,8 @@ function initializeProjectDetail() {
                     try {
                         // Use hash-based routing format for email links (frontend uses hash routing)
                         const projectLink = `#/projects/${project.id}`;
-                        // Build task-specific link with anchor for direct navigation to task
-                        const taskLink = updatedTaskData.id ? `${projectLink}#task-${updatedTaskData.id}` : projectLink;
+                        // Build task-specific link with query parameter for direct navigation to task
+                        const taskLink = updatedTaskData.id ? `${projectLink}?task=${updatedTaskData.id}` : projectLink;
                         
                         const response = await window.DatabaseAPI.makeRequest('/notifications', {
                             method: 'POST',
@@ -2083,8 +2129,8 @@ function initializeProjectDetail() {
                     try {
                         // Use hash-based routing format for email links (frontend uses hash routing)
                         const projectLink = `#/projects/${project.id}`;
-                        // Build task-specific link with anchor for direct navigation to task
-                        const taskLink = updatedTaskData.id ? `${projectLink}#task-${updatedTaskData.id}` : projectLink;
+                        // Build task-specific link with query parameter for direct navigation to task
+                        const taskLink = updatedTaskData.id ? `${projectLink}?task=${updatedTaskData.id}` : projectLink;
                         
                         const response = await window.DatabaseAPI.makeRequest('/notifications', {
                             method: 'POST',
