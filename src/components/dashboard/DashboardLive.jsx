@@ -571,6 +571,15 @@ const DashboardLive = () => {
         ];
     }, [isDark]);
 
+    // Helper function to persist widget preferences
+    const persistWidgets = (ids) => {
+        const userId = window.storage?.getUser?.()?.id || 'anon';
+        const key = `dashboard.widgets.${userId}`;
+        try {
+            window.localStorage.setItem(key, JSON.stringify(ids));
+        } catch (_) {}
+    };
+
     // Load and persist selected widgets
     useEffect(() => {
         const userId = window.storage?.getUser?.()?.id || 'anon';
@@ -581,6 +590,11 @@ const DashboardLive = () => {
             setAvailableWidgets(widgetRegistry);
             if (Array.isArray(parsed) && parsed.length > 0) {
                 const valid = parsed.filter(id => widgetRegistry.some(w => w.id === id));
+                // Auto-add new 'my-project-tasks' widget if it exists in registry but not in saved preferences
+                if (widgetRegistry.some(w => w.id === 'my-project-tasks') && !valid.includes('my-project-tasks')) {
+                    valid.push('my-project-tasks');
+                    persistWidgets(valid);
+                }
                 setSelectedWidgets(valid);
             } else {
                 const defaults = ['sales-overview', 'projects-overview', 'my-project-tasks', 'time-overview', 'calendar'];
@@ -592,14 +606,6 @@ const DashboardLive = () => {
             setSelectedWidgets(['sales-overview', 'projects-overview', 'my-project-tasks', 'time-overview', 'calendar']);
         }
     }, [widgetRegistry]);
-
-    const persistWidgets = (ids) => {
-        const userId = window.storage?.getUser?.()?.id || 'anon';
-        const key = `dashboard.widgets.${userId}`;
-        try {
-            window.localStorage.setItem(key, JSON.stringify(ids));
-        } catch (_) {}
-    };
 
     const handleToggleWidget = (id) => {
         setSelectedWidgets(prev => {
