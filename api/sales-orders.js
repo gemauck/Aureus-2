@@ -187,14 +187,27 @@ async function handler(req, res) {
         const isShipped = newStatus === 'shipped' && oldStatus !== 'shipped'
         const hasShippedDate = body.shippedDate && !existingOrder.shippedDate
         
+        console.log('🔍 Sales order status change check:', {
+          orderId: id,
+          orderNumber: existingOrder.orderNumber,
+          oldStatus,
+          newStatus,
+          isShipped,
+          hasShippedDate,
+          willProcessStock: isShipped || hasShippedDate
+        })
+        
         // Handle stock movements when order is shipped
         if (isShipped || hasShippedDate) {
+          console.log(`📦 Processing stock movements for sales order ${existingOrder.orderNumber || id} (status: ${oldStatus} -> ${newStatus})`)
           try {
             await prisma.$transaction(async (tx) => {
               // Parse items from order
               const items = typeof existingOrder.items === 'string' 
                 ? JSON.parse(existingOrder.items || '[]') 
                 : (Array.isArray(existingOrder.items) ? existingOrder.items : [])
+              
+              console.log(`📋 Sales order has ${items.length} items to process`)
               
               if (items.length === 0) {
                 console.log('⚠️ Sales order has no items - skipping stock movement')
@@ -209,19 +222,25 @@ async function handler(req, res) {
               
               // Helper to update LocationInventory
               async function upsertLocationInventory(locationId, sku, itemName, quantityDelta) {
-                if (!locationId) return null
+                if (!locationId) {
+                  console.log(`⚠️ No locationId provided for ${sku} - using main warehouse`)
+                  const mainWarehouse = await tx.stockLocation.findFirst({ where: { code: 'LOC001' } })
+                  if (!mainWarehouse) {
+                    console.error(`❌ Main warehouse (LOC001) not found - cannot update LocationInventory for ${sku}`)
+                    return null
+                  }
+                  locationId = mainWarehouse.id
+                }
                 
                 let li = await tx.locationInventory.findUnique({ 
                   where: { locationId_sku: { locationId, sku } } 
                 })
                 
                 if (!li) {
-                  const mainWarehouse = await tx.stockLocation.findFirst({ where: { code: 'LOC001' } })
-                  if (!mainWarehouse) return null
-                  
+                  console.log(`📦 Creating LocationInventory record for ${sku} at location ${locationId}`)
                   li = await tx.locationInventory.create({ 
                     data: {
-                      locationId: mainWarehouse.id,
+                      locationId,
                       sku,
                       itemName,
                       quantity: 0,
@@ -232,8 +251,11 @@ async function handler(req, res) {
                   })
                 }
                 
-                const newQty = Math.max(0, (li.quantity || 0) + quantityDelta) // Don't allow negative
+                const oldQty = li.quantity || 0
+                const newQty = Math.max(0, oldQty + quantityDelta) // Don't allow negative
                 const status = newQty > (li.reorderPoint || 0) ? 'in_stock' : (newQty > 0 ? 'low_stock' : 'out_of_stock')
+                
+                console.log(`📊 LocationInventory update for ${sku}: ${oldQty} + ${quantityDelta} = ${newQty}`)
                 
                 return await tx.locationInventory.update({
                   where: { id: li.id },
@@ -246,7 +268,12 @@ async function handler(req, res) {
               
               // Process each item in the sales order
               for (const item of items) {
-                if (!item.sku || !item.quantity || item.quantity <= 0) continue
+                if (!item.sku || !item.quantity || item.quantity <= 0) {
+                  console.log(`⏭️ Skipping item - missing SKU or invalid quantity:`, item)
+                  continue
+                }
+                
+                console.log(`📦 Processing item: ${item.sku} (${item.name || 'unnamed'}), quantity: ${item.quantity}`)
                 
                 const inventoryItem = await tx.inventoryItem.findFirst({
                   where: { sku: item.sku }
@@ -258,32 +285,46 @@ async function handler(req, res) {
                 }
                 
                 const quantityToDeduct = parseFloat(item.quantity) || 0
-                if (quantityToDeduct <= 0) continue
+                if (quantityToDeduct <= 0) {
+                  console.log(`⏭️ Skipping item - invalid quantity: ${quantityToDeduct}`)
+                  continue
+                }
                 
                 // Check if sufficient stock available
-                if ((inventoryItem.quantity || 0) < quantityToDeduct) {
-                  throw new Error(`Insufficient stock for ${item.sku || item.name || 'item'}. Available: ${inventoryItem.quantity || 0}, Required: ${quantityToDeduct}`)
+                const availableQty = inventoryItem.quantity || 0
+                if (availableQty < quantityToDeduct) {
+                  const errorMsg = `Insufficient stock for ${item.sku || item.name || 'item'}. Available: ${availableQty}, Required: ${quantityToDeduct}`
+                  console.error(`❌ ${errorMsg}`)
+                  throw new Error(errorMsg)
                 }
                 
                 // Get location for inventory item
                 let locationId = inventoryItem.locationId || null
                 if (!locationId) {
                   const mainWarehouse = await tx.stockLocation.findFirst({ where: { code: 'LOC001' } })
-                  if (mainWarehouse) locationId = mainWarehouse.id
+                  if (mainWarehouse) {
+                    locationId = mainWarehouse.id
+                    console.log(`📍 Using main warehouse (LOC001) for ${item.sku}`)
+                  } else {
+                    console.error(`❌ Main warehouse (LOC001) not found - cannot process stock movement for ${item.sku}`)
+                    continue
+                  }
                 }
                 
                 // Update LocationInventory (decrease stock)
-                if (locationId) {
-                  await upsertLocationInventory(
-                    locationId,
-                    item.sku,
-                    item.name || inventoryItem.name,
-                    -quantityToDeduct // negative for sale
-                  )
-                }
+                await upsertLocationInventory(
+                  locationId,
+                  item.sku,
+                  item.name || inventoryItem.name,
+                  -quantityToDeduct // negative for sale
+                )
+                
+                // Get location code for movement record
+                const location = await tx.stockLocation.findUnique({ where: { id: locationId } })
+                const locationCode = location?.code || ''
                 
                 // Create stock movement record
-                await tx.stockMovement.create({
+                const movement = await tx.stockMovement.create({
                   data: {
                     movementId: `MOV${String(seq++).padStart(4, '0')}`,
                     date: body.shippedDate ? new Date(body.shippedDate) : new Date(),
@@ -291,13 +332,15 @@ async function handler(req, res) {
                     itemName: item.name || inventoryItem.name,
                     sku: item.sku,
                     quantity: -quantityToDeduct, // negative for sale
-                    fromLocation: locationId ? (await tx.stockLocation.findUnique({ where: { id: locationId } }))?.code || '' : '',
+                    fromLocation: locationCode,
                     toLocation: '',
                     reference: existingOrder.orderNumber || id,
                     performedBy: req.user?.name || 'System',
                     notes: `Sales order ${existingOrder.orderNumber || id} - ${item.name || item.sku}`
                   }
                 })
+                
+                console.log(`✅ Created stock movement ${movement.movementId} for ${item.sku}`)
                 
                 // Recalculate master aggregate from all locations
                 const totalAtLocations = await tx.locationInventory.aggregate({ 
@@ -316,15 +359,17 @@ async function handler(req, res) {
                   }
                 })
                 
-                console.log(`✅ Deducted ${quantityToDeduct} of ${item.sku} for sales order ${existingOrder.orderNumber || id}`)
+                console.log(`✅ Deducted ${quantityToDeduct} of ${item.sku} for sales order ${existingOrder.orderNumber || id}. New quantity: ${aggQty}`)
               }
             })
             
-            console.log(`✅ Stock movements created for sales order ${existingOrder.orderNumber || id}`)
+            console.log(`✅ Stock movements created successfully for sales order ${existingOrder.orderNumber || id}`)
           } catch (stockError) {
             console.error('❌ Failed to process stock movements for sales order:', stockError)
-            // Don't fail the entire update, but log the error
-            // The sales order will still be updated, but stock won't be deducted
+            console.error('❌ Error stack:', stockError.stack)
+            // Re-throw the error so the transaction fails and the order update is blocked
+            // This ensures data consistency - if stock can't be deducted, order shouldn't be shipped
+            throw stockError
           }
         }
         

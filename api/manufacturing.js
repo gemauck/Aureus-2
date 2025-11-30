@@ -1808,6 +1808,13 @@ async function handler(req, res) {
         // Handle status change to 'completed' - add finished goods to inventory with cost = sum of parts
         if (newStatus === 'completed' && oldStatus !== 'completed') {
           console.log(`✅ Triggering finished goods addition for production order ${id} (status: ${oldStatus} -> ${newStatus})`)
+          console.log(`🔍 Production order details:`, {
+            id,
+            bomId: existingOrder.bomId,
+            productSku: existingOrder.productSku,
+            quantity: existingOrder.quantity,
+            quantityProduced: existingOrder.quantityProduced
+          })
           
           if (!existingOrder.bomId) {
             return badRequest(res, 'Order has no BOM - cannot complete production')
@@ -1935,6 +1942,7 @@ async function handler(req, res) {
             
             // Update LocationInventory for finished product
             if (toLocationId) {
+              console.log(`📦 Updating LocationInventory for ${finishedProduct.sku} at location ${toLocationId}`)
               await upsertLocationInventory(
                 toLocationId,
                 finishedProduct.sku,
@@ -1943,6 +1951,9 @@ async function handler(req, res) {
                 unitCost,
                 finishedProduct.reorderPoint || 0
               )
+              console.log(`✅ LocationInventory updated for ${finishedProduct.sku}`)
+            } else {
+              console.warn(`⚠️ No location ID found for finished product ${finishedProduct.sku} - LocationInventory not updated`)
             }
             
             // Create stock movement record for production
@@ -1951,7 +1962,10 @@ async function handler(req, res) {
               ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
               : 1
             
-            await tx.stockMovement.create({
+            const location = toLocationId ? await tx.stockLocation.findUnique({ where: { id: toLocationId } }) : null
+            const locationCode = location?.code || ''
+            
+            const movement = await tx.stockMovement.create({
               data: {
                 movementId: `MOV${String(seq).padStart(4, '0')}`,
                 date: new Date(),
@@ -1960,12 +1974,14 @@ async function handler(req, res) {
                 sku: finishedProduct.sku,
                 quantity: quantityProduced, // positive for receipt
                 fromLocation: '',
-                toLocation: toLocationId ? (await tx.stockLocation.findUnique({ where: { id: toLocationId } }))?.code || '' : '',
+                toLocation: locationCode,
                 reference: orderInTx.workOrderNumber || id,
                 performedBy: req.user?.name || 'System',
                 notes: `Production completion for ${orderInTx.productName} - Cost: ${unitCost.toFixed(2)} per unit (sum of parts)`
               }
             })
+            
+            console.log(`✅ Created stock movement ${movement.movementId} for ${finishedProduct.sku} (quantity: ${quantityProduced})`)
             
             // Recalculate master aggregate from all locations
             const totalAtLocations = await tx.locationInventory.aggregate({ 
