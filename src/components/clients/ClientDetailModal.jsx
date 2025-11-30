@@ -172,14 +172,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         // This ensures LiveDataSync is stopped even if onPauseSync prop is not passed
         if (window.LiveDataSync && window.LiveDataSync.stop) {
             window.LiveDataSync.stop();
-            console.log('🛑 ClientDetailModal opened - stopping LiveDataSync directly', client ? '(existing client)' : '(new client)');
         }
         
         // Also use onPauseSync callback if provided (for parent component coordination)
         // This sets isFormOpenRef to true, providing additional blocking
         if (onPauseSync && typeof onPauseSync === 'function') {
             onPauseSync(true);
-            console.log('🛑 ClientDetailModal opened - calling onPauseSync(true)');
         }
         
         // CRITICAL: LiveDataSync will ONLY restart when modal explicitly closes
@@ -187,7 +185,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         // VERSION v2: Removed all LiveDataSync.start() calls from cleanup
         return () => {
             // Don't restart here - only restart when user explicitly closes/saves
-            console.log('🔄 ClientDetailModal unmounting - LiveDataSync will restart only on explicit close/save');
             // NO LiveDataSync.start() here - only in onClose callback
         };
     }, []); // Run on mount/unmount only - stop/start based on modal visibility
@@ -225,7 +222,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         // CRITICAL: If client is null (new client), NEVER sync formData from prop
         // User is creating a new client - formData should be completely user-controlled
         if (!client) {
-            console.log('🚫 useEffect BLOCKED: client is null (new client) - formData is user-controlled');
             return;
         }
         
@@ -239,19 +235,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         
         // CRITICAL: If user has started typing or edited fields, NEVER update formData from prop
         if (userHasStartedTypingRef.current || userEditedFieldsRef.current.size > 0) {
-            console.log('🚫 useEffect BLOCKED: user has typed/edited - formData is user-controlled', {
-                hasStartedTyping: userHasStartedTypingRef.current,
-                editedFields: Array.from(userEditedFieldsRef.current),
-                currentClientId,
-                previousClientId
-            });
             lastProcessedClientRef.current = client;
             return;
         }
         
         // CRITICAL: Block if user is currently editing or saving
         if (isEditingRef.current || isAutoSavingRef.current || hasUserEditedForm.current) {
-            console.log('🚫 useEffect BLOCKED: user is editing or saving');
             lastProcessedClientRef.current = client;
             return;
         }
@@ -268,11 +257,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         
         // Block if formData has content (user has entered something)
         if (formDataHasContent) {
-            console.log('🚫 useEffect BLOCKED: formData has content', {
-                formDataHasContent,
-                currentClientId,
-                previousClientId
-            });
             lastProcessedClientRef.current = client;
             return;
         }
@@ -284,7 +268,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         
         // CRITICAL: If same client ID (and not first time opening), NEVER sync even if form is empty (might be mid-edit)
         if (currentClientId === previousClientId && currentClientId !== null && !isFirstTimeOpening) {
-            console.log('🚫 useEffect BLOCKED: same client ID - never overwrite formData');
             lastProcessedClientRef.current = client;
             return;
         }
@@ -314,11 +297,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 })
             };
             
-            console.log('✅ Syncing formData: switching to different client (Manufacturing pattern)', {
-                previousClientId,
-                currentClientId,
-                formWasEmpty: !formDataHasContent
-            });
             setFormData(parsedClient);
         }
         
@@ -339,11 +317,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         
         // CRITICAL: NEVER reset if user has edited any fields
         if (userEditedFieldsRef.current.size > 0) {
-            console.log('🛡️ Preserving typing flag and edited fields: user has edited', {
-                editedFields: Array.from(userEditedFieldsRef.current),
-                currentClientId,
-                previousClientId
-            });
             previousClientIdRef.current = currentClientId;
             return; // Don't reset anything if user has edited fields
         }
@@ -353,14 +326,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             // Only reset if it's truly a different client (not the same client getting an ID)
             const isSameClientGettingId = !previousClientId && currentClientId && userHasStartedTypingRef.current;
             if (!isSameClientGettingId) {
-                console.log('🔄 Resetting typing flag: switching to different client', {
-                    previousId: previousClientId,
-                    currentId: currentClientId,
-                    formDataId: currentFormDataId
-                });
                 userHasStartedTypingRef.current = false;
             } else {
-                console.log('🛡️ Preserving typing flag: same client getting ID after save');
             }
         }
         
@@ -386,7 +353,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             try {
                 const tabKey = `client-tab-${client.id}`;
                 localStorage.setItem(tabKey, tab);
-                console.log('💾 Saved tab to localStorage:', tabKey, tab);
             } catch (e) {
                 console.warn('⚠️ Failed to save tab to localStorage:', e);
             }
@@ -405,7 +371,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 if (savedTab && initialTab === 'overview') {
                     // Use setTimeout to ensure this runs after initialTab useEffect
                     const timer = setTimeout(() => {
-                        console.log('📂 Restoring saved tab from localStorage:', tabKey, savedTab);
                         setActiveTab(savedTab);
                         if (onTabChange) {
                             onTabChange(savedTab);
@@ -561,7 +526,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             
             const clientId = String(client.id);
             
-            console.log('🔍 Loading job cards for client ID:', clientId);
             
             // First, try fetching by clientId (most reliable)
             let response = await fetch(`/api/jobcards?clientId=${encodeURIComponent(clientId)}&pageSize=1000`, {
@@ -575,7 +539,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             
             if (response.ok) {
                 data = await response.json();
-                const jobCards = data.jobCards || [];
+                // Handle both response structures: { jobCards: [...] } and { data: { jobCards: [...] } }
+                const jobCards = data.jobCards || data.data?.jobCards || [];
                 console.log(`📋 Job cards found by clientId: ${jobCards.length}`);
                 
                 if (jobCards.length > 0) {
@@ -599,7 +564,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 
                 if (response.ok) {
                     data = await response.json();
-                    const jobCards = data.jobCards || [];
+                    // Handle both response structures
+                    const jobCards = data.jobCards || data.data?.jobCards || [];
                     console.log(`📋 Job cards found by clientName: ${jobCards.length}`);
                     
                     if (jobCards.length > 0) {
@@ -622,7 +588,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             
             if (response.ok) {
                 data = await response.json();
-                const allJobCards = data.jobCards || [];
+                // Handle both response structures
+                const allJobCards = data.jobCards || data.data?.jobCards || [];
                 
                 // Filter by clientId first, then by clientName if no clientId match
                 let matchingJobCards = allJobCards.filter(jc => 
@@ -639,21 +606,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                jobCardClientName.includes(normalizedClientName) ||
                                normalizedClientName.includes(jobCardClientName);
                     });
-                    console.log(`📋 Matched by clientName: ${matchingJobCards.length}`);
                 }
                 
-                console.log(`📋 Total job cards: ${allJobCards.length}, matching: ${matchingJobCards.length}`);
                 
                 if (matchingJobCards.length > 0) {
                     setJobCards(matchingJobCards);
                 } else {
                     // Log for debugging if job cards exist but don't match
                     if (allJobCards.length > 0) {
-                        console.log('🔍 Sample job cards (for debugging):', allJobCards.slice(0, 3).map(jc => ({
-                            jobCardNumber: jc.jobCardNumber,
-                            clientId: jc.clientId,
-                            clientName: jc.clientName
-                        })));
                     }
                     setJobCards([]);
                 }
@@ -687,7 +647,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Reload job cards when Service & Maintenance tab becomes active
     useEffect(() => {
         if (activeTab === 'service-maintenance' && client?.id) {
-            console.log('🔄 Service & Maintenance tab activated, reloading job cards...');
             loadJobCards();
         }
     }, [activeTab, client?.id, loadJobCards]);
@@ -887,7 +846,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 // Clear optimistic updates when switching clients
                 setOptimisticContacts([]);
                 setOptimisticSites([]);
-                console.log('🔄 Cleared optimistic updates for new client');
             }
             
             // Only load from database if client ID changed (new client) or form hasn't been edited
@@ -907,15 +865,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 services: typeof client.services === 'string' ? JSON.parse(client.services || '[]') : (client.services || [])
             };
             
-            console.log('🔄 Initial formData from client prop:', {
-                followUps: parsedClient.followUps?.length,
-                comments: parsedClient.comments?.length,
-                contracts: parsedClient.contracts?.length,
-                contacts: parsedClient.contacts?.length,
-                sites: parsedClient.sites?.length,
-                shouldLoadFromDatabase,
-                hasUserEdited: hasUserEditedForm.current
-            });
             
             // Only set formData if we should load (new client or not edited)
             if (shouldLoadFromDatabase) {
@@ -925,7 +874,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             // Load data from database ONLY if client changed or form hasn't been edited
             // This prevents overwriting optimistic updates
             if (shouldLoadFromDatabase) {
-                console.log('📡 Loading data from database (client changed or form not edited)');
                 
                 // Cancel any existing pending timeouts for this client
                 pendingTimeoutsRef.current.forEach(timeoutId => {
@@ -956,7 +904,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 }, 1500); // Increased delay to 1500ms
                 pendingTimeoutsRef.current.push(timeout4);
             } else {
-                console.log('⏭️ Skipping database load - form has been edited and client ID unchanged');
             }
         }
     }, [client?.id]); // Only depend on client.id, not entire client object to prevent infinite loops
@@ -966,38 +913,29 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         try {
             // Prevent duplicate requests
             if (isLoadingClientRef.current) {
-                console.log('⏭️ Skipping client reload - already loading');
                 return;
             }
             
             // Skip if form has been edited to preserve optimistic updates
             if (hasUserEditedForm.current) {
-                console.log('⏭️ Skipping client reload - form has been edited (preserving optimistic updates)');
                 return;
             }
             
             // Don't reload if auto-saving is in progress
             if (isAutoSavingRef.current) {
-                console.log('⚠️ Skipping client reload - auto-save in progress');
                 return;
             }
             
             const token = window.storage?.getToken?.();
             if (!token) {
-                console.log('⚠️ No authentication token, skipping client data load');
                 return;
             }
             
             isLoadingClientRef.current = true;
-            console.log('📡 Reloading full client data from database for client:', clientId);
             const response = await window.api.getClient(clientId);
             const dbClient = response?.data?.client;
             
             if (dbClient) {
-                console.log('✅ Loaded client from database:', dbClient.name);
-                console.log('📋 Comments:', typeof dbClient.comments, Array.isArray(dbClient.comments) ? dbClient.comments.length : 'not array');
-                console.log('📋 FollowUps:', typeof dbClient.followUps, Array.isArray(dbClient.followUps) ? dbClient.followUps.length : 'not array');
-                console.log('📋 ActivityLog:', typeof dbClient.activityLog, Array.isArray(dbClient.activityLog) ? dbClient.activityLog.length : 'not array');
                 
                 // Parse JSON strings
                 const parsedClient = {
@@ -1012,7 +950,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     billingTerms: typeof dbClient.billingTerms === 'string' ? JSON.parse(dbClient.billingTerms || '{}') : (dbClient.billingTerms || {})
                 };
                 
-                console.log('📝 Parsed client data - Comments:', parsedClient.comments?.length, 'FollowUps:', parsedClient.followUps?.length, 'ActivityLog:', parsedClient.activityLog?.length);
                 
                 // Update formData with the fresh data from database
                 // IMPORTANT: Only update comments, followUps, activityLog, contracts
@@ -1026,15 +963,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         contracts: parsedClient.contracts
                         // Explicitly preserve contacts and sites from current state
                     };
-                    console.log('🔄 Updated formData (preserving contacts/sites):', {
-                        contactsCount: updated.contacts?.length,
-                        sitesCount: updated.sites?.length,
-                        commentsCount: updated.comments?.length
-                    });
                     return updated;
                 });
                 
-                console.log('✅ FormData updated with fresh database data (contacts/sites preserved)');
             }
         } catch (error) {
             console.error('❌ Error loading client from database:', error);
@@ -1048,29 +979,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         try {
             // Prevent duplicate requests
             if (isLoadingContactsRef.current) {
-                console.log('⏭️ Skipping contact load - already loading');
                 return;
             }
             
             // Skip loading if form has been edited to preserve optimistic updates
             if (hasUserEditedForm.current) {
-                console.log('⏭️ Skipping contact load - form has been edited (preserving optimistic updates)');
                 return;
             }
             
             const token = window.storage?.getToken?.();
             if (!token) {
-                console.log('⚠️ No authentication token, skipping contact loading');
                 return;
             }
             
             isLoadingContactsRef.current = true;
-            console.log('📡 Loading contacts from database for client:', clientId);
             const response = await window.api.getContacts(clientId);
             const contacts = response?.data?.contacts || [];
             
-            console.log('✅ Loaded contacts from database:', contacts.length);
-            console.log('📋 Contact data:', contacts);
             
             // Merge database contacts with any optimistic contacts still pending
             setFormData(prevFormData => {
@@ -1082,7 +1007,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 formDataRef.current = updated;
                 return updated;
             });
-            console.log('🔄 Updated formData with contacts:', contacts.length);
 
             // Remove optimistic contacts that now exist in database
             setOptimisticContacts(prev => prev.filter(opt => !contacts.some(db => db.id === opt.id)));
@@ -1098,29 +1022,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         try {
             // Prevent duplicate requests
             if (isLoadingSitesRef.current) {
-                console.log('⏭️ Skipping site load - already loading');
                 return;
             }
             
             // Skip loading if form has been edited to preserve optimistic updates
             if (hasUserEditedForm.current) {
-                console.log('⏭️ Skipping site load - form has been edited (preserving optimistic updates)');
                 return;
             }
             
             const token = window.storage?.getToken?.();
             if (!token) {
-                console.log('⚠️ No authentication token, skipping site loading');
                 return;
             }
             
             isLoadingSitesRef.current = true;
-            console.log('📡 Loading sites from database for client:', clientId);
             const response = await window.api.getSites(clientId);
             const sites = response?.data?.sites || [];
             
-            console.log('✅ Loaded sites from database:', sites.length);
-            console.log('📋 Site data:', sites);
             
             // Merge database sites with any optimistic sites still pending
             setFormData(prevFormData => {
@@ -1132,7 +1050,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 formDataRef.current = updated;
                 return updated;
             });
-            console.log('🔄 Updated formData with sites:', sites.length);
 
             // Remove optimistic sites that now exist in database
             setOptimisticSites(prev => prev.filter(opt => !sites.some(db => db.id === opt.id)));
@@ -1148,22 +1065,18 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         try {
             // Prevent duplicate requests
             if (isLoadingOpportunitiesRef.current) {
-                console.log('⏭️ Skipping opportunity load - already loading');
                 return;
             }
             
             const token = window.storage?.getToken?.();
             if (!token) {
-                console.log('⚠️ No authentication token, skipping opportunity loading');
                 return;
             }
             
             isLoadingOpportunitiesRef.current = true;
-            console.log('📡 Loading opportunities from database for client:', clientId);
             const response = await window.api.getOpportunitiesByClient(clientId);
             const opportunities = response?.data?.opportunities || [];
             
-            console.log('✅ Loaded opportunities from database:', opportunities.length);
             
             // Update formData with opportunities from database
             setFormData(prevFormData => ({
@@ -1197,19 +1110,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 return;
             }
             
-            console.log('🌐 Creating contact via API:', newContact);
             const response = await window.api.createContact(formData.id, newContact);
-            console.log('📥 Full API response:', response);
-            console.log('🔍 Response structure:', {
-                hasData: !!response?.data,
-                hasDataContact: !!response?.data?.contact,
-                hasContact: !!response?.contact,
-                responseKeys: Object.keys(response || {}),
-                dataKeys: response?.data ? Object.keys(response.data) : 'no data'
-            });
             
             const savedContact = response?.data?.contact || response?.contact || response;
-            console.log('👤 Extracted contact:', savedContact);
             
             if (savedContact && savedContact.id) {
                 // Mark form as edited to prevent useEffect from resetting formData
@@ -1222,14 +1125,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 setOptimisticContacts(prev => {
                     const contactExists = prev.some(c => c.id === savedContact.id);
                     if (contactExists) {
-                        console.log('⚠️ Contact already in optimistic state');
                         return prev;
                     }
                     const updated = [...prev, savedContact];
-                    console.log('✅ Added to optimisticContacts state:', {
-                        contactId: savedContact.id,
-                        optimisticCount: updated.length
-                    });
                     return updated;
                 });
                 
@@ -1240,15 +1138,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     // Check if contact already exists to avoid duplicates
                     const contactExists = currentContacts.some(c => c.id === savedContact.id);
                     if (contactExists) {
-                        console.log('⚠️ Contact already in state, skipping optimistic update');
                         return prev;
                     }
                     const updatedContacts = [...currentContacts, savedContact];
-                    console.log('✅ Optimistic update: adding contact to formData', {
-                        contactId: savedContact.id,
-                        previousCount: currentContacts.length,
-                        newCount: updatedContacts.length
-                    });
                     const newFormData = {
                         ...prev,
                         contacts: updatedContacts
@@ -1260,7 +1152,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 });
                 
                 // State update above will automatically trigger re-render
-                console.log('🔄 State updated - React will re-render automatically');
                 
                 const formDataForActivity = updatedFormDataAfterContact || formDataRef.current || formData;
                 const mergedContactsForActivity = mergeUniqueById(formDataForActivity?.contacts, [savedContact, ...optimisticContacts]);
@@ -1292,8 +1183,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     alert('✅ Contact saved to database successfully!');
                 }, 100);
                 
-                console.log('✅ Contact created and saved to database:', savedContact.id);
-                console.log('✅ Current formData.contacts count should be:', (formData.contacts?.length || 0) + 1);
             } else {
                 throw new Error('No contact ID returned from API');
             }
@@ -1340,7 +1229,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             handleTabChange('contacts');
         }, 100);
         
-        console.log('✅ Contact updated and saved:', newContact.name);
     };
 
     const handleDeleteContact = (contactId) => {
@@ -1363,7 +1251,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 handleTabChange('contacts');
             }, 100);
             
-            console.log('✅ Contact deleted and saved');
         }
     };
 
@@ -1527,7 +1414,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         currentUser.name || currentUser.email || 'Unknown',
                         allUsers
                     );
-                    console.log('✅ @Mention notifications processed for client comment');
                 }
             } catch (error) {
                 console.error('❌ Error processing @mentions:', error);
@@ -1574,7 +1460,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         // Clear the flag after a delay to allow API response to propagate
         setTimeout(() => {
             isAutoSavingRef.current = false;
-            console.log('✅ Auto-save completed, re-enabling formData updates');
         }, 3000);
         
         setNewComment('');
@@ -1582,7 +1467,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         setNewNoteTagsInput('');
         setNewNoteAttachments([]);
         
-        console.log('✅ Comment added and saved:', newComment);
     };
 
     const handleDeleteComment = (commentId) => {
@@ -1600,10 +1484,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             // Clear the flag after a delay to allow API response to propagate
             setTimeout(() => {
                 isAutoSavingRef.current = false;
-                console.log('✅ Auto-save completed, re-enabling formData updates');
             }, 3000);
             
-            console.log('✅ Comment deleted and saved');
         }
     };
 
@@ -1625,7 +1507,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 return;
             }
             
-            console.log('🌐 Creating site via API:', newSite);
             const response = await window.api.createSite(formData.id, newSite);
             const savedSite = response?.data?.site || response?.site || response;
             
@@ -1640,14 +1521,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 setOptimisticSites(prev => {
                     const siteExists = prev.some(s => s.id === savedSite.id);
                     if (siteExists) {
-                        console.log('⚠️ Site already in optimistic state');
                         return prev;
                     }
                     const updated = [...prev, savedSite];
-                    console.log('✅ Added to optimisticSites state:', {
-                        siteId: savedSite.id,
-                        optimisticCount: updated.length
-                    });
                     return updated;
                 });
                 
@@ -1658,15 +1534,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     // Check if site already exists to avoid duplicates
                     const siteExists = currentSites.some(s => s.id === savedSite.id);
                     if (siteExists) {
-                        console.log('⚠️ Site already in state, skipping optimistic update');
                         return prev;
                     }
                     const updatedSites = [...currentSites, savedSite];
-                    console.log('✅ Optimistic update: adding site to formData', {
-                        siteId: savedSite.id,
-                        previousCount: currentSites.length,
-                        newCount: updatedSites.length
-                    });
                     const newFormData = {
                         ...prev,
                         sites: updatedSites
@@ -1678,7 +1548,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 });
                 
                 // State update above will automatically trigger re-render
-                console.log('🔄 State updated - React will re-render automatically');
                 
                 const formDataForSiteActivity = updatedFormDataAfterSite || formDataRef.current || formData;
                 const mergedSitesForActivity = mergeUniqueById(formDataForSiteActivity?.sites, [savedSite, ...optimisticSites]);
@@ -1711,8 +1580,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     alert('✅ Site saved to database successfully!');
                 }, 100);
                 
-                console.log('✅ Site created and saved to database:', savedSite.id);
-                console.log('✅ Current formData.sites count should be:', (formData.sites?.length || 0) + 1);
             } else {
                 throw new Error('No site ID returned from API');
             }
@@ -1759,7 +1626,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             handleTabChange('sites');
         }, 100);
         
-        console.log('✅ Site updated and saved:', newSite.name);
     };
 
     const handleDeleteSite = (siteId) => {
@@ -1778,7 +1644,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             onSave(finalFormData, true);
             handleTabChange('sites'); // Stay in sites tab
             
-            console.log('✅ Site deleted and saved:', site?.name);
         }
     };
 
@@ -1796,14 +1661,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 value: parseFloat(newOpportunity.value) || 0
             };
             
-            console.log('🔍 ClientDetailModal opportunity data before API call:', {
-                opportunityData,
-                newOpportunity,
-                formDataId: formData.id,
-                titleValue: newOpportunity.name,
-                titleType: typeof newOpportunity.name,
-                titleLength: newOpportunity.name?.length
-            });
             
             const token = window.storage?.getToken?.();
             if (!token) {
@@ -1816,14 +1673,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 return;
             }
             
-            console.log('🌐 Creating opportunity via API:', opportunityData);
-            console.log('🔍 API method available?', typeof window.api?.createOpportunity);
             
             const response = await window.api.createOpportunity(opportunityData);
-            console.log('📥 API response:', response);
             
             const savedOpportunity = response?.data?.opportunity || response?.opportunity || response;
-            console.log('📋 Parsed savedOpportunity:', savedOpportunity);
             
             if (savedOpportunity && savedOpportunity.id) {
                 // Get current user info
@@ -1841,7 +1694,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     // Check if opportunity already exists to avoid duplicates
                     const opportunityExists = currentOpportunities.some(o => o.id === savedOpportunity.id);
                     if (opportunityExists) {
-                        console.log('⚠️ Opportunity already in state, skipping duplicate');
                         return prev;
                     }
                     
@@ -1885,7 +1737,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 // Instead, just update local state and let the user save when they're ready
                 // The opportunity is already in the database, so it will load on next fetch
                 
-                console.log('✅ Opportunity created and saved to database:', savedOpportunity.id);
                 
                 // Reload opportunities from database in background to ensure we have the latest
                 // This will merge with the optimistic update
@@ -1905,13 +1756,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         };
                     });
                     
-                    console.log('✅ Reloaded opportunities from database:', freshOpportunities.length);
                     
                     // Trigger a window event to notify Pipeline view that opportunities changed
                     window.dispatchEvent(new CustomEvent('opportunitiesUpdated', { 
                         detail: { clientId: formData.id, opportunities: freshOpportunities } 
                     }));
-                    console.log('📡 Dispatched opportunitiesUpdated event for Pipeline refresh');
                 } catch (error) {
                     console.error('❌ Failed to reload opportunities:', error);
                     // Don't show error to user - optimistic update already shows the opportunity
@@ -1956,7 +1805,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 return;
             }
             
-            console.log('🌐 Updating opportunity via API:', editingOpportunity.id, opportunityData);
             const response = await window.api.updateOpportunity(editingOpportunity.id, opportunityData);
             const updatedOpportunity = response?.data?.opportunity || response?.opportunity || response;
             
@@ -1983,7 +1831,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 });
                 setShowOpportunityForm(false);
                 
-                console.log('✅ Opportunity updated and saved to database:', updatedOpportunity.id);
             } else {
                 throw new Error('No opportunity data returned from API');
             }
@@ -2008,7 +1855,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     return;
                 }
                 
-                console.log('🌐 Deleting opportunity via API:', opportunityId);
                 await window.api.deleteOpportunity(opportunityId);
                 
                 // Update local opportunities array
@@ -2023,7 +1869,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 
                 alert('✅ Opportunity deleted from database successfully!');
                 
-                console.log('✅ Opportunity deleted from database:', opportunityId);
             } catch (error) {
                 console.error('❌ Error deleting opportunity:', error);
                 alert('❌ Error deleting opportunity from database: ' + error.message);
@@ -2079,7 +1924,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        console.log('💾 Saving form data:', { notes: formData.notes });
         hasUserEditedForm.current = false; // Reset after save
         const clientData = {
             ...formData,
@@ -2553,11 +2397,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             // Use the current textarea value to ensure we have the latest data
                                             if (client) {
                                                 const latestNotes = e.target.value;
-                                                console.log('💾 Notes onBlur triggered:', {
-                                                    notesLength: latestNotes.length,
-                                                    notesPreview: latestNotes.substring(0, 50),
-                                                    clientId: client.id
-                                                });
                                                 
                                                 // Mark form as edited to prevent useEffect from resetting
                                                 hasUserEditedForm.current = true;
@@ -2566,10 +2405,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 // Get latest formData including the notes value from the textarea
                                                 setFormData(prev => {
                                                     const latest = {...prev, notes: latestNotes};
-                                                    console.log('🔄 Updated formData with notes:', {
-                                                        notesLength: latest.notes.length,
-                                                        notesPreview: latest.notes.substring(0, 50)
-                                                    });
                                                     // Update ref immediately
                                                     formDataRef.current = latest;
                                                     return latest;
@@ -2579,19 +2414,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 const latest = {...(formDataRef.current || {}), notes: latestNotes};
                                                 formDataRef.current = latest;
                                                 
-                                                console.log('📤 Preparing to save notes:', {
-                                                    notesLength: latest.notes.length,
-                                                    notesPreview: latest.notes.substring(0, 50),
-                                                    allFields: Object.keys(latest)
-                                                });
                                                 
                                                 // Save the latest data after a small delay to ensure state is updated
                                                 setTimeout(() => {
                                                     onSave(latest, true).then((savedClient) => {
-                                                        console.log('✅ Notes saved successfully:', {
-                                                            savedNotesLength: savedClient?.notes?.length || 0,
-                                                            savedNotesPreview: savedClient?.notes?.substring(0, 50) || 'none'
-                                                        });
                                                         // Update formData with saved notes to ensure they persist
                                                         if (savedClient && savedClient.notes !== undefined) {
                                                             setFormData(prev => {
@@ -2601,11 +2427,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                 const savedNotes = savedClient.notes || '';
                                                                 if (currentNotes.trim().length > 0 && currentNotes.trim().length >= savedNotes.trim().length) {
                                                                     // Keep current notes if they're longer (user might have typed more)
-                                                                    console.log('🛡️ Keeping current notes (longer than saved):', currentNotes.substring(0, 50));
                                                                     return {...prev, notes: currentNotes};
                                                                 } else if (savedNotes.trim().length > 0) {
                                                                     // Use saved notes if they exist
-                                                                    console.log('🔄 Using saved notes:', savedNotes.substring(0, 50));
                                                                     return {...prev, notes: savedNotes};
                                                                 }
                                                                 // Otherwise keep current
@@ -2619,7 +2443,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         // CRITICAL: This delay must be LONGER than the setSelectedClient delay in Clients.jsx (100ms)
                                                         setTimeout(() => {
                                                             isAutoSavingRef.current = false;
-                                                            console.log('🔓 Auto-saving flag cleared');
                                                         }, 1000); // Increased to 1000ms to ensure setSelectedClient delay (100ms) completes first
                                                     });
                                                 }, 200); // Increased delay to ensure state is updated
@@ -2710,7 +2533,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         setFormData({ ...formData, services: next });
                                                         hasUserEditedForm.current = true;
                                                         userEditedFieldsRef.current.add('services'); // Track that user has edited services
-                                                        console.log('✅ Services updated:', next);
                                                     }}
                                                     className={`px-3 py-1.5 text-xs rounded-full border transition ${
                                                         isSelected
@@ -3058,11 +2880,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         
                                         const allContacts = Array.from(contactMap.values());
                                         
-                                        console.log('🖼️ RENDER: Contacts to display:', {
-                                            formContactsCount: formContacts.length,
-                                            optimisticCount: optimistic.length,
-                                            mergedCount: allContacts.length
-                                        });
 
                                         return allContacts.length === 0 ? (
                                             <div className="text-center py-8 text-gray-500 text-sm">
