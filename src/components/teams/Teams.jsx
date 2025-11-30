@@ -279,19 +279,30 @@ const Teams = () => {
         const currentTab = activeTabRef.current;
         if (currentTab === 'meeting-notes' && newTab !== 'meeting-notes') {
             const meetingNotesRef = window.ManagementMeetingNotesRef;
-            if (meetingNotesRef?.current?.hasPendingSaves?.()) {
-                console.log('⏳ Waiting for pending saves before tab switch...');
-                try {
-                    // Wait for saves to complete (with longer timeout)
-                    await Promise.race([
-                        meetingNotesRef.current.flushPendingSaves(),
-                        new Promise(resolve => setTimeout(resolve, 5000)) // 5 second timeout
-                    ]);
-                    // Wait a bit more to ensure all saves are fully processed
-                    await new Promise(resolve => setTimeout(resolve, 200));
-                    console.log('✅ All saves completed, switching tab');
-                } catch (error) {
-                    console.error('Error waiting for saves before tab switch:', error);
+            if (meetingNotesRef?.current?.hasPendingSaves?.() || meetingNotesRef?.current?.isBlockingNavigation?.()) {
+                console.log('🚫 Tab switch BLOCKED - saves in progress...');
+                
+                // Show blocking state if not already shown
+                if (meetingNotesRef?.current?.flushPendingSaves) {
+                    try {
+                        // Wait for saves to complete (with longer timeout)
+                        await Promise.race([
+                            meetingNotesRef.current.flushPendingSaves(),
+                            new Promise(resolve => setTimeout(resolve, 10000)) // 10 second timeout
+                        ]);
+                        // Wait a bit more to ensure all saves are fully processed
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        console.log('✅ All saves completed, switching tab');
+                    } catch (error) {
+                        console.error('Error waiting for saves before tab switch:', error);
+                    }
+                } else {
+                    // If flushPendingSaves not available, wait a bit and check again
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    if (meetingNotesRef?.current?.hasPendingSaves?.()) {
+                        console.warn('⚠️ Still has pending saves after wait, blocking tab switch');
+                        return; // Don't switch tabs
+                    }
                 }
             }
         }

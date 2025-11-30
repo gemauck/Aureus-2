@@ -271,6 +271,9 @@ const ManagementMeetingNotes = () => {
     
     // State for showing save status indicator
     const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
+    
+    // State for blocking navigation when saves are in progress
+    const [isBlockingNavigation, setIsBlockingNavigation] = useState(false);
 
     // Track pending saves to ensure they complete before navigation
     const pendingSaves = useRef(new Set());
@@ -651,11 +654,15 @@ const ManagementMeetingNotes = () => {
             return pendingSaves.current.size > 0 || 
                    Object.keys(pendingValues.current).length > 0 || 
                    activeSavePromises.current.size > 0;
-        }
+        },
+        isBlockingNavigation: () => isBlockingNavigation
     });
     
     // Flush all pending saves and wait for them to complete
     const flushPendingSaves = useCallback(async () => {
+        // Set blocking state
+        setIsBlockingNavigation(true);
+        
         // Clear all debounce timers
         Object.keys(saveTimers.current).forEach(fieldKey => {
             clearTimeout(saveTimers.current[fieldKey]);
@@ -668,7 +675,7 @@ const ManagementMeetingNotes = () => {
             try {
                 await Promise.race([
                     Promise.all(existingPromises),
-                    new Promise((resolve) => setTimeout(resolve, 2000)) // 2 second timeout for existing
+                    new Promise((resolve) => setTimeout(resolve, 3000)) // 3 second timeout for existing
                 ]);
             } catch (error) {
                 console.error('Error waiting for existing saves:', error);
@@ -718,7 +725,7 @@ const ManagementMeetingNotes = () => {
             try {
                 await Promise.race([
                     Promise.all(newSavePromises),
-                    new Promise((resolve) => setTimeout(resolve, 2000)) // 2 second timeout
+                    new Promise((resolve) => setTimeout(resolve, 3000)) // 3 second timeout
                 ]);
             } catch (error) {
                 console.error('Error waiting for new saves to complete:', error);
@@ -726,17 +733,23 @@ const ManagementMeetingNotes = () => {
         }
         
         // Final check - wait for any remaining active promises
-        const remainingPromises = Array.from(activeSavePromises.current);
-        if (remainingPromises.length > 0) {
+        let attempts = 0;
+        const maxAttempts = 5;
+        while (activeSavePromises.current.size > 0 && attempts < maxAttempts) {
+            const remainingPromises = Array.from(activeSavePromises.current);
             try {
                 await Promise.race([
                     Promise.all(remainingPromises),
-                    new Promise((resolve) => setTimeout(resolve, 1000)) // 1 second timeout for final check
+                    new Promise((resolve) => setTimeout(resolve, 1000)) // 1 second timeout per attempt
                 ]);
             } catch (error) {
                 console.error('Error waiting for remaining saves:', error);
             }
+            attempts++;
         }
+        
+        // Clear blocking state
+        setIsBlockingNavigation(false);
     }, []);
 
     // Ensure all pending saves complete before navigation
@@ -763,7 +776,7 @@ const ManagementMeetingNotes = () => {
             }
         };
 
-        // Intercept clicks on navigation links/buttons to wait for saves before navigation
+        // Intercept ALL clicks to block navigation when saves are pending
         const handleNavClick = async (e) => {
             const target = e.target.closest('a, button');
             if (!target) return;
@@ -777,30 +790,38 @@ const ManagementMeetingNotes = () => {
                 (target.closest('[class*="tab"]') && target.textContent?.match(/(Documents|Workflows|Checklists|Notices|Meeting Notes|Overview)/i)) ||
                 // Check for sidebar navigation
                 target.closest('[class*="sidebar"]') ||
-                target.closest('[class*="nav"]');
+                target.closest('[class*="nav"]') ||
+                // Check for any button that might navigate
+                (target.tagName === 'BUTTON' && (target.onclick || target.getAttribute('onclick')));
             
             if (isNavLink) {
                 const hasPendingSaves = pendingSaves.current.size > 0 || 
                     Object.keys(pendingValues.current).length > 0 || 
                     activeSavePromises.current.size > 0;
                 
-                if (hasPendingSaves) {
-                    console.log('⏳ Navigation intercepted - waiting for saves...', {
+                if (hasPendingSaves || isBlockingNavigation) {
+                    console.log('🚫 Navigation BLOCKED - saves in progress...', {
                         pendingSaves: pendingSaves.current.size,
                         pendingValues: Object.keys(pendingValues.current).length,
-                        activePromises: activeSavePromises.current.size
+                        activePromises: activeSavePromises.current.size,
+                        isBlocking: isBlockingNavigation
                     });
                     
-                    // Prevent default navigation temporarily
+                    // ALWAYS prevent navigation when saves are pending
                     e.preventDefault();
                     e.stopPropagation();
                     e.stopImmediatePropagation();
+                    
+                    // Show blocking overlay if not already shown
+                    if (!isBlockingNavigation) {
+                        setIsBlockingNavigation(true);
+                    }
                     
                     // Wait for all saves to complete
                     try {
                         await flushPendingSaves();
                         // Wait a bit more for any final saves and DOM updates
-                        await new Promise(resolve => setTimeout(resolve, 300));
+                        await new Promise(resolve => setTimeout(resolve, 500));
                         
                         console.log('✅ All saves completed, allowing navigation');
                         
@@ -813,17 +834,18 @@ const ManagementMeetingNotes = () => {
                             // Use setTimeout to ensure the click happens after current execution
                             setTimeout(() => {
                                 target.click();
-                            }, 50);
+                            }, 100);
                         }
                     } catch (error) {
                         console.error('Error waiting for saves before navigation:', error);
-                        // Still allow navigation even if save fails
+                        setIsBlockingNavigation(false);
+                        // Still allow navigation even if save fails after timeout
                         if (target.tagName === 'A') {
                             window.location.href = target.href;
                         } else {
                             setTimeout(() => {
                                 target.click();
-                            }, 50);
+                            }, 100);
                         }
                     }
                 }
@@ -847,11 +869,12 @@ const ManagementMeetingNotes = () => {
     // Update ref when flushPendingSaves changes and expose to window
     useEffect(() => {
         managementMeetingNotesRef.current.flushPendingSaves = flushPendingSaves;
+        managementMeetingNotesRef.current.isBlockingNavigation = () => isBlockingNavigation;
         window.ManagementMeetingNotesRef = managementMeetingNotesRef;
         return () => {
             delete window.ManagementMeetingNotesRef;
         };
-    }, [flushPendingSaves]);
+    }, [flushPendingSaves, isBlockingNavigation]);
 
     // Get all action items for the month
     const allActionItems = useMemo(() => {
@@ -2296,7 +2319,34 @@ const ManagementMeetingNotes = () => {
     }
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-4 relative">
+            {/* Blocking Overlay - Prevents all navigation until saves complete */}
+            {isBlockingNavigation && (
+                <div 
+                    className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[99999]"
+                    style={{ pointerEvents: 'all' }}
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }}
+                >
+                    <div className={`bg-white rounded-lg p-8 max-w-md mx-4 text-center ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
+                        <div className="mb-4">
+                            <i className="fas fa-circle-notch fa-spin text-4xl text-blue-600"></i>
+                        </div>
+                        <h3 className={`text-xl font-bold mb-2 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                            Saving Your Changes
+                        </h3>
+                        <p className={`text-sm mb-4 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                            Please wait while we save all your changes to the database. Navigation is blocked to prevent data loss.
+                        </p>
+                        <div className="flex items-center justify-center gap-2 text-xs text-gray-500">
+                            <span>Pending saves: {pendingSaves.current.size + Object.keys(pendingValues.current).length + activeSavePromises.current.size}</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+            
             {/* Header */}
             <div className={`rounded-xl border p-4 ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-white border-gray-200 shadow-sm'}`}>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
