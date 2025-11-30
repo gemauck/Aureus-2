@@ -5795,7 +5795,7 @@ const LeadDetailModal = ({
                 </div>
             )}
             
-            {/* Manage External Agents Modal - Admin Only */}
+            {/* Manage External Agents Modal - Admin Only - Added deletion functionality */}
             {showManageExternalAgentsModal && (
                 <div 
                     className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]"
