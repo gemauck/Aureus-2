@@ -3324,20 +3324,24 @@ const LeadDetailModal = ({
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Sites</label>
                                     <div className="space-y-2">
-                                        {(formData.sites || []).map((site, index) => (
+                                        {((formData && formData.sites) || []).map((site, index) => (
                                             <div key={index} className="flex gap-2">
                                                 <input 
                                                     type="text" 
                                                     value={typeof site === 'string' ? site : site.name || ''}
                                                     onChange={(e) => {
-                                                        const newSites = [...(formData.sites || [])];
-                                                        if (typeof site === 'string') {
-                                                            newSites[index] = e.target.value;
-                                                        } else {
-                                                            newSites[index] = { ...site, name: e.target.value };
-                                                        }
-                                                        setFormData({...formData, sites: newSites});
-                                                        formDataRef.current = {...formData, sites: newSites};
+                                                        setFormData(prev => {
+                                                            const currentSites = prev?.sites || [];
+                                                            const newSites = [...currentSites];
+                                                            if (typeof site === 'string') {
+                                                                newSites[index] = e.target.value;
+                                                            } else {
+                                                                newSites[index] = { ...site, name: e.target.value };
+                                                            }
+                                                            const updated = {...prev, sites: newSites};
+                                                            formDataRef.current = updated;
+                                                            return updated;
+                                                        });
                                                     }}
                                                     className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
                                                     placeholder="Site name or location"
@@ -3345,9 +3349,13 @@ const LeadDetailModal = ({
                                                 <button 
                                                     type="button"
                                                     onClick={() => {
-                                                        const newSites = (formData.sites || []).filter((_, i) => i !== index);
-                                                        setFormData({...formData, sites: newSites});
-                                                        formDataRef.current = {...formData, sites: newSites};
+                                                        setFormData(prev => {
+                                                            const currentSites = prev?.sites || [];
+                                                            const newSites = currentSites.filter((_, i) => i !== index);
+                                                            const updated = {...prev, sites: newSites};
+                                                            formDataRef.current = updated;
+                                                            return updated;
+                                                        });
                                                     }}
                                                     className="px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                                 >
@@ -3358,9 +3366,13 @@ const LeadDetailModal = ({
                                         <button 
                                             type="button"
                                             onClick={() => {
-                                                const newSites = [...(formData.sites || []), ''];
-                                                setFormData({...formData, sites: newSites});
-                                                formDataRef.current = {...formData, sites: newSites};
+                                                setFormData(prev => {
+                                                    const currentSites = prev?.sites || [];
+                                                    const newSites = [...currentSites, ''];
+                                                    const updated = {...prev, sites: newSites};
+                                                    formDataRef.current = updated;
+                                                    return updated;
+                                                });
                                             }}
                                             className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
                                         >
@@ -5842,21 +5854,24 @@ const LeadDetailModal = ({
                                     React.createElement('div', { className: 'md:col-span-2' },
                                         React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'Sites'),
                                         React.createElement('div', { className: 'space-y-2' },
-                                            (formData.sites || []).map((site, index) =>
+                                            ((formData && formData.sites) || []).map((site, index) =>
                                                 React.createElement('div', { key: index, className: 'flex gap-2' },
                                                     React.createElement('input', {
                                                         type: 'text',
                                                         value: typeof site === 'string' ? site : site.name || '',
                                                         onChange: (e) => {
-                                                            const newSites = [...(formData.sites || [])];
-                                                            if (typeof site === 'string') {
-                                                                newSites[index] = e.target.value;
-                                                            } else {
-                                                                newSites[index] = { ...site, name: e.target.value };
-                                                            }
-                                                            const updated = {...formData, sites: newSites};
-                                                            setFormData(updated);
-                                                            formDataRef.current = updated;
+                                                            setFormData(prev => {
+                                                                const currentSites = prev?.sites || [];
+                                                                const newSites = [...currentSites];
+                                                                if (typeof site === 'string') {
+                                                                    newSites[index] = e.target.value;
+                                                                } else {
+                                                                    newSites[index] = { ...site, name: e.target.value };
+                                                                }
+                                                                const updated = {...prev, sites: newSites};
+                                                                formDataRef.current = updated;
+                                                                return updated;
+                                                            });
                                                         },
                                                         className: 'flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent',
                                                         placeholder: 'Site name or location'
@@ -5864,10 +5879,13 @@ const LeadDetailModal = ({
                                                     React.createElement('button', {
                                                         type: 'button',
                                                         onClick: () => {
-                                                            const newSites = (formData.sites || []).filter((_, i) => i !== index);
-                                                            const updated = {...formData, sites: newSites};
-                                                            setFormData(updated);
-                                                            formDataRef.current = updated;
+                                                            setFormData(prev => {
+                                                                const currentSites = prev?.sites || [];
+                                                                const newSites = currentSites.filter((_, i) => i !== index);
+                                                                const updated = {...prev, sites: newSites};
+                                                                formDataRef.current = updated;
+                                                                return updated;
+                                                            });
                                                         },
                                                         className: 'px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors'
                                                     },
@@ -5878,10 +5896,13 @@ const LeadDetailModal = ({
                                             React.createElement('button', {
                                                 type: 'button',
                                                 onClick: () => {
-                                                    const newSites = [...(formData.sites || []), ''];
-                                                    const updated = {...formData, sites: newSites};
-                                                    setFormData(updated);
-                                                    formDataRef.current = updated;
+                                                    setFormData(prev => {
+                                                        const currentSites = prev?.sites || [];
+                                                        const newSites = [...currentSites, ''];
+                                                        const updated = {...prev, sites: newSites};
+                                                        formDataRef.current = updated;
+                                                        return updated;
+                                                    });
                                                 },
                                                 className: 'px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium'
                                             },
