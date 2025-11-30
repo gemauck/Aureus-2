@@ -584,10 +584,33 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     return;
                 }
             } else {
-                console.warn('⚠️ API filter by clientId failed, trying fallback...');
+                console.warn('⚠️ API filter by clientId failed, trying clientName fallback...');
             }
             
-            // Fallback: Fetch all job cards and filter by clientId client-side
+            // Fallback 1: Try filtering by clientName (in case job cards only have clientName set)
+            if (client?.name) {
+                console.log('📡 Trying to fetch job cards by clientName:', client.name);
+                response = await fetch(`/api/jobcards?clientName=${encodeURIComponent(client.name)}&pageSize=1000`, {
+                    headers: { 
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    data = await response.json();
+                    const jobCards = data.jobCards || [];
+                    console.log(`📋 Job cards found by clientName: ${jobCards.length}`);
+                    
+                    if (jobCards.length > 0) {
+                        setJobCards(jobCards);
+                        setLoadingJobCards(false);
+                        return;
+                    }
+                }
+            }
+            
+            // Fallback 2: Fetch all job cards and filter by clientId/clientName client-side
             // This handles cases where API filtering might not work correctly
             console.log('📡 Fetching all job cards for client-side filtering...');
             response = await fetch(`/api/jobcards?pageSize=1000`, {
@@ -601,12 +624,25 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 data = await response.json();
                 const allJobCards = data.jobCards || [];
                 
-                // Filter by clientId
-                const matchingJobCards = allJobCards.filter(jc => 
+                // Filter by clientId first, then by clientName if no clientId match
+                let matchingJobCards = allJobCards.filter(jc => 
                     jc.clientId && String(jc.clientId) === clientId
                 );
                 
-                console.log(`📋 Total job cards: ${allJobCards.length}, matching clientId: ${matchingJobCards.length}`);
+                // If no matches by clientId, try matching by clientName
+                if (matchingJobCards.length === 0 && client?.name) {
+                    const normalizedClientName = (client.name || '').trim().toLowerCase();
+                    matchingJobCards = allJobCards.filter(jc => {
+                        const jobCardClientName = (jc.clientName || '').trim().toLowerCase();
+                        // Match if clientName contains the client name or vice versa
+                        return jobCardClientName === normalizedClientName || 
+                               jobCardClientName.includes(normalizedClientName) ||
+                               normalizedClientName.includes(jobCardClientName);
+                    });
+                    console.log(`📋 Matched by clientName: ${matchingJobCards.length}`);
+                }
+                
+                console.log(`📋 Total job cards: ${allJobCards.length}, matching: ${matchingJobCards.length}`);
                 
                 if (matchingJobCards.length > 0) {
                     setJobCards(matchingJobCards);
@@ -634,7 +670,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         } finally {
             setLoadingJobCards(false);
         }
-    }, [client?.id]);
+    }, [client?.id, client?.name]);
     
 
     // Load tags when client changes
