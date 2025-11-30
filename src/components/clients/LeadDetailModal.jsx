@@ -91,7 +91,8 @@ const LeadDetailModal = ({
                         followUps: typeof fetchedLead.followUps === 'string' ? JSON.parse(fetchedLead.followUps || '[]') : (fetchedLead.followUps || []),
                         comments: typeof fetchedLead.comments === 'string' ? JSON.parse(fetchedLead.comments || '[]') : (fetchedLead.comments || []),
                         proposals: typeof fetchedLead.proposals === 'string' ? JSON.parse(fetchedLead.proposals || '[]') : (fetchedLead.proposals || []),
-                        projectIds: typeof fetchedLead.projectIds === 'string' ? JSON.parse(fetchedLead.projectIds || '[]') : (fetchedLead.projectIds || [])
+                        projectIds: typeof fetchedLead.projectIds === 'string' ? JSON.parse(fetchedLead.projectIds || '[]') : (fetchedLead.projectIds || []),
+                        sites: typeof fetchedLead.sites === 'string' ? JSON.parse(fetchedLead.sites || '[]') : (fetchedLead.sites || [])
                     };
                     lastSavedDataRef.current = parsedLead;
                 }
@@ -110,6 +111,13 @@ const LeadDetailModal = ({
         
         fetchLead();
     }, [leadId, initialLead]);
+    
+    // Load sites when leadId changes
+    useEffect(() => {
+        if (formData?.id && !isLoadingSitesRef.current) {
+            loadSitesFromDatabase(formData.id);
+        }
+    }, [formData?.id]);
     
     // Cleanup debounce timeout on unmount
     useEffect(() => {
@@ -153,6 +161,7 @@ const LeadDetailModal = ({
         comments: [],
         activityLog: [],
         proposals: [],
+        sites: [],
         firstContactDate: new Date().toISOString().split('T')[0],
         thumbnail: '',
         id: null // Ensure id exists even if null
@@ -172,6 +181,7 @@ const LeadDetailModal = ({
             activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
             billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {}),
             proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []),
+            sites: typeof lead.sites === 'string' ? JSON.parse(lead.sites || '[]') : (lead.sites || []),
             thumbnail: lead.thumbnail || ''
         } : defaultFormData;
         
@@ -1314,6 +1324,24 @@ const LeadDetailModal = ({
     
     const [editingContact, setEditingContact] = useState(null);
     const [showContactForm, setShowContactForm] = useState(false);
+    
+    // Sites state management
+    const [optimisticSites, setOptimisticSites] = useState([]);
+    const isLoadingSitesRef = useRef(false);
+    const [showSiteForm, setShowSiteForm] = useState(false);
+    const [editingSite, setEditingSite] = useState(null);
+    const [newSite, setNewSite] = useState({
+        name: '',
+        address: '',
+        contactPerson: '',
+        phone: '',
+        email: '',
+        notes: '',
+        latitude: '',
+        longitude: '',
+        gpsCoordinates: ''
+    });
+    
     const [newContact, setNewContact] = useState({
         name: '',
         role: '',
@@ -1977,6 +2005,323 @@ const LeadDetailModal = ({
         }
     };
 
+    // Helper function to merge arrays by unique ID
+    const mergeUniqueById = (items = [], extras = []) => {
+        const map = new Map();
+        [...(items || []), ...(extras || [])].forEach(item => {
+            if (item?.id) {
+                map.set(item.id, item);
+            }
+        });
+        return Array.from(map.values());
+    };
+
+    // Load sites from database
+    const loadSitesFromDatabase = async (leadId) => {
+        try {
+            // Prevent duplicate requests
+            if (isLoadingSitesRef.current) {
+                console.log('⏭️ Skipping site load - already loading');
+                return;
+            }
+            
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                console.log('⚠️ No authentication token, skipping site loading');
+                return;
+            }
+            
+            isLoadingSitesRef.current = true;
+            console.log('📡 Loading sites from database for lead:', leadId);
+            const response = await window.api.getSites(leadId);
+            const sites = response?.data?.sites || [];
+            
+            console.log('✅ Loaded sites from database:', sites.length);
+            
+            // Merge database sites with any optimistic sites still pending
+            setFormData(prevFormData => {
+                const mergedSites = mergeUniqueById(sites, optimisticSites);
+                return {
+                    ...prevFormData,
+                    sites: mergedSites
+                };
+            });
+            
+            // Remove optimistic sites that now exist in database
+            setOptimisticSites(prev => prev.filter(opt => !sites.some(db => db.id === opt.id)));
+        } catch (error) {
+            console.error('❌ Error loading sites from database:', error);
+        } finally {
+            isLoadingSitesRef.current = false;
+        }
+    };
+
+    const handleAddSite = async () => {
+        if (!newSite.name) {
+            alert('Site name is required');
+            return;
+        }
+        
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                alert('❌ Please log in to save sites to the database');
+                return;
+            }
+            
+            if (!window.api?.createSite) {
+                alert('❌ Site API not available. Please refresh the page.');
+                return;
+            }
+            
+            console.log('🌐 Creating site via API:', newSite);
+            const response = await window.api.createSite(formData.id, newSite);
+            const savedSite = response?.data?.site || response?.site || response;
+            
+            if (savedSite && savedSite.id) {
+                // Add to optimistic sites state
+                setOptimisticSites(prev => {
+                    const siteExists = prev.some(s => s.id === savedSite.id);
+                    if (siteExists) {
+                        console.log('⚠️ Site already in optimistic state');
+                        return prev;
+                    }
+                    return [...prev, savedSite];
+                });
+                
+                // Optimistically update UI immediately
+                setFormData(prev => {
+                    const currentSites = prev.sites || [];
+                    const siteExists = currentSites.some(s => s.id === savedSite.id);
+                    if (siteExists) {
+                        return prev;
+                    }
+                    return {
+                        ...prev,
+                        sites: [...currentSites, savedSite]
+                    };
+                });
+                
+                // Get current user info for activity log
+                let currentUser = { name: 'System', email: 'system', id: 'system' };
+                if (window.storage) {
+                    if (typeof window.storage.getUserInfo === 'function') {
+                        currentUser = window.storage.getUserInfo() || currentUser;
+                    } else if (typeof window.storage.getUser === 'function') {
+                        const user = window.storage.getUser();
+                        if (user) {
+                            currentUser = {
+                                name: user.name || 'System',
+                                email: user.email || 'system',
+                                id: user.id || 'system'
+                            };
+                        }
+                    }
+                }
+                
+                // Create activity log entry
+                const activity = {
+                    id: Date.now(),
+                    type: 'Site Added',
+                    description: `Added site: ${newSite.name}`,
+                    timestamp: new Date().toISOString(),
+                    user: currentUser.name,
+                    userId: currentUser.id,
+                    userEmail: currentUser.email,
+                    relatedId: savedSite.id
+                };
+                
+                const updatedActivityLog = [...(Array.isArray(formData.activityLog) ? formData.activityLog : []), activity];
+                const updatedFormData = {
+                    ...formData,
+                    sites: [...(formData.sites || []), savedSite],
+                    activityLog: updatedActivityLog
+                };
+                
+                // Save site changes immediately
+                (async () => {
+                    try {
+                        await onSave(updatedFormData, true);
+                        console.log('✅ Site save completed successfully');
+                    } catch (error) {
+                        console.error('❌ Error saving site:', error);
+                        alert('Failed to save site. Please try again.');
+                    }
+                })();
+                
+                // Switch to sites tab
+                handleTabChange('sites');
+                
+                // Close form and reset
+                setNewSite({
+                    name: '',
+                    address: '',
+                    contactPerson: '',
+                    phone: '',
+                    email: '',
+                    notes: '',
+                    latitude: '',
+                    longitude: '',
+                    gpsCoordinates: ''
+                });
+                setShowSiteForm(false);
+            } else {
+                throw new Error('No site ID returned from API');
+            }
+        } catch (error) {
+            console.error('❌ Error creating site:', error);
+            alert('❌ Error saving site to database: ' + error.message);
+        }
+    };
+
+    const handleEditSite = (site) => {
+        setEditingSite(site);
+        setNewSite(site);
+        setShowSiteForm(true);
+    };
+
+    const handleUpdateSite = () => {
+        try {
+            // Get current user info for activity log
+            let currentUser = { name: 'System', email: 'system', id: 'system' };
+            if (window.storage) {
+                if (typeof window.storage.getUserInfo === 'function') {
+                    currentUser = window.storage.getUserInfo() || currentUser;
+                } else if (typeof window.storage.getUser === 'function') {
+                    const user = window.storage.getUser();
+                    if (user) {
+                        currentUser = {
+                            name: user.name || 'System',
+                            email: user.email || 'system',
+                            id: user.id || 'system'
+                        };
+                    }
+                }
+            }
+            
+            const sites = Array.isArray(formData.sites) ? formData.sites : [];
+            const updatedSites = sites.map(s => 
+                s.id === editingSite.id ? {...newSite, id: s.id} : s
+            );
+            
+            // Create activity log entry
+            const activity = {
+                id: Date.now(),
+                type: 'Site Updated',
+                description: `Updated site: ${newSite.name}`,
+                timestamp: new Date().toISOString(),
+                user: currentUser.name,
+                userId: currentUser.id,
+                userEmail: currentUser.email,
+                relatedId: editingSite.id
+            };
+            
+            const updatedActivityLog = [...(Array.isArray(formData.activityLog) ? formData.activityLog : []), activity];
+            const updatedFormData = {
+                ...formData,
+                sites: updatedSites,
+                activityLog: updatedActivityLog
+            };
+            
+            setFormData(updatedFormData);
+            
+            // Save site changes immediately
+            (async () => {
+                try {
+                    await onSave(updatedFormData, true);
+                    console.log('✅ Site update saved successfully');
+                } catch (error) {
+                    console.error('❌ Error saving site update:', error);
+                    alert('Failed to save site update. Please try again.');
+                }
+            })();
+            
+            setEditingSite(null);
+            setNewSite({
+                name: '',
+                address: '',
+                contactPerson: '',
+                phone: '',
+                email: '',
+                notes: '',
+                latitude: '',
+                longitude: '',
+                gpsCoordinates: ''
+            });
+            setShowSiteForm(false);
+            // Stay in sites tab
+            setTimeout(() => {
+                handleTabChange('sites');
+            }, 100);
+        } catch (error) {
+            console.error('❌ Error updating site:', error);
+            alert('Failed to update site: ' + error.message);
+        }
+    };
+
+    const handleDeleteSite = (siteId) => {
+        const site = formData.sites?.find(s => s.id === siteId);
+        if (confirm('Delete this site?')) {
+            try {
+                // Get current user info for activity log
+                let currentUser = { name: 'System', email: 'system', id: 'system' };
+                if (window.storage) {
+                    if (typeof window.storage.getUserInfo === 'function') {
+                        currentUser = window.storage.getUserInfo() || currentUser;
+                    } else if (typeof window.storage.getUser === 'function') {
+                        const user = window.storage.getUser();
+                        if (user) {
+                            currentUser = {
+                                name: user.name || 'System',
+                                email: user.email || 'system',
+                                id: user.id || 'system'
+                            };
+                        }
+                    }
+                }
+                
+                const sites = Array.isArray(formData.sites) ? formData.sites : [];
+                const updatedSites = sites.filter(s => s.id !== siteId);
+                
+                // Create activity log entry
+                const activity = {
+                    id: Date.now(),
+                    type: 'Site Deleted',
+                    description: `Deleted site: ${site?.name || 'Unknown'}`,
+                    timestamp: new Date().toISOString(),
+                    user: currentUser.name,
+                    userId: currentUser.id,
+                    userEmail: currentUser.email,
+                    relatedId: siteId
+                };
+                
+                const updatedActivityLog = [...(Array.isArray(formData.activityLog) ? formData.activityLog : []), activity];
+                const updatedFormData = {
+                    ...formData,
+                    sites: updatedSites,
+                    activityLog: updatedActivityLog
+                };
+                
+                setFormData(updatedFormData);
+                
+                // Save site deletion immediately
+                (async () => {
+                    try {
+                        await onSave(updatedFormData, true);
+                        console.log('✅ Site deletion saved successfully');
+                    } catch (error) {
+                        console.error('❌ Error saving site deletion:', error);
+                    }
+                })();
+                
+                handleTabChange('sites');
+            } catch (error) {
+                console.error('❌ Error deleting site:', error);
+                alert('Failed to delete site: ' + error.message);
+            }
+        }
+    };
+
     const handleAddFollowUp = () => {
         if (!newFollowUp.date || !newFollowUp.description) {
             alert('Date and description are required');
@@ -2449,7 +2794,7 @@ const LeadDetailModal = ({
                 {/* Tabs */}
                 <div className="border-b border-gray-200 px-3 sm:px-6">
                     <div className="flex flex-wrap gap-2 sm:gap-6">
-                        {['overview', 'contacts', 'calendar', ...(isAdmin ? ['proposals'] : []), 'activity', 'notes'].map(tab => (
+                        {['overview', 'contacts', 'sites', 'calendar', ...(isAdmin ? ['proposals'] : []), 'activity', 'notes'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => handleTabChange(tab)}
@@ -2463,6 +2808,7 @@ const LeadDetailModal = ({
                                 <i className={`fas fa-${
                                     tab === 'overview' ? 'info-circle' :
                                     tab === 'contacts' ? 'users' :
+                                    tab === 'sites' ? 'map-marker-alt' :
                                     tab === 'calendar' ? 'calendar-alt' :
                                     tab === 'proposals' ? 'file-contract' :
                                     tab === 'activity' ? 'history' :
@@ -2472,6 +2818,11 @@ const LeadDetailModal = ({
                                 {tab === 'contacts' && Array.isArray(formData.contacts) && formData.contacts.length > 0 && (
                                     <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
                                         {formData.contacts.length}
+                                    </span>
+                                )}
+                                {tab === 'sites' && formData.sites?.length > 0 && (
+                                    <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
+                                        {formData.sites.length}
                                     </span>
                                 )}
                                 {tab === 'proposals' && Array.isArray(formData.proposals) && formData.proposals.length > 0 && (
@@ -2969,6 +3320,56 @@ const LeadDetailModal = ({
                                     ></textarea>
                                 </div>
 
+                                {/* Sites Section */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Sites</label>
+                                    <div className="space-y-2">
+                                        {(formData.sites || []).map((site, index) => (
+                                            <div key={index} className="flex gap-2">
+                                                <input 
+                                                    type="text" 
+                                                    value={typeof site === 'string' ? site : site.name || ''}
+                                                    onChange={(e) => {
+                                                        const newSites = [...(formData.sites || [])];
+                                                        if (typeof site === 'string') {
+                                                            newSites[index] = e.target.value;
+                                                        } else {
+                                                            newSites[index] = { ...site, name: e.target.value };
+                                                        }
+                                                        setFormData({...formData, sites: newSites});
+                                                        formDataRef.current = {...formData, sites: newSites};
+                                                    }}
+                                                    className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
+                                                    placeholder="Site name or location"
+                                                />
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const newSites = (formData.sites || []).filter((_, i) => i !== index);
+                                                        setFormData({...formData, sites: newSites});
+                                                        formDataRef.current = {...formData, sites: newSites};
+                                                    }}
+                                                    className="px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                >
+                                                    <i className="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        ))}
+                                        <button 
+                                            type="button"
+                                            onClick={() => {
+                                                const newSites = [...(formData.sites || []), ''];
+                                                setFormData({...formData, sites: newSites});
+                                                formDataRef.current = {...formData, sites: newSites};
+                                            }}
+                                            className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                        >
+                                            <i className="fas fa-plus mr-1"></i>
+                                            Add Site
+                                        </button>
+                                    </div>
+                                </div>
+
                                 {/* RSS News Feed Subscription */}
                                 <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                                     <div className="flex items-center justify-between">
@@ -3374,6 +3775,252 @@ const LeadDetailModal = ({
                                             </div>
                                         ))
                                     )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Sites Tab */}
+                        {activeTab === 'sites' && (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-lg font-semibold text-gray-900">Sites & Locations</h3>
+                                    {!showSiteForm && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowSiteForm(true)}
+                                            className="bg-primary-600 text-white px-3 py-1.5 text-sm rounded-lg hover:bg-primary-700 flex items-center"
+                                        >
+                                            <i className="fas fa-plus mr-1.5"></i>
+                                            Add Site
+                                        </button>
+                                    )}
+                                </div>
+
+                                {showSiteForm && (
+                                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                                        <h4 className="font-medium text-gray-900 mb-3 text-sm">
+                                            {editingSite ? 'Edit Site' : 'New Site'}
+                                        </h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Site Name *</label>
+                                                <input
+                                                    type="text"
+                                                    value={newSite.name}
+                                                    onChange={(e) => setNewSite({...newSite, name: e.target.value})}
+                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                    placeholder="e.g., Main Mine, North Farm"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Site Contact</label>
+                                                <input
+                                                    type="text"
+                                                    value={newSite.contactPerson}
+                                                    onChange={(e) => setNewSite({...newSite, contactPerson: e.target.value})}
+                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                                                    placeholder="Contact person name"
+                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                />
+                                            </div>
+                                            <div className="col-span-2">
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Address</label>
+                                                <textarea
+                                                    value={newSite.address}
+                                                    onChange={(e) => setNewSite({...newSite, address: e.target.value})}
+                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                    rows="2"
+                                                    placeholder="Full site address"
+                                                ></textarea>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Phone</label>
+                                                <input
+                                                    type="tel"
+                                                    value={newSite.phone}
+                                                    onChange={(e) => setNewSite({...newSite, phone: e.target.value})}
+                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                                                    placeholder="+27 11 123 4567"
+                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
+                                                <input
+                                                    type="email"
+                                                    value={newSite.email}
+                                                    onChange={(e) => setNewSite({...newSite, email: e.target.value})}
+                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                                                    placeholder="site@company.com"
+                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                />
+                                            </div>
+                                            <div className="col-span-2">
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
+                                                <textarea
+                                                    value={newSite.notes}
+                                                    onChange={(e) => setNewSite({...newSite, notes: e.target.value})}
+                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                    rows="2"
+                                                    placeholder="Equipment deployed, special instructions, etc."
+                                                ></textarea>
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-end gap-2 mt-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setShowSiteForm(false);
+                                                    setEditingSite(null);
+                                                    setNewSite({
+                                                        name: '',
+                                                        address: '',
+                                                        contactPerson: '',
+                                                        phone: '',
+                                                        email: '',
+                                                        notes: '',
+                                                        latitude: '',
+                                                        longitude: '',
+                                                        gpsCoordinates: ''
+                                                    });
+                                                }}
+                                                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={editingSite ? handleUpdateSite : handleAddSite}
+                                                className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                                            >
+                                                {editingSite ? 'Update' : 'Add'} Site
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="space-y-2">
+                                    {(() => {
+                                        // Merge formData sites with optimistic sites
+                                        const formSites = formData.sites || [];
+                                        const optimistic = optimisticSites || [];
+                                        
+                                        // Merge and deduplicate by ID
+                                        const siteMap = new Map();
+                                        
+                                        // Add formData sites first
+                                        formSites.forEach(site => {
+                                            if (site?.id) siteMap.set(site.id, site);
+                                        });
+                                        
+                                        // Add optimistic sites (will overwrite if duplicate ID)
+                                        optimistic.forEach(site => {
+                                            if (site?.id) siteMap.set(site.id, site);
+                                        });
+                                        
+                                        const allSites = Array.from(siteMap.values());
+                                        
+                                        return allSites.length === 0 ? (
+                                            <div className="text-center py-8 text-gray-500 text-sm">
+                                                <i className="fas fa-map-marker-alt text-3xl mb-2"></i>
+                                                <p>No sites added yet</p>
+                                            </div>
+                                        ) : (
+                                            allSites.map(site => (
+                                                <div key={site.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:border-primary-300 transition-all duration-200 hover:shadow-md">
+                                                    <div className="flex justify-between items-start mb-3">
+                                                        <div className="flex items-center gap-2">
+                                                            <i className="fas fa-map-marker-alt text-primary-600 text-lg"></i>
+                                                            <h4 className="font-semibold text-gray-900 text-base">{site.name}</h4>
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleEditSite(site)}
+                                                                className="text-primary-600 hover:text-primary-700 p-2 hover:bg-primary-50 rounded-lg transition-colors"
+                                                                title="Edit Site"
+                                                            >
+                                                                <i className="fas fa-edit"></i>
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDeleteSite(site.id)}
+                                                                className="text-red-600 hover:text-red-700 p-2 hover:bg-red-50 rounded-lg transition-colors"
+                                                                title="Delete Site"
+                                                            >
+                                                                <i className="fas fa-trash"></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        <div className="space-y-3">
+                                                            {site.address && (
+                                                                <div className="flex items-start gap-2 text-gray-700">
+                                                                    <i className="fas fa-map-marker-alt text-primary-600 mt-0.5 w-4"></i>
+                                                                    <div>
+                                                                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Address</div>
+                                                                        <div className="text-sm">{site.address}</div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                            
+                                                            {site.contactPerson && (
+                                                                <div className="flex items-start gap-2 text-gray-700">
+                                                                    <i className="fas fa-user text-blue-600 mt-0.5 w-4"></i>
+                                                                    <div>
+                                                                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Contact Person</div>
+                                                                        <div className="text-sm">{site.contactPerson}</div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="space-y-3">
+                                                            {site.phone && (
+                                                                <div className="flex items-start gap-2 text-gray-700">
+                                                                    <i className="fas fa-phone text-green-600 mt-0.5 w-4"></i>
+                                                                    <div>
+                                                                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Phone</div>
+                                                                        <a href={`tel:${site.phone}`} className="text-sm text-primary-600 hover:underline">
+                                                                            {site.phone}
+                                                                        </a>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                            
+                                                            {site.email && (
+                                                                <div className="flex items-start gap-2 text-gray-700">
+                                                                    <i className="fas fa-envelope text-purple-600 mt-0.5 w-4"></i>
+                                                                    <div>
+                                                                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Email</div>
+                                                                        <a href={`mailto:${site.email}`} className="text-sm text-primary-600 hover:underline">
+                                                                            {site.email}
+                                                                        </a>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    {site.notes && (
+                                                        <div className="mt-4 pt-3 border-t border-gray-200">
+                                                            <div className="flex items-start gap-2">
+                                                                <i className="fas fa-sticky-note text-yellow-600 mt-0.5 w-4"></i>
+                                                                <div className="flex-1">
+                                                                    <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Notes</div>
+                                                                    <div className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
+                                                                        {site.notes}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))
+                                        );
+                                    })()}
                                 </div>
                             </div>
                         )}
@@ -4942,7 +5589,7 @@ const LeadDetailModal = ({
                     React.createElement('form', { onSubmit: handleSubmit, className: 'h-full flex flex-col' },
                         React.createElement('div', { className: 'border-b border-gray-200 px-3 sm:px-6' },
                             React.createElement('div', { className: 'flex gap-2 sm:gap-6 overflow-x-auto scrollbar-hide', style: { scrollbarWidth: 'none', msOverflowStyle: 'none' } },
-                                ['overview', 'contacts', 'calendar', ...(isAdmin ? ['proposals'] : []), 'activity', 'notes'].map(tab =>
+                                ['overview', 'contacts', 'sites', 'calendar', ...(isAdmin ? ['proposals'] : []), 'activity', 'notes'].map(tab =>
                                     React.createElement('button', {
                                         key: tab,
                                         onClick: () => handleTabChange(tab),
@@ -5191,6 +5838,57 @@ const LeadDetailModal = ({
                                             className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500',
                                             placeholder: 'Add notes about this lead...'
                                         })
+                                    ),
+                                    React.createElement('div', { className: 'md:col-span-2' },
+                                        React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'Sites'),
+                                        React.createElement('div', { className: 'space-y-2' },
+                                            (formData.sites || []).map((site, index) =>
+                                                React.createElement('div', { key: index, className: 'flex gap-2' },
+                                                    React.createElement('input', {
+                                                        type: 'text',
+                                                        value: typeof site === 'string' ? site : site.name || '',
+                                                        onChange: (e) => {
+                                                            const newSites = [...(formData.sites || [])];
+                                                            if (typeof site === 'string') {
+                                                                newSites[index] = e.target.value;
+                                                            } else {
+                                                                newSites[index] = { ...site, name: e.target.value };
+                                                            }
+                                                            const updated = {...formData, sites: newSites};
+                                                            setFormData(updated);
+                                                            formDataRef.current = updated;
+                                                        },
+                                                        className: 'flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent',
+                                                        placeholder: 'Site name or location'
+                                                    }),
+                                                    React.createElement('button', {
+                                                        type: 'button',
+                                                        onClick: () => {
+                                                            const newSites = (formData.sites || []).filter((_, i) => i !== index);
+                                                            const updated = {...formData, sites: newSites};
+                                                            setFormData(updated);
+                                                            formDataRef.current = updated;
+                                                        },
+                                                        className: 'px-2 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors'
+                                                    },
+                                                        React.createElement('i', { className: 'fas fa-trash' })
+                                                    )
+                                                )
+                                            ),
+                                            React.createElement('button', {
+                                                type: 'button',
+                                                onClick: () => {
+                                                    const newSites = [...(formData.sites || []), ''];
+                                                    const updated = {...formData, sites: newSites};
+                                                    setFormData(updated);
+                                                    formDataRef.current = updated;
+                                                },
+                                                className: 'px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium'
+                                            },
+                                                React.createElement('i', { className: 'fas fa-plus mr-1' }),
+                                                'Add Site'
+                                            )
+                                        )
                                     )
                                 )
                             ),
