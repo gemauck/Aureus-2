@@ -42,7 +42,15 @@ const DashboardSimple = () => {
             setTasksError(null);
             try {
                 const token = window.storage?.getToken?.();
-                if (!token || !window.DatabaseAPI) {
+                if (!token) {
+                    setTasksError('Not authenticated');
+                    setTasks([]);
+                    setTasksLoading(false);
+                    return;
+                }
+                
+                if (!window.DatabaseAPI) {
+                    setTasksError('DatabaseAPI not available');
                     setTasks([]);
                     setTasksLoading(false);
                     return;
@@ -50,10 +58,11 @@ const DashboardSimple = () => {
 
                 const response = await window.DatabaseAPI.getTasks();
                 const tasksData = response?.data?.tasks || [];
+                console.log('Loaded tasks:', tasksData.length, tasksData);
                 setTasks(tasksData);
             } catch (err) {
                 console.error('Error loading tasks:', err);
-                setTasksError('Failed to load tasks');
+                setTasksError(err.message || 'Failed to load tasks');
                 setTasks([]);
             } finally {
                 setTasksLoading(false);
