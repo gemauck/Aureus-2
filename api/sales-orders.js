@@ -8,12 +8,6 @@ import { withLogging } from './_lib/logger.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔍 Sales Orders API Debug:', {
-      method: req.method,
-      url: req.url,
-      headers: req.headers,
-      user: req.user
-    })
     
     // Parse the URL path - strip /api/ prefix if present
     const urlPath = req.url.split('?')[0].split('#')[0].replace(/^\/api\//, '/')
@@ -35,7 +29,6 @@ async function handler(req, res) {
           },
           orderBy: { createdAt: 'desc' } 
         })
-        console.log('✅ Sales orders retrieved successfully:', salesOrders.length)
         return ok(res, { salesOrders })
       } catch (dbError) {
         console.error('❌ Database error listing sales orders:', dbError)
@@ -47,12 +40,10 @@ async function handler(req, res) {
     if (req.method === 'GET' && pathSegments.length === 3 && pathSegments[0] === 'sales-orders' && pathSegments[1] === 'client') {
       const clientId = pathSegments[2]
       try {
-        console.log('🔍 Sales Orders API: Fetching orders for clientId:', clientId)
         const salesOrders = await prisma.salesOrder.findMany({ 
           where: { clientId },
           orderBy: { createdAt: 'desc' } 
         })
-        console.log('✅ Client sales orders retrieved successfully:', salesOrders.length, 'for client:', clientId)
         return ok(res, { salesOrders })
       } catch (dbError) {
         console.error('❌ Database error getting client sales orders:', dbError)
@@ -112,7 +103,6 @@ async function handler(req, res) {
         ownerId: req.user?.sub || null
       }
 
-      console.log('🔍 Creating sales order with data:', salesOrderData)
       try {
         const salesOrder = await prisma.salesOrder.create({
           data: salesOrderData
@@ -124,7 +114,6 @@ async function handler(req, res) {
           items: typeof salesOrder.items === 'string' ? JSON.parse(salesOrder.items) : salesOrder.items
         }
         
-        console.log('✅ Sales order created successfully:', salesOrder.id)
         return created(res, { salesOrder: responseOrder })
       } catch (dbError) {
         console.error('❌ Database error creating sales order:', dbError)
@@ -156,7 +145,6 @@ async function handler(req, res) {
             items: typeof salesOrder.items === 'string' ? JSON.parse(salesOrder.items) : salesOrder.items
           }
           
-          console.log('✅ Sales order retrieved successfully:', salesOrder.id)
           return ok(res, { salesOrder: responseOrder })
         } catch (dbError) {
           console.error('❌ Database error getting sales order:', dbError)
@@ -187,19 +175,9 @@ async function handler(req, res) {
         const isShipped = newStatus === 'shipped' && oldStatus !== 'shipped'
         const hasShippedDate = body.shippedDate && !existingOrder.shippedDate
         
-        console.log('🔍 Sales order status change check:', {
-          orderId: id,
-          orderNumber: existingOrder.orderNumber,
-          oldStatus,
-          newStatus,
-          isShipped,
-          hasShippedDate,
-          willProcessStock: isShipped || hasShippedDate
-        })
         
         // Handle stock movements when order is shipped
         if (isShipped || hasShippedDate) {
-          console.log(`📦 Processing stock movements for sales order ${existingOrder.orderNumber || id} (status: ${oldStatus} -> ${newStatus})`)
           try {
             await prisma.$transaction(async (tx) => {
               // Parse items from order
@@ -207,10 +185,8 @@ async function handler(req, res) {
                 ? JSON.parse(existingOrder.items || '[]') 
                 : (Array.isArray(existingOrder.items) ? existingOrder.items : [])
               
-              console.log(`📋 Sales order has ${items.length} items to process`)
               
               if (items.length === 0) {
-                console.log('⚠️ Sales order has no items - skipping stock movement')
                 return
               }
               
@@ -223,7 +199,6 @@ async function handler(req, res) {
               // Helper to update LocationInventory
               async function upsertLocationInventory(locationId, sku, itemName, quantityDelta) {
                 if (!locationId) {
-                  console.log(`⚠️ No locationId provided for ${sku} - using main warehouse`)
                   const mainWarehouse = await tx.stockLocation.findFirst({ where: { code: 'LOC001' } })
                   if (!mainWarehouse) {
                     console.error(`❌ Main warehouse (LOC001) not found - cannot update LocationInventory for ${sku}`)
@@ -237,7 +212,6 @@ async function handler(req, res) {
                 })
                 
                 if (!li) {
-                  console.log(`📦 Creating LocationInventory record for ${sku} at location ${locationId}`)
                   li = await tx.locationInventory.create({ 
                     data: {
                       locationId,
@@ -255,7 +229,6 @@ async function handler(req, res) {
                 const newQty = Math.max(0, oldQty + quantityDelta) // Don't allow negative
                 const status = newQty > (li.reorderPoint || 0) ? 'in_stock' : (newQty > 0 ? 'low_stock' : 'out_of_stock')
                 
-                console.log(`📊 LocationInventory update for ${sku}: ${oldQty} + ${quantityDelta} = ${newQty}`)
                 
                 return await tx.locationInventory.update({
                   where: { id: li.id },
@@ -269,24 +242,20 @@ async function handler(req, res) {
               // Process each item in the sales order
               for (const item of items) {
                 if (!item.sku || !item.quantity || item.quantity <= 0) {
-                  console.log(`⏭️ Skipping item - missing SKU or invalid quantity:`, item)
                   continue
                 }
                 
-                console.log(`📦 Processing item: ${item.sku} (${item.name || 'unnamed'}), quantity: ${item.quantity}`)
                 
                 const inventoryItem = await tx.inventoryItem.findFirst({
                   where: { sku: item.sku }
                 })
                 
                 if (!inventoryItem) {
-                  console.log(`⚠️ Inventory item not found for SKU: ${item.sku} - skipping`)
                   continue
                 }
                 
                 const quantityToDeduct = parseFloat(item.quantity) || 0
                 if (quantityToDeduct <= 0) {
-                  console.log(`⏭️ Skipping item - invalid quantity: ${quantityToDeduct}`)
                   continue
                 }
                 
@@ -298,13 +267,12 @@ async function handler(req, res) {
                   throw new Error(errorMsg)
                 }
                 
-                // Get location for inventory item
-                let locationId = inventoryItem.locationId || null
+                // Get location for inventory item (prefer item's location, then inventory item's location, then main warehouse)
+                let locationId = item.locationId || inventoryItem.locationId || null
                 if (!locationId) {
                   const mainWarehouse = await tx.stockLocation.findFirst({ where: { code: 'LOC001' } })
                   if (mainWarehouse) {
                     locationId = mainWarehouse.id
-                    console.log(`📍 Using main warehouse (LOC001) for ${item.sku}`)
                   } else {
                     console.error(`❌ Main warehouse (LOC001) not found - cannot process stock movement for ${item.sku}`)
                     continue
@@ -340,7 +308,6 @@ async function handler(req, res) {
                   }
                 })
                 
-                console.log(`✅ Created stock movement ${movement.movementId} for ${item.sku}`)
                 
                 // Recalculate master aggregate from all locations
                 const totalAtLocations = await tx.locationInventory.aggregate({ 
@@ -359,11 +326,9 @@ async function handler(req, res) {
                   }
                 })
                 
-                console.log(`✅ Deducted ${quantityToDeduct} of ${item.sku} for sales order ${existingOrder.orderNumber || id}. New quantity: ${aggQty}`)
               }
             })
             
-            console.log(`✅ Stock movements created successfully for sales order ${existingOrder.orderNumber || id}`)
           } catch (stockError) {
             console.error('❌ Failed to process stock movements for sales order:', stockError)
             console.error('❌ Error stack:', stockError.stack)
@@ -392,7 +357,6 @@ async function handler(req, res) {
           }
         })
         
-        console.log('🔍 Updating sales order with data:', updateData)
         try {
           const salesOrder = await prisma.salesOrder.update({ 
             where: { id }, 
@@ -405,7 +369,6 @@ async function handler(req, res) {
             items: typeof salesOrder.items === 'string' ? JSON.parse(salesOrder.items) : salesOrder.items
           }
           
-          console.log('✅ Sales order updated successfully:', salesOrder.id)
           return ok(res, { salesOrder: responseOrder })
         } catch (dbError) {
           console.error('❌ Database error updating sales order:', dbError)
@@ -416,7 +379,6 @@ async function handler(req, res) {
       if (req.method === 'DELETE') {
         try {
           await prisma.salesOrder.delete({ where: { id } })
-          console.log('✅ Sales order deleted successfully:', id)
           return ok(res, { deleted: true })
         } catch (dbError) {
           console.error('❌ Database error deleting sales order:', dbError)

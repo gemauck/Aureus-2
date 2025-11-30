@@ -1053,10 +1053,43 @@ async function handler(req, res) {
 
             // Create LocationInventory placeholder for this item's location only
             // Best practice: Items are location-specific, not duplicated across all locations
-            if (locationId) {
+            if (locationId && quantity > 0) {
               await ensureLocationInventoryPlaceholder(locationId, inventoryItem)
               // Update the LocationInventory with the initial quantity
               await upsertLocationInventoryQuantity(locationId, inventoryItem, quantity)
+              
+              // Create stock movement for starting balance (best practice: record all inventory changes)
+              try {
+                const lastMovement = await prisma.stockMovement.findFirst({
+                  orderBy: { createdAt: 'desc' }
+                })
+                const nextNumber = lastMovement && lastMovement.movementId?.startsWith('MOV')
+                  ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
+                  : 1
+                
+                const location = await prisma.stockLocation.findUnique({ where: { id: locationId } })
+                const locationCode = location?.code || ''
+                
+                await prisma.stockMovement.create({
+                  data: {
+                    movementId: `MOV${String(nextNumber).padStart(4, '0')}`,
+                    date: new Date(),
+                    type: 'adjustment', // Starting balance is an adjustment
+                    itemName: inventoryItem.name,
+                    sku: inventoryItem.sku,
+                    quantity: quantity, // Positive for starting balance
+                    fromLocation: '',
+                    toLocation: locationCode,
+                    reference: 'BULK_IMPORT',
+                    performedBy: 'System',
+                    notes: `Initial stock balance recorded for ${inventoryItem.name} at ${location?.name || locationCode} (bulk import)`,
+                    ownerId: null
+                  }
+                })
+              } catch (movementError) {
+                // Log but don't fail the bulk import if movement creation fails
+                console.warn(`⚠️ Failed to create stock movement for ${inventoryItem.sku}:`, movementError.message)
+              }
             }
             
             created.push({ sku: inventoryItem.sku, name: inventoryItem.name })
@@ -1185,10 +1218,43 @@ async function handler(req, res) {
         
         // Create LocationInventory placeholder for this item's location only
         // Best practice: Items are location-specific, not duplicated across all locations
-        if (locationId) {
+        if (locationId && quantity > 0) {
           await ensureLocationInventoryPlaceholder(locationId, item)
           // Update the LocationInventory with the initial quantity
           await upsertLocationInventoryQuantity(locationId, item, quantity)
+          
+          // Create stock movement for starting balance (best practice: record all inventory changes)
+          try {
+            const lastMovement = await prisma.stockMovement.findFirst({
+              orderBy: { createdAt: 'desc' }
+            })
+            const nextNumber = lastMovement && lastMovement.movementId?.startsWith('MOV')
+              ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
+              : 1
+            
+            const location = await prisma.stockLocation.findUnique({ where: { id: locationId } })
+            const locationCode = location?.code || ''
+            
+            await prisma.stockMovement.create({
+              data: {
+                movementId: `MOV${String(nextNumber).padStart(4, '0')}`,
+                date: new Date(),
+                type: 'adjustment', // Starting balance is an adjustment
+                itemName: item.name,
+                sku: item.sku,
+                quantity: quantity, // Positive for starting balance
+                fromLocation: '',
+                toLocation: locationCode,
+                reference: 'INITIAL_BALANCE',
+                performedBy: req.user?.name || 'System',
+                notes: `Initial stock balance recorded for ${item.name} at ${location?.name || locationCode}`,
+                ownerId: null
+              }
+            })
+          } catch (movementError) {
+            // Log but don't fail the inventory creation if movement creation fails
+            console.warn('⚠️ Failed to create stock movement for initial balance:', movementError.message)
+          }
         }
         
         return created(res, { 
@@ -2269,6 +2335,64 @@ async function handler(req, res) {
                   if (allocatedQty > 0 && allocatedQty < requiredQty) {
                   }
                   
+                  // Get component location (default to main warehouse if not specified)
+                  let componentLocationId = inventoryItem.locationId || null
+                  if (!componentLocationId) {
+                    const mainWarehouse = await tx.stockLocation.findFirst({ 
+                      where: { code: 'LOC001' } 
+                    })
+                    if (mainWarehouse) componentLocationId = mainWarehouse.id
+                  }
+                  
+                  // Helper to update LocationInventory for consumed components
+                  async function upsertLocationInventory(locationId, sku, itemName, quantityDelta, unitCost, reorderPoint) {
+                    if (!locationId) return null
+                    
+                    let li = await tx.locationInventory.findUnique({ 
+                      where: { locationId_sku: { locationId, sku } } 
+                    })
+                    
+                    if (!li) {
+                      li = await tx.locationInventory.create({ 
+                        data: {
+                          locationId,
+                          sku,
+                          itemName,
+                          quantity: 0,
+                          unitCost: unitCost || 0,
+                          reorderPoint: reorderPoint || 0,
+                          status: 'out_of_stock'
+                        }
+                      })
+                    }
+                    
+                    const newQty = (li.quantity || 0) + quantityDelta
+                    const status = getStatusFromQuantity(newQty, li.reorderPoint || reorderPoint || 0)
+                    
+                    return await tx.locationInventory.update({
+                      where: { id: li.id },
+                      data: {
+                        quantity: newQty,
+                        unitCost: unitCost !== undefined ? unitCost : li.unitCost,
+                        reorderPoint: reorderPoint !== undefined ? reorderPoint : li.reorderPoint,
+                        status,
+                        itemName: itemName || li.itemName
+                      }
+                    })
+                  }
+                  
+                  // Update LocationInventory for consumed component (decrease quantity)
+                  if (componentLocationId) {
+                    await upsertLocationInventory(
+                      componentLocationId,
+                      component.sku,
+                      component.name || component.sku,
+                      -requiredQty, // Negative for consumption
+                      inventoryItem.unitCost,
+                      inventoryItem.reorderPoint
+                    )
+                  }
+                  
                   // Always allow deduction (even if it results in negative stock)
                   // Remove quantity check from where clause to allow negative stock
                   const updateData = {
@@ -2299,25 +2423,26 @@ async function handler(req, res) {
                     throw new Error(`Cannot deduct ${requiredQty} of ${component.sku}. Current qty: ${current?.quantity || 0}, allocated: ${current?.allocatedQuantity || 0}`)
                   }
                   
-                  // Update status based on new available quantity (allow negative stock)
-                  const updated = await tx.inventoryItem.findFirst({ where: { sku: component.sku } })
-                  if (updated) {
-                    const newQty = updated.quantity
-                    const newAllocatedQty = updated.allocatedQuantity || 0
-                    const availableQty = newQty - newAllocatedQty
-                    const reorderPoint = updated.reorderPoint || 0
-                    // Allow negative stock - show negative quantities
-                    const status = newQty > reorderPoint ? 'in_stock' : (newQty > 0 ? 'low_stock' : 'out_of_stock')
-                    
-                    await tx.inventoryItem.update({
-                      where: { id: updated.id },
-                      data: {
-                        totalValue: Math.max(0, newQty * (updated.unitCost || 0)), // Don't allow negative total value
-                        status: status
-                      }
-                    })
-                  }
+                  // Recalculate master aggregate from all locations for this component
+                  const totalAtLocations = await tx.locationInventory.aggregate({ 
+                    _sum: { quantity: true }, 
+                    where: { sku: component.sku } 
+                  })
+                  const aggQty = totalAtLocations._sum.quantity || 0
                   
+                  // Update master inventory item with aggregated quantity from all locations
+                  await tx.inventoryItem.update({
+                    where: { id: inventoryItem.id },
+                    data: {
+                      quantity: aggQty,
+                      totalValue: Math.max(0, aggQty * (inventoryItem.unitCost || 0)),
+                      status: getStatusFromQuantity(aggQty, inventoryItem.reorderPoint || 0)
+                    }
+                  })
+                  
+                  // Get location code for stock movement
+                  const componentLocation = componentLocationId ? await tx.stockLocation.findUnique({ where: { id: componentLocationId } }) : null
+                  const componentLocationCode = componentLocation?.code || ''
                   
                 // Create stock movement record (consumption should be negative)
                 await tx.stockMovement.create({
@@ -2328,7 +2453,7 @@ async function handler(req, res) {
                     itemName: component.name || component.sku,
                     sku: component.sku,
                     quantity: -Math.abs(requiredQty), // Consumption should always be negative
-                    fromLocation: '',
+                    fromLocation: componentLocationCode,
                     toLocation: '',
                     reference: orderInTx.workOrderNumber || id,
                     performedBy: req.user?.name || 'System',
