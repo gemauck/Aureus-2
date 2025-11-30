@@ -885,13 +885,33 @@ const ManagementMeetingNotes = () => {
             }
         }, 15000); // 15 seconds timeout
         
-        // Wait for ALL existing active save promises to complete - NO TIMEOUT
+        // Wait for ALL existing active save promises to complete - with timeout for 502 errors
         const existingPromises = Array.from(activeSavePromises.current);
         if (existingPromises.length > 0) {
             console.log(`⏳ Waiting for ${existingPromises.length} existing save(s) to complete...`);
             try {
-                await Promise.all(existingPromises);
-                console.log('✅ All existing saves completed');
+                // Use Promise.allSettled to allow some failures (e.g., 502 errors)
+                // Wrap each promise with a timeout to fail fast on server errors
+                const timeoutPromises = existingPromises.map(promise => 
+                    Promise.race([
+                        promise,
+                        new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('Save timeout after 8 seconds')), 8000)
+                        )
+                    ]).catch(error => {
+                        // Check if it's a 502 error - fail fast
+                        const errorMsg = error?.message || String(error);
+                        if (errorMsg.includes('502') || errorMsg.includes('Bad Gateway')) {
+                            console.warn('⚠️ 502 error detected, failing fast:', errorMsg);
+                            // Remove from active promises immediately
+                            activeSavePromises.current.delete(promise);
+                            throw error;
+                        }
+                        throw error;
+                    })
+                );
+                await Promise.allSettled(timeoutPromises);
+                console.log('✅ All existing saves completed (some may have failed)');
             } catch (error) {
                 console.error('Error waiting for existing saves:', error);
             }
@@ -915,7 +935,13 @@ const ManagementMeetingNotes = () => {
                 console.log(`💾 Saving ${fieldKey}:`, valueToSave.substring(0, 50) + '...');
                 
                 // Create save promise - CRITICAL: Use keepalive for guaranteed delivery
-                const savePromise = window.DatabaseAPI.updateDepartmentNotes(data.departmentNotesId, { [data.field]: valueToSave })
+                // Wrap with timeout to fail fast on 502 errors
+                const savePromise = Promise.race([
+                    window.DatabaseAPI.updateDepartmentNotes(data.departmentNotesId, { [data.field]: valueToSave }),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Save timeout after 8 seconds')), 8000)
+                    )
+                ])
                     .then(() => {
                         // Only remove if this is still the latest value
                         const currentPending = pendingValues.current[fieldKey];
@@ -930,8 +956,22 @@ const ManagementMeetingNotes = () => {
                         console.log(`✅ Saved field ${fieldKey}`);
                     })
                     .catch((error) => {
-                        console.error('Error flushing save:', error);
-                        // On error, also try fetch with keepalive as fallback - CRITICAL
+                        const errorMsg = error?.message || String(error);
+                        const is502Error = errorMsg.includes('502') || errorMsg.includes('Bad Gateway');
+                        
+                        console.error(`Error flushing save ${fieldKey}:`, errorMsg);
+                        
+                        // For 502 errors, fail fast - don't retry with fallback
+                        if (is502Error) {
+                            console.warn(`⚠️ 502 error for ${fieldKey}, failing fast. Changes will be lost.`);
+                            // Remove from queue to prevent blocking navigation
+                            delete pendingValues.current[fieldKey];
+                            pendingSaves.current.delete(fieldKey);
+                            activeSavePromises.current.delete(savePromise);
+                            return; // Exit early for 502 errors
+                        }
+                        
+                        // On other errors, try fetch with keepalive as fallback - CRITICAL
                         fetch(url, {
                             method: 'PUT',
                             headers: {
@@ -961,26 +1001,49 @@ const ManagementMeetingNotes = () => {
             }
         });
         
-        // Wait for ALL new saves to complete - NO TIMEOUT, wait for actual completion
+        // Wait for ALL new saves to complete - use allSettled to allow some failures
         if (newSavePromises.length > 0) {
             console.log(`⏳ Waiting for ${newSavePromises.length} new save(s) to complete...`);
             try {
-                await Promise.all(newSavePromises);
-                console.log('✅ All new saves completed');
+                const results = await Promise.allSettled(newSavePromises);
+                const failed = results.filter(r => r.status === 'rejected');
+                if (failed.length > 0) {
+                    console.warn(`⚠️ ${failed.length} save(s) failed (may be 502 errors):`, 
+                        failed.map(r => r.reason?.message || 'Unknown error'));
+                }
+                console.log(`✅ ${results.length - failed.length}/${results.length} new saves completed`);
             } catch (error) {
                 console.error('Error waiting for new saves to complete:', error);
             }
         }
         
-        // Final check - wait for ANY remaining active promises - NO TIMEOUT
+        // Final check - wait for ANY remaining active promises - with timeout
         let attempts = 0;
-        const maxAttempts = 15; // More attempts
+        const maxAttempts = 10; // Reduced from 15 to fail faster
         while (activeSavePromises.current.size > 0 && attempts < maxAttempts) {
             const remainingPromises = Array.from(activeSavePromises.current);
             console.log(`⏳ Final check: Waiting for ${remainingPromises.length} remaining save(s)...`);
             try {
-                await Promise.all(remainingPromises);
-                console.log('✅ All remaining saves completed');
+                // Use allSettled and timeout to allow failures
+                const timeoutPromises = remainingPromises.map(promise => 
+                    Promise.race([
+                        promise,
+                        new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('Save timeout')), 5000)
+                        )
+                    ])
+                );
+                const results = await Promise.allSettled(timeoutPromises);
+                const failed = results.filter(r => r.status === 'rejected');
+                if (failed.length > 0) {
+                    // Remove failed promises from active set
+                    failed.forEach((_, index) => {
+                        if (remainingPromises[index]) {
+                            activeSavePromises.current.delete(remainingPromises[index]);
+                        }
+                    });
+                }
+                console.log(`✅ ${results.length - failed.length}/${results.length} remaining saves completed`);
             } catch (error) {
                 console.error('Error waiting for remaining saves:', error);
             }
@@ -991,18 +1054,34 @@ const ManagementMeetingNotes = () => {
             }
         }
         
-        // Verify ALL saves are complete before unblocking
+        // Clear any remaining promises that timed out (likely 502 errors)
+        if (activeSavePromises.current.size > 0) {
+            console.warn(`⚠️ Clearing ${activeSavePromises.current.size} timed-out save(s) (likely 502 errors)`);
+            activeSavePromises.current.clear();
+        }
+        
+        // Verify saves are complete - but allow navigation even if some failed
         const finalCheck = pendingSaves.current.size === 0 && 
                           Object.keys(pendingValues.current).length === 0 && 
                           activeSavePromises.current.size === 0;
         
         if (!finalCheck) {
-            console.warn('⚠️ WARNING: Some saves may still be pending:', {
+            const failedCount = pendingSaves.current.size + Object.keys(pendingValues.current).length;
+            console.warn('⚠️ WARNING: Some saves may have failed (likely 502 errors):', {
                 pendingSaves: pendingSaves.current.size,
                 pendingValues: Object.keys(pendingValues.current).length,
-                activePromises: activeSavePromises.current.size
+                activePromises: activeSavePromises.current.size,
+                message: failedCount > 0 ? `${failedCount} save(s) failed due to server errors. Changes may be lost.` : 'Some saves may still be pending.'
             });
-            // Timeout is already set above, just return and let timeout handle it
+            
+            // Clear failed saves to prevent re-blocking
+            pendingSaves.current.clear();
+            // Keep pendingValues for potential retry later, but don't block navigation
+            
+            // Still unblock navigation after timeout - user can retry manually
+            clearTimeout(blockingTimeout);
+            setIsBlockingNavigation(false);
+            console.log('🔓 UNBLOCKING NAVIGATION - Some saves may have failed');
             return;
         }
         
@@ -1880,7 +1959,13 @@ const ManagementMeetingNotes = () => {
         pendingSaves.current.add(fieldKey);
         
         // Create save promise and track it - CRITICAL: This must complete before navigation
-        const savePromise = window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value })
+        // Wrap with timeout to fail fast on 502 errors
+        const savePromise = Promise.race([
+            window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value }),
+            new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Save timeout after 8 seconds')), 8000)
+            )
+        ])
             .then(() => {
                 // Successfully saved - but only remove from pending if this is still the latest value
                 const currentPending = pendingValues.current[fieldKey];
@@ -1894,7 +1979,16 @@ const ManagementMeetingNotes = () => {
                 // NO SAVE STATUS MESSAGES - save silently
             })
             .catch(error => {
-                console.error('Error auto-saving department notes:', error);
+                const errorMsg = error?.message || String(error);
+                const is502Error = errorMsg.includes('502') || errorMsg.includes('Bad Gateway');
+                
+                if (is502Error) {
+                    console.warn(`⚠️ 502 error auto-saving ${fieldKey}, will retry on navigation`);
+                    // For 502 errors, keep in pendingValues but don't block indefinitely
+                    // The navigation flush will handle it with faster timeout
+                } else {
+                    console.error('Error auto-saving department notes:', error);
+                }
                 // Keep in pendingValues on error - blur/navigation will retry
                 // DO NOT remove from pendingValues on error - it must be saved
                 

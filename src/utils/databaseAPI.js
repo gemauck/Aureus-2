@@ -37,6 +37,11 @@ const DatabaseAPI = {
     _rateLimitCount: 0, // Track consecutive rate limit errors
     _lastRateLimitLog: null, // Track last time we logged rate limit message
     
+    // Error aggregation for 502 errors to reduce console noise
+    _recent502Errors: [], // Track recent 502 errors
+    _last502ErrorLog: 0, // Track last time we logged 502 error summary
+    _502ErrorLogInterval: 5000, // Log 502 error summary every 5 seconds
+    
     // Clear old cache entries periodically
     _cleanCache() {
         const now = Date.now();
@@ -229,7 +234,8 @@ const DatabaseAPI = {
     
     // Internal method to execute the actual request
     async _executeRequest(endpoint, options = {}) {
-        const maxRetries = 5;
+        // Reduce retries for 502 errors - they often indicate server is down
+        const maxRetries = options.maxRetries !== undefined ? options.maxRetries : 5;
         const baseDelay = 1000; // Start with 1 second
 
         // Check RateLimitManager before acquiring slot (if available)
@@ -614,16 +620,19 @@ const DatabaseAPI = {
                     // 500 errors are often temporary server issues and should be retried
                     const isRetryableServerError = response.status === 500 || response.status === 502 || response.status === 503 || response.status === 504;
                     
-                    if (isRetryableServerError && attempt < maxRetries) {
+                    // For 502 errors, use fewer retries (2 instead of 5) to fail faster
+                    const is502Error = response.status === 502;
+                    const effectiveMaxRetries = is502Error ? 2 : maxRetries;
+                    
+                    if (isRetryableServerError && attempt < effectiveMaxRetries) {
                         // Use shorter delays for 502 errors (Bad Gateway - often transient)
                         // 502 errors typically resolve quickly, so retry faster
-                        const is502Error = response.status === 502;
                         const retryBaseDelay = is502Error ? 300 : baseDelay; // 300ms for 502, 1000ms for others
                         const delay = retryBaseDelay * Math.pow(2, attempt);
                         // Suppress warnings for 500 errors (expected when backend has issues)
                         // Only log warnings for 502/503/504 (gateway/proxy errors)
                         if (attempt === 0 && response.status !== 500) {
-                            console.warn(`⚠️ Server error ${response.status} on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`);
+                            console.warn(`⚠️ Server error ${response.status} on ${endpoint} (attempt ${attempt + 1}/${effectiveMaxRetries + 1}). Retrying in ${delay}ms...`);
                         }
                         await new Promise(resolve => setTimeout(resolve, delay));
                         continue; // Retry the request
@@ -676,6 +685,35 @@ const DatabaseAPI = {
                     
                     // Handle 502 Bad Gateway errors
                     if (response.status === 502) {
+                        // Track 502 errors for aggregation
+                        const now = Date.now();
+                        this._recent502Errors.push({
+                            endpoint,
+                            timestamp: now
+                        });
+                        
+                        // Clean up old errors (older than 30 seconds)
+                        this._recent502Errors = this._recent502Errors.filter(
+                            err => now - err.timestamp < 30000
+                        );
+                        
+                        // Log aggregated summary periodically instead of every error
+                        // Only log if we have multiple errors to reduce noise
+                        if (now - this._last502ErrorLog > this._502ErrorLogInterval) {
+                            const recentCount = this._recent502Errors.length;
+                            if (recentCount > 1) { // Only log if more than 1 error
+                                const uniqueEndpoints = [...new Set(this._recent502Errors.map(e => e.endpoint))];
+                                console.warn(`⚠️ Server unavailable (502): ${recentCount} error(s) across ${uniqueEndpoints.length} endpoint(s) in the last 30s. The server may be temporarily down.`);
+                                this._last502ErrorLog = now;
+                                // Clear tracked errors after logging
+                                this._recent502Errors = [];
+                            } else if (recentCount === 1) {
+                                // For single errors, just update the timestamp but don't log yet
+                                // This allows batching if more errors come in quickly
+                                this._last502ErrorLog = now;
+                            }
+                        }
+                        
                         // Include "502" in the error message so catch block can recognize it
                         const errorMessage = serverErrorMessage || `Bad Gateway (502): The server is temporarily unavailable. All retry attempts exhausted.`;
                         throw new Error(`502: ${errorMessage}`);
@@ -774,10 +812,14 @@ const DatabaseAPI = {
                             
                             // Only log non-database errors and non-server errors (server errors are expected when backend is down)
                             // Suppress console.error for server errors (500, 502, 503, 504) to reduce noise
+                            // 502 errors are already logged in aggregated form above
                             if (!isDatabaseError && !isServerError) {
                                 console.error(`❌ Database API request failed after ${maxRetries + 1} attempts (${endpoint}):`, error);
                             }
                             if (isServerError) {
+                                // For 502 errors, track for aggregation (already done above, but ensure we don't log individually)
+                                const is502Error = error?.message?.includes('502') || error?.message?.includes('Bad Gateway');
+                                
                                 // Preserve the original error message so it can be identified by error handlers
                                 // The error message should include the status code (e.g., "502:", "503:", etc.)
                                 const originalMessage = error?.message || 'Server error';

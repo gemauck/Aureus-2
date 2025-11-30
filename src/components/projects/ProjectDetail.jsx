@@ -562,6 +562,195 @@ function initializeProjectDetail() {
         }
     }, [project?.id, tasks]);
     
+    // Ensure functions for lazy loading components - defined early to avoid TDZ issues
+    const ensureListModalLoaded = useCallback(async () => {
+        if (typeof window.ListModal === 'function') {
+            if (!listModalComponent) {
+                setListModalComponent(() => window.ListModal);
+            }
+            return true;
+        }
+
+        if (listModalLoadPromiseRef.current) {
+            return listModalLoadPromiseRef.current;
+        }
+
+        setIsListModalLoading(true);
+
+        const loadPromise = new Promise((resolve) => {
+            const script = document.createElement('script');
+            script.src = `/dist/src/components/projects/ListModal.js?v=list-modal-on-demand-${Date.now()}`;
+            script.async = true;
+            script.dataset.listModalLoader = 'true';
+
+            script.onload = () => {
+                setIsListModalLoading(false);
+                listModalLoadPromiseRef.current = null;
+                if (typeof window.ListModal === 'function') {
+                    setListModalComponent(() => window.ListModal);
+                    resolve(true);
+                } else {
+                    const message = 'The list editor loaded but did not register correctly. Please refresh the page and try again.';
+                    console.error(message);
+                    alert(message);
+                    resolve(false);
+                }
+            };
+
+            script.onerror = () => {
+                setIsListModalLoading(false);
+                listModalLoadPromiseRef.current = null;
+                const message = 'Failed to load the list editor. Please check your connection and refresh the page.';
+                console.error(message);
+                alert(message);
+                resolve(false);
+            };
+
+            document.body.appendChild(script);
+        });
+
+        listModalLoadPromiseRef.current = loadPromise;
+        return loadPromise;
+    }, [listModalComponent]);
+
+    const ensureTaskDetailModalLoaded = useCallback(async () => {
+        if (typeof window.TaskDetailModal === 'function') {
+            if (!taskDetailModalComponent) {
+                setTaskDetailModalComponent(() => window.TaskDetailModal);
+            }
+            return true;
+        }
+
+        if (taskDetailModalLoadPromiseRef.current) {
+            return taskDetailModalLoadPromiseRef.current;
+        }
+
+        setIsTaskDetailModalLoading(true);
+
+        const loadPromise = new Promise((resolve) => {
+            const script = document.createElement('script');
+            script.src = `/dist/src/components/projects/TaskDetailModal.js?v=task-detail-modal-fallback-${Date.now()}`;
+            script.async = true;
+            script.dataset.taskDetailModalLoader = 'true';
+
+            script.onload = () => {
+                setIsTaskDetailModalLoading(false);
+                taskDetailModalLoadPromiseRef.current = null;
+                if (typeof window.TaskDetailModal === 'function') {
+                    setTaskDetailModalComponent(() => window.TaskDetailModal);
+                    resolve(true);
+                } else {
+                    console.warn('⚠️ TaskDetailModal script loaded but component not registered');
+                    resolve(false);
+                }
+            };
+
+            script.onerror = (error) => {
+                console.error('❌ Failed to load TaskDetailModal:', error);
+                setIsTaskDetailModalLoading(false);
+                taskDetailModalLoadPromiseRef.current = null;
+                resolve(false);
+            };
+
+            document.body.appendChild(script);
+        });
+
+        taskDetailModalLoadPromiseRef.current = loadPromise;
+        return loadPromise;
+    }, [taskDetailModalComponent]);
+
+    const ensureCommentsPopupLoaded = useCallback(async () => {
+        if (typeof window.CommentsPopup === 'function') {
+            if (!commentsPopupComponent) {
+                setCommentsPopupComponent(() => window.CommentsPopup);
+            }
+            return true;
+        }
+
+        if (commentsPopupLoadPromiseRef.current) {
+            return commentsPopupLoadPromiseRef.current;
+        }
+
+        setIsCommentsPopupLoading(true);
+
+        const loadPromise = new Promise((resolve) => {
+            const script = document.createElement('script');
+            script.src = `/dist/src/components/projects/CommentsPopup.js?v=comments-popup-fallback-${Date.now()}`;
+            script.async = true;
+            script.dataset.commentsPopupLoader = 'true';
+
+            script.onload = () => {
+                setIsCommentsPopupLoading(false);
+                commentsPopupLoadPromiseRef.current = null;
+                if (typeof window.CommentsPopup === 'function') {
+                    setCommentsPopupComponent(() => window.CommentsPopup);
+                    resolve(true);
+                } else {
+                    console.warn('⚠️ CommentsPopup script loaded but component not registered');
+                    resolve(false);
+                }
+            };
+
+            script.onerror = (error) => {
+                console.error('❌ Failed to load CommentsPopup:', error);
+                setIsCommentsPopupLoading(false);
+                commentsPopupLoadPromiseRef.current = null;
+                resolve(false);
+            };
+
+            document.body.appendChild(script);
+        });
+
+        commentsPopupLoadPromiseRef.current = loadPromise;
+        return loadPromise;
+    }, [commentsPopupComponent]);
+
+    const ensureProjectModalLoaded = useCallback(async () => {
+        if (typeof window.ProjectModal === 'function') {
+            if (!projectModalComponent) {
+                setProjectModalComponent(() => window.ProjectModal);
+            }
+            return true;
+        }
+
+        if (projectModalLoadPromiseRef.current) {
+            return projectModalLoadPromiseRef.current;
+        }
+
+        setIsProjectModalLoading(true);
+
+        const loadPromise = new Promise((resolve) => {
+            const script = document.createElement('script');
+            script.src = `/dist/src/components/projects/ProjectModal.js?v=project-modal-fallback-${Date.now()}`;
+            script.async = true;
+            script.dataset.projectModalLoader = 'true';
+
+            script.onload = () => {
+                setIsProjectModalLoading(false);
+                projectModalLoadPromiseRef.current = null;
+                if (typeof window.ProjectModal === 'function') {
+                    setProjectModalComponent(() => window.ProjectModal);
+                    resolve(true);
+                } else {
+                    console.warn('⚠️ ProjectModal script loaded but component not registered');
+                    resolve(false);
+                }
+            };
+
+            script.onerror = (error) => {
+                console.error('❌ Failed to load ProjectModal:', error);
+                setIsProjectModalLoading(false);
+                projectModalLoadPromiseRef.current = null;
+                resolve(false);
+            };
+
+            document.body.appendChild(script);
+        });
+
+        projectModalLoadPromiseRef.current = loadPromise;
+        return loadPromise;
+    }, [projectModalComponent]);
+    
     // Listen for openTask event (for programmatic task opening)
     useEffect(() => {
         if (!project?.id || !tasks || tasks.length === 0) return;
@@ -808,194 +997,6 @@ function initializeProjectDetail() {
             window.removeEventListener('componentLoaded', handleComponentLoaded);
         };
     }, [commentsPopupComponent]);
-
-    const ensureListModalLoaded = useCallback(async () => {
-        if (typeof window.ListModal === 'function') {
-            if (!listModalComponent) {
-                setListModalComponent(() => window.ListModal);
-            }
-            return true;
-        }
-
-        if (listModalLoadPromiseRef.current) {
-            return listModalLoadPromiseRef.current;
-        }
-
-        setIsListModalLoading(true);
-
-        const loadPromise = new Promise((resolve) => {
-            const script = document.createElement('script');
-            script.src = `/dist/src/components/projects/ListModal.js?v=list-modal-on-demand-${Date.now()}`;
-            script.async = true;
-            script.dataset.listModalLoader = 'true';
-
-            script.onload = () => {
-                setIsListModalLoading(false);
-                listModalLoadPromiseRef.current = null;
-                if (typeof window.ListModal === 'function') {
-                    setListModalComponent(() => window.ListModal);
-                    resolve(true);
-                } else {
-                    const message = 'The list editor loaded but did not register correctly. Please refresh the page and try again.';
-                    console.error(message);
-                    alert(message);
-                    resolve(false);
-                }
-            };
-
-            script.onerror = () => {
-                setIsListModalLoading(false);
-                listModalLoadPromiseRef.current = null;
-                const message = 'Failed to load the list editor. Please check your connection and refresh the page.';
-                console.error(message);
-                alert(message);
-                resolve(false);
-            };
-
-            document.body.appendChild(script);
-        });
-
-        listModalLoadPromiseRef.current = loadPromise;
-        return loadPromise;
-    }, [listModalComponent]);
-
-    const ensureTaskDetailModalLoaded = useCallback(async () => {
-        if (typeof window.TaskDetailModal === 'function') {
-            if (!taskDetailModalComponent) {
-                setTaskDetailModalComponent(() => window.TaskDetailModal);
-            }
-            return true;
-        }
-
-        if (taskDetailModalLoadPromiseRef.current) {
-            return taskDetailModalLoadPromiseRef.current;
-        }
-
-        setIsTaskDetailModalLoading(true);
-
-        const loadPromise = new Promise((resolve) => {
-            const script = document.createElement('script');
-            script.src = `/dist/src/components/projects/TaskDetailModal.js?v=task-detail-modal-fallback-${Date.now()}`;
-            script.async = true;
-            script.dataset.taskDetailModalLoader = 'true';
-
-            script.onload = () => {
-                setIsTaskDetailModalLoading(false);
-                taskDetailModalLoadPromiseRef.current = null;
-                if (typeof window.TaskDetailModal === 'function') {
-                    setTaskDetailModalComponent(() => window.TaskDetailModal);
-                    resolve(true);
-                } else {
-                    console.warn('⚠️ TaskDetailModal script loaded but component not registered');
-                    resolve(false);
-                }
-            };
-
-            script.onerror = (error) => {
-                console.error('❌ Failed to load TaskDetailModal:', error);
-                setIsTaskDetailModalLoading(false);
-                taskDetailModalLoadPromiseRef.current = null;
-                resolve(false);
-            };
-
-            document.body.appendChild(script);
-        });
-
-        taskDetailModalLoadPromiseRef.current = loadPromise;
-        return loadPromise;
-    }, [taskDetailModalComponent]);
-
-    const ensureCommentsPopupLoaded = useCallback(async () => {
-        if (typeof window.CommentsPopup === 'function') {
-            if (!commentsPopupComponent) {
-                setCommentsPopupComponent(() => window.CommentsPopup);
-            }
-            return true;
-        }
-
-        if (commentsPopupLoadPromiseRef.current) {
-            return commentsPopupLoadPromiseRef.current;
-        }
-
-        setIsCommentsPopupLoading(true);
-
-        const loadPromise = new Promise((resolve) => {
-            const script = document.createElement('script');
-            script.src = `/dist/src/components/projects/CommentsPopup.js?v=comments-popup-fallback-${Date.now()}`;
-            script.async = true;
-            script.dataset.commentsPopupLoader = 'true';
-
-            script.onload = () => {
-                setIsCommentsPopupLoading(false);
-                commentsPopupLoadPromiseRef.current = null;
-                if (typeof window.CommentsPopup === 'function') {
-                    setCommentsPopupComponent(() => window.CommentsPopup);
-                    resolve(true);
-                } else {
-                    console.warn('⚠️ CommentsPopup script loaded but component not registered');
-                    resolve(false);
-                }
-            };
-
-            script.onerror = (error) => {
-                console.error('❌ Failed to load CommentsPopup:', error);
-                setIsCommentsPopupLoading(false);
-                commentsPopupLoadPromiseRef.current = null;
-                resolve(false);
-            };
-
-            document.body.appendChild(script);
-        });
-
-        commentsPopupLoadPromiseRef.current = loadPromise;
-        return loadPromise;
-    }, [commentsPopupComponent]);
-
-    const ensureProjectModalLoaded = useCallback(async () => {
-        if (typeof window.ProjectModal === 'function') {
-            if (!projectModalComponent) {
-                setProjectModalComponent(() => window.ProjectModal);
-            }
-            return true;
-        }
-
-        if (projectModalLoadPromiseRef.current) {
-            return projectModalLoadPromiseRef.current;
-        }
-
-        setIsProjectModalLoading(true);
-
-        const loadPromise = new Promise((resolve) => {
-            const script = document.createElement('script');
-            script.src = `/dist/src/components/projects/ProjectModal.js?v=project-modal-fallback-${Date.now()}`;
-            script.async = true;
-            script.dataset.projectModalLoader = 'true';
-
-            script.onload = () => {
-                setIsProjectModalLoading(false);
-                projectModalLoadPromiseRef.current = null;
-                if (typeof window.ProjectModal === 'function') {
-                    setProjectModalComponent(() => window.ProjectModal);
-                    resolve(true);
-                } else {
-                    console.warn('⚠️ ProjectModal script loaded but component not registered');
-                    resolve(false);
-                }
-            };
-
-            script.onerror = (error) => {
-                console.error('❌ Failed to load ProjectModal:', error);
-                setIsProjectModalLoading(false);
-                projectModalLoadPromiseRef.current = null;
-                resolve(false);
-            };
-
-            document.body.appendChild(script);
-        });
-
-        projectModalLoadPromiseRef.current = loadPromise;
-        return loadPromise;
-    }, [projectModalComponent]);
 
     // Initialize custom field definitions with project-specific data
     const [customFieldDefinitions, setCustomFieldDefinitions] = useState(
