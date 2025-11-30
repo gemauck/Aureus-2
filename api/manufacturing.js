@@ -319,7 +319,6 @@ async function syncInventoryAcrossAllLocations(force = false) {
       }
 
       lastGlobalLocationSync = Date.now()
-      console.log(`✅ Completed global inventory sync across ${locations.length} locations (created ${totalCreated} placeholder items)`)
       return { syncedLocations: locations.length, totalCreated }
     } finally {
       globalSyncPromise = null
@@ -382,7 +381,6 @@ async function handler(req, res) {
     // CREATE
     if (req.method === 'POST' && !id) {
       const body = req.body || {}
-      console.log('📥 POST /manufacturing/locations - Request body:', JSON.stringify(body, null, 2));
       
       if (!body.name) {
         console.error('❌ POST /manufacturing/locations - Missing name in body');
@@ -418,7 +416,6 @@ async function handler(req, res) {
           }
         }
         
-        console.log('📝 Creating location with:', { code, name: body.name, type: body.type, meta: metaValue });
         
         const location = await prisma.stockLocation.create({
           data: {
@@ -433,12 +430,10 @@ async function handler(req, res) {
           }
         })
         
-        console.log('✅ Location created successfully:', JSON.stringify(location, null, 2));
         
         // Ensure every existing inventory item has a placeholder entry for the new location
         try {
           const syncStats = await ensureLocationHasAllInventory(location)
-          console.log(`✅ Synced inventory templates for ${location.code}: ${syncStats.created} new entries`)
         } catch (invError) {
           console.warn('⚠️ Could not sync inventory for new location:', invError.message)
           // Don't fail location creation if inventory creation fails
@@ -446,7 +441,6 @@ async function handler(req, res) {
         
         // Return the location in the expected format
         const responseData = { location }
-        console.log('📤 POST /manufacturing/locations - Response data:', JSON.stringify(responseData, null, 2));
         return created(res, responseData)
       } catch (e) {
         console.error('❌ POST /manufacturing/locations - Error:', e);
@@ -771,7 +765,6 @@ async function handler(req, res) {
             orderBy: { createdAt: 'desc' }
           })
         }
-        console.log('🧪 Manufacturing List inventory', { owner, locationId, count: items.length })
         
         // Deduplicate by SKU and locationId - merge duplicates intelligently
         // When locationId is not filtered, we still deduplicate items with same SKU+locationId
@@ -830,7 +823,6 @@ async function handler(req, res) {
             }
             
             itemMap.set(key, existing);
-            console.log(`⚠️  Merged duplicate: SKU ${item.sku}, Location: ${locationKey} - Combined qty: ${existing.quantity} (was ${existingQty} + ${itemQty})`);
           }
         }
         
@@ -838,9 +830,7 @@ async function handler(req, res) {
 
         if (deduplicatedItems.length < items.length) {
           const removedCount = items.length - deduplicatedItems.length;
-          console.log(`⚠️  Deduplication: Removed ${removedCount} duplicate inventory items (${items.length} → ${deduplicatedItems.length})`);
         } else {
-          console.log(`✅ No duplicates found (${items.length} items)`);
         }
 
         // When showing "All Locations" we don't want to surface legacy
@@ -915,7 +905,6 @@ async function handler(req, res) {
         return badRequest(res, 'items array required and must not be empty')
       }
 
-      console.log(`📦 Starting bulk import of ${items.length} inventory items...`)
 
       try {
         // Get current max SKU number
@@ -1079,7 +1068,6 @@ async function handler(req, res) {
           }
         }
 
-        console.log(`✅ Bulk import completed: ${created.length} created, ${errors.length} errors`)
         return ok(res, {
           message: `Bulk import completed: ${created.length} items created, ${errors.length} errors`,
           created: created.length,
@@ -1203,7 +1191,6 @@ async function handler(req, res) {
           await upsertLocationInventoryQuantity(locationId, item, quantity)
         }
         
-        console.log('✅ Created inventory item:', item.id)
         return created(res, { 
           item: {
             ...item,
@@ -1319,7 +1306,6 @@ async function handler(req, res) {
           }
         }
         
-        console.log('✅ Updated inventory item:', id)
         return ok(res, { 
           item: {
             ...item,
@@ -1358,7 +1344,6 @@ async function handler(req, res) {
         }
 
         await prisma.inventoryItem.delete({ where: { id } })
-        console.log('✅ Deleted inventory item:', id)
         return ok(res, { deleted: true })
       } catch (error) {
         console.error('❌ Failed to delete inventory item:', error)
@@ -1376,14 +1361,12 @@ async function handler(req, res) {
     if (req.method === 'GET' && !id) {
       try {
         const owner = req.user?.sub
-        console.log('🧪 Manufacturing List boms - Starting query...', { owner })
         
         // Verify BOM table exists first
         try {
           const boms = await prisma.bOM.findMany({
             orderBy: { createdAt: 'desc' }
           })
-          console.log('🧪 Manufacturing List boms', { owner, count: boms.length })
           
           const formatted = boms.map(bom => ({
             ...bom,
@@ -1443,16 +1426,6 @@ async function handler(req, res) {
     // CREATE (POST /api/manufacturing/boms)
     if (req.method === 'POST' && !id) {
       const body = req.body || {}
-      // Debug payload to help diagnose 400s
-      try {
-        console.log('📥 Received BOM create payload:', {
-          type: typeof body,
-          keys: Object.keys(body || {}),
-          productSku: body?.productSku,
-          productName: body?.productName,
-          inventoryItemId: body?.inventoryItemId
-        })
-      } catch (_) {}
       
       if (!body.productSku || !body.productName) {
         return badRequest(res, 'productSku and productName required')
@@ -1464,10 +1437,31 @@ async function handler(req, res) {
       }
 
       try {
-        // Validate that the inventory item exists
-        const inventoryItem = await prisma.inventoryItem.findUnique({
-          where: { id: body.inventoryItemId }
-        })
+        // Validate that the inventory item exists with timeout protection
+        let inventoryItem
+        try {
+          inventoryItem = await Promise.race([
+            prisma.inventoryItem.findUnique({
+              where: { id: body.inventoryItemId }
+            }),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Database query timeout')), 10000)
+            )
+          ])
+        } catch (dbError) {
+          console.error('❌ Database error validating inventory item:', {
+            error: dbError.message,
+            code: dbError.code,
+            inventoryItemId: body.inventoryItemId
+          })
+          // Check if it's a connection/timeout error
+          if (dbError.code === 'P1001' || dbError.code === 'P1002' || dbError.code === 'P1008' || 
+              dbError.message?.includes('timeout') || dbError.message?.includes('connection')) {
+            return serverError(res, 'Database connection timeout. Please try again.', 'DATABASE_TIMEOUT')
+          }
+          throw dbError
+        }
+        
         if (!inventoryItem) {
           return badRequest(res, 'Inventory item not found. Please create the finished product inventory item first.')
         }
@@ -1483,28 +1477,53 @@ async function handler(req, res) {
         const overheadCost = parseFloat(body.overheadCost) || 0
         const totalCost = totalMaterialCost + laborCost + overheadCost
         
-        const bom = await prisma.bOM.create({
-          data: {
+        // Create BOM with timeout protection
+        let bom
+        try {
+          bom = await Promise.race([
+            prisma.bOM.create({
+              data: {
+                productSku: body.productSku,
+                productName: body.productName,
+                inventoryItemId: body.inventoryItemId,
+                version: body.version || '1.0',
+                status: body.status || 'active',
+                effectiveDate: body.effectiveDate ? new Date(body.effectiveDate) : new Date(),
+                laborCost,
+                overheadCost,
+                totalMaterialCost,
+                totalCost,
+                estimatedTime: parseInt(body.estimatedTime) || 0,
+                components: JSON.stringify(components),
+                notes: body.notes || '',
+                thumbnail: body.thumbnail || '',
+                instructions: body.instructions || '',
+                ownerId: null
+              }
+            }),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Database create timeout')), 10000)
+            )
+          ])
+        } catch (dbError) {
+          console.error('❌ Database error creating BOM:', {
+            error: dbError.message,
+            code: dbError.code,
             productSku: body.productSku,
-            productName: body.productName,
-            inventoryItemId: body.inventoryItemId,
-            version: body.version || '1.0',
-            status: body.status || 'active',
-            effectiveDate: body.effectiveDate ? new Date(body.effectiveDate) : new Date(),
-            laborCost,
-            overheadCost,
-            totalMaterialCost,
-            totalCost,
-            estimatedTime: parseInt(body.estimatedTime) || 0,
-            components: JSON.stringify(components),
-            notes: body.notes || '',
-            thumbnail: body.thumbnail || '',
-            instructions: body.instructions || '',
-            ownerId: null
+            inventoryItemId: body.inventoryItemId
+          })
+          // Check if it's a connection/timeout error
+          if (dbError.code === 'P1001' || dbError.code === 'P1002' || dbError.code === 'P1008' || 
+              dbError.message?.includes('timeout') || dbError.message?.includes('connection')) {
+            return serverError(res, 'Database connection timeout. Please try again.', 'DATABASE_TIMEOUT')
           }
-        })
+          // Check for unique constraint violations
+          if (dbError.code === 'P2002') {
+            return badRequest(res, 'A BOM with this product SKU already exists.')
+          }
+          throw dbError
+        }
         
-        console.log('✅ Created BOM:', bom.id)
         return created(res, { 
           bom: {
             ...bom,
@@ -1515,7 +1534,13 @@ async function handler(req, res) {
           }
         })
       } catch (error) {
-        console.error('❌ Failed to create BOM:', error)
+        console.error('❌ Failed to create BOM:', {
+          error: error.message,
+          code: error.code,
+          stack: error.stack?.substring(0, 500),
+          productSku: body.productSku,
+          inventoryItemId: body.inventoryItemId
+        })
         return serverError(res, 'Failed to create BOM', error.message)
       }
     }
@@ -1575,7 +1600,6 @@ async function handler(req, res) {
           data: updateData
         })
         
-        console.log('✅ Updated BOM:', id)
         return ok(res, { 
           bom: {
             ...bom,
@@ -1598,7 +1622,6 @@ async function handler(req, res) {
     if (req.method === 'DELETE' && id) {
       try {
         await prisma.bOM.delete({ where: { id } })
-        console.log('✅ Deleted BOM:', id)
         return ok(res, { deleted: true })
       } catch (error) {
         console.error('❌ Failed to delete BOM:', error)
@@ -1619,7 +1642,6 @@ async function handler(req, res) {
         const orders = await prisma.productionOrder.findMany({
           orderBy: { createdAt: 'desc' }
         })
-        console.log('🧪 Manufacturing List productionOrders', { owner, count: orders.length })
         
         const formatted = orders.map(order => ({
           ...order,
@@ -1678,19 +1700,16 @@ async function handler(req, res) {
         
         // Allocate stock if BOM is provided and status is 'requested'
         // WRAPPED IN TRANSACTION to ensure atomicity (allocation + order creation)
-        console.log(`📦 Stock allocation check: bomId=${body.bomId}, status=${orderStatus}`)
         
         const order = await prisma.$transaction(async (tx) => {
           // First, allocate stock if needed
           if (body.bomId && orderStatus === 'requested') {
             const bom = await tx.bOM.findUnique({ where: { id: body.bomId } })
-            console.log(`📦 BOM found:`, bom ? `Yes (${bom.id})` : 'No')
             if (!bom) {
               throw new Error(`BOM not found: ${body.bomId}`)
             }
             
             const components = parseJson(bom.components, [])
-            console.log(`📦 BOM has ${components.length} components`)
             if (components.length === 0) {
               throw new Error(`BOM ${body.bomId} has no components`)
             }
@@ -1698,14 +1717,12 @@ async function handler(req, res) {
             // Validate all components before allocating (fail fast)
             const componentChecks = []
             for (const component of components) {
-              console.log(`📦 Processing component:`, { sku: component.sku, quantity: component.quantity, name: component.name })
               if (component.sku && component.quantity) {
                 const requiredQty = parseFloat(component.quantity) * orderQuantity
                 if (requiredQty <= 0) {
                   throw new Error(`Invalid quantity for component ${component.name || component.sku}: ${requiredQty}`)
                 }
                 
-                console.log(`📦 Looking for inventory item with SKU: ${component.sku}, required: ${requiredQty}`)
                 const inventoryItem = await tx.inventoryItem.findFirst({
                   where: { sku: component.sku }
                 })
@@ -1714,7 +1731,6 @@ async function handler(req, res) {
                   throw new Error(`Inventory item not found for SKU: ${component.sku}`)
                 }
                 
-                console.log(`📦 Inventory item found: Yes (qty: ${inventoryItem.quantity}, allocated: ${inventoryItem.allocatedQuantity || 0})`)
                 const availableQty = inventoryItem.quantity - (inventoryItem.allocatedQuantity || 0)
                 if (availableQty < requiredQty) {
                   throw new Error(`Insufficient stock for ${component.name || component.sku}. Available: ${availableQty}, Required: ${requiredQty}`)
@@ -1736,7 +1752,6 @@ async function handler(req, res) {
               )
             )
             
-            console.log(`📦 Allocated stock for ${componentChecks.length} components`)
           }
           
           // Create order (will rollback allocations if this fails)
@@ -1766,7 +1781,6 @@ async function handler(req, res) {
           return await tx.productionOrder.create({ data: createData })
         })
         
-        console.log('✅ Created production order:', order.id)
         return created(res, { 
           order: {
             ...order,
@@ -1817,19 +1831,9 @@ async function handler(req, res) {
         // Handle status change to 'completed' - add finished goods to inventory
         const oldStatus = String(existingOrder.status || '').trim()
         const newStatus = String(body.status || '').trim()
-        console.log(`🔄 Status change check: "${oldStatus}" -> "${newStatus}"`)
-        console.log(`🔍 Order ID: ${id}, BOM ID: ${existingOrder.bomId || 'none'}`)
         
         // Handle status change to 'completed' - add finished goods to inventory with cost = sum of parts
         if (newStatus === 'completed' && oldStatus !== 'completed') {
-          console.log(`✅ Triggering finished goods addition for production order ${id} (status: ${oldStatus} -> ${newStatus})`)
-          console.log(`🔍 Production order details:`, {
-            id,
-            bomId: existingOrder.bomId,
-            productSku: existingOrder.productSku,
-            quantity: existingOrder.quantity,
-            quantityProduced: existingOrder.quantityProduced
-          })
           
           if (!existingOrder.bomId) {
             return badRequest(res, 'Order has no BOM - cannot complete production')
@@ -1852,31 +1856,26 @@ async function handler(req, res) {
             // Backward compatibility: Try to find by productSku if inventoryItemId is missing
             let finishedProduct;
             if (bom.inventoryItemId) {
-              console.log(`🔍 Looking up finished product by inventoryItemId: ${bom.inventoryItemId}`)
               finishedProduct = await tx.inventoryItem.findUnique({
                 where: { id: bom.inventoryItemId }
               })
               if (!finishedProduct) {
-                console.log(`⚠️ Inventory item ${bom.inventoryItemId} not found, falling back to SKU lookup`)
               }
             }
             
             if (!finishedProduct) {
               // Fallback: Find by SKU (for older BOMs without inventoryItemId)
-              console.log(`🔍 Looking up finished product by SKU: ${bom.productSku}`)
               finishedProduct = await tx.inventoryItem.findFirst({
                 where: { sku: bom.productSku, type: 'finished_good' }
               })
               if (!finishedProduct) {
                 // Also try by category
-                console.log(`🔍 Trying to find by category 'finished_goods': ${bom.productSku}`)
                 finishedProduct = await tx.inventoryItem.findFirst({
                   where: { sku: bom.productSku, category: 'finished_goods' }
                 })
               }
               // Last resort: try without type/category filter
               if (!finishedProduct) {
-                console.log(`🔍 Trying to find by SKU only (any type/category): ${bom.productSku}`)
                 finishedProduct = await tx.inventoryItem.findFirst({
                   where: { sku: bom.productSku }
                 })
@@ -1889,7 +1888,6 @@ async function handler(req, res) {
               throw new Error(errorMsg)
             }
             
-            console.log(`✅ Found finished product: ${finishedProduct.name} (SKU: ${finishedProduct.sku}, ID: ${finishedProduct.id})`)
             
             // Use the finishedProduct we already found above
             
@@ -1901,7 +1899,6 @@ async function handler(req, res) {
             // Calculate unit cost from BOM (material cost only, sum of parts)
             const unitCost = bom.totalMaterialCost || 0 // Cost per unit = sum of all component costs (default to 0 if not set)
             if (!unitCost && bom.totalMaterialCost === null) {
-              console.log(`⚠️ BOM ${bom.id} has no totalMaterialCost set. Using 0 as default.`)
             }
             
             // Calculate new quantity and value
@@ -1957,7 +1954,6 @@ async function handler(req, res) {
             
             // Update LocationInventory for finished product
             if (toLocationId) {
-              console.log(`📦 Updating LocationInventory for ${finishedProduct.sku} at location ${toLocationId}`)
               await upsertLocationInventory(
                 toLocationId,
                 finishedProduct.sku,
@@ -1966,7 +1962,6 @@ async function handler(req, res) {
                 unitCost,
                 finishedProduct.reorderPoint || 0
               )
-              console.log(`✅ LocationInventory updated for ${finishedProduct.sku}`)
             } else {
               console.warn(`⚠️ No location ID found for finished product ${finishedProduct.sku} - LocationInventory not updated`)
             }
@@ -1996,7 +1991,6 @@ async function handler(req, res) {
               }
             })
             
-            console.log(`✅ Created stock movement ${movement.movementId} for ${finishedProduct.sku} (quantity: ${quantityProduced})`)
             
             // Recalculate master aggregate from all locations
             const totalAtLocations = await tx.locationInventory.aggregate({ 
@@ -2030,7 +2024,6 @@ async function handler(req, res) {
               data: completionUpdate
             })
             
-            console.log(`✅ Added ${quantityProduced} units of ${finishedProduct.name} to inventory with cost ${unitCost} per unit`)
           }, {
             timeout: 30000
           })
@@ -2060,10 +2053,8 @@ async function handler(req, res) {
         // To avoid double-allocation, we only run this block when coming from a status
         // that did NOT previously allocate BOM components.
         if (newStatus === 'received' && oldStatus !== 'received' && oldStatus !== 'requested') {
-          console.log(`📋 Triggering stock allocation for production order ${id} (status: ${oldStatus} -> ${newStatus})`)
           
           if (!existingOrder.bomId) {
-            console.log(`⚠️ Order ${id} has no BOM - skipping stock allocation`)
           } else {
             try {
               await prisma.$transaction(async (tx) => {
@@ -2081,7 +2072,6 @@ async function handler(req, res) {
                 const validComponents = components.filter(c => c.sku && c.quantity)
                 
                 if (validComponents.length === 0) {
-                  console.log(`⚠️ BOM ${orderInTx.bomId} has no components - skipping stock allocation`)
                   return
                 }
                 
@@ -2100,7 +2090,6 @@ async function handler(req, res) {
                   })
                   
                   if (!inventoryItem) {
-                    console.log(`⚠️ Inventory item not found for SKU: ${component.sku} - skipping`)
                     continue
                   }
                   
@@ -2134,7 +2123,6 @@ async function handler(req, res) {
                     }
                   })
                   
-                  console.log(`📋 Allocated ${requiredQty} of ${component.sku} for production order ${id}`)
                 }
                 
                 // Update order status
@@ -2143,7 +2131,6 @@ async function handler(req, res) {
                   data: { status: 'received' }
                 })
                 
-                console.log(`✅ Stock allocation completed for production order ${id}`)
               }, {
                 timeout: 30000
               })
@@ -2156,10 +2143,8 @@ async function handler(req, res) {
         
         // Handle stock release when changing FROM 'received' to another status (except in_production)
         if (oldStatus === 'received' && newStatus !== 'received' && newStatus !== 'in_production') {
-          console.log(`↩️ Triggering stock deallocation for production order ${id} (status: ${oldStatus} -> ${newStatus})`)
           
           if (!existingOrder.bomId) {
-            console.log(`⚠️ Order ${id} has no BOM - skipping stock deallocation`)
           } else {
             try {
               await prisma.$transaction(async (tx) => {
@@ -2199,7 +2184,6 @@ async function handler(req, res) {
                     }
                   })
                   
-                  console.log(`↩️ Deallocated ${allocatedQty} of ${component.sku} for production order ${id}`)
                 }
                 
                 // Update order status
@@ -2220,7 +2204,6 @@ async function handler(req, res) {
         // Handle status change from 'requested' or 'received' to 'in_production' - deduct stock
         // WRAPPED IN TRANSACTION to ensure atomicity (deduction + movement + status update)
         if (newStatus === 'in_production' && (oldStatus === 'requested' || oldStatus === 'received')) {
-          console.log(`✅ Triggering stock deduction for production order ${id} (status: ${oldStatus} -> ${newStatus})`)
           
           // IDEMPOTENCY CHECK: Verify status hasn't changed (prevent double deduction)
           if (existingOrder.status !== 'requested' && existingOrder.status !== 'received') {
@@ -2268,7 +2251,6 @@ async function handler(req, res) {
             }
             
             const components = parseJson(bomInTx.components, [])
-            console.log(`📉 BOM has ${components.length} components to process`)
             
             if (components.length === 0) {
               throw new Error(`BOM ${orderInTx.bomId} has no components - cannot deduct stock`)
@@ -2293,8 +2275,6 @@ async function handler(req, res) {
                     throw new Error(`Invalid quantity for component ${component.name || component.sku}: ${requiredQty}`)
                   }
                   
-                  console.log(`📉 Processing component for deduction:`, { sku: component.sku, quantity: component.quantity, name: component.name })
-                  console.log(`📉 Required quantity: ${requiredQty} (component qty: ${component.quantity} × order qty: ${orderInTx.quantity})`)
                   
                   const inventoryItem = await tx.inventoryItem.findFirst({
                     where: { sku: component.sku }
@@ -2304,19 +2284,16 @@ async function handler(req, res) {
                     throw new Error(`Inventory item not found for SKU: ${component.sku}`)
                   }
                   
-                  console.log(`📉 Inventory item found: Yes (current qty: ${inventoryItem.quantity}, allocated: ${inventoryItem.allocatedQuantity || 0})`)
                   
                   // Check for insufficient stock and warn (but allow negative stock)
                   const allocatedQty = inventoryItem.allocatedQuantity || 0
                   const totalQty = inventoryItem.quantity || 0
                   
                   if (totalQty < requiredQty) {
-                    console.log(`⚠️ WARNING: Insufficient stock for ${component.name || component.sku}. Available: ${totalQty}, Required: ${requiredQty}. Allowing negative stock.`)
                   }
                   
                   // Warn if allocation doesn't match (for orders created before allocation tracking)
                   if (allocatedQty > 0 && allocatedQty < requiredQty) {
-                    console.log(`⚠️ Allocation mismatch for ${component.sku}: allocated=${allocatedQty}, required=${requiredQty}. Proceeding with deduction from total stock.`)
                   }
                   
                   // Always allow deduction (even if it results in negative stock)
@@ -2368,7 +2345,6 @@ async function handler(req, res) {
                     })
                   }
                   
-                  console.log(`📉 Deducted ${requiredQty} of ${component.sku} for production order ${id}`)
                   
                 // Create stock movement record (consumption should be negative)
                 await tx.stockMovement.create({
@@ -2395,7 +2371,6 @@ async function handler(req, res) {
             
             // If coming from 'received' status, allocate finished product to stock in production
             if (oldStatus === 'received') {
-              console.log(`📦 Allocating finished product to stock in production for order ${id}`)
               
               // Get the finished product inventory item
               let finishedProduct;
@@ -2426,7 +2401,6 @@ async function handler(req, res) {
                   }
                 })
                 
-                console.log(`📦 Allocated ${orderQuantity} units of ${finishedProduct.name} to stock in production`)
                 
                 // Create stock movement record for allocation
                 await tx.stockMovement.create({
@@ -2445,7 +2419,6 @@ async function handler(req, res) {
                   }
                 })
               } else {
-                console.log(`⚠️ Finished product not found for SKU: ${bomInTx.productSku} - skipping allocation`)
               }
             }
             
@@ -2455,7 +2428,6 @@ async function handler(req, res) {
               data: { status: 'in_production' }
             })
             
-            console.log(`✅ Stock deduction completed for production order ${id}`)
           }, {
             timeout: 30000 // 30 second timeout for transaction
           })
@@ -2466,10 +2438,8 @@ async function handler(req, res) {
         if ((newStatus === 'requested' && oldStatus === 'in_production') || 
             (newStatus === 'received' && oldStatus === 'in_production') ||
             newStatus === 'cancelled') {
-          console.log(`↩️ Triggering stock return for production order ${id} (status: ${oldStatus} -> ${newStatus})`)
           
           if (!existingOrder.bomId) {
-            console.log(`⚠️ Order ${id} has no BOM - skipping stock return`)
           } else {
             await prisma.$transaction(async (tx) => {
               // Re-fetch order within transaction
@@ -2478,17 +2448,14 @@ async function handler(req, res) {
                 throw new Error(`Order ${id} not found`)
               }
               
-              console.log(`↩️ Looking up BOM: ${orderInTx.bomId}`)
               const bom = await tx.bOM.findUnique({ where: { id: orderInTx.bomId } })
               if (!bom) {
                 throw new Error(`BOM not found: ${orderInTx.bomId}`)
               }
               
               const components = parseJson(bom.components, [])
-              console.log(`↩️ BOM has ${components.length} components to return`)
               
               if (components.length === 0) {
-                console.log(`⚠️ BOM ${orderInTx.bomId} has no components - skipping stock return`)
                 return
               }
               
@@ -2507,23 +2474,18 @@ async function handler(req, res) {
                 try {
                   const returnQty = parseFloat(component.quantity) * orderInTx.quantity
                   if (returnQty <= 0) {
-                    console.log(`⚠️ Invalid quantity for component ${component.sku}: ${returnQty}`)
                     continue
                   }
                   
-                  console.log(`↩️ Processing component for return:`, { sku: component.sku, quantity: component.quantity, name: component.name })
-                  console.log(`↩️ Return quantity: ${returnQty} (component qty: ${component.quantity} × order qty: ${orderInTx.quantity})`)
                   
                   const inventoryItem = await tx.inventoryItem.findFirst({
                     where: { sku: component.sku }
                   })
                   
                   if (!inventoryItem) {
-                    console.log(`⚠️ Inventory item not found for SKU: ${component.sku} - skipping`)
                     continue
                   }
                   
-                  console.log(`↩️ Inventory item found: Yes (current qty: ${inventoryItem.quantity}, allocated: ${inventoryItem.allocatedQuantity || 0})`)
                   
                   // Determine what to return based on order's previous state
                   // Scenario 1: In Production -> Requested/Received/Cancelled
@@ -2542,12 +2504,10 @@ async function handler(req, res) {
                   if (oldStatus === 'in_production') {
                     // Stock was deducted - return it to quantity
                     updateData.quantity = { increment: returnQty }
-                    console.log(`↩️ Returning ${returnQty} to quantity for ${component.sku} (was in production)`)
                     
                     // If reverting to "requested" or "received", re-allocate the stock
                     if (newStatus === 'requested' || newStatus === 'received') {
                       updateData.allocatedQuantity = { increment: returnQty }
-                      console.log(`↩️ Re-allocating ${returnQty} for ${component.sku} (back to ${newStatus})`)
                     }
                     // If cancelling, just return to quantity (don't re-allocate)
                     
@@ -2556,14 +2516,11 @@ async function handler(req, res) {
                     const currentAllocated = inventoryItem.allocatedQuantity || 0
                     if (currentAllocated >= returnQty) {
                       updateData.allocatedQuantity = { decrement: returnQty }
-                      console.log(`↩️ Releasing ${returnQty} from allocation for ${component.sku} (cancelled ${oldStatus} order)`)
                     } else {
                       // Release whatever is allocated (handle edge cases)
                       if (currentAllocated > 0) {
                         updateData.allocatedQuantity = 0
-                        console.log(`↩️ Releasing ${currentAllocated} from allocation for ${component.sku} (was less than ${returnQty})`)
                       } else {
-                        console.log(`⚠️ No allocation to release for ${component.sku} (already at 0)`)
                       }
                     }
                   }
@@ -2576,7 +2533,6 @@ async function handler(req, res) {
                     })
                     
                     if (result.count === 0) {
-                      console.log(`⚠️ Could not return stock for ${component.sku} - update failed`)
                       continue
                     }
                     
@@ -2598,7 +2554,6 @@ async function handler(req, res) {
                       })
                     }
                     
-                    console.log(`↩️ Returned ${returnQty} of ${component.sku} for production order ${id}`)
                     
                     // Create stock movement record for return
                     const movementType = newStatus === 'cancelled' ? 'adjustment' : 'return'
@@ -2627,7 +2582,6 @@ async function handler(req, res) {
               
               // If reverting from in_production to received/requested, deallocate finished product
               if (oldStatus === 'in_production' && (newStatus === 'received' || newStatus === 'requested')) {
-                console.log(`↩️ Deallocating finished product from stock in production for order ${id}`)
                 
                 // Get the finished product inventory item
                 let finishedProduct;
@@ -2660,7 +2614,6 @@ async function handler(req, res) {
                     }
                   })
                   
-                  console.log(`↩️ Deallocated ${orderQuantity} units of ${finishedProduct.name} from stock in production`)
                   
                   // Create stock movement record
                   await tx.stockMovement.create({
@@ -2687,7 +2640,6 @@ async function handler(req, res) {
                 data: { status: newStatus }
               })
               
-              console.log(`✅ Stock return completed for production order ${id}`)
             }, {
               timeout: 30000
             })
@@ -2725,7 +2677,6 @@ async function handler(req, res) {
           order = await prisma.productionOrder.findUnique({ where: { id } })
         }
         
-        console.log('✅ Updated production order:', id)
         
         // Return order with warnings if there were stock issues
         const responseData = {
@@ -2742,7 +2693,6 @@ async function handler(req, res) {
         // Add stock warnings if they exist
         if (stockWarnings && stockWarnings.length > 0) {
           responseData.stockWarnings = stockWarnings
-          console.log('⚠️ Returning stock warnings:', stockWarnings)
         }
         
         return ok(res, responseData)
@@ -2778,7 +2728,6 @@ async function handler(req, res) {
         
         // Return stock before deleting (wrapped in transaction)
         if (orderToDelete.bomId && (orderToDelete.status === 'requested' || orderToDelete.status === 'in_production')) {
-          console.log(`🗑️ Deleting production order ${id} with stock return (status: ${orderToDelete.status})`)
           
           await prisma.$transaction(async (tx) => {
             const bom = await tx.bOM.findUnique({ where: { id: orderToDelete.bomId } })
@@ -2810,16 +2759,13 @@ async function handler(req, res) {
                   if (orderToDelete.status === 'in_production') {
                     // Stock was deducted - return to quantity
                     updateData.quantity = { increment: returnQty }
-                    console.log(`↩️ Returning ${returnQty} to quantity for ${component.sku} (deleting in_production order)`)
                   } else if (orderToDelete.status === 'requested') {
                     // Stock was only allocated - release allocation
                     const currentAllocated = inventoryItem.allocatedQuantity || 0
                     if (currentAllocated >= returnQty) {
                       updateData.allocatedQuantity = { decrement: returnQty }
-                      console.log(`↩️ Releasing ${returnQty} from allocation for ${component.sku} (deleting requested order)`)
                     } else if (currentAllocated > 0) {
                       updateData.allocatedQuantity = 0
-                      console.log(`↩️ Releasing ${currentAllocated} from allocation for ${component.sku}`)
                     }
                   }
                   
@@ -2869,7 +2815,6 @@ async function handler(req, res) {
                 }
               }
               
-              console.log(`✅ Stock returned for deleted production order ${id}`)
             }
             
             // Delete the order
@@ -2882,7 +2827,6 @@ async function handler(req, res) {
           await prisma.productionOrder.delete({ where: { id } })
         }
         
-        console.log('✅ Deleted production order:', id)
         return ok(res, { deleted: true })
       } catch (error) {
         console.error('❌ Failed to delete production order:', error)
@@ -2910,11 +2854,6 @@ async function handler(req, res) {
           acc[m.type] = (acc[m.type] || 0) + 1;
           return acc;
         }, {});
-        console.log('🧪 Manufacturing List movements', { 
-          owner, 
-          totalCount: movements.length,
-          typeBreakdown 
-        })
         
         const formatted = movements.map(movement => ({
           ...movement,
@@ -3510,7 +3449,6 @@ async function handler(req, res) {
           return { movement, item }
         })
 
-        console.log('✅ Created stock movement and updated inventory:', result.movement.id, result.item?.id)
         return created(res, {
           movement: {
             ...result.movement,
@@ -3556,7 +3494,6 @@ async function handler(req, res) {
       try {
         const count = await prisma.stockMovement.count()
         const result = await prisma.stockMovement.deleteMany({})
-        console.log(`✅ Deleted all stock movements: ${result.count} of ${count}`)
         return ok(res, { deleted: true, count: result.count })
       } catch (error) {
         console.error('❌ Failed to delete all stock movements:', error)
@@ -3568,7 +3505,6 @@ async function handler(req, res) {
     if (req.method === 'DELETE' && id) {
       try {
         await prisma.stockMovement.delete({ where: { id } })
-        console.log('✅ Deleted stock movement:', id)
         return ok(res, { deleted: true })
       } catch (error) {
         console.error('❌ Failed to delete stock movement:', error)
@@ -3802,7 +3738,6 @@ async function handler(req, res) {
         const suppliers = await prisma.supplier.findMany({
           orderBy: { createdAt: 'desc' }
         })
-        console.log('🧪 Manufacturing List suppliers', { owner, count: suppliers.length })
         
         const formatted = suppliers.map(supplier => ({
           ...supplier,
@@ -3878,7 +3813,6 @@ async function handler(req, res) {
           }
         })
         
-        console.log('✅ Created supplier:', supplier.id)
         return created(res, { 
           supplier: {
             ...supplier,
@@ -3915,7 +3849,6 @@ async function handler(req, res) {
           data: updateData
         })
         
-        console.log('✅ Updated supplier:', id)
         return ok(res, { 
           supplier: {
             ...supplier,
@@ -3952,7 +3885,6 @@ async function handler(req, res) {
         }
         
         await prisma.supplier.delete({ where: { id } })
-        console.log('✅ Deleted supplier:', id)
         return ok(res, { deleted: true })
       } catch (error) {
         console.error('❌ Failed to delete supplier:', error)
