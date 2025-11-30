@@ -112,13 +112,6 @@ const LeadDetailModal = ({
         fetchLead();
     }, [leadId, initialLead]);
     
-    // Load sites when leadId changes
-    useEffect(() => {
-        if (formData?.id && !isLoadingSitesRef.current) {
-            loadSitesFromDatabase(formData.id);
-        }
-    }, [formData?.id]);
-    
     // Cleanup debounce timeout on unmount
     useEffect(() => {
         return () => {
@@ -2055,6 +2048,13 @@ const LeadDetailModal = ({
             isLoadingSitesRef.current = false;
         }
     };
+    
+    // Load sites when formData.id changes (moved here after loadSitesFromDatabase is defined to avoid TDZ error)
+    useEffect(() => {
+        if (formData?.id && !isLoadingSitesRef.current) {
+            loadSitesFromDatabase(formData.id);
+        }
+    }, [formData?.id]);
 
     const handleAddSite = async () => {
         if (!newSite.name) {
