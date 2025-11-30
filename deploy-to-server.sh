@@ -145,6 +145,26 @@ echo "🔄 Clearing Prisma cache and regenerating client..."
 rm -rf node_modules/.prisma 2>/dev/null || true
 npx prisma generate || echo "⚠️  Prisma generate skipped"
 
+# Cache busting - Clear nginx cache and add version timestamp
+echo ""
+echo "🔄 Clearing caches for cache busting..."
+# Clear nginx cache if it exists
+if [ -d /var/cache/nginx ]; then
+    rm -rf /var/cache/nginx/* 2>/dev/null || true
+    echo "✅ Nginx cache cleared"
+fi
+
+# Add cache-busting version file
+CACHE_BUST_VERSION=$(date +%s)
+echo "$CACHE_BUST_VERSION" > /var/www/abcotronics-erp/.cache-version 2>/dev/null || true
+echo "✅ Cache version set to: $CACHE_BUST_VERSION"
+
+# Reload nginx to clear any in-memory cache
+if command -v nginx &> /dev/null; then
+    nginx -s reload 2>/dev/null || systemctl reload nginx 2>/dev/null || echo "⚠️  Nginx reload skipped"
+    echo "✅ Nginx reloaded"
+fi
+
 # Restart the application
 echo ""
 echo "🔄 Restarting application..."
@@ -159,9 +179,26 @@ if command -v pm2 &> /dev/null; then
     [ -f /etc/environment ] && source /etc/environment
     set +a
     
-    # Start PM2 with explicit environment
+    # Set cache-busting version and build time
+    export APP_BUILD_TIME=\$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    export APP_VERSION=\$(git rev-parse --short HEAD 2>/dev/null || echo "\$(date +%s)")
+    echo "📦 Cache-busting version: \$APP_VERSION"
+    echo "📦 Build time: \$APP_BUILD_TIME"
+    
+    # Update .env with cache-busting version
+    if [ -f /var/www/abcotronics-erp/.env ]; then
+        # Remove old APP_VERSION and APP_BUILD_TIME if they exist
+        sed -i '/^APP_VERSION=/d' /var/www/abcotronics-erp/.env
+        sed -i '/^APP_BUILD_TIME=/d' /var/www/abcotronics-erp/.env
+        # Add new ones
+        echo "APP_VERSION=\$APP_VERSION" >> /var/www/abcotronics-erp/.env
+        echo "APP_BUILD_TIME=\$APP_BUILD_TIME" >> /var/www/abcotronics-erp/.env
+        echo "✅ Updated .env with cache-busting version"
+    fi
+    
+    # Start PM2 with explicit environment including cache-busting vars
     cd /var/www/abcotronics-erp
-    pm2 start server.js --name abcotronics-erp --update-env
+    pm2 start server.js --name abcotronics-erp --update-env --env production
     echo "✅ Application restarted with PM2 (environment variables updated)"
     pm2 save || true
 elif command -v systemctl &> /dev/null; then
