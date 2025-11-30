@@ -273,43 +273,50 @@ const Teams = () => {
         activeTabRef.current = activeTab;
     }, [activeTab]);
     
-    // Wrapper for setActiveTab that waits for pending saves before switching away from meeting-notes
+    // Wrapper for setActiveTab that BLOCKS navigation until saves complete
     const setActiveTab = useCallback(async (newTab) => {
-        // If switching away from meeting-notes, wait for pending saves
+        // If switching away from meeting-notes, CHECK FIRST - synchronous check
         const currentTab = activeTabRef.current;
         if (currentTab === 'meeting-notes' && newTab !== 'meeting-notes') {
             const meetingNotesRef = window.ManagementMeetingNotesRef;
+            
+            // SYNCHRONOUS CHECK - if there are pending saves, BLOCK IMMEDIATELY
             if (meetingNotesRef?.current?.hasPendingSaves?.() || meetingNotesRef?.current?.isBlockingNavigation?.()) {
                 console.log('🚫 Tab switch BLOCKED - saves in progress...');
                 
-                // Show blocking state if not already shown
+                // Trigger flush and wait - DO NOT allow state change until complete
                 if (meetingNotesRef?.current?.flushPendingSaves) {
                     try {
                         // Wait for saves to complete - NO TIMEOUT, wait for actual completion
                         await meetingNotesRef.current.flushPendingSaves();
                         
-                        // Verify saves are complete
+                        // Verify saves are complete - keep checking until truly done
                         let verifyAttempts = 0;
+                        const maxVerifyAttempts = 20; // More attempts
                         while ((meetingNotesRef?.current?.hasPendingSaves?.() || 
                                meetingNotesRef?.current?.isBlockingNavigation?.()) && 
-                               verifyAttempts < 10) {
+                               verifyAttempts < maxVerifyAttempts) {
                             await new Promise(resolve => setTimeout(resolve, 200));
                             verifyAttempts++;
                         }
                         
-                        // Only switch if truly complete
-                        if (!meetingNotesRef?.current?.hasPendingSaves?.() && 
-                            !meetingNotesRef?.current?.isBlockingNavigation?.()) {
+                        // Final check - only switch if truly complete
+                        const isComplete = !meetingNotesRef?.current?.hasPendingSaves?.() && 
+                                          !meetingNotesRef?.current?.isBlockingNavigation?.();
+                        
+                        if (isComplete) {
                             console.log('✅ VERIFIED: All saves completed, switching tab');
                             await new Promise(resolve => setTimeout(resolve, 300));
                             setActiveTabState(newTab);
                         } else {
-                            console.error('❌ BLOCKED: Saves not complete, preventing tab switch');
-                            // Don't switch - keep on meeting-notes tab
+                            console.error('❌ BLOCKED: Saves not complete after verification, preventing tab switch');
+                            // DO NOT switch - return early, keep on meeting-notes tab
+                            return;
                         }
                     } catch (error) {
                         console.error('Error waiting for saves before tab switch:', error);
-                        // On error, don't switch to be safe
+                        // On error, DO NOT switch to be safe
+                        return;
                     }
                 } else {
                     // If flushPendingSaves not available, wait and check
@@ -317,18 +324,17 @@ const Teams = () => {
                     if (meetingNotesRef?.current?.hasPendingSaves?.() || 
                         meetingNotesRef?.current?.isBlockingNavigation?.()) {
                         console.warn('⚠️ Still has pending saves after wait, blocking tab switch');
-                        return; // Don't switch tabs
+                        return; // Don't switch tabs - return early
                     }
                     setActiveTabState(newTab);
                 }
-            } else {
-                // No pending saves, allow immediate switch
-                setActiveTabState(newTab);
+                // Return here to prevent fall-through
+                return;
             }
-        } else {
-            // Not switching away from meeting-notes, allow immediate switch
-            setActiveTabState(newTab);
         }
+        
+        // No blocking needed - allow immediate switch
+        setActiveTabState(newTab);
     }, []);
     const [selectedTeam, setSelectedTeam] = useState(() => {
         // Initialize from URL if available
