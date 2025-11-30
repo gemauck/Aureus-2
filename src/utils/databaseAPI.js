@@ -132,6 +132,9 @@ const DatabaseAPI = {
         
         return (
             errorName === 'typeerror' ||
+            errorName === 'aborterror' ||
+            errorName === 'timeouterror' ||
+            error.isTimeout === true ||
             errorMessage.includes('failed to fetch') ||
             errorMessage.includes('networkerror') ||
             errorMessage.includes('network request failed') ||
@@ -140,8 +143,12 @@ const DatabaseAPI = {
             errorMessage.includes('err_connection_refused') ||
             errorMessage.includes('err_connection_reset') ||
             errorMessage.includes('err_connection_timed_out') ||
+            errorMessage.includes('err_timed_out') ||
+            errorMessage.includes('request timeout') ||
+            errorMessage.includes('timeout after') ||
             errorString.includes('networkerror') ||
-            errorString.includes('failed to fetch')
+            errorString.includes('failed to fetch') ||
+            errorString.includes('timeout')
         );
     },
 
@@ -231,7 +238,18 @@ const DatabaseAPI = {
             if (!token) {
                 try {
                     const refreshUrl = `${this.API_BASE}/api/auth/refresh`;
-                    const refreshRes = await fetch(refreshUrl, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } });
+                    // Add timeout to refresh request
+                    const refreshController = new AbortController();
+                    const refreshTimeoutId = setTimeout(() => refreshController.abort(), 10000); // 10 second timeout
+                    
+                    const refreshRes = await fetch(refreshUrl, { 
+                        method: 'POST', 
+                        credentials: 'include', 
+                        headers: { 'Content-Type': 'application/json' },
+                        signal: refreshController.signal
+                    });
+                    clearTimeout(refreshTimeoutId);
+                    
                     if (refreshRes.ok) {
                         const text = await refreshRes.text();
                         const refreshData = text ? JSON.parse(text) : {};
@@ -325,9 +343,36 @@ const DatabaseAPI = {
                     }
                 }
                 
+                // Add timeout handling using AbortController
+                const timeoutMs = options.timeout || 30000; // Default 30 seconds, configurable
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => {
+                    controller.abort();
+                }, timeoutMs);
+                
+                // Add abort signal to config
+                config.signal = controller.signal;
+                
                 this._lastRequestTimestamp = Date.now();
-                const response = await fetch(url, config);
-                return response;
+                
+                try {
+                    const response = await fetch(url, config);
+                    clearTimeout(timeoutId);
+                    return response;
+                } catch (error) {
+                    clearTimeout(timeoutId);
+                    
+                    // Handle timeout errors specifically
+                    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+                        const timeoutError = new Error(`Request timeout after ${timeoutMs}ms: ${endpoint}`);
+                        timeoutError.name = 'TimeoutError';
+                        timeoutError.isTimeout = true;
+                        throw timeoutError;
+                    }
+                    
+                    // Re-throw other errors
+                    throw error;
+                }
             };
 
             // Retry loop for network errors
@@ -380,13 +425,20 @@ const DatabaseAPI = {
                     if (!response.ok && response.status === 401) {
                     // Attempt refresh once before giving up
                     console.log('🔄 Got 401, attempting token refresh...');
+                    let refreshSucceeded = false;
                     try {
                         const refreshUrl = `${this.API_BASE}/api/auth/refresh`;
+                        // Add timeout to refresh request as well
+                        const refreshController = new AbortController();
+                        const refreshTimeoutId = setTimeout(() => refreshController.abort(), 10000); // 10 second timeout for refresh
+                        
                         const refreshRes = await fetch(refreshUrl, { 
                             method: 'POST', 
                             credentials: 'include', 
-                            headers: { 'Content-Type': 'application/json' } 
+                            headers: { 'Content-Type': 'application/json' },
+                            signal: refreshController.signal
                         });
+                        clearTimeout(refreshTimeoutId);
                         
                         if (refreshRes.ok) {
                             const text = await refreshRes.text();
@@ -399,6 +451,7 @@ const DatabaseAPI = {
                                 // Retry the original request with the new token
                                 response = await execute(newToken);
                                 console.log('✅ Retried request after refresh, status:', response.status);
+                                refreshSucceeded = true;
                             } else {
                                 console.error('❌ Token refresh failed: No token in response');
                             }
@@ -407,7 +460,37 @@ const DatabaseAPI = {
                         }
                     } catch (refreshError) {
                         console.error('❌ Token refresh error:', refreshError);
-                        // Continue to throw the original 401 error
+                        // If refresh fails, don't retry - force logout immediately
+                        if (window.forceLogout) {
+                            window.forceLogout('SESSION_EXPIRED');
+                        } else {
+                            if (window.storage?.removeToken) window.storage.removeToken();
+                            if (window.storage?.removeUser) window.storage.removeUser();
+                            if (window.LiveDataSync) {
+                                window.LiveDataSync.stop();
+                            }
+                            if (!window.location.hash.includes('#/login')) {
+                                window.location.hash = '#/login';
+                            }
+                        }
+                        throw new Error('Authentication expired. Please log in again.');
+                    }
+                    
+                    // If refresh didn't succeed and we still have a 401, don't retry
+                    if (!refreshSucceeded && response.status === 401) {
+                        if (window.forceLogout) {
+                            window.forceLogout('SESSION_EXPIRED');
+                        } else {
+                            if (window.storage?.removeToken) window.storage.removeToken();
+                            if (window.storage?.removeUser) window.storage.removeUser();
+                            if (window.LiveDataSync) {
+                                window.LiveDataSync.stop();
+                            }
+                            if (!window.location.hash.includes('#/login')) {
+                                window.location.hash = '#/login';
+                            }
+                        }
+                        throw new Error('Authentication expired. Please log in again.');
                     }
                 }
 
@@ -557,14 +640,21 @@ const DatabaseAPI = {
                     // Check if error message indicates a 500/502/503/504 that we should retry
                     const isServerError = error.message?.includes('500') || error.message?.includes('502') || error.message?.includes('503') || error.message?.includes('504');
                     
-                    // Only retry on network errors or server errors (502/503/504), not on other HTTP errors or auth errors
+                    // Check if it's a timeout error (should be retried)
+                    const isTimeout = error.isTimeout === true || 
+                                     error.name === 'TimeoutError' || 
+                                     error.name === 'AbortError' ||
+                                     error.message?.includes('timeout') ||
+                                     error.message?.includes('ERR_TIMED_OUT');
+                    
+                    // Only retry on network errors, timeout errors, or server errors (502/503/504), not on other HTTP errors or auth errors
                     const isNetwork = this.isNetworkError(error);
-                    const shouldRetry = (isNetwork || isServerError) && attempt < maxRetries;
+                    const shouldRetry = (isNetwork || isTimeout || isServerError) && attempt < maxRetries;
                     
                     if (shouldRetry) {
                         // Calculate exponential backoff delay: 1s, 2s, 4s
                         const delay = baseDelay * Math.pow(2, attempt);
-                        const errorType = isServerError ? 'Server error' : 'Network error';
+                        const errorType = isTimeout ? 'Timeout error' : (isServerError ? 'Server error' : 'Network error');
                         console.warn(`⚠️ ${errorType} on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`, error.message);
                         await this._sleep(delay);
                         continue; // Retry the request

@@ -156,8 +156,20 @@ async function request(path, options = {}) {
   const requestOptions = { ...options, headers, credentials: 'include' }
 
   const execute = async () => {
-    const res = await fetch(fullUrl, requestOptions)
-    const text = await res.text()
+    // Add timeout handling using AbortController
+    const timeoutMs = options.timeout || 30000; // Default 30 seconds, configurable
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
+    
+    // Add abort signal to request options
+    requestOptions.signal = controller.signal;
+    
+    try {
+      const res = await fetch(fullUrl, requestOptions);
+      clearTimeout(timeoutId);
+      const text = await res.text();
 
     // Handle 429 rate limit errors FIRST before trying to parse JSON
     // Server returns plain text "Too many requests, please slow down..." which is not JSON
@@ -212,7 +224,21 @@ async function request(path, options = {}) {
       }
     }
 
-    return { res, data }
+      return { res, data };
+    } catch (error) {
+      clearTimeout(timeoutId);
+      
+      // Handle timeout errors specifically
+      if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+        const timeoutError = new Error(`Request timeout after ${timeoutMs}ms: ${path}`);
+        timeoutError.name = 'TimeoutError';
+        timeoutError.isTimeout = true;
+        throw timeoutError;
+      }
+      
+      // Re-throw other errors
+      throw error;
+    }
   }
 
   try {
