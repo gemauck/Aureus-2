@@ -663,70 +663,28 @@ const ManagementMeetingNotes = () => {
     const captureCurrentFieldValues = useCallback(() => {
         const capturedValues = {};
         
-        // Find all textarea elements in department note sections
-        const textareas = document.querySelectorAll('textarea');
+        // Find all textarea elements with data attributes (our department note fields)
+        const textareas = document.querySelectorAll('textarea[data-dept-note-id][data-field]');
         textareas.forEach(textarea => {
+            const deptNoteId = textarea.getAttribute('data-dept-note-id');
+            const fieldName = textarea.getAttribute('data-field');
             const value = textarea.value || '';
-            if (value.trim()) {
-                // Try to find the department note ID from the component structure
-                // Look for the parent container that might have the ID
-                const container = textarea.closest('[class*="space-y"], [class*="mb-"], div');
-                if (container) {
-                    // Check if this is a department note field by looking for labels
-                    const label = container.querySelector('label');
-                    if (label) {
-                        const labelText = label.textContent || '';
-                        // Check if this is one of our department note fields
-                        if (labelText.includes('Successes') || 
-                            labelText.includes('Weekly Plan') || 
-                            labelText.includes('Frustrations')) {
-                            
-                            // Try to find departmentNotesId from the component data
-                            // Look for the department note card
-                            let deptNoteId = null;
-                            let fieldName = null;
-                            
-                            if (labelText.includes('Successes')) {
-                                fieldName = 'successes';
-                            } else if (labelText.includes('Weekly Plan') || labelText.includes('Week to Follow')) {
-                                fieldName = 'weekToFollow';
-                            } else if (labelText.includes('Frustrations')) {
-                                fieldName = 'frustrations';
-                            }
-                            
-                            // Walk up the DOM to find the department note ID
-                            let parent = container;
-                            for (let i = 0; i < 10 && parent; i++) {
-                                // Check if parent has data attributes or IDs that might contain the note ID
-                                const dataId = parent.getAttribute('data-dept-note-id') || 
-                                             parent.getAttribute('data-id') ||
-                                             parent.id;
-                                if (dataId && dataId.startsWith('cm')) {
-                                    deptNoteId = dataId;
-                                    break;
-                                }
-                                parent = parent.parentElement;
-                            }
-                            
-                            // If we found both ID and field, store it
-                            if (deptNoteId && fieldName) {
-                                const fieldKey = `${deptNoteId}-${fieldName}`;
-                                // Only update if this value is different/newer than what we have
-                                const existing = pendingValues.current[fieldKey];
-                                if (!existing || existing.value !== value) {
-                                    capturedValues[fieldKey] = {
-                                        departmentNotesId: deptNoteId,
-                                        field: fieldName,
-                                        value: value
-                                    };
-                                    console.log(`📸 Captured current value for ${fieldKey} from DOM:`, value.substring(0, 50));
-                                }
-                            }
-                        }
-                    }
-                }
+            
+            if (deptNoteId && fieldName && value) {
+                const fieldKey = `${deptNoteId}-${fieldName}`;
+                // ALWAYS update with current DOM value - it's the source of truth
+                capturedValues[fieldKey] = {
+                    departmentNotesId: deptNoteId,
+                    field: fieldName,
+                    value: value
+                };
+                console.log(`📸 Captured current DOM value for ${fieldKey}:`, value.substring(0, 50) + '...');
             }
         });
+        
+        // Also check RichTextEditor components if they exist
+        // RichTextEditor might store value differently, but we'll rely on onChange for those
+        // since they're more complex components
         
         return capturedValues;
     }, []);
@@ -2994,6 +2952,8 @@ const ManagementMeetingNotes = () => {
                                                                     placeholder="What went well during the week?"
                                                                     className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
                                                                     rows={4}
+                                                                    data-dept-note-id={deptNote.id}
+                                                                    data-field="successes"
                                                                 />
                                                             )}
                                                         </div>
@@ -3020,6 +2980,8 @@ const ManagementMeetingNotes = () => {
                                                                     placeholder="What's planned for the upcoming week?"
                                                                     className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
                                                                     rows={4}
+                                                                    data-dept-note-id={deptNote.id}
+                                                                    data-field="weekToFollow"
                                                                 />
                                                             )}
                                                         </div>
@@ -3046,6 +3008,8 @@ const ManagementMeetingNotes = () => {
                                                                     placeholder="What challenges or blockers are we facing?"
                                                                     className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
                                                                     rows={4}
+                                                                    data-dept-note-id={deptNote.id}
+                                                                    data-field="frustrations"
                                                                 />
                                                             )}
                                                         </div>

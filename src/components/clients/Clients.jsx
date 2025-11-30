@@ -1142,13 +1142,22 @@ const Clients = React.memo(() => {
                 );
                 
                 // Show cached clients IMMEDIATELY
+                // Ensure tags field exists (even if empty) for proper rendering
                 if (filteredCachedClients.length > 0) {
-                    setClients(filteredCachedClients);
+                    const clientsWithTagsField = filteredCachedClients.map(client => ({
+                        ...client,
+                        tags: Array.isArray(client.tags) ? client.tags : []
+                    }));
+                    setClients(clientsWithTagsField);
                 }
                 
                 // Show cached leads IMMEDIATELY (this is critical for fast loading!)
+                // Ensure tags field exists (even if empty) for proper rendering
                 if (cachedLeads.length > 0) {
-                    const normalizedCachedLeads = normalizeLeadStages(cachedLeads);
+                    const normalizedCachedLeads = normalizeLeadStages(cachedLeads).map(lead => ({
+                        ...lead,
+                        tags: Array.isArray(lead.tags) ? lead.tags : []
+                    }));
                     setLeads(normalizedCachedLeads);
                     setLeadsCount(normalizedCachedLeads.length);
                 }
@@ -1172,6 +1181,7 @@ const Clients = React.memo(() => {
                             const updated = filteredCachedClients.map(client => ({
                                 ...client,
                                 opportunities: opportunitiesByClient[client.id] || client.opportunities || []
+                                // Tags are preserved from client object (may be from cache, will be updated by API)
                             }));
                             setClients(updated);
                             safeStorage.setClients(updated);
@@ -1202,10 +1212,17 @@ const Clients = React.memo(() => {
             const now = Date.now();
             const timeSinceLastCall = now - lastApiCallTimestamp;
             
+            // Check if cached clients are missing tags - if so, always fetch from API
+            const cachedClientsMissingTags = cachedClients && cachedClients.length > 0 && 
+                cachedClients.some(client => !client.tags || !Array.isArray(client.tags) || client.tags.length === 0);
+            const clientsMissingTags = clients.length > 0 && 
+                clients.some(client => !client.tags || !Array.isArray(client.tags) || client.tags.length === 0);
+            const needsTagsRefresh = cachedClientsMissingTags || clientsMissingTags;
+            
             // If we have cached clients AND it's been less than 10 seconds since last call, skip API entirely
             // This prevents unnecessary network requests when data is fresh
-            // UNLESS forceRefresh is true - then ALWAYS call API (bypass all throttling)
-            if (!forceRefresh && timeSinceLastCall < API_CALL_INTERVAL && (clients.length > 0 || (cachedClients && cachedClients.length > 0))) {
+            // UNLESS forceRefresh is true OR tags are missing - then ALWAYS call API (bypass throttling)
+            if (!forceRefresh && !needsTagsRefresh && timeSinceLastCall < API_CALL_INTERVAL && (clients.length > 0 || (cachedClients && cachedClients.length > 0))) {
                 
                 // But still trigger LiveDataSync in background to get updates
                 if (window.LiveDataSync?.forceSync) {
@@ -1302,13 +1319,19 @@ const Clients = React.memo(() => {
                 }
                 
                 // Preserve opportunities from cached clients for instant display
+                // CRITICAL: Always use tags from API response (client object) - never use cached tags
                 const cachedClientsForOpps = safeStorage.getClients() || [];
                 const clientsWithCachedOpps = clientsOnly.map(client => {
                     const cachedClient = cachedClientsForOpps.find(c => c.id === client.id);
+                    // Start with API client data (which has tags from processClientData)
+                    const merged = { ...client };
+                    // Preserve opportunities from cache if available (for instant display)
                     if (cachedClient?.opportunities && Array.isArray(cachedClient.opportunities) && cachedClient.opportunities.length > 0) {
-                        return { ...client, opportunities: cachedClient.opportunities };
+                        merged.opportunities = cachedClient.opportunities;
                     }
-                    return client;
+                    // Tags are already in merged from client (API response) - they take precedence over cache
+                    // This ensures tags always come from the API, not stale cache
+                    return merged;
                 });
                 
                 // Show clients immediately with preserved opportunities
@@ -1352,9 +1375,11 @@ const Clients = React.memo(() => {
                             });
                             
                             // Attach opportunities to their clients
+                            // CRITICAL: Preserve tags from API response (client object already has tags from processClientData)
                             const updated = clientsOnly.map(client => ({
                                 ...client,
                                 opportunities: opportunitiesByClient[client.id] || []
+                                // Tags are already in client from processClientData - preserve them
                             }));
                             
                             const totalOpps = updated.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
@@ -2085,14 +2110,21 @@ const Clients = React.memo(() => {
                 const now = Date.now();
                 const timeSinceLastCall = now - lastLeadsApiCallTimestamp;
                 
+                // Check if cached leads are missing tags - if so, always fetch from API
+                const cachedLeadsMissingTags = cachedLeads && Array.isArray(cachedLeads) && cachedLeads.length > 0 && 
+                    cachedLeads.some(lead => !lead.tags || !Array.isArray(lead.tags) || lead.tags.length === 0);
+                const leadsMissingTags = leads.length > 0 && 
+                    leads.some(lead => !lead.tags || !Array.isArray(lead.tags) || lead.tags.length === 0);
+                const needsTagsRefresh = cachedLeadsMissingTags || leadsMissingTags;
+                
                 // Check if we should skip API call:
                 // 1. If we have leads in state AND recent API call - skip
                 // 2. If we have leads in localStorage (just loaded above) AND recent API call - skip
-                // UNLESS forceRefresh is true - then ALWAYS call API
+                // UNLESS forceRefresh is true OR tags are missing - then ALWAYS call API
                 const hasLeadsInState = leads.length > 0;
                 const hasLeadsInCache = cachedLeads && Array.isArray(cachedLeads) && cachedLeads.length > 0;
                 
-                if (!forceRefresh && timeSinceLastCall < API_CALL_INTERVAL && (hasLeadsInState || hasLeadsInCache)) {
+                if (!forceRefresh && !needsTagsRefresh && timeSinceLastCall < API_CALL_INTERVAL && (hasLeadsInState || hasLeadsInCache)) {
                     const leadCount = hasLeadsInState ? leads.length : cachedLeads.length;
                     
                     // But still trigger LiveDataSync in background to get updates

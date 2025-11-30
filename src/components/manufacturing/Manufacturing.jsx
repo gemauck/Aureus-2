@@ -8498,7 +8498,11 @@ const Manufacturing = () => {
             };
 
             // Calculate balances backwards from current quantity (since we're displaying newest-first)
-            // Start with current quantity and work backwards by subtracting each movement
+            // Start with current quantity and work backwards by reversing each movement
+            // When going backwards: if movement was +10, balance before was current - 10
+            //                     if movement was -5, balance before was current + 5
+            // Formula: balance_before = balance_after - movement_effect
+            // Since we're going backwards, we ADD the movement effect to get the balance before
             const currentQuantity = item.quantity || 0;
             let runningBalance = currentQuantity;
 
@@ -8533,8 +8537,14 @@ const Manufacturing = () => {
                         const isDecrease = qty < 0;
                         
                         // Display the balance AFTER this movement (runningBalance)
-                        // Then calculate the balance BEFORE this movement for the next row
+                        // To get balance BEFORE this movement, we reverse the movement effect
+                        // If movement was +10 (increase), balance before was current - 10
+                        // If movement was -5 (decrease), balance before was current + 5
+                        // So: balance_before = balance_after - qty
+                        // Since qty is already normalized (positive for increases, negative for decreases),
+                        // we subtract qty to reverse the effect: balance_before = balance_after - qty
                         const balanceToDisplay = runningBalance;
+                        // Reverse the movement to get balance before: if +10 was added, before was current - 10
                         runningBalance = runningBalance - qty;
                         
                         return (
