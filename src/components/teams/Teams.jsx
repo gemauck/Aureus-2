@@ -280,7 +280,6 @@ const Teams = () => {
         if (currentTab === 'meeting-notes' && newTab !== 'meeting-notes') {
             const meetingNotesRef = window.ManagementMeetingNotesRef;
             if (meetingNotesRef?.current?.hasPendingSaves?.() || meetingNotesRef?.current?.isBlockingNavigation?.()) {
-                console.log('🚫 Tab switch BLOCKED - saves in progress...');
                 
                 // Show blocking state if not already shown
                 if (meetingNotesRef?.current?.flushPendingSaves) {
@@ -292,7 +291,6 @@ const Teams = () => {
                         ]);
                         // Wait a bit more to ensure all saves are fully processed
                         await new Promise(resolve => setTimeout(resolve, 500));
-                        console.log('✅ All saves completed, switching tab');
                     } catch (error) {
                         console.error('Error waiting for saves before tab switch:', error);
                     }
@@ -480,20 +478,12 @@ const Teams = () => {
 
     // Check modal components on mount only
     useEffect(() => {
-        console.log('🔍 Teams: Checking modal components...');
-        console.log('  - DocumentModal:', typeof window.DocumentModal);
-        console.log('  - WorkflowModal:', typeof window.WorkflowModal);
-        console.log('  - ChecklistModal:', typeof window.ChecklistModal);
-        console.log('  - NoticeModal:', typeof window.NoticeModal);
-        console.log('  - WorkflowExecutionModal:', typeof window.WorkflowExecutionModal);
-        console.log('  - ManagementMeetingNotes:', typeof window.ManagementMeetingNotes);
     }, []);
 
     // Wait for ManagementMeetingNotes component to load
     useEffect(() => {
         const checkForManagementMeetingNotes = () => {
             if (window.ManagementMeetingNotes) {
-                console.log('✅ Teams: ManagementMeetingNotes component now available');
                 setManagementMeetingNotesAvailable(true);
                 return true;
             }
@@ -526,7 +516,6 @@ const Teams = () => {
     useEffect(() => {
         const loadData = async () => {
             try {
-                console.log('🔄 Teams: Loading data from data service');
                 
                 // Safely call dataService methods with better error handling
                 const getSafeData = async (method) => {
@@ -568,13 +557,6 @@ const Teams = () => {
                     savedExecutions = [];
                 }
 
-                console.log('✅ Teams: Data loaded successfully', {
-                    documents: documents.length,
-                    workflows: workflows.length,
-                    checklists: checklists.length,
-                    notices: notices.length,
-                    executions: savedExecutions.length
-                });
 
                 setDocuments(documents);
                 setWorkflows(workflows);
@@ -1165,12 +1147,8 @@ const Teams = () => {
                     <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-2">
                         <button
                             onClick={() => {
-                                console.log('🟢 Add Document button clicked');
-                                console.log('  - DocumentModal available:', typeof window.DocumentModal);
-                                console.log('  - selectedTeam:', selectedTeam?.name);
                                 setEditingDocument(null);
                                 setShowDocumentModal(true);
-                                console.log('  - showDocumentModal set to: true');
                             }}
                             className="px-3 py-2.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-xs font-medium min-h-[44px] sm:min-h-0"
                         >
@@ -1180,12 +1158,8 @@ const Teams = () => {
                         </button>
                         <button
                             onClick={() => {
-                                console.log('🟢 Create Workflow button clicked');
-                                console.log('  - WorkflowModal available:', typeof window.WorkflowModal);
-                                console.log('  - selectedTeam:', selectedTeam?.name);
                                 setEditingWorkflow(null);
                                 setShowWorkflowModal(true);
-                                console.log('  - showWorkflowModal set to: true');
                             }}
                             className="px-3 py-2.5 sm:py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-xs font-medium min-h-[44px] sm:min-h-0"
                         >
@@ -1195,12 +1169,8 @@ const Teams = () => {
                         </button>
                         <button
                             onClick={() => {
-                                console.log('🟢 New Checklist button clicked');
-                                console.log('  - ChecklistModal available:', typeof window.ChecklistModal);
-                                console.log('  - selectedTeam:', selectedTeam?.name);
                                 setEditingChecklist(null);
                                 setShowChecklistModal(true);
-                                console.log('  - showChecklistModal set to: true');
                             }}
                             className="px-3 py-2.5 sm:py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-xs font-medium min-h-[44px] sm:min-h-0"
                         >
@@ -1210,12 +1180,8 @@ const Teams = () => {
                         </button>
                         <button
                             onClick={() => {
-                                console.log('🟢 Post Notice button clicked');
-                                console.log('  - NoticeModal available:', typeof window.NoticeModal);
-                                console.log('  - selectedTeam:', selectedTeam?.name);
                                 setEditingNotice(null);
                                 setShowNoticeModal(true);
-                                console.log('  - showNoticeModal set to: true');
                             }}
                             className="px-3 py-2.5 sm:py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition text-xs font-medium min-h-[44px] sm:min-h-0"
                         >
@@ -1537,14 +1503,6 @@ const Teams = () => {
                         {activeTab === 'meeting-notes' && selectedTeam?.id === 'management' && (() => {
                             const ComponentToRender = window.ManagementMeetingNotes || ManagementMeetingNotes;
                             
-                            console.log('🔍 Teams: Rendering meeting-notes tab', {
-                                activeTab,
-                                selectedTeamId: selectedTeam?.id,
-                                ManagementMeetingNotesAvailable: !!ManagementMeetingNotes,
-                                windowManagementMeetingNotes: !!window.ManagementMeetingNotes,
-                                ComponentToRender: !!ComponentToRender,
-                                managementMeetingNotesAvailable
-                            });
                             
                             if (!ComponentToRender) {
                                 // Show loading state while waiting for component

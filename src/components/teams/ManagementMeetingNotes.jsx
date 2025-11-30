@@ -658,10 +658,11 @@ const ManagementMeetingNotes = () => {
         isBlockingNavigation: () => isBlockingNavigation
     });
     
-    // Flush all pending saves and wait for them to complete
+    // Flush all pending saves and wait for them to complete - NO TIMEOUTS, wait for ALL saves
     const flushPendingSaves = useCallback(async () => {
-        // Set blocking state
+        // Set blocking state IMMEDIATELY
         setIsBlockingNavigation(true);
+        console.log('🔒 BLOCKING NAVIGATION - Starting save flush...');
         
         // Clear all debounce timers
         Object.keys(saveTimers.current).forEach(fieldKey => {
@@ -669,14 +670,13 @@ const ManagementMeetingNotes = () => {
             delete saveTimers.current[fieldKey];
         });
         
-        // First, wait for any existing active save promises to complete
+        // Wait for ALL existing active save promises to complete - NO TIMEOUT
         const existingPromises = Array.from(activeSavePromises.current);
         if (existingPromises.length > 0) {
+            console.log(`⏳ Waiting for ${existingPromises.length} existing save(s) to complete...`);
             try {
-                await Promise.race([
-                    Promise.all(existingPromises),
-                    new Promise((resolve) => setTimeout(resolve, 3000)) // 3 second timeout for existing
-                ]);
+                await Promise.all(existingPromises);
+                console.log('✅ All existing saves completed');
             } catch (error) {
                 console.error('Error waiting for existing saves:', error);
             }
@@ -699,6 +699,7 @@ const ManagementMeetingNotes = () => {
                     .then(() => {
                         delete pendingValues.current[fieldKey];
                         activeSavePromises.current.delete(savePromise);
+                        console.log(`✅ Saved field ${fieldKey}`);
                     })
                     .catch((error) => {
                         console.error('Error flushing save:', error);
@@ -720,35 +721,51 @@ const ManagementMeetingNotes = () => {
             }
         });
         
-        // Wait for all new saves to complete (with timeout for safety)
+        // Wait for ALL new saves to complete - NO TIMEOUT, wait for actual completion
         if (newSavePromises.length > 0) {
+            console.log(`⏳ Waiting for ${newSavePromises.length} new save(s) to complete...`);
             try {
-                await Promise.race([
-                    Promise.all(newSavePromises),
-                    new Promise((resolve) => setTimeout(resolve, 3000)) // 3 second timeout
-                ]);
+                await Promise.all(newSavePromises);
+                console.log('✅ All new saves completed');
             } catch (error) {
                 console.error('Error waiting for new saves to complete:', error);
             }
         }
         
-        // Final check - wait for any remaining active promises
+        // Final check - wait for ANY remaining active promises - NO TIMEOUT
         let attempts = 0;
-        const maxAttempts = 5;
+        const maxAttempts = 10; // More attempts
         while (activeSavePromises.current.size > 0 && attempts < maxAttempts) {
             const remainingPromises = Array.from(activeSavePromises.current);
+            console.log(`⏳ Final check: Waiting for ${remainingPromises.length} remaining save(s)...`);
             try {
-                await Promise.race([
-                    Promise.all(remainingPromises),
-                    new Promise((resolve) => setTimeout(resolve, 1000)) // 1 second timeout per attempt
-                ]);
+                await Promise.all(remainingPromises);
+                console.log('✅ All remaining saves completed');
             } catch (error) {
                 console.error('Error waiting for remaining saves:', error);
             }
             attempts++;
+            // Small delay between attempts
+            if (activeSavePromises.current.size > 0) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
         }
         
-        // Clear blocking state
+        // Verify ALL saves are complete before unblocking
+        const finalCheck = pendingSaves.current.size === 0 && 
+                          Object.keys(pendingValues.current).length === 0 && 
+                          activeSavePromises.current.size === 0;
+        
+        if (!finalCheck) {
+            console.warn('⚠️ WARNING: Some saves may still be pending:', {
+                pendingSaves: pendingSaves.current.size,
+                pendingValues: Object.keys(pendingValues.current).length,
+                activePromises: activeSavePromises.current.size
+            });
+        }
+        
+        console.log('🔓 UNBLOCKING NAVIGATION - All saves complete');
+        // Clear blocking state ONLY after verification
         setIsBlockingNavigation(false);
     }, []);
 
@@ -800,12 +817,6 @@ const ManagementMeetingNotes = () => {
                     activeSavePromises.current.size > 0;
                 
                 if (hasPendingSaves || isBlockingNavigation) {
-                    console.log('🚫 Navigation BLOCKED - saves in progress...', {
-                        pendingSaves: pendingSaves.current.size,
-                        pendingValues: Object.keys(pendingValues.current).length,
-                        activePromises: activeSavePromises.current.size,
-                        isBlocking: isBlockingNavigation
-                    });
                     
                     // ALWAYS prevent navigation when saves are pending
                     e.preventDefault();
@@ -817,36 +828,63 @@ const ManagementMeetingNotes = () => {
                         setIsBlockingNavigation(true);
                     }
                     
-                    // Wait for all saves to complete
+                    // Wait for all saves to complete - VERIFY before allowing navigation
                     try {
                         await flushPendingSaves();
-                        // Wait a bit more for any final saves and DOM updates
-                        await new Promise(resolve => setTimeout(resolve, 500));
                         
-                        console.log('✅ All saves completed, allowing navigation');
+                        // VERIFY all saves are actually complete before allowing navigation
+                        let verifyAttempts = 0;
+                        while ((pendingSaves.current.size > 0 || 
+                               Object.keys(pendingValues.current).length > 0 || 
+                               activeSavePromises.current.size > 0) && 
+                               verifyAttempts < 5) {
+                            console.log('🔍 Verifying saves complete...', {
+                                pendingSaves: pendingSaves.current.size,
+                                pendingValues: Object.keys(pendingValues.current).length,
+                                activePromises: activeSavePromises.current.size
+                            });
+                            await new Promise(resolve => setTimeout(resolve, 200));
+                            verifyAttempts++;
+                        }
                         
-                        // Re-trigger the click after saves complete
-                        if (target.tagName === 'A') {
-                            window.location.href = target.href;
-                        } else if (target.onclick) {
-                            target.onclick(e);
+                        // Final verification - if still pending, wait more
+                        if (pendingSaves.current.size > 0 || 
+                            Object.keys(pendingValues.current).length > 0 || 
+                            activeSavePromises.current.size > 0) {
+                            console.warn('⚠️ Still has pending saves, waiting more...');
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                        }
+                        
+                        // Only allow navigation if truly complete
+                        const isComplete = pendingSaves.current.size === 0 && 
+                                          Object.keys(pendingValues.current).length === 0 && 
+                                          activeSavePromises.current.size === 0;
+                        
+                        if (isComplete) {
+                            console.log('✅ VERIFIED: All saves completed, allowing navigation');
+                            // Wait a bit more for DOM updates
+                            await new Promise(resolve => setTimeout(resolve, 300));
+                            
+                            // Re-trigger the click after saves complete
+                            if (target.tagName === 'A') {
+                                window.location.href = target.href;
+                            } else if (target.onclick) {
+                                target.onclick(e);
+                            } else {
+                                // Use setTimeout to ensure the click happens after current execution
+                                setTimeout(() => {
+                                    target.click();
+                                }, 100);
+                            }
                         } else {
-                            // Use setTimeout to ensure the click happens after current execution
-                            setTimeout(() => {
-                                target.click();
-                            }, 100);
+                            console.error('❌ BLOCKED: Saves not complete, preventing navigation');
+                            setIsBlockingNavigation(true);
+                            // Don't allow navigation - keep blocking
                         }
                     } catch (error) {
                         console.error('Error waiting for saves before navigation:', error);
-                        setIsBlockingNavigation(false);
-                        // Still allow navigation even if save fails after timeout
-                        if (target.tagName === 'A') {
-                            window.location.href = target.href;
-                        } else {
-                            setTimeout(() => {
-                                target.click();
-                            }, 100);
-                        }
+                        // On error, keep blocking to be safe
+                        setIsBlockingNavigation(true);
                     }
                 }
             }
@@ -1749,12 +1787,6 @@ const ManagementMeetingNotes = () => {
             setEditingActionItem(null);
 
             setLoading(true);
-            console.log('💾 Saving action item:', {
-                isUpdate,
-                actionItemData,
-                editingActionItem,
-                tempId
-            });
 
             let response;
             // Check if we're updating (has id) or creating (no id)
@@ -1766,7 +1798,6 @@ const ManagementMeetingNotes = () => {
                 response = await window.DatabaseAPI.createActionItem(actionItemData);
             }
             
-            console.log('✅ Action item response:', response);
             
             // Get the actual action item from response
             const savedActionItem = response?.data?.actionItem || response?.actionItem;
