@@ -774,26 +774,30 @@ const ManagementMeetingNotes = () => {
         });
         
         // CRITICAL FALLBACK: Use React state values from currentMonthlyNotes
-        // This is the most reliable way to capture RichTextEditor values
+        // BUT ONLY capture values that have actually changed (not already saved)
         if (currentMonthlyNotes?.weeklyNotes) {
             currentMonthlyNotes.weeklyNotes.forEach(week => {
                 if (week?.departmentNotes) {
                     week.departmentNotes.forEach(deptNote => {
                         if (deptNote?.id) {
-                            // Capture all three fields
+                            // Capture all three fields, but only if they differ from last saved
                             ['successes', 'weekToFollow', 'frustrations'].forEach(field => {
-                                const fieldKey = `${deptNote.id}-${field}`; // Inline getFieldKey
+                                const fieldKey = `${deptNote.id}-${field}`;
                                 const value = deptNote[field] || '';
+                                const lastSaved = lastSavedValues.current[fieldKey];
                                 
-                                // Always use React state value if available (it's the source of truth)
-                                // Only override if DOM capture found a different (newer) value
-                                if (!capturedValues[fieldKey] || capturedValues[fieldKey].value !== value) {
+                                // Only capture if:
+                                // 1. Not already captured from DOM
+                                // 2. Value differs from last saved value
+                                // 3. Or it's already in pendingValues (user typed something)
+                                if ((!capturedValues[fieldKey] || capturedValues[fieldKey].value !== value) &&
+                                    (value !== lastSaved || pendingValues.current[fieldKey])) {
                                     capturedValues[fieldKey] = {
                                         departmentNotesId: deptNote.id,
                                         field: field,
                                         value: value
                                     };
-                                    console.log(`📸 Captured React state value for ${fieldKey}:`, String(value).substring(0, 50) + '...');
+                                    console.log(`📸 Captured React state value for ${fieldKey} (changed):`, String(value).substring(0, 50) + '...');
                                 }
                             });
                         }
@@ -834,11 +838,17 @@ const ManagementMeetingNotes = () => {
         const capturedValues = captureCurrentFieldValues();
         console.log('📸 Captured current field values from DOM:', Object.keys(capturedValues).length);
         
-        // Merge captured values into pendingValues - these are the absolute latest
+        // Merge captured values into pendingValues - but only if they differ from last saved
         Object.entries(capturedValues).forEach(([fieldKey, data]) => {
             if (data) {
-                pendingValues.current[fieldKey] = data;
-                console.log(`📝 Updated pending value for ${fieldKey} from DOM capture`);
+                const lastSaved = lastSavedValues.current[fieldKey];
+                // Only add to pending if it's different from last saved or already pending
+                if (data.value !== lastSaved || pendingValues.current[fieldKey]) {
+                    pendingValues.current[fieldKey] = data;
+                    console.log(`📝 Updated pending value for ${fieldKey} from DOM capture`);
+                } else {
+                    console.log(`⏭️ Skipping ${fieldKey} - already saved`);
+                }
             }
         });
         
@@ -885,6 +895,10 @@ const ManagementMeetingNotes = () => {
                         if (currentPending && currentPending.value === valueToSave) {
                             delete pendingValues.current[fieldKey];
                         }
+                        // Update last saved value
+                        lastSavedValues.current[fieldKey] = valueToSave;
+                        // Remove from pending saves
+                        pendingSaves.current.delete(fieldKey);
                         activeSavePromises.current.delete(savePromise);
                         console.log(`✅ Saved field ${fieldKey}`);
                     })
@@ -905,6 +919,10 @@ const ManagementMeetingNotes = () => {
                             if (currentPending && currentPending.value === valueToSave) {
                                 delete pendingValues.current[fieldKey];
                             }
+                            // Update last saved value
+                            lastSavedValues.current[fieldKey] = valueToSave;
+                            // Remove from pending saves
+                            pendingSaves.current.delete(fieldKey);
                         }).catch(() => {
                             console.error(`❌ Fallback save also failed for ${fieldKey}`);
                         });
@@ -957,14 +975,23 @@ const ManagementMeetingNotes = () => {
                 pendingValues: Object.keys(pendingValues.current).length,
                 activePromises: activeSavePromises.current.size
             });
-            // Keep blocking if not complete
+            // Force clear after a reasonable timeout to prevent indefinite blocking
+            setTimeout(() => {
+                if (isBlockingNavigation) {
+                    console.warn('⚠️ Force unblocking after timeout - some saves may still be in progress');
+                    setIsBlockingNavigation(false);
+                    // Clear any remaining pending saves to prevent re-blocking
+                    pendingSaves.current.clear();
+                    // Keep pendingValues in case they need to be saved later
+                }
+            }, 15000); // 15 second timeout
             return;
         }
         
         console.log('🔓 UNBLOCKING NAVIGATION - All saves complete');
         // Clear blocking state ONLY after verification
         setIsBlockingNavigation(false);
-    }, [captureCurrentFieldValues]);
+    }, [captureCurrentFieldValues, isBlockingNavigation]);
 
     // Ensure all pending saves complete before navigation
     useEffect(() => {
@@ -2669,9 +2696,27 @@ const ManagementMeetingNotes = () => {
                         <p className={`text-sm mb-4 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
                             Please wait while we save all your changes to the database. Navigation is blocked to prevent data loss.
                         </p>
-                        <div className="flex items-center justify-center gap-2 text-xs text-gray-500">
-                            <span>Pending saves: {pendingSaves.current.size + Object.keys(pendingValues.current).length + activeSavePromises.current.size}</span>
+                        <div className="flex items-center justify-center gap-2 text-xs text-gray-500 mb-4">
+                            <span>Active saves: {activeSavePromises.current.size}</span>
+                            {Object.keys(pendingValues.current).length > 0 && (
+                                <span>• Pending: {Object.keys(pendingValues.current).length}</span>
+                            )}
                         </div>
+                        <button
+                            onClick={() => {
+                                console.warn('⚠️ User force-unblocked navigation');
+                                setIsBlockingNavigation(false);
+                                // Clear pending saves to prevent immediate re-blocking
+                                pendingSaves.current.clear();
+                            }}
+                            className={`px-4 py-2 text-sm rounded-lg font-medium transition ${
+                                isDark 
+                                    ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' 
+                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            }`}
+                        >
+                            Force Continue (May lose unsaved changes)
+                        </button>
                     </div>
                 </div>
             )}
