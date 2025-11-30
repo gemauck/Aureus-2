@@ -821,7 +821,7 @@ const ManagementMeetingNotes = () => {
         });
         
         return capturedValues;
-    }, []);
+    }, [currentMonthlyNotes]); // Include currentMonthlyNotes to access latest React state
     
     // Flush all pending saves and wait for them to complete - NO TIMEOUTS, wait for ALL saves
     const flushPendingSaves = useCallback(async () => {
