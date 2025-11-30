@@ -136,6 +136,24 @@ async function handler(req, res) {
           }
         }
         
+        // Check if externalAgentId column exists before including relation
+        let hasExternalAgentId = false
+        try {
+          // Check for column with case-insensitive table name (PostgreSQL stores unquoted identifiers in lowercase)
+          const columnCheck = await prisma.$queryRaw`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE LOWER(table_name) = 'client' AND column_name = 'externalAgentId'
+          `
+          hasExternalAgentId = Array.isArray(columnCheck) && columnCheck.length > 0
+          if (!hasExternalAgentId) {
+            console.warn('⚠️ externalAgentId column does not exist, skipping externalAgent relation')
+          }
+        } catch (columnCheckError) {
+          console.warn('⚠️ Failed to check for externalAgentId column, assuming it does not exist:', columnCheckError.message)
+          hasExternalAgentId = false
+        }
+        
         // Include tags for list view - needed for Tags column
         let leads = []
         try {
@@ -143,33 +161,34 @@ async function handler(req, res) {
           // EXPLICITLY exclude ownerId from WHERE clause to ensure all leads are returned
           // Use defensive includes - if relations fail, try without them
           try {
+            const includeObj = {
+              tags: {
+                include: {
+                  tag: true
+                }
+              },
+              // Only include externalAgent if the column exists
+              ...(hasExternalAgentId ? { externalAgent: true } : {}),
+              // Include starredBy relation only if we have a valid userId
+              ...(validUserId ? {
+                starredBy: {
+                  where: {
+                    userId: validUserId
+                  },
+                  select: {
+                    id: true,
+                    userId: true
+                  }
+                }
+              } : {})
+            }
+            
             leads = await prisma.client.findMany({ 
               where: { 
                 type: 'lead'
                 // Explicitly NO ownerId filter - all users see all leads
               },
-              include: {
-                tags: {
-                  include: {
-                    tag: true
-                  }
-                },
-                // Only include externalAgent if the column exists (check error code)
-                externalAgent: true,
-                // Include starredBy relation only if we have a valid userId
-                // If no validUserId, starredBy will be undefined and isStarred will be false
-                ...(validUserId ? {
-                  starredBy: {
-                    where: {
-                      userId: validUserId
-                    },
-                    select: {
-                      id: true,
-                      userId: true
-                    }
-                  }
-                } : {})
-              },
+              include: includeObj,
               orderBy: { createdAt: 'desc' } 
             })
           } catch (relationError) {
