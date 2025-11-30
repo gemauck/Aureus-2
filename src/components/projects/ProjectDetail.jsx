@@ -865,11 +865,17 @@ function initializeProjectDetail() {
     });
     
     // Sync tasks when project prop changes (e.g., after reload or navigation)
+    // Use a ref to track previous project ID to prevent infinite loops
+    const previousProjectIdRef = useRef(project?.id);
     useEffect(() => {
-        if (project?.tasks && Array.isArray(project.tasks)) {
-            setTasks(project.tasks);
+        // Only sync if project ID changed (switching to a different project)
+        if (project?.id !== previousProjectIdRef.current) {
+            previousProjectIdRef.current = project?.id;
+            if (project?.tasks && Array.isArray(project.tasks)) {
+                setTasks(project.tasks);
+            }
         }
-    }, [project?.id, project?.tasks]);
+    }, [project?.id]); // Only depend on project ID, not tasks array (which may be recreated on every render)
     
     // Initialize custom field definitions with project-specific data
     const [customFieldDefinitions, setCustomFieldDefinitions] = useState(
@@ -3113,12 +3119,6 @@ function initializeProjectDetail() {
                     </div>
 
             {/* List or Kanban View */}
-            {(() => {
-                console.error('🔴 CRITICAL DEBUG - Tasks section rendering');
-                console.error('🔴 viewMode:', viewMode);
-                console.error('🔴 Will render:', viewMode === 'list' ? 'ListView' : 'KanbanView');
-                return null;
-            })()}
             {viewMode === 'list' ? (
                 <ListView />
             ) : (
