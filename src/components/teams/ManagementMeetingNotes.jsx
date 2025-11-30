@@ -1039,28 +1039,54 @@ const ManagementMeetingNotes = () => {
             }
         };
 
-        // Intercept ALL clicks to block navigation when saves are pending
+        // Intercept navigation clicks to block when saves are pending
         const handleNavClick = async (e) => {
             const target = e.target.closest('a, button, [role="button"]');
             if (!target) return;
+            
+            // CRITICAL: Exclude clicks on form elements, editor toolbars, and meeting notes component
+            // Don't block clicks on inputs, textareas, contentEditable, or their toolbars
+            // Also exclude any buttons/links inside the meeting notes component itself
+            if (target.tagName === 'INPUT' || 
+                target.tagName === 'TEXTAREA' || 
+                target.getAttribute('contenteditable') === 'true' ||
+                target.closest('textarea') ||
+                target.closest('input') ||
+                target.closest('[contenteditable="true"]') ||
+                target.closest('[class*="toolbar"]') ||
+                target.closest('[class*="editor"]') ||
+                target.closest('[class*="RichTextEditor"]') ||
+                target.closest('[data-rich-text-editor]') ||
+                target.closest('[class*="meeting-notes"]') ||
+                target.closest('[class*="ManagementMeetingNotes"]') ||
+                target.closest('form') ||
+                // Exclude any button that's clearly a form/editor button (not navigation)
+                (target.tagName === 'BUTTON' && (
+                    target.closest('[class*="department"]') ||
+                    target.closest('[class*="week"]') ||
+                    target.textContent?.match(/(Bold|Italic|Underline|Bullet|Number|Link|Image|Format)/i)
+                ))) {
+                return; // Allow these clicks - they're not navigation
+            }
             
             // Check if it's a navigation element (link or nav button)
             const href = target.getAttribute('href') || target.closest('a')?.getAttribute('href');
             const isNavLink = target.tagName === 'A' || 
                 href ||
-                target.closest('nav') || 
+                // Only check for navigation in sidebar or main nav, not form buttons
+                (target.closest('nav') && !target.closest('form')) || 
                 target.closest('[data-nav]') ||
                 target.classList.contains('nav-link') ||
-                // Check for Teams component tab buttons
-                (target.closest('[class*="tab"]') && target.textContent?.match(/(Documents|Workflows|Checklists|Notices|Meeting Notes|Overview)/i)) ||
-                // Check for sidebar navigation
-                target.closest('[class*="sidebar"]') ||
-                target.closest('[class*="nav"]') ||
-                // Check for any button that might navigate
-                (target.tagName === 'BUTTON' && (target.onclick || target.getAttribute('onclick'))) ||
+                // Check for Teams component tab buttons (but not buttons inside meeting notes)
+                (target.closest('[class*="tab"]') && 
+                 !target.closest('[class*="meeting-notes"]') &&
+                 target.textContent?.match(/(Documents|Workflows|Checklists|Notices|Meeting Notes|Overview)/i)) ||
+                // Check for sidebar navigation (but not form elements in sidebar)
+                (target.closest('[class*="sidebar"]') && !target.closest('form')) ||
+                (target.closest('[class*="nav"]') && !target.closest('form')) ||
                 // Check for sidebar menu items (common patterns)
-                target.closest('[class*="menu-item"]') ||
-                target.closest('[class*="nav-item"]');
+                (target.closest('[class*="menu-item"]') && !target.closest('form')) ||
+                (target.closest('[class*="nav-item"]') && !target.closest('form'));
             
             if (isNavLink) {
                 const hasPendingSaves = pendingSaves.current.size > 0 || 
