@@ -20,6 +20,7 @@ const DatabaseAPI = {
         '/clients': 60000,      // 1 minute - clients don't change frequently
         '/leads': 60000,        // 1 minute - leads don't change frequently
         '/projects': 60000,     // 1 minute - projects don't change frequently
+        '/tasks': 30000,        // 30 seconds - tasks change frequently
         '/users': 120000,       // 2 minutes - users rarely change
         '/invoices': 60000,     // 1 minute
         '/time-entries': 30000, // 30 seconds
@@ -971,6 +972,29 @@ const DatabaseAPI = {
             method: 'DELETE'
         });
         return response;
+    },
+
+    // TASK OPERATIONS
+    async getTasks(status = null, projectId = null) {
+        let endpoint = '/tasks';
+        const params = [];
+        if (status) params.push(`status=${encodeURIComponent(status)}`);
+        if (projectId) params.push(`projectId=${encodeURIComponent(projectId)}`);
+        if (params.length > 0) {
+            endpoint += `?${params.join('&')}`;
+        }
+        const response = await this.makeRequest(endpoint);
+        // Normalize response to ensure consistent structure
+        const normalized = {
+            data: {
+                tasks: Array.isArray(response?.data?.tasks)
+                    ? response.data.tasks
+                    : Array.isArray(response?.data)
+                        ? response.data
+                        : []
+            }
+        };
+        return normalized;
     },
 
     // INVOICE OPERATIONS
@@ -2063,6 +2087,8 @@ if (window.api) {
     window.api.createProject = DatabaseAPI.createProject.bind(DatabaseAPI);
     window.api.updateProject = DatabaseAPI.updateProject.bind(DatabaseAPI);
     window.api.deleteProject = DatabaseAPI.deleteProject.bind(DatabaseAPI);
+    
+    window.api.getTasks = DatabaseAPI.getTasks.bind(DatabaseAPI);
     
     window.api.getInvoices = DatabaseAPI.getInvoices.bind(DatabaseAPI);
     window.api.createInvoice = DatabaseAPI.createInvoice.bind(DatabaseAPI);

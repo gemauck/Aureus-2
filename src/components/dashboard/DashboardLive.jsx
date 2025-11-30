@@ -363,35 +363,141 @@ const DashboardLive = () => {
                 )
             },
             {
-                id: 'my-tasks',
-                group: 'Teams',
-                title: 'My Tasks',
+                id: 'my-project-tasks',
+                group: 'Projects',
+                title: 'My Project Tasks',
                 render: () => {
-                    const TaskComponent = window.TaskManagement;
-                    const tasks = (window.TaskAPI && typeof window.TaskAPI.getMyTasks === 'function')
-                        ? (window.TaskAPI.getMyTasks() || [])
-                        : [];
-                    
+                    const [tasks, setTasks] = React.useState([]);
+                    const [isLoading, setIsLoading] = React.useState(true);
+                    const [error, setError] = React.useState(null);
+
+                    React.useEffect(() => {
+                        const loadTasks = async () => {
+                            setIsLoading(true);
+                            setError(null);
+                            try {
+                                const token = window.storage?.getToken?.();
+                                if (!token || !window.DatabaseAPI) {
+                                    setTasks([]);
+                                    setIsLoading(false);
+                                    return;
+                                }
+
+                                const response = await window.DatabaseAPI.getTasks();
+                                const tasksData = response?.data?.tasks || [];
+                                setTasks(tasksData);
+                            } catch (err) {
+                                console.error('Error loading tasks:', err);
+                                setError('Failed to load tasks');
+                                setTasks([]);
+                            } finally {
+                                setIsLoading(false);
+                            }
+                        };
+
+                        loadTasks();
+                    }, []);
+
+                    const getStatusColor = (status) => {
+                        switch (status?.toLowerCase()) {
+                            case 'done':
+                            case 'completed':
+                                return 'bg-green-100 text-green-800';
+                            case 'in-progress':
+                            case 'inprogress':
+                                return 'bg-blue-100 text-blue-800';
+                            case 'todo':
+                            case 'pending':
+                                return 'bg-gray-100 text-gray-800';
+                            case 'blocked':
+                                return 'bg-red-100 text-red-800';
+                            default:
+                                return 'bg-gray-100 text-gray-800';
+                        }
+                    };
+
+                    const getDueDateStatus = (dueDate) => {
+                        if (!dueDate) return null;
+                        const due = new Date(dueDate);
+                        const now = new Date();
+                        const diffDays = Math.ceil((due - now) / (1000 * 60 * 60 * 24));
+                        
+                        if (diffDays < 0) return { text: 'Overdue', color: 'text-red-600 font-semibold' };
+                        if (diffDays === 0) return { text: 'Due today', color: 'text-orange-600 font-semibold' };
+                        if (diffDays <= 3) return { text: `Due in ${diffDays} days`, color: 'text-yellow-600' };
+                        return { text: new Date(dueDate).toLocaleDateString(), color: subText };
+                    };
+
+                    const handleTaskClick = (task) => {
+                        if (task.projectId && window.RouteState) {
+                            window.RouteState.setPageSubpath('projects', [task.projectId]);
+                        }
+                    };
+
                     return (
                         <div className={`${cardBase} border rounded-lg p-4`}>
-                            <div className="flex items-center justify-between mb-2">
-                                <h3 className={`text-sm font-semibold ${headerText}`}>My Tasks</h3>
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className={`text-sm font-semibold ${headerText}`}>My Project Tasks</h3>
                                 <i className="fas fa-tasks text-teal-500"></i>
                             </div>
-                            {Array.isArray(tasks) && tasks.length > 0 ? (
-                                <ul className="space-y-2">
-                                    {tasks.slice(0, 5).map(t => (
-                                        <li key={t.id} className="flex items-center justify-between">
-                                            <span className="text-sm truncate">{t.title || t.name}</span>
-                                            {t.dueDate ? (
-                                                <span className={`text-xs ${subText}`}>{new Date(t.dueDate).toLocaleDateString()}</span>
-                                            ) : null}
-                                        </li>
-                                    ))}
-                                </ul>
+                            
+                            {isLoading ? (
+                                <div className="text-center py-4">
+                                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-teal-600 mx-auto mb-2"></div>
+                                    <p className={`text-xs ${subText}`}>Loading tasks...</p>
+                                </div>
+                            ) : error ? (
+                                <div className={`text-sm ${subText} text-center py-2`}>{error}</div>
+                            ) : tasks.length === 0 ? (
+                                <div className={`text-sm ${subText} text-center py-2`}>No tasks assigned to you.</div>
                             ) : (
-                                <div className={`text-sm ${subText}`}>
-                                    {TaskComponent ? 'No tasks found for you.' : 'Tasks module not available.'}
+                                <div className="space-y-2 max-h-96 overflow-y-auto">
+                                    {tasks.slice(0, 10).map(task => {
+                                        const dueDateInfo = getDueDateStatus(task.dueDate);
+                                        return (
+                                            <div
+                                                key={task.id}
+                                                onClick={() => handleTaskClick(task)}
+                                                className={`p-2 rounded border ${isDark ? 'border-gray-700 hover:border-gray-600' : 'border-gray-200 hover:border-gray-300'} cursor-pointer transition-colors`}
+                                                title={`Click to view project: ${task.project?.name || 'Unknown'}`}
+                                            >
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className={`text-xs px-1.5 py-0.5 rounded ${getStatusColor(task.status)}`}>
+                                                                {task.status || 'todo'}
+                                                            </span>
+                                                            {task.project && (
+                                                                <span className={`text-xs ${subText} truncate`} title={task.project.name}>
+                                                                    <i className="fas fa-project-diagram mr-1"></i>
+                                                                    {task.project.name}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className={`text-sm ${headerText} font-medium truncate`} title={task.title}>
+                                                            {task.title}
+                                                        </p>
+                                                        {task.project?.clientName && (
+                                                            <p className={`text-xs ${subText} truncate`} title={task.project.clientName}>
+                                                                {task.project.clientName}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                {dueDateInfo && (
+                                                    <div className={`text-xs mt-1 ${dueDateInfo.color}`}>
+                                                        <i className="fas fa-calendar-alt mr-1"></i>
+                                                        {dueDateInfo.text}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                    {tasks.length > 10 && (
+                                        <div className={`text-xs ${subText} text-center pt-2 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                                            Showing 10 of {tasks.length} tasks
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -477,13 +583,13 @@ const DashboardLive = () => {
                 const valid = parsed.filter(id => widgetRegistry.some(w => w.id === id));
                 setSelectedWidgets(valid);
             } else {
-                const defaults = ['sales-overview', 'projects-overview', 'time-overview', 'calendar'];
+                const defaults = ['sales-overview', 'projects-overview', 'my-project-tasks', 'time-overview', 'calendar'];
                 const validDefaults = defaults.filter(id => widgetRegistry.some(w => w.id === id));
                 setSelectedWidgets(validDefaults);
             }
         } catch (_) {
             setAvailableWidgets(widgetRegistry);
-            setSelectedWidgets(['sales-overview', 'projects-overview', 'time-overview', 'calendar']);
+            setSelectedWidgets(['sales-overview', 'projects-overview', 'my-project-tasks', 'time-overview', 'calendar']);
         }
     }, [widgetRegistry]);
 
@@ -504,7 +610,7 @@ const DashboardLive = () => {
     };
 
     const handleResetWidgets = () => {
-        const defaults = ['sales-overview', 'projects-overview', 'time-overview', 'calendar'];
+        const defaults = ['sales-overview', 'projects-overview', 'my-project-tasks', 'time-overview', 'calendar'];
         setSelectedWidgets(defaults);
         persistWidgets(defaults);
     };
