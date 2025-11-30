@@ -788,16 +788,19 @@ const ManagementMeetingNotes = () => {
                                 
                                 // Only capture if:
                                 // 1. Not already captured from DOM
-                                // 2. Value differs from last saved value
-                                // 3. Or it's already in pendingValues (user typed something)
-                                if ((!capturedValues[fieldKey] || capturedValues[fieldKey].value !== value) &&
-                                    (value !== lastSaved || pendingValues.current[fieldKey])) {
+                                // 2. Value is already in pendingValues (user typed something) OR
+                                // 3. Value differs from last saved AND lastSaved is defined (meaning it was previously saved)
+                                // This prevents capturing all fields on first load when lastSaved is undefined
+                                const isAlreadyPending = pendingValues.current[fieldKey];
+                                const hasChanged = lastSaved !== undefined && value !== lastSaved;
+                                
+                                if (!capturedValues[fieldKey] && (isAlreadyPending || hasChanged)) {
                                     capturedValues[fieldKey] = {
                                         departmentNotesId: deptNote.id,
                                         field: field,
                                         value: value
                                     };
-                                    console.log(`📸 Captured React state value for ${fieldKey} (changed):`, String(value).substring(0, 50) + '...');
+                                    console.log(`📸 Captured React state value for ${fieldKey} (${isAlreadyPending ? 'pending' : 'changed'}):`, String(value).substring(0, 50) + '...');
                                 }
                             });
                         }
@@ -807,19 +810,27 @@ const ManagementMeetingNotes = () => {
         }
         
         // Also use currentFieldValues ref as additional fallback
+        // But only if the value has changed or is already pending
         Object.entries(currentFieldValues.current).forEach(([fieldKey, value]) => {
             if (!capturedValues[fieldKey] && value) {
-                // Parse fieldKey to get deptNoteId and field
-                const parts = fieldKey.split('-');
-                if (parts.length >= 2) {
-                    const deptNoteId = parts[0];
-                    const field = parts.slice(1).join('-'); // Handle fields with dashes
-                    capturedValues[fieldKey] = {
-                        departmentNotesId: deptNoteId,
-                        field: field,
-                        value: value
-                    };
-                    console.log(`📸 Captured currentFieldValues ref for ${fieldKey} (fallback):`, String(value).substring(0, 50) + '...');
+                const lastSaved = lastSavedValues.current[fieldKey];
+                const isAlreadyPending = pendingValues.current[fieldKey];
+                const hasChanged = lastSaved !== undefined && value !== lastSaved;
+                
+                // Only capture if it's already pending or has changed
+                if (isAlreadyPending || hasChanged) {
+                    // Parse fieldKey to get deptNoteId and field
+                    const parts = fieldKey.split('-');
+                    if (parts.length >= 2) {
+                        const deptNoteId = parts[0];
+                        const field = parts.slice(1).join('-'); // Handle fields with dashes
+                        capturedValues[fieldKey] = {
+                            departmentNotesId: deptNoteId,
+                            field: field,
+                            value: value
+                        };
+                        console.log(`📸 Captured currentFieldValues ref for ${fieldKey} (${isAlreadyPending ? 'pending' : 'changed'}):`, String(value).substring(0, 50) + '...');
+                    }
                 }
             }
         });
@@ -842,12 +853,18 @@ const ManagementMeetingNotes = () => {
         Object.entries(capturedValues).forEach(([fieldKey, data]) => {
             if (data) {
                 const lastSaved = lastSavedValues.current[fieldKey];
-                // Only add to pending if it's different from last saved or already pending
-                if (data.value !== lastSaved || pendingValues.current[fieldKey]) {
+                // Only add to pending if:
+                // 1. It's already in pendingValues (user typed something), OR
+                // 2. It's different from last saved AND lastSaved is defined (previously saved)
+                const isAlreadyPending = pendingValues.current[fieldKey];
+                const hasChanged = lastSaved !== undefined && data.value !== lastSaved;
+                
+                if (isAlreadyPending || hasChanged) {
                     pendingValues.current[fieldKey] = data;
+                    pendingSaves.current.add(fieldKey); // Ensure it's marked as pending
                     console.log(`📝 Updated pending value for ${fieldKey} from DOM capture`);
                 } else {
-                    console.log(`⏭️ Skipping ${fieldKey} - already saved`);
+                    console.log(`⏭️ Skipping ${fieldKey} - no changes detected`);
                 }
             }
         });
@@ -857,6 +874,17 @@ const ManagementMeetingNotes = () => {
             clearTimeout(saveTimers.current[fieldKey]);
             delete saveTimers.current[fieldKey];
         });
+        
+        // Set a timeout to prevent indefinite blocking (always set, not just on failure)
+        const blockingTimeout = setTimeout(() => {
+            if (isBlockingNavigation) {
+                console.warn('⚠️ Save flush timed out after 15 seconds. Unblocking navigation with potential unsaved changes.');
+                setIsBlockingNavigation(false);
+                // Clear any remaining pending saves to prevent re-blocking
+                pendingSaves.current.clear();
+                // Keep pendingValues in case they need to be saved later
+            }
+        }, 15000); // 15 seconds timeout
         
         // Wait for ALL existing active save promises to complete - NO TIMEOUT
         const existingPromises = Array.from(activeSavePromises.current);
@@ -975,18 +1003,12 @@ const ManagementMeetingNotes = () => {
                 pendingValues: Object.keys(pendingValues.current).length,
                 activePromises: activeSavePromises.current.size
             });
-            // Force clear after a reasonable timeout to prevent indefinite blocking
-            setTimeout(() => {
-                if (isBlockingNavigation) {
-                    console.warn('⚠️ Force unblocking after timeout - some saves may still be in progress');
-                    setIsBlockingNavigation(false);
-                    // Clear any remaining pending saves to prevent re-blocking
-                    pendingSaves.current.clear();
-                    // Keep pendingValues in case they need to be saved later
-                }
-            }, 15000); // 15 second timeout
+            // Timeout is already set above, just return and let timeout handle it
             return;
         }
+        
+        // Clear the timeout since we completed successfully
+        clearTimeout(blockingTimeout);
         
         console.log('🔓 UNBLOCKING NAVIGATION - All saves complete');
         // Clear blocking state ONLY after verification
@@ -2698,8 +2720,11 @@ const ManagementMeetingNotes = () => {
                         </p>
                         <div className="flex items-center justify-center gap-2 text-xs text-gray-500 mb-4">
                             <span>Active saves: {activeSavePromises.current.size}</span>
-                            {Object.keys(pendingValues.current).length > 0 && (
-                                <span>• Pending: {Object.keys(pendingValues.current).length}</span>
+                            {pendingSaves.current.size > 0 && (
+                                <span>• Pending: {pendingSaves.current.size}</span>
+                            )}
+                            {Object.keys(pendingValues.current).length > 0 && pendingSaves.current.size === 0 && (
+                                <span>• Queued: {Object.keys(pendingValues.current).length}</span>
                             )}
                         </div>
                         <button
