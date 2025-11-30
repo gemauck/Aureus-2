@@ -280,14 +280,16 @@ const Teams = () => {
         if (currentTab === 'meeting-notes' && newTab !== 'meeting-notes') {
             const meetingNotesRef = window.ManagementMeetingNotesRef;
             if (meetingNotesRef?.current?.hasPendingSaves?.()) {
+                console.log('⏳ Waiting for pending saves before tab switch...');
                 try {
-                    // Wait for saves to complete (with timeout)
+                    // Wait for saves to complete (with longer timeout)
                     await Promise.race([
                         meetingNotesRef.current.flushPendingSaves(),
-                        new Promise(resolve => setTimeout(resolve, 2000)) // 2 second timeout
+                        new Promise(resolve => setTimeout(resolve, 5000)) // 5 second timeout
                     ]);
-                    // Small delay to ensure saves are fully processed
-                    await new Promise(resolve => setTimeout(resolve, 100));
+                    // Wait a bit more to ensure all saves are fully processed
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    console.log('✅ All saves completed, switching tab');
                 } catch (error) {
                     console.error('Error waiting for saves before tab switch:', error);
                 }

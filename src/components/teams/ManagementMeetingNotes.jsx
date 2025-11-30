@@ -662,9 +662,22 @@ const ManagementMeetingNotes = () => {
             delete saveTimers.current[fieldKey];
         });
         
-        // Collect all pending saves as promises
+        // First, wait for any existing active save promises to complete
+        const existingPromises = Array.from(activeSavePromises.current);
+        if (existingPromises.length > 0) {
+            try {
+                await Promise.race([
+                    Promise.all(existingPromises),
+                    new Promise((resolve) => setTimeout(resolve, 2000)) // 2 second timeout for existing
+                ]);
+            } catch (error) {
+                console.error('Error waiting for existing saves:', error);
+            }
+        }
+        
+        // Then, save any remaining pending values
         const pendingEntries = Object.entries(pendingValues.current);
-        const savePromises = [];
+        const newSavePromises = [];
         
         pendingEntries.forEach(([fieldKey, data]) => {
             if (data) {
@@ -696,19 +709,32 @@ const ManagementMeetingNotes = () => {
                     });
                 
                 activeSavePromises.current.add(savePromise);
-                savePromises.push(savePromise);
+                newSavePromises.push(savePromise);
             }
         });
         
-        // Wait for all saves to complete (with timeout for safety)
-        if (savePromises.length > 0) {
+        // Wait for all new saves to complete (with timeout for safety)
+        if (newSavePromises.length > 0) {
             try {
                 await Promise.race([
-                    Promise.all(savePromises),
-                    new Promise((resolve) => setTimeout(resolve, 3000)) // 3 second timeout
+                    Promise.all(newSavePromises),
+                    new Promise((resolve) => setTimeout(resolve, 2000)) // 2 second timeout
                 ]);
             } catch (error) {
-                console.error('Error waiting for saves to complete:', error);
+                console.error('Error waiting for new saves to complete:', error);
+            }
+        }
+        
+        // Final check - wait for any remaining active promises
+        const remainingPromises = Array.from(activeSavePromises.current);
+        if (remainingPromises.length > 0) {
+            try {
+                await Promise.race([
+                    Promise.all(remainingPromises),
+                    new Promise((resolve) => setTimeout(resolve, 1000)) // 1 second timeout for final check
+                ]);
+            } catch (error) {
+                console.error('Error waiting for remaining saves:', error);
             }
         }
     }, []);
@@ -759,15 +785,24 @@ const ManagementMeetingNotes = () => {
                     activeSavePromises.current.size > 0;
                 
                 if (hasPendingSaves) {
+                    console.log('⏳ Navigation intercepted - waiting for saves...', {
+                        pendingSaves: pendingSaves.current.size,
+                        pendingValues: Object.keys(pendingValues.current).length,
+                        activePromises: activeSavePromises.current.size
+                    });
+                    
                     // Prevent default navigation temporarily
                     e.preventDefault();
                     e.stopPropagation();
+                    e.stopImmediatePropagation();
                     
                     // Wait for all saves to complete
                     try {
                         await flushPendingSaves();
-                        // Wait a bit more for any final saves
-                        await new Promise(resolve => setTimeout(resolve, 100));
+                        // Wait a bit more for any final saves and DOM updates
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                        
+                        console.log('✅ All saves completed, allowing navigation');
                         
                         // Re-trigger the click after saves complete
                         if (target.tagName === 'A') {
@@ -775,7 +810,10 @@ const ManagementMeetingNotes = () => {
                         } else if (target.onclick) {
                             target.onclick(e);
                         } else {
-                            target.click();
+                            // Use setTimeout to ensure the click happens after current execution
+                            setTimeout(() => {
+                                target.click();
+                            }, 50);
                         }
                     } catch (error) {
                         console.error('Error waiting for saves before navigation:', error);
@@ -783,7 +821,9 @@ const ManagementMeetingNotes = () => {
                         if (target.tagName === 'A') {
                             window.location.href = target.href;
                         } else {
-                            target.click();
+                            setTimeout(() => {
+                                target.click();
+                            }, 50);
                         }
                     }
                 }
@@ -1424,8 +1464,8 @@ const ManagementMeetingNotes = () => {
         // Mark as pending save
         pendingSaves.current.add(fieldKey);
         
-        // Save immediately - no debounce
-        window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value })
+        // Create save promise and track it
+        const savePromise = window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value })
             .then(() => {
                 // Successfully saved - clear from pending values and track last saved
                 delete pendingValues.current[fieldKey];
@@ -1443,7 +1483,11 @@ const ManagementMeetingNotes = () => {
             })
             .finally(() => {
                 pendingSaves.current.delete(fieldKey);
+                activeSavePromises.current.delete(savePromise);
             });
+        
+        // Track the save promise so we can wait for it during navigation
+        activeSavePromises.current.add(savePromise);
     };
     
     // Flush save on blur - immediately saves the latest value
@@ -1463,8 +1507,8 @@ const ManagementMeetingNotes = () => {
         // Mark as pending
         pendingSaves.current.add(fieldKey);
         
-        // Save immediately on blur
-        window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: valueToSave })
+        // Create save promise and track it
+        const savePromise = window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: valueToSave })
             .then(() => {
                 // Successfully saved - clear from pending values
                 delete pendingValues.current[fieldKey];
@@ -1477,7 +1521,11 @@ const ManagementMeetingNotes = () => {
             })
             .finally(() => {
                 pendingSaves.current.delete(fieldKey);
+                activeSavePromises.current.delete(savePromise);
             });
+        
+        // Track the save promise
+        activeSavePromises.current.add(savePromise);
     };
 
     // Track temp IDs to prevent duplicates when server responds
