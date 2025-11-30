@@ -41,12 +41,27 @@ try {
   // Force use of process.env.DATABASE_URL - ensure it's the correct one
   const databaseUrl = process.env.DATABASE_URL
   
-  if (!databaseUrl || !databaseUrl.includes('nov-3-backup5-do-user-28031752-0')) {
-    console.error('❌ ERROR: DATABASE_URL does not contain correct hostname!')
+  // Check for valid database hostname (allow multiple valid hostnames)
+  const validHostnames = [
+    'nov-3-backup5-do-user-28031752-0',
+    'dbaas-db-6934625-do-user-28031752-0',
+    'ondigitalocean.com'
+  ]
+  
+  const hasValidHostname = validHostnames.some(hostname => databaseUrl && databaseUrl.includes(hostname))
+  
+  if (!databaseUrl || !hasValidHostname) {
+    console.error('❌ ERROR: DATABASE_URL does not contain valid hostname!')
     console.error('   Current DATABASE_URL:', databaseUrl ? databaseUrl.replace(/:([^:@]+)@/, ':***@') : 'NOT SET')
-    console.error('   Expected hostname: nov-3-backup5-do-user-28031752-0')
+    console.error('   Expected hostnames:', validHostnames.join(', '))
     console.error('   Full DATABASE_URL (masked):', databaseUrl ? databaseUrl.replace(/:([^:@]+)@/, ':***@') : 'NOT SET')
-    throw new Error('DATABASE_URL must contain correct hostname: nov-3-backup5-do-user-28031752-0')
+    // In production, still throw error but with better message
+    // In development, allow connection to proceed with warning
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(`DATABASE_URL must contain one of these hostnames: ${validHostnames.join(', ')}`)
+    } else {
+      console.warn('⚠️ WARNING: DATABASE_URL hostname check failed, but allowing connection in development mode')
+    }
   }
   
   

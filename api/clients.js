@@ -292,15 +292,29 @@ async function handler(req, res) {
         // Check if it's a connection error
         const isConnectionError = dbError.message?.includes("Can't reach database server") ||
                                  dbError.code === 'P1001' ||
+                                 dbError.code === 'P1002' ||
+                                 dbError.code === 'P1008' ||
+                                 dbError.code === 'P1017' ||
                                  dbError.code === 'ETIMEDOUT' ||
-                                 dbError.code === 'ECONNREFUSED'
+                                 dbError.code === 'ECONNREFUSED' ||
+                                 dbError.code === 'ENOTFOUND' ||
+                                 dbError.name === 'PrismaClientInitializationError'
         
         if (isConnectionError) {
           console.error('🔌 Database connection issue detected - server may be unreachable')
+          console.error('   Error details:', {
+            code: dbError.code,
+            message: dbError.message,
+            name: dbError.name
+          })
         }
         
-        // Return detailed error for debugging
-        return serverError(res, 'Failed to list clients', dbError.message || 'Unknown database error')
+        // Return detailed error for debugging (include error code and message)
+        const errorDetails = process.env.NODE_ENV === 'development' 
+          ? `${dbError.message || 'Unknown database error'} (Code: ${dbError.code || 'N/A'})`
+          : 'Database connection failed. Please check server logs for details.'
+        
+        return serverError(res, 'Failed to list clients', errorDetails)
       }
     }
 

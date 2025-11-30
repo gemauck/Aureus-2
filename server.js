@@ -1159,12 +1159,33 @@ app.use('/api', async (req, res) => {
       // Only send error if response hasn't been sent
       if (!res.headersSent && !res.writableEnded) {
         const isDevelopment = process.env.NODE_ENV === 'development'
-        res.status(500).json({ 
-          error: 'Internal server error', 
-          details: isDevelopment ? handlerError.message : 'Contact support if this persists',
-          errorCode: handlerError.code,
+        
+        // Check for database connection errors
+        const isDbError = handlerError.code === 'P1001' || handlerError.code === 'P1002' || 
+                         handlerError.code === 'P1008' || handlerError.code === 'P1017' || 
+                         handlerError.code === 'ETIMEDOUT' || handlerError.code === 'ECONNREFUSED' ||
+                         handlerError.code === 'ENOTFOUND' || handlerError.name === 'PrismaClientInitializationError' ||
+                         handlerError.message?.includes("Can't reach database server")
+        
+        const errorResponse = {
+          error: 'Internal server error',
+          errorCode: handlerError.code || 'UNKNOWN',
+          errorName: handlerError.name || 'Error',
           timestamp: new Date().toISOString()
-        })
+        }
+        
+        if (isDbError) {
+          errorResponse.error = 'Database connection error'
+          errorResponse.details = isDevelopment 
+            ? `Database connection failed: ${handlerError.message}`
+            : 'Database server is unreachable. Please check server logs.'
+        } else {
+          errorResponse.details = isDevelopment 
+            ? handlerError.message 
+            : 'Contact support if this persists'
+        }
+        
+        res.status(500).json(errorResponse)
       } else {
         console.error('⚠️ Cannot send error response - headers already sent or response ended')
       }
