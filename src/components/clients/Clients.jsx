@@ -864,6 +864,62 @@ const Clients = React.memo(() => {
         loadIndustries();
     }, [loadIndustries]);
     
+    // Listen for entity navigation events (from notifications, comments, etc.)
+    useEffect(() => {
+        const handleEntityNavigation = async (event) => {
+            if (!event.detail) return;
+            
+            const { entityType, entityId, options } = event.detail;
+            if (!entityType || !entityId) return;
+            
+            // Handle client entities
+            if (entityType === 'client' || entityType === 'lead' || entityType === 'opportunity') {
+                // Find the entity in our data
+                let entity = null;
+                if (entityType === 'client') {
+                    entity = clients.find(c => c.id === entityId);
+                } else if (entityType === 'lead') {
+                    entity = leads.find(l => l.id === entityId);
+                } else if (entityType === 'opportunity') {
+                    // Find opportunity in clients' opportunities
+                    for (const client of clients) {
+                        const opp = (client.opportunities || []).find(o => o.id === entityId);
+                        if (opp) {
+                            entity = { ...opp, clientId: client.id, clientName: client.name };
+                            break;
+                        }
+                    }
+                }
+                
+                if (entity) {
+                    if (entityType === 'client') {
+                        handleOpenClient(entity);
+                    } else if (entityType === 'lead') {
+                        handleOpenLead(entity);
+                    } else if (entityType === 'opportunity') {
+                        // Open opportunity detail view
+                        setViewMode('opportunity-detail');
+                        selectedLeadRef.current = entity;
+                    }
+                    
+                    // Handle tab navigation if specified
+                    if (options?.tab && window.setCurrentTab) {
+                        setTimeout(() => {
+                            window.setCurrentTab?.(options.tab);
+                        }, 100);
+                    }
+                } else {
+                    // Entity not found in cache, try to fetch it
+                    console.log(`Entity ${entityType} with id ${entityId} not found in cache, attempting to fetch...`);
+                    // The component will handle loading when viewMode changes
+                }
+            }
+        };
+        
+        window.addEventListener('openEntityDetail', handleEntityNavigation);
+        return () => window.removeEventListener('openEntityDetail', handleEntityNavigation);
+    }, [clients, leads, handleOpenClient, handleOpenLead]);
+    
     const pipelineStageOrder = useMemo(() => {
         const order = {};
         PIPELINE_STAGES.forEach((stage, index) => {

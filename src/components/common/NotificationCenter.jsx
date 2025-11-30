@@ -313,7 +313,19 @@ const NotificationCenter = () => {
             }
             
             // Navigate to the link FIRST
-            window.location.hash = notification.link;
+            // Use entity URL navigation if available, otherwise fall back to hash navigation
+            if (window.EntityUrl && notification.link) {
+                const parsed = window.EntityUrl.parseEntityUrl(notification.link);
+                if (parsed) {
+                    // Use entity navigation
+                    window.EntityUrl.navigateToEntity(parsed.entityType, parsed.entityId, parsed.options);
+                } else {
+                    // Fall back to hash navigation
+                    window.location.hash = notification.link;
+                }
+            } else {
+                window.location.hash = notification.link;
+            }
             
             // Helper function to highlight an element
             const highlightElement = (element) => {

@@ -408,7 +408,8 @@ async function handler(req, res) {
           taxExempt: false,
           notes: ''
         }),
-        proposals: JSON.stringify(Array.isArray(body.proposals) ? body.proposals : [])
+        proposals: JSON.stringify(Array.isArray(body.proposals) ? body.proposals : []),
+        ...(body.externalAgentId ? { externalAgentId: body.externalAgentId } : {})
       }
 
 
@@ -532,7 +533,8 @@ async function handler(req, res) {
           contracts: body.contracts !== undefined ? (typeof body.contracts === 'string' ? body.contracts : JSON.stringify(body.contracts)) : undefined,
           activityLog: body.activityLog !== undefined ? (typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(body.activityLog)) : undefined,
           billingTerms: body.billingTerms !== undefined ? (typeof body.billingTerms === 'string' ? body.billingTerms : JSON.stringify(body.billingTerms)) : undefined,
-          proposals: body.proposals !== undefined ? (typeof body.proposals === 'string' ? body.proposals : JSON.stringify(body.proposals)) : undefined
+          proposals: body.proposals !== undefined ? (typeof body.proposals === 'string' ? body.proposals : JSON.stringify(body.proposals)) : undefined,
+          ...(body.externalAgentId !== undefined ? { externalAgentId: body.externalAgentId || null } : {})
         }
         Object.keys(updateData).forEach(key => {
           if (updateData[key] === undefined) {

@@ -392,6 +392,14 @@ const TaskDetailModal = ({
                     );
                     
                     if (assigneeUser && assigneeUser.id !== currentUser.id && !mentionedUsers.find(m => m.id === assigneeUser.id)) {
+                        // Generate entity URL for the task
+                        let entityUrl = taskLink; // Fallback to old format
+                        if (window.EntityUrl && taskId) {
+                            entityUrl = window.EntityUrl.getEntityUrl('task', taskId, {
+                                tab: 'comments'
+                            });
+                        }
+                        
                         await window.DatabaseAPI.makeRequest('/notifications', {
                             method: 'POST',
                             body: JSON.stringify({
@@ -399,7 +407,7 @@ const TaskDetailModal = ({
                                 type: 'comment',
                                 title: `New comment on task: ${taskTitle}`,
                                 message: `${currentUser.name} commented on "${taskTitle}" in project "${projectName}": "${newComment.substring(0, 100)}${newComment.length > 100 ? '...' : ''}"`,
-                                link: taskLink, // Use task-specific link
+                                link: entityUrl,
                                 metadata: {
                                     taskId: taskId,
                                     taskTitle: taskTitle,
@@ -424,6 +432,14 @@ const TaskDetailModal = ({
                     const subscriber = users.find(u => u.id === subscriberId);
                     if (subscriber) {
                         try {
+                            // Generate entity URL for the task
+                            let entityUrl = taskLink; // Fallback to old format
+                            if (window.EntityUrl && taskId) {
+                                entityUrl = window.EntityUrl.getEntityUrl('task', taskId, {
+                                    tab: 'comments'
+                                });
+                            }
+                            
                             await window.DatabaseAPI.makeRequest('/notifications', {
                                 method: 'POST',
                                 body: JSON.stringify({
@@ -431,7 +447,7 @@ const TaskDetailModal = ({
                                     type: 'comment',
                                     title: `New comment on task: ${taskTitle}`,
                                     message: `${currentUser.name} commented on "${taskTitle}" in project "${projectName}": "${newComment.substring(0, 100)}${newComment.length > 100 ? '...' : ''}"`,
-                                    link: taskLink, // Use task-specific link
+                                    link: entityUrl,
                                     metadata: {
                                         taskId: taskId,
                                         taskTitle: taskTitle,

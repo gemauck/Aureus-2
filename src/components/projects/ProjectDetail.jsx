@@ -1543,6 +1543,15 @@ function initializeProjectDetail() {
             if (!userId || !window.DatabaseAPI || typeof window.DatabaseAPI.makeRequest !== 'function') {
                 return;
             }
+            
+            // Generate entity URL for the task
+            let entityUrl = taskLink; // Fallback to old format
+            if (window.EntityUrl && finalTaskId) {
+                entityUrl = window.EntityUrl.getEntityUrl('task', finalTaskId, {
+                    tab: 'comments'
+                });
+            }
+            
             await window.DatabaseAPI.makeRequest('/notifications', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -1550,7 +1559,7 @@ function initializeProjectDetail() {
                     type: 'comment',
                     title: `New comment on task: ${taskTitle}`,
                     message: `${currentUser.name} commented on "${taskTitle}" in project "${projectName}": "${commentText.substring(0, 100)}${commentText.length > 100 ? '...' : ''}"`,
-                    link: taskLink, // Use task-specific link
+                    link: entityUrl,
                     metadata: {
                         taskId: finalTaskId,
                         taskTitle,

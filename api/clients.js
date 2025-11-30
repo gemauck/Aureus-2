@@ -334,7 +334,8 @@ async function handler(req, res) {
           taxExempt: false,
           notes: ''
         }),
-        ...(ownerId ? { ownerId } : {})
+        ...(ownerId ? { ownerId } : {}),
+        ...(body.externalAgentId ? { externalAgentId: body.externalAgentId } : {})
       }
 
       
@@ -543,7 +544,8 @@ async function handler(req, res) {
           contracts: typeof body.contracts === 'string' ? body.contracts : JSON.stringify(Array.isArray(body.contracts) ? body.contracts : []),
           activityLog: typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : []),
           services: servicesValue, // Always include services
-          billingTerms: typeof body.billingTerms === 'string' ? body.billingTerms : JSON.stringify(typeof body.billingTerms === 'object' && body.billingTerms !== null ? body.billingTerms : {})
+          billingTerms: typeof body.billingTerms === 'string' ? body.billingTerms : JSON.stringify(typeof body.billingTerms === 'object' && body.billingTerms !== null ? body.billingTerms : {}),
+          ...(body.externalAgentId !== undefined ? { externalAgentId: body.externalAgentId || null } : {})
         }
         Object.keys(updateData).forEach(key => {
           if (updateData[key] === undefined) {

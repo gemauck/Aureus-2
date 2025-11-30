@@ -149,6 +149,77 @@ const Projects = () => {
         return () => window.removeEventListener('hashchange', handleHashChangeForTracker);
     }, []);
     
+    // Listen for entity navigation events (from notifications, comments, etc.)
+    useEffect(() => {
+        const handleEntityNavigation = async (event) => {
+            if (!event.detail) return;
+            
+            const { entityType, entityId, options } = event.detail;
+            if (!entityType || !entityId) return;
+            
+            // Handle project and task entities
+            if (entityType === 'project') {
+                // Find the project in our data
+                const project = projects.find(p => p.id === entityId);
+                
+                if (project) {
+                    setSelectedProject(project);
+                    setViewingProject(project);
+                    setShowModal(false);
+                    
+                    // Handle tab navigation if specified
+                    if (options?.tab) {
+                        // ProjectDetail component will handle tab switching
+                        setTimeout(() => {
+                            window.dispatchEvent(new CustomEvent('switchProjectTab', {
+                                detail: { tab: options.tab }
+                            }));
+                        }, 100);
+                    }
+                } else {
+                    // Project not found in cache, try to fetch it
+                    console.log(`Project with id ${entityId} not found in cache, attempting to fetch...`);
+                    // Try to load the project
+                    try {
+                        if (window.DatabaseAPI?.getProject) {
+                            const response = await window.DatabaseAPI.getProject(entityId);
+                            const projectData = response?.data?.project || response?.project;
+                            if (projectData) {
+                                setSelectedProject(projectData);
+                                setViewingProject(projectData);
+                                setShowModal(false);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Failed to load project:', error);
+                    }
+                }
+            } else if (entityType === 'task') {
+                // For tasks, we need to find the parent project first
+                // This will be handled by ProjectDetail component when it loads
+                // We can navigate to the project and let ProjectDetail handle task selection
+                if (options?.projectId) {
+                    const project = projects.find(p => p.id === options.projectId);
+                    if (project) {
+                        setSelectedProject(project);
+                        setViewingProject(project);
+                        setShowModal(false);
+                        
+                        // Dispatch event for ProjectDetail to handle task selection
+                        setTimeout(() => {
+                            window.dispatchEvent(new CustomEvent('openTask', {
+                                detail: { taskId: entityId, tab: options.tab || 'comments' }
+                            }));
+                        }, 200);
+                    }
+                }
+            }
+        };
+        
+        window.addEventListener('openEntityDetail', handleEntityNavigation);
+        return () => window.removeEventListener('openEntityDetail', handleEntityNavigation);
+    }, [projects]);
+    
     // Ensure storage is available
     useEffect(() => {
         if (!window.storage) {

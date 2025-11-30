@@ -73,6 +73,9 @@
         'utils/permissions.js',
         'utils/leaveUtils.js',
         'utils/whatsapp.js',
+        'utils/routeState.js',
+        'utils/entityUrl.js',
+        'utils/mentionHelper.js',
         
         // Hooks
         'hooks/usePersistence.js',
@@ -158,6 +161,9 @@
         'components/users/PasswordDisplayModal.jsx',
         'components/users/Users.jsx',
         'components/users/UserManagement.jsx',
+        
+        // Admin
+        'components/admin/ExternalAgents.jsx',
         
         // Leave Platform - Load before Manufacturing for better availability
         'components/leave-platform/LeavePlatform.jsx',

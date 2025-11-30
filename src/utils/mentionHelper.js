@@ -169,12 +169,38 @@ const MentionHelper = {
                 }
             }
             
+            // Generate entity URL if we have entity information
+            let entityUrl = contextLink;
+            if (window.EntityUrl) {
+                // Try to generate URL from metadata
+                if (metadata.projectId) {
+                    // If we have a task, link to the task; otherwise link to project
+                    if (metadata.taskId) {
+                        entityUrl = window.EntityUrl.getEntityUrl('task', metadata.taskId, {
+                            tab: 'comments'
+                        });
+                    } else {
+                        entityUrl = window.EntityUrl.getEntityUrl('project', metadata.projectId, {
+                            tab: 'comments'
+                        });
+                    }
+                } else if (metadata.clientId) {
+                    entityUrl = window.EntityUrl.getEntityUrl('client', metadata.clientId, {
+                        tab: 'comments'
+                    });
+                } else if (metadata.opportunityId) {
+                    entityUrl = window.EntityUrl.getEntityUrl('opportunity', metadata.opportunityId, {
+                        tab: 'comments'
+                    });
+                }
+            }
+            
             const notificationPayload = {
                 userId: mentionedUserId,
                 type: 'mention',
                 title: `${mentionedByName} mentioned you`,
                 message: `${mentionedByName} mentioned you in ${contextTitle}: "${previewText}"`,
-                link: contextLink,
+                link: entityUrl || contextLink,
                 metadata: metadata
             };
             
