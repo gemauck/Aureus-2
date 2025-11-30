@@ -1963,12 +1963,25 @@ async function handler(req, res) {
             const newTotalValue = newQuantity * unitCost
             
             // Get default location (main warehouse) for finished product
+            // If no location exists, create a default one to ensure LocationInventory is always updated
             let toLocationId = finishedProduct.locationId || null
             if (!toLocationId) {
-              const mainWarehouse = await tx.stockLocation.findFirst({ 
+              let mainWarehouse = await tx.stockLocation.findFirst({ 
                 where: { code: 'LOC001' } 
               })
-              if (mainWarehouse) toLocationId = mainWarehouse.id
+              if (!mainWarehouse) {
+                // Create default location if it doesn't exist
+                mainWarehouse = await tx.stockLocation.create({
+                  data: {
+                    code: 'LOC001',
+                    name: 'Main Warehouse',
+                    type: 'warehouse',
+                    status: 'active'
+                  }
+                })
+                console.log(`✅ Created default location LOC001 for production order ${id}`)
+              }
+              toLocationId = mainWarehouse.id
             }
             
             // Helper to update LocationInventory
@@ -2049,21 +2062,32 @@ async function handler(req, res) {
             })
             
             
-            // Recalculate master aggregate from all locations
+            // Update master inventory item directly (increment quantity)
+            // This ensures the master is updated even if LocationInventory doesn't exist
+            const currentMasterQty = finishedProduct.quantity || 0
+            const newMasterQty = currentMasterQty + quantityProduced
+            
+            // Also recalculate from LocationInventory if it exists (for consistency)
             const totalAtLocations = await tx.locationInventory.aggregate({ 
               _sum: { quantity: true }, 
               where: { sku: finishedProduct.sku } 
             })
-            const aggQty = totalAtLocations._sum.quantity || 0
+            const aggQtyFromLocations = totalAtLocations._sum.quantity || 0
             
-            // Update inventory item with aggregated quantity
+            // Use the direct update as source of truth, but log if there's a discrepancy
+            const finalQty = toLocationId ? aggQtyFromLocations : newMasterQty
+            if (toLocationId && Math.abs(finalQty - newMasterQty) > 0.01) {
+              console.warn(`⚠️ Quantity mismatch for ${finishedProduct.sku}: direct=${newMasterQty}, from locations=${aggQtyFromLocations}`)
+            }
+            
+            // Update inventory item with final quantity
             await tx.inventoryItem.update({
               where: { id: finishedProduct.id },
               data: {
-                quantity: aggQty,
+                quantity: finalQty,
                 unitCost: unitCost, // Set to sum of parts
-                totalValue: aggQty * unitCost,
-                status: aggQty > (finishedProduct.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock'),
+                totalValue: finalQty * unitCost,
+                status: finalQty > (finishedProduct.reorderPoint || 0) ? 'in_stock' : (finalQty > 0 ? 'low_stock' : 'out_of_stock'),
                 lastRestocked: new Date()
               }
             })
@@ -2354,12 +2378,25 @@ async function handler(req, res) {
                   }
                   
                   // Get component location (default to main warehouse if not specified)
+                  // If no location exists, create a default one to ensure LocationInventory is always updated
                   let componentLocationId = inventoryItem.locationId || null
                   if (!componentLocationId) {
-                    const mainWarehouse = await tx.stockLocation.findFirst({ 
+                    let mainWarehouse = await tx.stockLocation.findFirst({ 
                       where: { code: 'LOC001' } 
                     })
-                    if (mainWarehouse) componentLocationId = mainWarehouse.id
+                    if (!mainWarehouse) {
+                      // Create default location if it doesn't exist
+                      mainWarehouse = await tx.stockLocation.create({
+                        data: {
+                          code: 'LOC001',
+                          name: 'Main Warehouse',
+                          type: 'warehouse',
+                          status: 'active'
+                        }
+                      })
+                      console.log(`✅ Created default location LOC001 for component ${component.sku}`)
+                    }
+                    componentLocationId = mainWarehouse.id
                   }
                   
                   // Helper to update LocationInventory for consumed components
@@ -2441,20 +2478,31 @@ async function handler(req, res) {
                     throw new Error(`Cannot deduct ${requiredQty} of ${component.sku}. Current qty: ${current?.quantity || 0}, allocated: ${current?.allocatedQuantity || 0}`)
                   }
                   
-                  // Recalculate master aggregate from all locations for this component
+                  // Update master inventory item directly (decrement quantity)
+                  // This ensures the master is updated even if LocationInventory doesn't exist
+                  const updatedItem = await tx.inventoryItem.findFirst({ where: { id: inventoryItem.id } })
+                  const newMasterQty = (updatedItem?.quantity || 0) - requiredQty
+                  
+                  // Also recalculate from LocationInventory if it exists (for consistency)
                   const totalAtLocations = await tx.locationInventory.aggregate({ 
                     _sum: { quantity: true }, 
                     where: { sku: component.sku } 
                   })
-                  const aggQty = totalAtLocations._sum.quantity || 0
+                  const aggQtyFromLocations = totalAtLocations._sum.quantity || 0
                   
-                  // Update master inventory item with aggregated quantity from all locations
+                  // Use the direct update as source of truth, but log if there's a discrepancy
+                  const finalQty = componentLocationId ? aggQtyFromLocations : newMasterQty
+                  if (componentLocationId && Math.abs(finalQty - newMasterQty) > 0.01) {
+                    console.warn(`⚠️ Quantity mismatch for ${component.sku}: direct=${newMasterQty}, from locations=${aggQtyFromLocations}`)
+                  }
+                  
+                  // Update master inventory item
                   await tx.inventoryItem.update({
                     where: { id: inventoryItem.id },
                     data: {
-                      quantity: aggQty,
-                      totalValue: Math.max(0, aggQty * (inventoryItem.unitCost || 0)),
-                      status: getStatusFromQuantity(aggQty, inventoryItem.reorderPoint || 0)
+                      quantity: finalQty,
+                      totalValue: Math.max(0, finalQty * (inventoryItem.unitCost || 0)),
+                      status: getStatusFromQuantity(finalQty, inventoryItem.reorderPoint || 0)
                     }
                   })
                   
