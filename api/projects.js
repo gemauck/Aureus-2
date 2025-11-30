@@ -132,6 +132,7 @@ async function handler(req, res) {
 
         // If the projects table or columns are missing in the database, fall back
         // to returning an empty list instead of a hard 500 so the UI can still load.
+        const errorMessage = dbError.message || ''
         const isMissingTableOrColumn =
           dbError.code === 'P2021' || // table does not exist
           dbError.code === 'P2022' || // column does not exist
