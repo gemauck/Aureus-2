@@ -1057,8 +1057,11 @@ async function handler(req, res) {
               await ensureLocationInventoryPlaceholder(locationId, inventoryItem)
               // Update the LocationInventory with the initial quantity
               await upsertLocationInventoryQuantity(locationId, inventoryItem, quantity)
-              
-              // Create stock movement for starting balance (best practice: record all inventory changes)
+            }
+            
+            // Create stock movement for starting balance (best practice: record all inventory changes)
+            // Always create movement if quantity > 0, even if no location (for audit trail)
+            if (quantity > 0) {
               try {
                 const lastMovement = await prisma.stockMovement.findFirst({
                   orderBy: { createdAt: 'desc' }
@@ -1067,8 +1070,11 @@ async function handler(req, res) {
                   ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
                   : 1
                 
-                const location = await prisma.stockLocation.findUnique({ where: { id: locationId } })
-                const locationCode = location?.code || ''
+                let locationCode = ''
+                if (locationId) {
+                  const location = await prisma.stockLocation.findUnique({ where: { id: locationId } })
+                  locationCode = location?.code || ''
+                }
                 
                 await prisma.stockMovement.create({
                   data: {
@@ -1082,13 +1088,16 @@ async function handler(req, res) {
                     toLocation: locationCode,
                     reference: 'BULK_IMPORT',
                     performedBy: 'System',
-                    notes: `Initial stock balance recorded for ${inventoryItem.name} at ${location?.name || locationCode} (bulk import)`,
+                    notes: locationCode 
+                      ? `Initial stock balance recorded for ${inventoryItem.name} at ${locationCode} (bulk import)`
+                      : `Initial stock balance recorded for ${inventoryItem.name} (bulk import, no location assigned)`,
                     ownerId: null
                   }
                 })
               } catch (movementError) {
                 // Log but don't fail the bulk import if movement creation fails
-                console.warn(`⚠️ Failed to create stock movement for ${inventoryItem.sku}:`, movementError.message)
+                console.error(`❌ Failed to create stock movement for ${inventoryItem.sku}:`, movementError.message)
+                console.error('❌ Error stack:', movementError.stack)
               }
             }
             
@@ -1222,8 +1231,11 @@ async function handler(req, res) {
           await ensureLocationInventoryPlaceholder(locationId, item)
           // Update the LocationInventory with the initial quantity
           await upsertLocationInventoryQuantity(locationId, item, quantity)
-          
-          // Create stock movement for starting balance (best practice: record all inventory changes)
+        }
+        
+        // Create stock movement for starting balance (best practice: record all inventory changes)
+        // Always create movement if quantity > 0, even if no location (for audit trail)
+        if (quantity > 0) {
           try {
             const lastMovement = await prisma.stockMovement.findFirst({
               orderBy: { createdAt: 'desc' }
@@ -1232,8 +1244,11 @@ async function handler(req, res) {
               ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
               : 1
             
-            const location = await prisma.stockLocation.findUnique({ where: { id: locationId } })
-            const locationCode = location?.code || ''
+            let locationCode = ''
+            if (locationId) {
+              const location = await prisma.stockLocation.findUnique({ where: { id: locationId } })
+              locationCode = location?.code || ''
+            }
             
             await prisma.stockMovement.create({
               data: {
@@ -1247,13 +1262,16 @@ async function handler(req, res) {
                 toLocation: locationCode,
                 reference: 'INITIAL_BALANCE',
                 performedBy: req.user?.name || 'System',
-                notes: `Initial stock balance recorded for ${item.name} at ${location?.name || locationCode}`,
+                notes: locationCode 
+                  ? `Initial stock balance recorded for ${item.name} at ${locationCode}`
+                  : `Initial stock balance recorded for ${item.name} (no location assigned)`,
                 ownerId: null
               }
             })
           } catch (movementError) {
             // Log but don't fail the inventory creation if movement creation fails
-            console.warn('⚠️ Failed to create stock movement for initial balance:', movementError.message)
+            console.error('❌ Failed to create stock movement for initial balance:', movementError.message)
+            console.error('❌ Error stack:', movementError.stack)
           }
         }
         
