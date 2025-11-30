@@ -127,3 +127,4 @@ echo "      - Should trigger immediate version check"
 echo "      - Check Network tab for /version request"
 echo ""
 
+

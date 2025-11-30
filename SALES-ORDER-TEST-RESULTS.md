@@ -154,3 +154,4 @@ From Stock Movements page:
 
 **The sales order stock deduction logic is working correctly!**
 
+

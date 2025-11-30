@@ -83,3 +83,4 @@ echo "6. The version banner should appear if you deploy a new version"
 echo "   (it polls /version every 60 seconds)"
 echo ""
 
+

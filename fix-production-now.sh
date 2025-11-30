@@ -73,3 +73,4 @@ echo ""
 echo "✅ Done! Check the logs above for database connection status."
 echo "   Look for: '✅ Prisma database connection established'"
 
+

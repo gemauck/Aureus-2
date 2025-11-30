@@ -119,3 +119,4 @@ To test the version update system:
 ✅ **Immediate reload** option for users who want the latest version right away  
 ✅ **Smart dismissal** prevents banner spam while ensuring critical updates are seen
 
+

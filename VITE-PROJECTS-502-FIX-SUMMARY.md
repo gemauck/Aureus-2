@@ -174,3 +174,4 @@ After deployment, verify everything works:
 - The 502 errors you're seeing might be due to the backend server being down (all API endpoints are also returning 502)
 - The code improvements ensure the app degrades gracefully if vite-projects doesn't load
 
+

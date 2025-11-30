@@ -1958,7 +1958,7 @@ const ManagementMeetingNotes = () => {
     const handleSaveDepartment = async (departmentNotesId) => {
         if (!departmentNotesId) return;
         
-        // Preserve scroll position
+        // Preserve scroll position - capture before any async operations
         const currentScrollPosition = window.scrollY || window.pageYOffset;
         
         // Find the department note
@@ -1977,6 +1977,22 @@ const ManagementMeetingNotes = () => {
             frustrations: deptNote.frustrations || ''
         };
         
+        // Function to restore scroll position
+        const restoreScroll = () => {
+            // Use multiple methods to ensure scroll is restored
+            requestAnimationFrame(() => {
+                window.scrollTo({
+                    top: currentScrollPosition,
+                    left: 0,
+                    behavior: 'instant'
+                });
+                // Also set directly as fallback
+                if (window.scrollY !== currentScrollPosition) {
+                    window.scrollTo(0, currentScrollPosition);
+                }
+            });
+        };
+        
         try {
             setLoading(true);
             // Save all fields at once
@@ -1989,19 +2005,27 @@ const ManagementMeetingNotes = () => {
                 lastSavedValues.current[fieldKey] = fieldsToSave[field];
             });
             
-            // Restore scroll position after save
-            requestAnimationFrame(() => {
-                window.scrollTo(0, currentScrollPosition);
-            });
+            // Restore scroll position after save - use setTimeout to ensure DOM updates are complete
+            setTimeout(() => {
+                restoreScroll();
+            }, 0);
+            
+            // Also restore immediately and after a short delay
+            restoreScroll();
         } catch (error) {
             console.error('Error saving department notes:', error);
             alert('Failed to save department notes. Please try again.');
             // Restore scroll position even on error
-            requestAnimationFrame(() => {
-                window.scrollTo(0, currentScrollPosition);
-            });
+            setTimeout(() => {
+                restoreScroll();
+            }, 0);
+            restoreScroll();
         } finally {
             setLoading(false);
+            // Final scroll restoration after loading state updates
+            setTimeout(() => {
+                restoreScroll();
+            }, 50);
         }
     };
 
@@ -3444,7 +3468,7 @@ const ManagementMeetingNotes = () => {
                                                             Add Action Item
                                                         </button>
 
-                                                        {/* Save Department Button */}
+                                                        {/* Save Button */}
                                                         <button
                                                             type="button"
                                                             onClick={async (e) => {
@@ -3455,7 +3479,7 @@ const ManagementMeetingNotes = () => {
                                                             className={`w-full text-xs px-3 py-2 rounded font-medium transition ${isDark ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
                                                         >
                                                             <i className="fas fa-save mr-1"></i>
-                                                            Save Department
+                                                            Save
                                                         </button>
                                                     </div>
                                                 </>

@@ -31,7 +31,7 @@ const DatabaseAPI = {
     // Request throttling / rate limiting safeguards
     _maxConcurrentRequests: 2, // Reduced from 4 to prevent overwhelming the server
     _currentRequests: 0,
-    _minRequestInterval: 500, // Increased from 250ms to 500ms to reduce request frequency
+    _minRequestInterval: 300, // Increased to 300ms to match RateLimitManager and reduce request frequency
     _lastRequestTimestamp: 0,
     _rateLimitResumeAt: 0,
     _rateLimitCount: 0, // Track consecutive rate limit errors
@@ -232,6 +232,17 @@ const DatabaseAPI = {
         const maxRetries = 5;
         const baseDelay = 1000; // Start with 1 second
 
+        // Check RateLimitManager before acquiring slot (if available)
+        if (window.RateLimitManager && window.RateLimitManager.isRateLimited()) {
+            const waitSeconds = window.RateLimitManager.getWaitTimeRemaining();
+            const waitMinutes = Math.round(waitSeconds / 60);
+            const error = new Error(`Rate limit active. Please wait ${waitMinutes} minute(s) before trying again.`);
+            error.status = 429;
+            error.code = 'RATE_LIMIT_EXCEEDED';
+            error.retryAfter = waitSeconds;
+            throw error;
+        }
+
         await this._acquireRequestSlot();
         
         try {
@@ -412,6 +423,12 @@ const DatabaseAPI = {
                     let response = await execute(token);
 
                 if (!response.ok && response.status === 429) {
+                    // Update RateLimitManager if available
+                    if (window.RateLimitManager) {
+                        const retryAfter = response.headers.get('Retry-After') || '900';
+                        const retryAfterSeconds = parseInt(retryAfter, 10);
+                        window.RateLimitManager.setRateLimit(retryAfterSeconds);
+                    }
                     // Track rate limit occurrences
                     this._rateLimitCount += 1;
                     

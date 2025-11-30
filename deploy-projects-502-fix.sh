@@ -80,3 +80,4 @@ echo "   1. Monitor logs: ssh $SERVER 'pm2 logs abcotronics-erp --lines 50'"
 echo "   2. Test API: curl https://abcoafrica.co.za/api/projects"
 echo "   3. Check browser console for 502 errors"
 
+

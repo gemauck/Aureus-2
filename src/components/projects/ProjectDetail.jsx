@@ -2677,14 +2677,39 @@ function initializeProjectDetail() {
     // List View Component - Memoized to prevent recreation on every render
     const ListView = useMemo(() => {
         return () => {
-            if (typeof window !== 'undefined') {
-                setTimeout(() => {
+            // Diagnostic check for table version - runs after component mounts with retries
+            const { useEffect } = window.React;
+            useEffect(() => {
+                // Only check if we're in a browser environment
+                if (typeof window === 'undefined') return;
+                
+                let attempts = 0;
+                const maxAttempts = 5;
+                const delays = [500, 1000, 2000, 3000, 5000]; // Progressive delays
+                
+                const checkTable = () => {
+                    attempts++;
                     const tables = document.querySelectorAll('[data-task-table-version="3.0"]');
-                    if (tables.length === 0) {
-                        console.error('❌ NO TABLE FOUND - OLD CODE MAY BE RUNNING');
+                    if (tables.length > 0) {
+                        // Table found, no need to continue checking
+                        return;
                     }
-                }, 1000);
-            }
+                    
+                    if (attempts < maxAttempts) {
+                        // Retry with next delay
+                        const delay = attempts === 1 ? delays[0] : delays[attempts] - delays[attempts - 1];
+                        setTimeout(checkTable, delay);
+                    } else {
+                        // Only warn if we've checked multiple times and still no table
+                        // This might be normal if component isn't in list view mode or has no tasks
+                        console.warn('⚠️ Table version check: No table with data-task-table-version="3.0" found after multiple attempts. This may be normal if not in list view or if there are no tasks.');
+                    }
+                };
+                
+                // Start checking after initial delay
+                setTimeout(checkTable, delays[0]);
+            }, []);
+            
             const formatChecklistProgress = (checklist = []) => {
                 if (!Array.isArray(checklist) || checklist.length === 0) {
                     return { percent: 0, label: '0/0 complete' };

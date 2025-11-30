@@ -11,7 +11,9 @@ const RateLimitManager = {
   _requestQueue: [],
   _processingQueue: false,
   _lastRequestTime: 0,
-  _minRequestInterval: 100, // Minimum 100ms between requests to prevent bursts
+  _minRequestInterval: 300, // Minimum 300ms between requests to prevent bursts (increased from 100ms)
+  _pendingBatches: new Map(), // Track pending batched requests
+  _batchDelay: 50, // Wait 50ms to batch similar requests together
   
   isRateLimited() {
     if (!this._rateLimitActive) return false
@@ -134,26 +136,49 @@ const RateLimitManager = {
       reject(new Error('Request queue cleared due to rate limit'))
     })
     this._requestQueue = []
+  },
+  
+  // Batch similar requests together to prevent duplicate API calls
+  async batchRequest(requestKey, requestFn, priority = 0) {
+    // If there's already a pending request for this key, return the same promise
+    if (this._pendingBatches.has(requestKey)) {
+      return this._pendingBatches.get(requestKey)
+    }
+    
+    // Create a new batched request
+    const batchedPromise = this.throttleRequest(requestFn, priority)
+      .finally(() => {
+        // Clean up after request completes (success or failure)
+        setTimeout(() => {
+          this._pendingBatches.delete(requestKey)
+        }, this._batchDelay)
+      })
+    
+    this._pendingBatches.set(requestKey, batchedPromise)
+    return batchedPromise
   }
 }
 
 async function request(path, options = {}) {
-  // Check if we're currently rate limited before making any request
-  if (RateLimitManager.isRateLimited()) {
-    const waitSeconds = RateLimitManager.getWaitTimeRemaining()
-    const waitMinutes = Math.round(waitSeconds / 60)
-    const error = new Error(`Rate limit active. Please wait ${waitMinutes} minute(s) before trying again.`)
-    error.status = 429
-    error.code = 'RATE_LIMIT_EXCEEDED'
-    error.retryAfter = waitSeconds
-    throw error
-  }
-  const token = window.storage?.getToken?.()
-  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) }
-  if (token) headers['Authorization'] = `Bearer ${token}`
+  // Use throttling for all requests to prevent bursts
+  return RateLimitManager.throttleRequest(async () => {
+    // Check if we're currently rate limited before making any request
+    if (RateLimitManager.isRateLimited()) {
+      const waitSeconds = RateLimitManager.getWaitTimeRemaining()
+      const waitMinutes = Math.round(waitSeconds / 60)
+      const error = new Error(`Rate limit active. Please wait ${waitMinutes} minute(s) before trying again.`)
+      error.status = 429
+      error.code = 'RATE_LIMIT_EXCEEDED'
+      error.retryAfter = waitSeconds
+      throw error
+    }
+    
+    const token = window.storage?.getToken?.()
+    const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) }
+    if (token) headers['Authorization'] = `Bearer ${token}`
 
-  const fullUrl = `${API_BASE}${path}`
-  const requestOptions = { ...options, headers, credentials: 'include' }
+    const fullUrl = `${API_BASE}${path}`
+    const requestOptions = { ...options, headers, credentials: 'include' }
 
   const execute = async () => {
     // Add timeout handling using AbortController
@@ -358,8 +383,31 @@ async function request(path, options = {}) {
   }
 }
 
-// Expose rate limit manager globally for debugging
+// Initial load coordinator to stagger component mounts
+const InitialLoadCoordinator = {
+  _componentLoadCount: 0,
+  _baseDelay: 50, // Base delay between component loads
+  
+  // Get a staggered delay for component initialization
+  getStaggeredDelay() {
+    const delay = this._componentLoadCount * this._baseDelay;
+    this._componentLoadCount += 1;
+    // Reset after a reasonable number to prevent infinite growth
+    if (this._componentLoadCount > 100) {
+      this._componentLoadCount = 0;
+    }
+    return delay;
+  },
+  
+  // Reset the counter (useful for testing or page reloads)
+  reset() {
+    this._componentLoadCount = 0;
+  }
+};
+
+// Expose rate limit manager and initial load coordinator globally for debugging
 window.RateLimitManager = RateLimitManager;
+window.InitialLoadCoordinator = InitialLoadCoordinator;
 
 const api = {
   // Auth

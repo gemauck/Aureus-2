@@ -96,3 +96,4 @@ ssh root@abcoafrica.co.za "pm2 logs abcotronics-erp --lines 50 | grep -i 'env.lo
 
 This multi-layer protection ensures `.env.local` can never cause database connection issues in production again.
 
+
