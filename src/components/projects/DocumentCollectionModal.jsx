@@ -138,4 +138,13 @@ const DocumentCollectionModal = ({ document, onSave, onClose, users }) => {
 };
 
 // Make available globally
-window.DocumentCollectionModal = DocumentCollectionModal;
+if (typeof window !== 'undefined') {
+    window.DocumentCollectionModal = DocumentCollectionModal;
+    // Dispatch event to notify that component is loaded
+    if (typeof window.dispatchEvent === 'function') {
+        window.dispatchEvent(new CustomEvent('componentLoaded', { 
+            detail: { component: 'DocumentCollectionModal' } 
+        }));
+    }
+    console.log('✅ DocumentCollectionModal registered to window');
+}

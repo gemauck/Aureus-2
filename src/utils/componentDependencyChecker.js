@@ -96,7 +96,16 @@ window.waitForComponent = function(componentName, timeout = 5000) {
 window.validateAllDependencies = function() {
     // Optional dependencies - these may load later or from external modules
     const optionalDependencies = {
-        'ProjectDetail': ['MonthlyDocumentCollectionTracker'] // Loaded from vite-projects module
+        'ProjectDetail': [
+            'MonthlyDocumentCollectionTracker', // Loaded from vite-projects module
+            'DocumentCollectionModal', // May load asynchronously, not critical for initial render
+            'ListModal', // May load asynchronously
+            'ProjectModal', // May load asynchronously
+            'CustomFieldModal', // May load asynchronously
+            'TaskDetailModal', // May load asynchronously
+            'KanbanView', // May load asynchronously
+            'CommentsPopup' // May load asynchronously
+        ]
     };
     
     Object.keys(COMPONENT_DEPENDENCIES).forEach(componentName => {

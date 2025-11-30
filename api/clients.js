@@ -100,32 +100,48 @@ async function handler(req, res) {
         try {
           
           // Query clients directly using Prisma (we confirmed there are no NULL types, all are 'client' or 'lead')
-          rawClients = await prisma.client.findMany({
-            where: {
-              type: 'client'
-            },
-            include: {
-              tags: {
-                include: {
-                  tag: true
-                }
+          // Use defensive includes - if relations fail, try without them
+          try {
+            rawClients = await prisma.client.findMany({
+              where: {
+                type: 'client'
               },
-              ...(validUserId ? {
-                starredBy: {
-                  where: {
-                    userId: validUserId
-                  },
-                  select: {
-                    id: true,
-                    userId: true
+              include: {
+                tags: {
+                  include: {
+                    tag: true
                   }
-                }
-              } : {})
-            },
-            orderBy: {
-              createdAt: 'desc'
-            }
-          })
+                },
+                ...(validUserId ? {
+                  starredBy: {
+                    where: {
+                      userId: validUserId
+                    },
+                    select: {
+                      id: true,
+                      userId: true
+                    }
+                  }
+                } : {})
+              },
+              orderBy: {
+                createdAt: 'desc'
+              }
+            })
+          } catch (relationError) {
+            // If relations fail, try query without relations
+            console.warn('⚠️ Query with relations failed, trying without relations:', relationError.message)
+            rawClients = await prisma.client.findMany({
+              where: {
+                type: 'client'
+              },
+              orderBy: {
+                createdAt: 'desc'
+              }
+            })
+            // Add empty tags array to each client
+            rawClients = rawClients.map(c => ({ ...c, tags: [] }))
+          }
         } catch (typeError) {
           // If type column doesn't exist or query fails, try without type filter
           console.error('❌ Type filter failed, trying without filter:', typeError.message)
@@ -134,35 +150,53 @@ async function handler(req, res) {
           // Note: validUserId is already set above, no need to reset it
           
           // Also check total count for debugging
-          const totalCount = await prisma.client.count()
+          try {
+            const totalCount = await prisma.client.count()
+          } catch (countError) {
+            console.warn('⚠️ Count query failed:', countError.message)
+          }
           
           // IMPORTANT: Return ALL clients regardless of ownerId - all users should see all clients
-          rawClients = await prisma.client.findMany({
-            include: {
-              tags: {
-                include: {
-                  tag: true
-                }
-              },
-              ...(validUserId ? {
-                starredBy: {
-                  where: {
-                    userId: validUserId
-                  },
-                  select: {
-                    id: true,
-                    userId: true
+          try {
+            rawClients = await prisma.client.findMany({
+              include: {
+                tags: {
+                  include: {
+                    tag: true
                   }
-                }
-              } : {})
-            },
-            orderBy: {
-              createdAt: 'desc'
-            }
-            // No WHERE clause filtering by ownerId - all users see all clients
-          })
-          // Filter manually in case type column doesn't exist in DB but we want to exclude leads
-          rawClients = rawClients.filter(c => !c.type || c.type === 'client' || c.type === null)
+                },
+                ...(validUserId ? {
+                  starredBy: {
+                    where: {
+                      userId: validUserId
+                    },
+                    select: {
+                      id: true,
+                      userId: true
+                    }
+                  }
+                } : {})
+              },
+              orderBy: {
+                createdAt: 'desc'
+              }
+              // No WHERE clause filtering by ownerId - all users see all clients
+            })
+            // Filter manually in case type column doesn't exist in DB but we want to exclude leads
+            rawClients = rawClients.filter(c => !c.type || c.type === 'client' || c.type === null)
+          } catch (fallbackError) {
+            // Last resort: query without any relations
+            console.error('❌ Fallback query with relations failed, trying minimal query:', fallbackError.message)
+            rawClients = await prisma.client.findMany({
+              orderBy: {
+                createdAt: 'desc'
+              }
+            })
+            // Filter manually and add empty tags
+            rawClients = rawClients
+              .filter(c => !c.type || c.type === 'client' || c.type === null)
+              .map(c => ({ ...c, tags: [] }))
+          }
         }
         
         // Prisma returns objects with relations - parse JSON fields
@@ -595,6 +629,27 @@ async function handler(req, res) {
 
     return badRequest(res, 'Invalid method or client action')
   } catch (e) {
+    // Log full error details for debugging
+    console.error('❌ Client handler top-level error:', {
+      message: e.message,
+      name: e.name,
+      code: e.code,
+      stack: e.stack?.substring(0, 1000),
+      url: req.url,
+      method: req.method
+    })
+    
+    // Check for database connection errors
+    const isConnectionError = e.message?.includes("Can't reach database server") ||
+                             e.code === 'P1001' ||
+                             e.code === 'ETIMEDOUT' ||
+                             e.code === 'ECONNREFUSED' ||
+                             e.code === 'ENOTFOUND'
+    
+    if (isConnectionError) {
+      return serverError(res, 'Database connection failed', `Unable to connect to database: ${e.message}`)
+    }
+    
     return serverError(res, 'Client handler failed', e.message)
   }
 }

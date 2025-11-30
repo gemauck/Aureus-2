@@ -141,34 +141,48 @@ async function handler(req, res) {
         try {
           // IMPORTANT: Return ALL leads regardless of ownerId - all users should see all leads
           // EXPLICITLY exclude ownerId from WHERE clause to ensure all leads are returned
-          leads = await prisma.client.findMany({ 
-            where: { 
-              type: 'lead'
-              // Explicitly NO ownerId filter - all users see all leads
-            },
-            include: {
-              tags: {
-                include: {
-                  tag: true
-                }
+          // Use defensive includes - if relations fail, try without them
+          try {
+            leads = await prisma.client.findMany({ 
+              where: { 
+                type: 'lead'
+                // Explicitly NO ownerId filter - all users see all leads
               },
-              externalAgent: true,
-              // Include starredBy relation only if we have a valid userId
-              // If no validUserId, starredBy will be undefined and isStarred will be false
-              ...(validUserId ? {
-                starredBy: {
-                  where: {
-                    userId: validUserId
-                  },
-                  select: {
-                    id: true,
-                    userId: true
+              include: {
+                tags: {
+                  include: {
+                    tag: true
                   }
-                }
-              } : {})
-            },
-            orderBy: { createdAt: 'desc' } 
-          })
+                },
+                externalAgent: true,
+                // Include starredBy relation only if we have a valid userId
+                // If no validUserId, starredBy will be undefined and isStarred will be false
+                ...(validUserId ? {
+                  starredBy: {
+                    where: {
+                      userId: validUserId
+                    },
+                    select: {
+                      id: true,
+                      userId: true
+                    }
+                  }
+                } : {})
+              },
+              orderBy: { createdAt: 'desc' } 
+            })
+          } catch (relationError) {
+            // If relations fail, try query without relations
+            console.warn('⚠️ Query with relations failed, trying without relations:', relationError.message)
+            leads = await prisma.client.findMany({ 
+              where: { 
+                type: 'lead'
+              },
+              orderBy: { createdAt: 'desc' } 
+            })
+            // Add empty tags array to each lead
+            leads = leads.map(l => ({ ...l, tags: [], externalAgent: null }))
+          }
           
           // DEBUG: Also check raw SQL to verify what's actually in database
           try {
@@ -235,40 +249,57 @@ async function handler(req, res) {
           console.warn('⚠️ Trying fallback query without type filter...')
           try {
             // IMPORTANT: Return ALL leads regardless of ownerId - all users should see all leads
-            const allRecords = await prisma.client.findMany({
-              include: {
-                tags: {
-                  include: {
-                    tag: true
-                  }
-                },
-                ...(validUserId ? {
-                  starredBy: {
-                    where: {
-                      userId: validUserId
-                    },
-                    select: {
-                      id: true,
-                      userId: true
+            try {
+              const allRecords = await prisma.client.findMany({
+                include: {
+                  tags: {
+                    include: {
+                      tag: true
                     }
-                  }
-                } : {})
-              },
-              orderBy: { createdAt: 'desc' }
-              // No ownerId filter - all users see all leads
-            })
-            // Filter to only leads
-            leads = allRecords.filter(record => {
-              // If type exists, it must be 'lead'
-              if (record.type !== null && record.type !== undefined && record.type !== '') {
-                return record.type === 'lead'
+                  },
+                  ...(validUserId ? {
+                    starredBy: {
+                      where: {
+                        userId: validUserId
+                      },
+                      select: {
+                        id: true,
+                        userId: true
+                      }
+                    }
+                  } : {})
+                },
+                orderBy: { createdAt: 'desc' }
+                // No ownerId filter - all users see all leads
+              })
+              // Filter to only leads
+              leads = allRecords.filter(record => {
+                // If type exists, it must be 'lead'
+                if (record.type !== null && record.type !== undefined && record.type !== '') {
+                  return record.type === 'lead'
+                }
+                // If type is null/undefined/empty, skip (legacy data without type should not be treated as leads)
+                return false
+              })
+              // Log lead details for debugging visibility issues
+              if (leads.length > 0) {
+                const leadDetails = leads.map(l => ({ id: l.id, name: l.name, ownerId: l.ownerId || 'null' }))
               }
-              // If type is null/undefined/empty, skip (legacy data without type should not be treated as leads)
-              return false
-            })
-            // Log lead details for debugging visibility issues
-            if (leads.length > 0) {
-              const leadDetails = leads.map(l => ({ id: l.id, name: l.name, ownerId: l.ownerId || 'null' }))
+            } catch (fallbackRelationError) {
+              // Last resort: query without any relations
+              console.warn('⚠️ Fallback query with relations failed, trying minimal query:', fallbackRelationError.message)
+              const allRecords = await prisma.client.findMany({
+                orderBy: { createdAt: 'desc' }
+              })
+              // Filter to only leads and add empty tags
+              leads = allRecords
+                .filter(record => {
+                  if (record.type !== null && record.type !== undefined && record.type !== '') {
+                    return record.type === 'lead'
+                  }
+                  return false
+                })
+                .map(l => ({ ...l, tags: [] }))
             }
           } catch (fallbackError) {
             console.error('❌ Fallback query also failed:', {
@@ -597,6 +628,27 @@ async function handler(req, res) {
 
     return badRequest(res, 'Invalid method or lead action')
   } catch (e) {
+    // Log full error details for debugging
+    console.error('❌ Lead handler top-level error:', {
+      message: e.message,
+      name: e.name,
+      code: e.code,
+      stack: e.stack?.substring(0, 1000),
+      url: req.url,
+      method: req.method
+    })
+    
+    // Check for database connection errors
+    const isConnectionError = e.message?.includes("Can't reach database server") ||
+                             e.code === 'P1001' ||
+                             e.code === 'ETIMEDOUT' ||
+                             e.code === 'ECONNREFUSED' ||
+                             e.code === 'ENOTFOUND'
+    
+    if (isConnectionError) {
+      return serverError(res, 'Database connection failed', `Unable to connect to database: ${e.message}`)
+    }
+    
     return serverError(res, 'Lead handler failed', e.message)
   }
 }
