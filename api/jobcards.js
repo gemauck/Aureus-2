@@ -114,10 +114,25 @@ async function handler(req, res) {
         
         // Limit the number of job cards returned and support simple pagination
         // to keep the dashboard fast even as history grows.
+        // Only select fields needed for list view to improve performance
         const [totalItems, jobCards] = await Promise.all([
           prisma.jobCard.count({ where: whereClause }),
           prisma.jobCard.findMany({
             where: whereClause,
+            select: {
+              id: true,
+              jobCardNumber: true,
+              agentName: true,
+              clientId: true,
+              clientName: true,
+              siteName: true,
+              status: true,
+              reasonForVisit: true,
+              diagnosis: true,
+              ownerId: true,
+              createdAt: true,
+              updatedAt: true
+            },
             orderBy: { createdAt: 'desc' },
             skip: (page - 1) * pageSize,
             take: pageSize
@@ -140,17 +155,10 @@ async function handler(req, res) {
         })
         
         // Format dates for response
+        // Note: We only selected minimal fields above, so we don't need to parse JSON fields
         const formatted = jobCards.map(jobCard => ({
           ...jobCard,
-          otherTechnicians: parseJson(jobCard.otherTechnicians),
-          photos: parseJson(jobCard.photos),
-          stockUsed: parseJson(jobCard.stockUsed || '[]'),
-          materialsBought: parseJson(jobCard.materialsBought || '[]'),
-          // Return full ISO strings for datetime fields (component needs them for datetime-local inputs)
-          timeOfDeparture: formatDate(jobCard.timeOfDeparture),
-          timeOfArrival: formatDate(jobCard.timeOfArrival),
-          submittedAt: formatDate(jobCard.submittedAt),
-          completedAt: formatDate(jobCard.completedAt),
+          // Return full ISO strings for datetime fields
           createdAt: formatDate(jobCard.createdAt),
           updatedAt: formatDate(jobCard.updatedAt)
         }))
