@@ -67,6 +67,46 @@ else
 fi
 ENDSSH
 
+# Step 5: Verify server is running and can serve files
+echo ""
+echo "🔍 Step 5: Checking server health..."
+HEALTH_CHECK=$(ssh root@$DROPLET_IP "curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:3000/health 2>/dev/null || echo '000'")
+if [ "$HEALTH_CHECK" = "200" ]; then
+    echo "✅ Server is running and healthy"
+else
+    echo "⚠️  Server health check returned: $HEALTH_CHECK"
+    echo "   Attempting to restart server..."
+    ssh root@$DROPLET_IP << ENDSSH
+cd $APP_DIR
+if command -v pm2 &> /dev/null; then
+    pm2 restart abcotronics-erp 2>/dev/null || pm2 start server.js --name abcotronics-erp
+    sleep 3
+    echo "   Server restart attempted"
+else
+    echo "   PM2 not available - manual restart may be required"
+fi
+ENDSSH
+fi
+
+# Step 6: Test file accessibility via HTTP
+echo ""
+echo "🔍 Step 6: Testing file accessibility..."
+VITE_JS_STATUS=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://$DOMAIN/vite-projects/projects-module.js" 2>/dev/null || echo "000")
+VITE_CSS_STATUS=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://$DOMAIN/vite-projects/projects-index.css" 2>/dev/null || echo "000")
+
+if [ "$VITE_JS_STATUS" = "200" ] && [ "$VITE_CSS_STATUS" = "200" ]; then
+    echo "✅ Files are accessible via HTTP (200 OK)"
+elif [ "$VITE_JS_STATUS" = "502" ] || [ "$VITE_CSS_STATUS" = "502" ]; then
+    echo "❌ Files return 502 Bad Gateway - server may be down"
+    echo "   Run on server: ./fix-502-immediate.sh"
+    echo "   Or: pm2 restart abcotronics-erp"
+elif [ "$VITE_JS_STATUS" = "404" ] || [ "$VITE_CSS_STATUS" = "404" ]; then
+    echo "⚠️  Files return 404 - check nginx configuration"
+    echo "   Ensure /vite-projects/ location is proxied correctly"
+else
+    echo "⚠️  Files returned: JS=$VITE_JS_STATUS, CSS=$VITE_CSS_STATUS"
+fi
+
 echo ""
 echo "========================================="
 echo "✅ Deployment complete!"
@@ -77,7 +117,10 @@ echo "   1. Visit: https://$DOMAIN"
 echo "   2. Hard refresh: Ctrl+Shift+R (Windows) or Cmd+Shift+R (Mac)"
 echo "   3. Check browser console - should see: '✅ Vite Projects module script loaded successfully'"
 echo ""
-echo "📊 If issues persist, check server logs:"
-echo "   ssh root@$DROPLET_IP 'pm2 logs abcotronics-erp'"
+echo "📊 If issues persist:"
+echo "   - Check server logs: ssh root@$DROPLET_IP 'pm2 logs abcotronics-erp'"
+echo "   - Check nginx logs: ssh root@$DROPLET_IP 'tail -50 /var/log/nginx/error.log'"
+echo "   - Restart server: ssh root@$DROPLET_IP 'pm2 restart abcotronics-erp'"
+echo "   - Run diagnostic: ssh root@$DROPLET_IP 'cd $APP_DIR && ./fix-502-immediate.sh'"
 echo ""
 

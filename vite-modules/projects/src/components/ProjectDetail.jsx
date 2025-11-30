@@ -457,6 +457,12 @@ export function ProjectDetail({ project, onBack, onDelete }) {
 
     // Initialize tasks with project-specific data
     const [tasks, setTasks] = useState(project.tasks || []);
+    // Use a ref to store current tasks value to avoid TDZ issues in closures
+    const tasksRef = useRef(project.tasks || []);
+    // Keep ref in sync with state
+    useEffect(() => {
+        tasksRef.current = tasks;
+    }, [tasks]);
     const [taskFilters, setTaskFilters] = useState({
         search: '',
         status: 'all',
@@ -475,6 +481,7 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                 tasksWithComments: project.tasks.filter(t => t.comments && t.comments.length > 0).length
             });
             setTasks(project.tasks);
+            tasksRef.current = project.tasks; // Also update ref
         }
     }, [project?.id, project?.tasks]);
     
@@ -515,25 +522,32 @@ export function ProjectDetail({ project, onBack, onDelete }) {
     }, []);
     
     const persistProjectData = useCallback(async ({
-        nextTasks = tasks,
-        nextTaskLists = taskLists,
-        nextCustomFieldDefinitions = customFieldDefinitions,
-        nextDocuments = documents,
-        nextHasDocumentCollectionProcess = hasDocumentCollectionProcess,
+        nextTasks,
+        nextTaskLists,
+        nextCustomFieldDefinitions,
+        nextDocuments,
+        nextHasDocumentCollectionProcess,
         excludeHasDocumentCollectionProcess = false,
         excludeDocumentSections = true  // Default to true: don't overwrite documentSections managed by MonthlyDocumentCollectionTracker
     } = {}) => {
+        // Use provided values or fall back to current state from ref (avoids TDZ issues)
+        const tasksToSave = nextTasks !== undefined ? nextTasks : tasksRef.current;
+        const taskListsToSave = nextTaskLists !== undefined ? nextTaskLists : taskLists;
+        const customFieldDefinitionsToSave = nextCustomFieldDefinitions !== undefined ? nextCustomFieldDefinitions : customFieldDefinitions;
+        const documentsToSave = nextDocuments !== undefined ? nextDocuments : documents;
+        const hasDocumentCollectionProcessToSave = nextHasDocumentCollectionProcess !== undefined ? nextHasDocumentCollectionProcess : hasDocumentCollectionProcess;
+        
         try {
             console.log('💾 ProjectDetail: Saving project data changes...');
             console.log('  - Project ID:', project.id);
-            console.log('  - Tasks count:', nextTasks.length);
-            console.log('  - Task lists count:', nextTaskLists.length);
+            console.log('  - Tasks count:', tasksToSave.length);
+            console.log('  - Task lists count:', taskListsToSave.length);
             
             const updatePayload = {
-                taskLists: JSON.stringify(nextTaskLists),
-                tasksList: JSON.stringify(nextTasks),  // Note: backend uses 'tasksList' not 'tasks'
-                customFieldDefinitions: JSON.stringify(nextCustomFieldDefinitions),
-                documents: JSON.stringify(nextDocuments)
+                taskLists: JSON.stringify(taskListsToSave),
+                tasksList: JSON.stringify(tasksToSave),  // Note: backend uses 'tasksList' not 'tasks'
+                customFieldDefinitions: JSON.stringify(customFieldDefinitionsToSave),
+                documents: JSON.stringify(documentsToSave)
             };
             
             // Only include documentSections if not excluded
@@ -548,7 +562,7 @@ export function ProjectDetail({ project, onBack, onDelete }) {
             // Only include hasDocumentCollectionProcess if not excluded
             // This prevents overwriting the database value when we don't want to save it
             if (!excludeHasDocumentCollectionProcess) {
-                updatePayload.hasDocumentCollectionProcess = nextHasDocumentCollectionProcess;
+                updatePayload.hasDocumentCollectionProcess = hasDocumentCollectionProcessToSave;
             }
             
             console.log('📡 Sending update to database:', updatePayload);
@@ -589,11 +603,11 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                         
                         return { 
                             ...p, 
-                            tasks: nextTasks, 
-                            taskLists: nextTaskLists, 
-                            customFieldDefinitions: nextCustomFieldDefinitions, 
-                            documents: nextDocuments, 
-                            hasDocumentCollectionProcess: nextHasDocumentCollectionProcess,
+                            tasks: tasksToSave, 
+                            taskLists: taskListsToSave, 
+                            customFieldDefinitions: customFieldDefinitionsToSave, 
+                            documents: documentsToSave, 
+                            hasDocumentCollectionProcess: hasDocumentCollectionProcessToSave,
                             documentSections: sectionsToPreserve
                         };
                     });
@@ -612,7 +626,7 @@ export function ProjectDetail({ project, onBack, onDelete }) {
             alert('Failed to save project changes: ' + error.message);
             throw error;
         }
-    }, [project.id, serializedDocumentSections, documentSectionsArray, tasks, taskLists, customFieldDefinitions, documents, hasDocumentCollectionProcess]);
+    }, [project.id, serializedDocumentSections, documentSectionsArray, taskLists, customFieldDefinitions, documents, hasDocumentCollectionProcess]);
     
     // Track if hasDocumentCollectionProcess was explicitly changed by user
     const hasDocumentCollectionProcessChangedRef = useRef(false);

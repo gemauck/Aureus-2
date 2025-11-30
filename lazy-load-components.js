@@ -634,9 +634,10 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                             return;
                         }
                         
-                        Promise.all(batch.map(loadComponent)).then(() => {
+                            Promise.all(batch.map(loadComponent)).then(() => {
                             // Special handling: Load ProjectDetail AFTER its dependencies are loaded
                             // Check if we've loaded ProjectDetail dependencies but ProjectDetail itself isn't loaded yet
+                            // Note: MonthlyDocumentCollectionTracker is optional (loaded from vite-projects module)
                             const projectDependenciesLoaded = 
                                 window.CustomFieldModal && 
                                 window.TaskDetailModal && 
@@ -646,10 +647,18 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                                 window.CommentsPopup &&
                                 window.DocumentCollectionModal;
                             
-                            // BULLETPROOF: Try loading ProjectDetail whenever dependencies are ready
+                            // Check for MonthlyDocumentCollectionTracker (optional, may come from vite-projects)
+                            const monthlyTrackerAvailable = window.MonthlyDocumentCollectionTracker;
+                            
+                            // BULLETPROOF: Try loading ProjectDetail whenever critical dependencies are ready
+                            // MonthlyDocumentCollectionTracker is optional - ProjectDetail will handle its absence gracefully
                             // Don't check _projectDetailLoadAttempted - we want multiple attempts
                             if (projectDependenciesLoaded && !window.ProjectDetail) {
-                                console.log('🔵 Lazy loader: ProjectDetail dependencies loaded, loading ProjectDetail now...');
+                                if (!monthlyTrackerAvailable) {
+                                    console.log('🔵 Lazy loader: ProjectDetail critical dependencies loaded (MonthlyDocumentCollectionTracker may load later from vite-projects), loading ProjectDetail now...');
+                                } else {
+                                    console.log('🔵 Lazy loader: ProjectDetail dependencies loaded (including MonthlyDocumentCollectionTracker), loading ProjectDetail now...');
+                                }
                                 
                                 // Load ProjectDetail with its robust dependency checker
                                 loadComponent('./src/components/projects/ProjectDetail.jsx').then(() => {

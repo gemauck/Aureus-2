@@ -91,16 +91,35 @@ window.waitForComponent = function(componentName, timeout = 5000) {
 /**
  * Validate component dependencies on page load
  * Logs warnings for missing dependencies
+ * Distinguishes between critical and optional dependencies
  */
 window.validateAllDependencies = function() {
+    // Optional dependencies - these may load later or from external modules
+    const optionalDependencies = {
+        'ProjectDetail': ['MonthlyDocumentCollectionTracker'] // Loaded from vite-projects module
+    };
     
     Object.keys(COMPONENT_DEPENDENCIES).forEach(componentName => {
         const status = window.checkComponentDependencies(componentName);
+        const optional = optionalDependencies[componentName] || [];
         
         if (status.componentAvailable && status.missing.length > 0) {
-            console.warn(`⚠️ ${componentName} is loaded but missing dependencies:`, status.missing);
+            // Separate critical and optional missing dependencies
+            const criticalMissing = status.missing.filter(dep => !optional.includes(dep));
+            const optionalMissing = status.missing.filter(dep => optional.includes(dep));
+            
+            if (criticalMissing.length > 0) {
+                console.warn(`⚠️ ${componentName} is loaded but missing critical dependencies:`, criticalMissing);
+            }
+            
+            if (optionalMissing.length > 0) {
+                // Use debug level for optional dependencies - they may load later
+                console.log(`ℹ️ ${componentName} is loaded but missing optional dependencies (may load later):`, optionalMissing);
+            }
         } else if (!status.componentAvailable && status.missing.length > 0) {
+            // Component not available yet - this is normal during loading
         } else if (status.available) {
+            // All dependencies available - success (no need to log)
         }
     });
 };

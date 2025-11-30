@@ -24,9 +24,9 @@
           crossorigin=""/>
     
     <!-- Tailwind CSS - Production Build -->
-    <!-- CACHE BUST: 20251130-response-fix -->
-    <link rel="preload" href="/dist/styles.css?v=20251130-response-fix" as="style">
-    <link rel="stylesheet" href="/dist/styles.css?v=20251130-response-fix">
+    <!-- CACHE BUST: 20251130-tags-fix -->
+    <link rel="preload" href="/dist/styles.css?v=20251130-tags-fix" as="style">
+    <link rel="stylesheet" href="/dist/styles.css?v=20251130-tags-fix">
     
     <!-- Resource hints for faster loading -->
     <link rel="dns-prefetch" href="https://unpkg.com">
@@ -764,8 +764,8 @@
     </script>
     
     <!-- Core bundle: critical modules -->
-    <!-- CACHE BUST: 20251130-response-fix -->
-    <script defer src="/dist/core-bundle.js?v=20251130-response-fix"></script>
+    <!-- CACHE BUST: 20251130-tags-fix -->
+    <script defer src="/dist/core-bundle.js?v=20251130-tags-fix"></script>
 
     <script>
         window.addEventListener('corebundle:ready', () => {
@@ -960,6 +960,27 @@
                     console.error('❌ Failed to load Vite Projects module script:', error);
                     console.error('❌ Script URL:', script.src);
                     console.error('❌ Please check that the file exists at: dist/vite-projects/projects-module.js');
+                    console.error('❌ This may be a server configuration issue (502 Bad Gateway suggests nginx/backend misconfiguration)');
+                    
+                    // Check if MonthlyDocumentCollectionTracker might be available from another source
+                    // (it might have been loaded from the main app build instead)
+                    setTimeout(() => {
+                        if (window.MonthlyDocumentCollectionTracker) {
+                            console.log('✅ MonthlyDocumentCollectionTracker found from alternative source - continuing');
+                            // Dispatch event anyway so dependent components can proceed
+                            if (typeof window.dispatchEvent === 'function') {
+                                window.dispatchEvent(new CustomEvent('viteProjectsReady', {
+                                    detail: { 
+                                        MonthlyDocumentCollectionTracker: window.MonthlyDocumentCollectionTracker 
+                                    }
+                                }));
+                            }
+                        } else {
+                            console.warn('⚠️ MonthlyDocumentCollectionTracker not available - some features may be limited');
+                            console.warn('⚠️ To fix: Ensure vite-projects files are built and deployed to the server');
+                            console.warn('⚠️ Run: npm run build:vite-projects && deploy dist/vite-projects/ to server');
+                        }
+                    }, 2000); // Check after 2 seconds to allow other loaders to complete
                 };
                 document.head.appendChild(script);
                 

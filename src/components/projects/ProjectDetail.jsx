@@ -424,6 +424,44 @@ function initializeProjectDetail() {
     // as per product decision to keep the entry point consistent.
     const [activeSection, setActiveSection] = useState('overview');
     
+    // Initialize taskLists with project-specific data
+    const [taskLists, setTaskLists] = useState(
+        project.taskLists || [
+            { id: 1, name: 'To Do', color: 'blue', description: '' }
+        ]
+    );
+
+    // Initialize tasks with project-specific data
+    const [tasks, setTasks] = useState(project.tasks || []);
+    // Use a ref to store current tasks value to avoid TDZ issues in closures
+    const tasksRef = useRef(project.tasks || []);
+    // Keep ref in sync with state
+    useEffect(() => {
+        tasksRef.current = tasks;
+    }, [tasks]);
+    const [taskFilters, setTaskFilters] = useState({
+        search: '',
+        status: 'all',
+        assignee: 'all',
+        priority: 'all',
+        list: 'all',
+        includeSubtasks: true
+    });
+    
+    // Sync tasks when project prop changes (e.g., after reload or navigation)
+    // Use a ref to track previous project ID to prevent infinite loops
+    const previousProjectIdRef = useRef(project?.id);
+    useEffect(() => {
+        // Only sync if project ID changed (switching to a different project)
+        if (project?.id !== previousProjectIdRef.current) {
+            previousProjectIdRef.current = project?.id;
+            if (project?.tasks && Array.isArray(project.tasks)) {
+                setTasks(project.tasks);
+                tasksRef.current = project.tasks; // Also update ref
+            }
+        }
+    }, [project?.id]); // Only depend on project ID, not tasks array (which may be recreated on every render)
+    
     // Memoize the back callback to prevent DocumentCollectionProcessSection from re-rendering
     const handleBackToOverview = useCallback(() => {
         setActiveSection('overview');
@@ -892,37 +930,6 @@ function initializeProjectDetail() {
         return loadPromise;
     }, [projectModalComponent]);
 
-    // Initialize taskLists with project-specific data
-    const [taskLists, setTaskLists] = useState(
-        project.taskLists || [
-            { id: 1, name: 'To Do', color: 'blue', description: '' }
-        ]
-    );
-
-    // Initialize tasks with project-specific data
-    const [tasks, setTasks] = useState(project.tasks || []);
-    const [taskFilters, setTaskFilters] = useState({
-        search: '',
-        status: 'all',
-        assignee: 'all',
-        priority: 'all',
-        list: 'all',
-        includeSubtasks: true
-    });
-    
-    // Sync tasks when project prop changes (e.g., after reload or navigation)
-    // Use a ref to track previous project ID to prevent infinite loops
-    const previousProjectIdRef = useRef(project?.id);
-    useEffect(() => {
-        // Only sync if project ID changed (switching to a different project)
-        if (project?.id !== previousProjectIdRef.current) {
-            previousProjectIdRef.current = project?.id;
-            if (project?.tasks && Array.isArray(project.tasks)) {
-                setTasks(project.tasks);
-            }
-        }
-    }, [project?.id]); // Only depend on project ID, not tasks array (which may be recreated on every render)
-    
     // Initialize custom field definitions with project-specific data
     const [customFieldDefinitions, setCustomFieldDefinitions] = useState(
         project.customFieldDefinitions || []
@@ -960,21 +967,28 @@ function initializeProjectDetail() {
     }, []);
     
     const persistProjectData = useCallback(async ({
-        nextTasks = tasks,
-        nextTaskLists = taskLists,
-        nextCustomFieldDefinitions = customFieldDefinitions,
-        nextDocuments = documents,
-        nextHasDocumentCollectionProcess = hasDocumentCollectionProcess,
+        nextTasks,
+        nextTaskLists,
+        nextCustomFieldDefinitions,
+        nextDocuments,
+        nextHasDocumentCollectionProcess,
         excludeHasDocumentCollectionProcess = false,
         excludeDocumentSections = true  // Default to true: don't overwrite documentSections managed by MonthlyDocumentCollectionTracker
     } = {}) => {
+        // Use provided values or fall back to current state from ref (avoids TDZ issues)
+        const tasksToSave = nextTasks !== undefined ? nextTasks : tasksRef.current;
+        const taskListsToSave = nextTaskLists !== undefined ? nextTaskLists : taskLists;
+        const customFieldDefinitionsToSave = nextCustomFieldDefinitions !== undefined ? nextCustomFieldDefinitions : customFieldDefinitions;
+        const documentsToSave = nextDocuments !== undefined ? nextDocuments : documents;
+        const hasDocumentCollectionProcessToSave = nextHasDocumentCollectionProcess !== undefined ? nextHasDocumentCollectionProcess : hasDocumentCollectionProcess;
+        
         try {
             
             const updatePayload = {
-                taskLists: JSON.stringify(nextTaskLists),
-                tasksList: JSON.stringify(nextTasks),  // Note: backend uses 'tasksList' not 'tasks'
-                customFieldDefinitions: JSON.stringify(nextCustomFieldDefinitions),
-                documents: JSON.stringify(nextDocuments)
+                taskLists: JSON.stringify(taskListsToSave),
+                tasksList: JSON.stringify(tasksToSave),  // Note: backend uses 'tasksList' not 'tasks'
+                customFieldDefinitions: JSON.stringify(customFieldDefinitionsToSave),
+                documents: JSON.stringify(documentsToSave)
             };
             
             // Only include documentSections if not excluded
@@ -987,7 +1001,7 @@ function initializeProjectDetail() {
             // Only include hasDocumentCollectionProcess if not excluded
             // This prevents overwriting the database value when we don't want to save it
             if (!excludeHasDocumentCollectionProcess) {
-                updatePayload.hasDocumentCollectionProcess = nextHasDocumentCollectionProcess;
+                updatePayload.hasDocumentCollectionProcess = hasDocumentCollectionProcessToSave;
             }
             
             
@@ -1003,11 +1017,11 @@ function initializeProjectDetail() {
                             : documentSectionsArray;
                         return { 
                             ...p, 
-                            tasks: nextTasks, 
-                            taskLists: nextTaskLists, 
-                            customFieldDefinitions: nextCustomFieldDefinitions, 
-                            documents: nextDocuments, 
-                            hasDocumentCollectionProcess: nextHasDocumentCollectionProcess,
+                            tasks: tasksToSave, 
+                            taskLists: taskListsToSave, 
+                            customFieldDefinitions: customFieldDefinitionsToSave, 
+                            documents: documentsToSave, 
+                            hasDocumentCollectionProcess: hasDocumentCollectionProcessToSave,
                             documentSections: normalizedSections
                         };
                     });
@@ -1025,7 +1039,7 @@ function initializeProjectDetail() {
             alert('Failed to save project changes: ' + error.message);
             throw error;
         }
-    }, [project.id, serializedDocumentSections, documentSectionsArray, tasks, taskLists, customFieldDefinitions, documents, hasDocumentCollectionProcess]);
+    }, [project.id, serializedDocumentSections, documentSectionsArray, taskLists, customFieldDefinitions, documents, hasDocumentCollectionProcess]);
     
     // Track if hasDocumentCollectionProcess was explicitly changed by user
     const hasDocumentCollectionProcessChangedRef = useRef(false);
