@@ -559,158 +559,82 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 return;
             }
             
-            // Normalize client name for comparison (case-insensitive, trimmed)
-            const normalizedClientName = (client.name || '').trim().toLowerCase();
-            const clientIdToMatch = String(client.id); // Ensure string type for database match
+            const clientId = String(client.id);
             
-            console.log('🔍 Loading job cards for client:', {
-                clientId: clientIdToMatch,
-                clientIdType: typeof clientIdToMatch,
-                originalClientId: client.id,
-                originalClientIdType: typeof client.id,
-                clientName: client.name,
-                normalizedName: normalizedClientName
+            console.log('🔍 Loading job cards for client ID:', clientId);
+            
+            // First, try fetching by clientId (most reliable)
+            let response = await fetch(`/api/jobcards?clientId=${encodeURIComponent(clientId)}&pageSize=1000`, {
+                headers: { 
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
             });
             
-            // Strategy: Try clientId first (most reliable), then clientName, then fallback to all
-            let response = null;
             let data = null;
             
-            // Strategy 1: Fetch by clientId (most accurate)
-            if (clientIdToMatch) {
-                console.log('📡 Strategy 1: Fetching by clientId:', `/api/jobcards?clientId=${encodeURIComponent(clientIdToMatch)}&pageSize=1000`);
-                response = await fetch(`/api/jobcards?clientId=${encodeURIComponent(clientIdToMatch)}&pageSize=1000`, {
-                    headers: { 
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
+            if (response.ok) {
+                data = await response.json();
+                const jobCards = data.jobCards || [];
+                console.log(`📋 Job cards found by clientId: ${jobCards.length}`);
                 
-                console.log('📡 Strategy 1 response status:', response.status, response.statusText);
-                
-                if (response.ok) {
-                    data = await response.json();
-                    const count = (data.jobCards || []).length;
-                    console.log(`📋 Job cards from clientId filter: ${count} found`);
-                    if (count > 0) {
-                        console.log('📋 Sample job card:', {
-                            jobCardNumber: data.jobCards[0].jobCardNumber,
-                            clientId: data.jobCards[0].clientId,
-                            clientName: data.jobCards[0].clientName
-                        });
-                    }
-                } else {
-                    const errorText = await response.text().catch(() => 'Unknown error');
-                    console.error('❌ Strategy 1 failed:', response.status, errorText);
-                }
-            }
-            
-            // Strategy 2: If no results, try by clientName (case-insensitive partial match)
-            if ((!data || (data.jobCards || []).length === 0) && client.name) {
-                console.log('📡 Strategy 2: Fetching by clientName:', `/api/jobcards?clientName=${encodeURIComponent(client.name)}&pageSize=1000`);
-                response = await fetch(`/api/jobcards?clientName=${encodeURIComponent(client.name)}&pageSize=1000`, {
-                    headers: { 
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                console.log('📡 Strategy 2 response status:', response.status, response.statusText);
-                
-                if (response.ok) {
-                    data = await response.json();
-                    const count = (data.jobCards || []).length;
-                    console.log(`📋 Job cards from clientName filter: ${count} found`);
-                    if (count > 0) {
-                        console.log('📋 Sample job card:', {
-                            jobCardNumber: data.jobCards[0].jobCardNumber,
-                            clientId: data.jobCards[0].clientId,
-                            clientName: data.jobCards[0].clientName
-                        });
-                    }
-                } else {
-                    const errorText = await response.text().catch(() => 'Unknown error');
-                    console.error('❌ Strategy 2 failed:', response.status, errorText);
-                }
-            }
-            
-            // Strategy 3: Debug fallback - fetch a sample to see what's in the database
-            if ((!data || (data.jobCards || []).length === 0)) {
-                console.log('📡 Strategy 3: Fetching sample of all job cards for debugging...');
-                try {
-                    const debugResponse = await fetch(`/api/jobcards?pageSize=10`, {
-                        headers: { 
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    if (debugResponse.ok) {
-                        const debugData = await debugResponse.json();
-                        const allJobCards = debugData.jobCards || [];
-                        console.log(`🔍 Debug: Found ${allJobCards.length} total job cards in database (sample)`);
-                        if (allJobCards.length > 0) {
-                            console.log('🔍 Sample job cards:', allJobCards.map(jc => ({
-                                jobCardNumber: jc.jobCardNumber,
-                                clientId: jc.clientId,
-                                clientName: jc.clientName,
-                                matchesClientId: String(jc.clientId) === clientIdToMatch,
-                                matchesClientName: jc.clientName && jc.clientName.toLowerCase().includes(normalizedClientName)
-                            })));
-                        }
-                    }
-                } catch (debugError) {
-                    console.warn('⚠️ Debug fetch failed:', debugError);
-                }
-            }
-            
-            // Handle response errors (including rate limiting)
-            if (response && !response.ok) {
-                if (response.status === 429) {
-                    console.warn('⚠️ Rate limit exceeded while loading job cards. Please wait a moment and try again.');
-                    setError('Too many requests. Please wait a moment before refreshing.');
+                if (jobCards.length > 0) {
+                    setJobCards(jobCards);
                     setLoadingJobCards(false);
                     return;
                 }
-                
-                // For other errors, check if we got any data from previous strategies
-                if (!data) {
-                    const errorText = await response.text().catch(() => 'Unknown error');
-                    console.error('❌ Failed to load job cards:', response.status, errorText);
-                    setError(`Failed to load job cards (${response.status}). Please try again.`);
-                    setLoadingJobCards(false);
-                    return;
-                }
-                // If we have data from a previous strategy, continue with that
-            }
-            
-            // If we successfully got data from either strategy, use it
-            if (data && data.jobCards) {
-                const clientJobCards = data.jobCards || [];
-                console.log(`✅ Job cards for client: ${clientJobCards.length} found`);
-                setJobCards(clientJobCards);
-            } else if (response && !response.ok) {
-                // No data and error response
-                console.error('❌ Failed to load job cards: No data received');
-                setError('Failed to load job cards. Please try again.');
-                setJobCards([]);
             } else {
-                // Response OK but no job cards found - this is valid (client may have no job cards)
-                console.log('ℹ️ No job cards found for this client');
+                console.warn('⚠️ API filter by clientId failed, trying fallback...');
+            }
+            
+            // Fallback: Fetch all job cards and filter by clientId client-side
+            // This handles cases where API filtering might not work correctly
+            console.log('📡 Fetching all job cards for client-side filtering...');
+            response = await fetch(`/api/jobcards?pageSize=1000`, {
+                headers: { 
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (response.ok) {
+                data = await response.json();
+                const allJobCards = data.jobCards || [];
+                
+                // Filter by clientId
+                const matchingJobCards = allJobCards.filter(jc => 
+                    jc.clientId && String(jc.clientId) === clientId
+                );
+                
+                console.log(`📋 Total job cards: ${allJobCards.length}, matching clientId: ${matchingJobCards.length}`);
+                
+                if (matchingJobCards.length > 0) {
+                    setJobCards(matchingJobCards);
+                } else {
+                    // Log for debugging if job cards exist but don't match
+                    if (allJobCards.length > 0) {
+                        console.log('🔍 Sample job cards (for debugging):', allJobCards.slice(0, 3).map(jc => ({
+                            jobCardNumber: jc.jobCardNumber,
+                            clientId: jc.clientId,
+                            clientName: jc.clientName
+                        })));
+                    }
+                    setJobCards([]);
+                }
+            } else {
+                const errorText = await response.text().catch(() => 'Unknown error');
+                console.error('❌ Failed to load job cards:', response.status, errorText);
+                setError(`Failed to load job cards (${response.status}). Please try again.`);
                 setJobCards([]);
             }
         } catch (error) {
             console.error('Error loading job cards:', error);
-            // Handle rate limit errors in catch block as well
-            if (error?.status === 429 || error?.message?.includes('429')) {
-                setError('Too many requests. Please wait a moment before refreshing.');
-            } else {
-                setError('Failed to load job cards. Please try again.');
-            }
+            setError('Failed to load job cards. Please try again.');
             setJobCards([]);
         } finally {
             setLoadingJobCards(false);
         }
-    }, [client?.id, client?.name]);
+    }, [client?.id]);
     
 
     // Load tags when client changes
