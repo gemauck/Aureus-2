@@ -115,7 +115,6 @@ model Client {
   activityLog   String          @default("[]")
   billingTerms  String          @default("{\"paymentTerms\":\"Net 30\",\"billingFrequency\":\"Monthly\",\"currency\":\"ZAR\",\"retainerAmount\":0,\"taxExempt\":false,\"notes\":\"\"}")
   ownerId       String?
-  externalAgentId String?
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   proposals     String          @default("[]")
@@ -123,7 +122,6 @@ model Client {
   services      String          @default("[]")
   rssSubscribed Boolean         @default(true)
   owner         User?           @relation("ClientOwner", fields: [ownerId], references: [id])
-  externalAgent ExternalAgent?   @relation(fields: [externalAgentId], references: [id])
   newsArticles  ClientNews[]
   tags          ClientTag[]
   invoices      Invoice[]
@@ -136,23 +134,6 @@ model Client {
   @@index([type])
   @@index([status])
   @@index([ownerId])
-  @@index([externalAgentId])
-}
-
-model ExternalAgent {
-  id          String    @id @default(cuid())
-  name        String
-  email       String    @default("")
-  phone       String    @default("")
-  company     String    @default("")
-  notes       String    @default("")
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  clients     Client[]
-
-  @@index([name])
-  @@index([isActive])
 }
 
 model Tag {

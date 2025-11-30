@@ -237,9 +237,6 @@ const LeadDetailModal = ({
     const [isLoadingIndustries, setIsLoadingIndustries] = useState(false);
     const isOpeningIndustryModalRef = useRef(false); // Prevent multiple rapid clicks
     
-    // External Agents state
-    const [externalAgents, setExternalAgents] = useState([]);
-    
     // Debug modal state
     useEffect(() => {
         // Reset the ref when modal state changes
@@ -247,26 +244,6 @@ const LeadDetailModal = ({
             isOpeningIndustryModalRef.current = false;
         }
     }, [showIndustryModal, isAdmin]);
-    
-    // Load external agents function
-    const loadExternalAgents = useCallback(async () => {
-        try {
-            const token = window.storage?.getToken?.();
-            if (!token) return;
-            
-            const response = await fetch('/api/external-agents', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                const agents = data.data?.externalAgents || data.externalAgents || [];
-                setExternalAgents(agents.filter(agent => agent.isActive !== false));
-            }
-        } catch (error) {
-            console.error('Error loading external agents:', error);
-        }
-    }, []);
     
     // Load industries function
     const loadIndustries = useCallback(async () => {
@@ -328,11 +305,6 @@ const LeadDetailModal = ({
             loadIndustries();
         }
     }, [showIndustryModal, loadIndustries]);
-    
-    // Load external agents on mount
-    useEffect(() => {
-        loadExternalAgents();
-    }, [loadExternalAgents]);
     
     // Add new industry
     const handleAddIndustry = useCallback(async () => {
@@ -2870,48 +2842,6 @@ const LeadDetailModal = ({
                                                 <i className="fas fa-cog"></i>
                                             </button>
                                         </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">External Agent</label>
-                                        <select
-                                            value={formData.externalAgentId || ''}
-                                            onFocus={() => {
-                                                isEditingRef.current = true;
-                                                userHasStartedTypingRef.current = true;
-                                                notifyEditingChange(true);
-                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
-                                            }}
-                                            onChange={(e) => {
-                                                isEditingRef.current = true;
-                                                userHasStartedTypingRef.current = true;
-                                                userEditedFieldsRef.current.add('externalAgentId');
-                                                notifyEditingChange(true);
-                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
-                                                editingTimeoutRef.current = setTimeout(() => {
-                                                    isEditingRef.current = false;
-                                                    notifyEditingChange(false);
-                                                }, 5000);
-                                                setFormData(prev => {
-                                                    const updated = {...prev, externalAgentId: e.target.value || null};
-                                                    formDataRef.current = updated;
-                                                    return updated;
-                                                });
-                                            }}
-                                            onBlur={() => {
-                                                setTimeout(() => {
-                                                    isEditingRef.current = false;
-                                                    notifyEditingChange(false);
-                                                }, 500);
-                                            }}
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                        >
-                                            <option value="">No External Agent</option>
-                                            {externalAgents.map((agent) => (
-                                                <option key={agent.id} value={agent.id}>
-                                                    {agent.name} {agent.company ? `(${agent.company})` : ''}
-                                                </option>
-                                            ))}
-                                        </select>
                                     </div>
                                 </div>
 

@@ -162,9 +162,6 @@
         'components/users/Users.jsx',
         'components/users/UserManagement.jsx',
         
-        // Admin
-        'components/admin/ExternalAgents.jsx',
-        
         // Leave Platform - Load before Manufacturing for better availability
         'components/leave-platform/LeavePlatform.jsx',
         'components/leave-platform/EmployeeDetail.jsx',

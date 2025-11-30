@@ -774,7 +774,6 @@ const MainLayout = () => {
         { id: 'projects', label: 'Projects', icon: 'fa-project-diagram', permission: 'ACCESS_PROJECTS' },
         { id: 'teams', label: 'Teams', icon: 'fa-user-friends', permission: 'ACCESS_TEAM' },
         { id: 'users', label: 'Users', icon: 'fa-user-cog', permission: 'ACCESS_USERS' }, // Admin only
-        { id: 'external-agents', label: 'External Agents', icon: 'fa-user-tie', permission: 'ACCESS_USERS' }, // Admin only
         { id: 'leave-platform', label: 'Leave Platform', icon: 'fa-calendar-alt', permission: 'ACCESS_LEAVE_PLATFORM' },
         { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry', permission: 'ACCESS_MANUFACTURING' },
         { id: 'service-maintenance', label: 'Service & Maintenance', icon: 'fa-wrench', permission: 'ACCESS_SERVICE_MAINTENANCE' },
@@ -930,32 +929,6 @@ const MainLayout = () => {
                         );
                     }
                     return <ErrorBoundary key="users"><Users /></ErrorBoundary>;
-                case 'external-agents': 
-                    if (permissionChecker && window.PERMISSIONS) {
-                        if (!permissionChecker.hasPermission(window.PERMISSIONS.ACCESS_USERS)) {
-                            return (
-                                <div key="external-agents-access-denied" className="flex items-center justify-center min-h-[400px]">
-                                    <div className="text-center">
-                                        <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
-                                        <h2 className={`text-xl font-semibold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Access Denied</h2>
-                                        <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>You need administrator privileges to access this page.</p>
-                                    </div>
-                                </div>
-                            );
-                        }
-                    } else if (!isAdmin) {
-                        return (
-                            <div key="external-agents-access-denied" className="flex items-center justify-center min-h-[400px]">
-                                <div className="text-center">
-                                    <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
-                                    <h2 className={`text-xl font-semibold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Access Denied</h2>
-                                    <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>You need administrator privileges to access this page.</p>
-                                </div>
-                            </div>
-                        );
-                    }
-                    const ExternalAgents = window.ExternalAgents || (() => <div className="text-center py-12 text-gray-500">External Agents component loading...</div>);
-                    return <ErrorBoundary key="external-agents"><ExternalAgents /></ErrorBoundary>;
                 case 'account': 
                     return <ErrorBoundary key="account"><Account /></ErrorBoundary>;
                 case 'time-tracking': 
