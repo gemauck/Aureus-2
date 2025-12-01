@@ -262,10 +262,10 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
             };
             
             // Cache-busting for critical components to ensure fresh version loads
-            const meetingNotesVersion = 'meeting-notes-v20251109';
+            const meetingNotesVersion = 'meeting-notes-v20251201-smooth-transitions';
             if ((scriptSrc.includes('ManagementMeetingNotes') || scriptSrc.includes('teams/Teams')) && !scriptSrc.includes(meetingNotesVersion)) {
                 const separator = scriptSrc.includes('?') ? '&' : '?';
-                scriptSrc = scriptSrc + separator + 'v=' + meetingNotesVersion;
+                scriptSrc = scriptSrc + separator + 'v=' + meetingNotesVersion + '-' + Date.now();
             }
 
             // Use timestamp-based version for components that require fresh load each time
@@ -276,12 +276,14 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                                      src.includes('TaskManagement') || src.includes('MonthlyDocumentCollectionTracker') || 
                                      src.includes('Projects.jsx') || src.includes('Projects.js') || 
                                      src.includes('Users.jsx') || src.includes('Users.js') ||
+                                     src.includes('ManagementMeetingNotes') || src.includes('Teams.jsx') || src.includes('Teams.js') ||
                                      scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || 
                                      scriptSrc.includes('ProjectProgressTracker') || 
                                      scriptSrc.includes('TaskManagement') || scriptSrc.includes('MonthlyDocumentCollectionTracker') ||
                                      scriptSrc.includes('Users.jsx') || scriptSrc.includes('Users.js') || 
                                      scriptSrc.includes('Projects.jsx') || scriptSrc.includes('Projects.js') || 
                                      scriptSrc.includes('/projects/Projects') || 
+                                     scriptSrc.includes('ManagementMeetingNotes') || scriptSrc.includes('Teams.jsx') || scriptSrc.includes('Teams.js') ||
                                      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
             
             if (needsCacheBusting) {
@@ -294,8 +296,8 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
             ensureReactForProjectDetail().then(() => {
                 // First, fetch the file to validate it's JavaScript before loading as script
                 // This prevents HTML (404 pages) from being executed as JavaScript
-                // Use no-cache for DailyNotes, Manufacturing, and ProjectProgressTracker to ensure fresh version, default for others
-                const cachePolicy = scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || scriptSrc.includes('ProjectProgressTracker') ? 'no-cache' : 'default';
+                // Use no-cache for DailyNotes, Manufacturing, ProjectProgressTracker, and ManagementMeetingNotes to ensure fresh version, default for others
+                const cachePolicy = scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || scriptSrc.includes('ProjectProgressTracker') || scriptSrc.includes('ManagementMeetingNotes') || scriptSrc.includes('Teams.jsx') || scriptSrc.includes('Teams.js') ? 'no-cache' : 'default';
                 
                 // Retry logic for server errors (502, 503, 504)
                 const attemptLoad = (attempt = 1, maxAttempts = 3) => {
