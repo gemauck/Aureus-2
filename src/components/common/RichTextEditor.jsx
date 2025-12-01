@@ -154,6 +154,27 @@ const RichTextEditor = ({
                 ref={editorRef}
                 contentEditable
                 onInput={handleInput}
+                onFocus={(e) => {
+                    // Preserve scroll position when focusing RichTextEditor
+                    const currentScroll = window.scrollY || window.pageYOffset;
+                    // Use multiple restoration attempts
+                    requestAnimationFrame(() => {
+                        window.scrollTo(0, currentScroll);
+                        setTimeout(() => {
+                            window.scrollTo(0, currentScroll);
+                        }, 0);
+                        setTimeout(() => {
+                            window.scrollTo(0, currentScroll);
+                        }, 50);
+                    });
+                }}
+                onClick={(e) => {
+                    // Preserve scroll position when clicking
+                    const currentScroll = window.scrollY || window.pageYOffset;
+                    requestAnimationFrame(() => {
+                        window.scrollTo(0, currentScroll);
+                    });
+                }}
                 onBlur={(e) => {
                     if (onBlur && editorRef.current) {
                         onBlur(editorRef.current.innerHTML);
