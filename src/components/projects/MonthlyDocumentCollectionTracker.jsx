@@ -891,7 +891,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         setEditingSection(null);
     };
     
-    const handleDeleteSection = (sectionId, event) => {
+    const handleDeleteSection = async (sectionId, event) => {
         // Prevent event propagation to avoid interfering with other handlers
         if (event) {
             event.preventDefault();
@@ -920,25 +920,57 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         // Use functional update with sectionsByYear to ensure we have the latest state
         // Also update sectionsRef immediately to prevent race conditions with auto-save
+        let updatedSectionsByYear;
         setSectionsByYear(prev => {
             const yearSections = prev[selectedYear] || [];
             const filtered = yearSections.filter(s => String(s.id) !== normalizedSectionId);
             
-            const updated = {
+            updatedSectionsByYear = {
                 ...prev,
                 [selectedYear]: filtered
             };
             
             // Immediately update the ref to prevent race conditions with auto-save
-            sectionsRef.current = updated;
+            sectionsRef.current = updatedSectionsByYear;
             
-            return updated;
+            return updatedSectionsByYear;
         });
         
-        // Clear the deleting flag after auto-save completes (2 seconds should be enough)
+        // Force immediate save (bypass debounce) to ensure deletion is persisted
+        // Clear any pending debounced saves first
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        
+        // Save immediately with the updated sections
+        try {
+            await saveToDatabase({ skipParentUpdate: false });
+            console.log('✅ Section deletion saved successfully');
+        } catch (error) {
+            console.error('❌ Error saving section deletion:', error);
+            // Revert the deletion if save failed
+            setSectionsByYear(prev => {
+                const yearSections = prev[selectedYear] || [];
+                // Restore the section if it was in the original state
+                if (!yearSections.find(s => String(s.id) === normalizedSectionId)) {
+                    return {
+                        ...prev,
+                        [selectedYear]: [...yearSections, section]
+                    };
+                }
+                return prev;
+            });
+            alert('Failed to delete section. Please try again.');
+            isDeletingRef.current = false;
+            return;
+        }
+        
+        // Clear the deleting flag after a longer delay to ensure polling doesn't interfere
+        // Give it 5 seconds to ensure the save is fully persisted
         setTimeout(() => {
             isDeletingRef.current = false;
-        }, 2000);
+        }, 5000);
     };
     
     // ============================================================
