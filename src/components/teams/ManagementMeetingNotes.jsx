@@ -2688,6 +2688,14 @@ const ManagementMeetingNotes = () => {
                                                                     value={deptNote.successes || ''}
                                                                     onChange={(e) => handleFieldChange(deptNote.id, 'successes', e.target.value)}
                                                                     onBlur={(e) => handleFieldBlur(deptNote.id, 'successes', e.target.value)}
+                                                                    onFocus={(e) => {
+                                                                        // Preserve scroll position when focusing
+                                                                        const currentScroll = window.scrollY || window.pageYOffset;
+                                                                        e.target.focus();
+                                                                        requestAnimationFrame(() => {
+                                                                            window.scrollTo(0, currentScroll);
+                                                                        });
+                                                                    }}
                                                                     placeholder="What went well during the week?"
                                                                     className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
                                                                     rows={4}
@@ -2716,6 +2724,14 @@ const ManagementMeetingNotes = () => {
                                                                     value={deptNote.weekToFollow || ''}
                                                                     onChange={(e) => handleFieldChange(deptNote.id, 'weekToFollow', e.target.value)}
                                                                     onBlur={(e) => handleFieldBlur(deptNote.id, 'weekToFollow', e.target.value)}
+                                                                    onFocus={(e) => {
+                                                                        // Preserve scroll position when focusing
+                                                                        const currentScroll = window.scrollY || window.pageYOffset;
+                                                                        e.target.focus();
+                                                                        requestAnimationFrame(() => {
+                                                                            window.scrollTo(0, currentScroll);
+                                                                        });
+                                                                    }}
                                                                     placeholder="What's planned for the upcoming week?"
                                                                     className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
                                                                     rows={4}
@@ -2744,6 +2760,14 @@ const ManagementMeetingNotes = () => {
                                                                     value={deptNote.frustrations || ''}
                                                                     onChange={(e) => handleFieldChange(deptNote.id, 'frustrations', e.target.value)}
                                                                     onBlur={(e) => handleFieldBlur(deptNote.id, 'frustrations', e.target.value)}
+                                                                    onFocus={(e) => {
+                                                                        // Preserve scroll position when focusing
+                                                                        const currentScroll = window.scrollY || window.pageYOffset;
+                                                                        e.target.focus();
+                                                                        requestAnimationFrame(() => {
+                                                                            window.scrollTo(0, currentScroll);
+                                                                        });
+                                                                    }}
                                                                     placeholder="What challenges or blockers are we facing?"
                                                                     className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
                                                                     rows={4}
@@ -2770,6 +2794,7 @@ const ManagementMeetingNotes = () => {
                                                                             </div>
                                                                             <div className="flex gap-1">
                                                                                 <button
+                                                                                    type="button"
                                                                                     onClick={() => {
                                                                                         setEditingActionItem(item);
                                                                                         setShowActionItemModal(true);
@@ -2811,6 +2836,7 @@ const ManagementMeetingNotes = () => {
                                                                                         </p>
                                                                                     </div>
                                                                                     <button
+                                                                                        type="button"
                                                                                         onClick={() => handleDeleteComment(comment.id)}
                                                                                         className={`p-1.5 rounded-lg transition flex-shrink-0 ${isDark ? 'text-slate-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`}
                                                                                         title="Delete comment"
