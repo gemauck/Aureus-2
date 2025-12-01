@@ -1,9 +1,21 @@
 // Get dependencies from window
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
 const storage = window.storage;
 const ProjectModal = window.ProjectModal;
 const ProjectDetail = window.ProjectDetail;
 const SectionCommentWidget = window.SectionCommentWidget;
+
+// Utility function for project status colors
+const getStatusColorClasses = (status) => {
+    const statusMap = {
+        'In Progress': 'bg-blue-100 text-blue-700',
+        'Active': 'bg-green-100 text-green-700',
+        'Completed': 'bg-purple-100 text-purple-700',
+        'On Hold': 'bg-yellow-100 text-yellow-700',
+        'Cancelled': 'bg-red-100 text-red-700',
+    };
+    return statusMap[status] || 'bg-gray-100 text-gray-700';
+};
 
 // Safe useAuth wrapper - always returns a consistent hook result
 // CRITICAL FIX for React error #300: Always call hooks in the same order
@@ -70,6 +82,7 @@ const Projects = () => {
     const [projectDetailAvailable, setProjectDetailAvailable] = useState(!!window.ProjectDetail);
     const [waitingForTracker, setWaitingForTracker] = useState(false);
     const [forceRender, setForceRender] = useState(0); // Force re-render when ProjectDetail loads
+    const [deleteConfirmation, setDeleteConfirmation] = useState({ show: false, projectId: null });
     
     const openProgressTrackerHash = (params = {}) => {
         try {
@@ -940,10 +953,10 @@ const Projects = () => {
         return count;
     };
 
-    const handleAddProject = () => {
+    const handleAddProject = useCallback(() => {
         setSelectedProject(null);
         setShowModal(true);
-    };
+    }, []);
 
     const handleEditProject = async (project) => {
         try {
@@ -1251,7 +1264,7 @@ const Projects = () => {
         }
     };
 
-    const handleSaveProject = async (projectData) => {
+    const handleSaveProject = useCallback(async (projectData) => {
         
         // Validate required fields
         if (!projectData || !projectData.name || projectData.name.trim() === '') {
@@ -1348,10 +1361,10 @@ const Projects = () => {
             console.error('❌ Error saving project:', error);
             alert('Failed to save project: ' + error.message);
         }
-    };
+    }, [selectedProject, projects, logout, updateClientProjectIds]);
 
     // Helper function to update client's projectIds
-    const updateClientProjectIds = async (oldClientName, newClientName, projectId) => {
+    const updateClientProjectIds = useCallback(async (oldClientName, newClientName, projectId) => {
         try {
             if (window.dataService && typeof window.dataService.getClients === 'function' && typeof window.dataService.setClients === 'function') {
                 const clients = await window.dataService.getClients() || [];
@@ -1385,12 +1398,18 @@ const Projects = () => {
         } catch (error) {
             console.error('Error updating client project IDs:', error);
         }
-    };
+    }, []);
 
-    const handleDeleteProject = async (projectId) => {
-        if (!confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
-            return;
-        }
+    const handleDeleteProject = useCallback(async (projectId) => {
+        // Show confirmation modal instead of browser confirm
+        setDeleteConfirmation({ show: true, projectId });
+    }, [projects, viewingProject, logout, updateClientProjectIds]);
+    
+    const confirmDeleteProject = useCallback(async () => {
+        const projectId = deleteConfirmation.projectId;
+        if (!projectId) return;
+        
+        setDeleteConfirmation({ show: false, projectId: null });
 
         try {
             const token = window.storage?.getToken?.();
@@ -1459,26 +1478,35 @@ const Projects = () => {
             });
             alert('Failed to delete project: ' + (error.message || 'Unknown error'));
         }
-    };
+    }, [deleteConfirmation.projectId, projects, viewingProject, logout, updateClientProjectIds]);
+    
+    const cancelDeleteProject = useCallback(() => {
+        setDeleteConfirmation({ show: false, projectId: null });
+    }, []);
 
-    // Get unique clients from projects
-    const uniqueClients = [...new Set(projects.map(p => p.client))].sort();
+    // Get unique clients from projects - memoized
+    const uniqueClients = useMemo(() => {
+        return [...new Set(projects.map(p => p.client))].sort();
+    }, [projects]);
 
-    // Filter projects by selected client, search term, status and sort alphabetically by client name
-    const filteredProjects = projects.filter(p => {
-        const matchesClient = selectedClient === 'all' || p.client === selectedClient;
-        const matchesSearch = searchTerm === '' || 
-            p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (p.client || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            p.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            p.assignedTo?.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesStatus = filterStatus === 'all' || p.status === filterStatus;
-        return matchesClient && matchesSearch && matchesStatus;
-    }).sort((a, b) => {
-        const aClient = a.client || '';
-        const bClient = b.client || '';
-        return aClient.localeCompare(bClient);
-    });
+    // Filter projects by selected client, search term, status and sort alphabetically by client name - memoized
+    const filteredProjects = useMemo(() => {
+        const lowerSearchTerm = searchTerm.toLowerCase();
+        return projects.filter(p => {
+            const matchesClient = selectedClient === 'all' || p.client === selectedClient;
+            const matchesSearch = searchTerm === '' || 
+                p.name.toLowerCase().includes(lowerSearchTerm) ||
+                (p.client || '').toLowerCase().includes(lowerSearchTerm) ||
+                p.type.toLowerCase().includes(lowerSearchTerm) ||
+                p.assignedTo?.toLowerCase().includes(lowerSearchTerm);
+            const matchesStatus = filterStatus === 'all' || p.status === filterStatus;
+            return matchesClient && matchesSearch && matchesStatus;
+        }).sort((a, b) => {
+            const aClient = a.client || '';
+            const bClient = b.client || '';
+            return aClient.localeCompare(bClient);
+        });
+    }, [projects, selectedClient, searchTerm, filterStatus]);
 
     // Function to render Progress Tracker
     const renderProgressTracker = () => {
@@ -1738,29 +1766,39 @@ const Projects = () => {
             attemptLoad();
         }
         
-        // Continuous polling while viewing project - check every 200ms (more aggressive)
+        // Optimized polling while viewing project - check every 1 second (reduced from 200ms)
+        // Also listen for componentLoaded events to avoid unnecessary polling
+        const handleComponentLoaded = (event) => {
+            if (event.detail?.component === 'ProjectDetail' && window.ProjectDetail) {
+                setProjectDetailAvailable(true);
+                setWaitingForProjectDetail(false);
+            }
+        };
+        window.addEventListener('componentLoaded', handleComponentLoaded);
+        
         const checkInterval = setInterval(() => {
             if (window.ProjectDetail) {
                 if (!projectDetailAvailable) {
                     setProjectDetailAvailable(true);
                     setWaitingForProjectDetail(false);
-                    setViewingProject({ ...viewingProject });
                 }
             } else if (!waitingForProjectDetail) {
-                // Component disappeared? Try loading again
+                // Component disappeared? Try loading again (but less aggressively)
                 console.warn('⚠️ Effect: ProjectDetail disappeared, reloading...');
                 setWaitingForProjectDetail(true);
                 loadProjectDetail().then(loaded => {
                     setWaitingForProjectDetail(false);
                     if (loaded && window.ProjectDetail) {
                         setProjectDetailAvailable(true);
-                        setViewingProject({ ...viewingProject });
                     }
                 });
             }
-        }, 200); // Check every 200ms (more frequent)
+        }, 1000); // Check every 1 second (optimized from 200ms)
         
-        return () => clearInterval(checkInterval);
+        return () => {
+            clearInterval(checkInterval);
+            window.removeEventListener('componentLoaded', handleComponentLoaded);
+        };
     }, [viewingProject, waitingForProjectDetail, projectDetailAvailable]);
 
     // BULLETPROOF: Immediate check when viewingProject changes (runs synchronously before paint)
@@ -1778,8 +1816,8 @@ const Projects = () => {
                 setWaitingForProjectDetail(false);
                 return;
             }
-            if (attempts < 10) {
-                setTimeout(quickCheck, 50); // Check every 50ms for 500ms
+            if (attempts < 5) {
+                setTimeout(quickCheck, 200); // Check every 200ms for 1 second (optimized from 50ms)
             } else {
                 // If still not found, trigger full load
                 setWaitingForProjectDetail(prev => {
@@ -1983,7 +2021,7 @@ const Projects = () => {
                 </div>
                 <div className="flex gap-2">
                     {/* View Toggle */}
-                    <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden shrink-0">
+                    <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden shrink-0" role="group" aria-label="View mode selector">
                         <button
                             onClick={() => setViewMode('grid')}
                             className={`px-3 py-2 text-sm font-medium transition-colors shrink-0 ${
@@ -1992,8 +2030,10 @@ const Projects = () => {
                                     : 'bg-white text-gray-600 hover:bg-gray-50'
                             }`}
                             title="Grid View"
+                            aria-label="Switch to grid view"
+                            aria-pressed={viewMode === 'grid'}
                         >
-                            <i className="fas fa-th"></i>
+                            <i className="fas fa-th" aria-hidden="true"></i>
                         </button>
                         <button
                             onClick={() => setViewMode('list')}
@@ -2003,8 +2043,10 @@ const Projects = () => {
                                     : 'bg-white text-gray-600 hover:bg-gray-50'
                             }`}
                             title="List View"
+                            aria-label="Switch to list view"
+                            aria-pressed={viewMode === 'list'}
                         >
-                            <i className="fas fa-list"></i>
+                            <i className="fas fa-list" aria-hidden="true"></i>
                         </button>
                     </div>
                     <button 
@@ -2015,15 +2057,17 @@ const Projects = () => {
                             }, 100);
                         }}
                         className="px-3 py-1.5 border border-primary-600 text-primary-600 rounded-lg hover:bg-primary-50 transition-colors flex items-center text-sm font-medium"
+                        aria-label="Open progress tracker"
                     >
-                        <i className="fas fa-chart-line mr-1.5 text-xs"></i>
+                        <i className="fas fa-chart-line mr-1.5 text-xs" aria-hidden="true"></i>
                         Progress Tracker
                     </button>
                     <button 
                         onClick={handleAddProject}
                         className="bg-primary-600 text-white px-3 py-1.5 rounded-lg hover:bg-primary-700 transition-colors flex items-center text-sm font-medium"
+                        aria-label="Create new project"
                     >
-                        <i className="fas fa-plus mr-1.5 text-xs"></i>
+                        <i className="fas fa-plus mr-1.5 text-xs" aria-hidden="true"></i>
                         New Project
                     </button>
                 </div>
@@ -2039,12 +2083,14 @@ const Projects = () => {
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            aria-label="Search projects"
                         />
                     </div>
                     <select
                         value={selectedClient}
                         onChange={(e) => setSelectedClient(e.target.value)}
                         className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        aria-label="Filter by client"
                     >
                         <option value="all">All Clients ({projects.length})</option>
                         {uniqueClients.map(client => {
@@ -2060,6 +2106,7 @@ const Projects = () => {
                         value={filterStatus}
                         onChange={(e) => setFilterStatus(e.target.value)}
                         className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        aria-label="Filter by status"
                     >
                         <option value="all">All Statuses</option>
                         <option value="Active">Active</option>
@@ -2210,14 +2257,7 @@ const Projects = () => {
                                             <p className="text-xs text-gray-500">{project.client}</p>
                                         </div>
                                         <div className="flex items-center gap-1.5">
-                                            <span className={`px-2 py-0.5 text-[10px] rounded font-medium ${
-                                                project.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
-                                                project.status === 'Active' ? 'bg-green-100 text-green-700' :
-                                                project.status === 'Completed' ? 'bg-purple-100 text-purple-700' :
-                                                project.status === 'On Hold' ? 'bg-yellow-100 text-yellow-700' :
-                                                project.status === 'Cancelled' ? 'bg-red-100 text-red-700' :
-                                                'bg-gray-100 text-gray-700'
-                                            }`}>
+                                            <span className={`px-2 py-0.5 text-[10px] rounded font-medium ${getStatusColorClasses(project.status)}`}>
                                                 {project.status}
                                             </span>
                                         </div>
@@ -2276,14 +2316,7 @@ const Projects = () => {
                                                     <div className="text-sm text-gray-600">{project.type}</div>
                                                 </td>
                                                 <td className="px-4 py-3 whitespace-nowrap">
-                                                    <span className={`px-2 py-1 text-xs rounded font-medium ${
-                                                        project.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
-                                                        project.status === 'Active' ? 'bg-green-100 text-green-700' :
-                                                        project.status === 'Completed' ? 'bg-purple-100 text-purple-700' :
-                                                        project.status === 'On Hold' ? 'bg-yellow-100 text-yellow-700' :
-                                                        project.status === 'Cancelled' ? 'bg-red-100 text-red-700' :
-                                                        'bg-gray-100 text-gray-700'
-                                                    }`}>
+                                                    <span className={`px-2 py-1 text-xs rounded font-medium ${getStatusColorClasses(project.status)}`}>
                                                         {project.status}
                                                     </span>
                                                 </td>
@@ -2339,6 +2372,43 @@ const Projects = () => {
                         </div>
                     </div>
                 )
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {deleteConfirmation.show && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="delete-confirmation-title">
+                    <div className="bg-white rounded-lg p-4 w-full max-w-md">
+                        <div className="flex items-start mb-4">
+                            <div className="flex-shrink-0">
+                                <i className="fas fa-exclamation-triangle text-2xl text-red-600"></i>
+                            </div>
+                            <div className="ml-3 flex-1">
+                                <h2 id="delete-confirmation-title" className="text-lg font-semibold text-gray-900 mb-2">
+                                    Delete Project
+                                </h2>
+                                <p className="text-sm text-gray-600">
+                                    Are you sure you want to delete this project? This action cannot be undone.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-2 mt-4">
+                            <button
+                                onClick={cancelDeleteProject}
+                                className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                aria-label="Cancel deletion"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmDeleteProject}
+                                className="px-3 py-1.5 text-xs bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                                aria-label="Confirm deletion"
+                            >
+                                Delete Project
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );
