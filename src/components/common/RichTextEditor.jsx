@@ -18,11 +18,13 @@ const RichTextEditor = ({
     const scrollLockRef = useRef(false);
     const savedScrollPositionRef = useRef(0);
     const originalScrollIntoViewRef = useRef(null);
+    const isScrollProtectionSetupRef = useRef(false);
+    const protectionMonitorRef = useRef(null);
+    const hasInitializedRef = useRef(false);
 
     // Function to set up scroll protection on editor
     const setupScrollProtection = useCallback((editor) => {
         if (!editor) {
-            console.warn('🔒 RichTextEditor: setupScrollProtection called with no editor');
             return;
         }
         
@@ -35,6 +37,11 @@ const RichTextEditor = ({
         if (isAlreadyOverridden) {
             // Silently skip if already overridden (no need to log every time)
             return; // Already overridden
+        }
+        
+        // Additional check: if we've already set up protection for this editor instance, skip
+        if (isScrollProtectionSetupRef.current && editorRef.current === editor) {
+            return;
         }
         
         // Only log setup in debug mode (reduce console noise)
@@ -133,6 +140,9 @@ const RichTextEditor = ({
             }
         }
         
+        // Mark as setup complete
+        isScrollProtectionSetupRef.current = true;
+        
         // Also override focus method to prevent scroll
         const originalFocus = editor.focus;
         editor.focus = function(options) {
@@ -179,6 +189,14 @@ const RichTextEditor = ({
         
         const editor = editorRef.current;
         if (!editor) return;
+        
+        // Skip if already initialized (prevent redundant setup on re-renders)
+        if (hasInitializedRef.current && isScrollProtectionSetupRef.current) {
+            return;
+        }
+        
+        // Mark as initialized
+        hasInitializedRef.current = true;
         
         // Set up scrollIntoView override
         setupScrollProtection(editor);
@@ -285,19 +303,24 @@ const RichTextEditor = ({
         }, 5); // Check more frequently
         
         // Re-apply scroll protection if it gets lost (React might recreate elements)
-        const protectionMonitor = setInterval(() => {
-            if (editor && editor.scrollIntoView) {
+        // Only check occasionally and only if protection was actually set up
+        protectionMonitorRef.current = setInterval(() => {
+            if (editor && editor.scrollIntoView && isScrollProtectionSetupRef.current) {
                 const scrollIntoViewString = editor.scrollIntoView.toString();
-                // If override was lost, re-apply it
+                // If override was lost, re-apply it (but only log in debug mode)
                 if (!scrollIntoViewString.includes('savedScrollPositionRef') && scrollIntoViewString.length < 100) {
-                    console.warn('🔒 RichTextEditor: Override lost, re-applying protection', {
-                        scrollIntoViewString: scrollIntoViewString.substring(0, 100),
-                        isNative: scrollIntoViewString.includes('[native code]')
-                    });
+                    if (window.DEBUG_RICHTEXT_EDITOR) {
+                        console.warn('🔒 RichTextEditor: Override lost, re-applying protection', {
+                            scrollIntoViewString: scrollIntoViewString.substring(0, 100),
+                            isNative: scrollIntoViewString.includes('[native code]')
+                        });
+                    }
+                    // Temporarily reset flag to allow re-setup
+                    isScrollProtectionSetupRef.current = false;
                     setupScrollProtection(editor);
                 }
             }
-        }, 100); // Check every 100ms
+        }, 1000); // Check every 1 second instead of 100ms to reduce overhead
         
         return () => {
             // Restore original scrollIntoView - use ref to avoid scope issues
@@ -311,7 +334,6 @@ const RichTextEditor = ({
                 }
             } catch (error) {
                 // Silently fail if editor is no longer available
-                console.warn('Could not restore scrollIntoView:', error);
             }
             editor.removeEventListener('mousedown', handleMouseDown, true);
             editor.removeEventListener('focus', handleFocus, true);
@@ -320,7 +342,13 @@ const RichTextEditor = ({
             window.removeEventListener('wheel', globalScrollLock, { capture: true });
             window.removeEventListener('touchmove', globalScrollLock, { capture: true });
             clearInterval(scrollMonitor);
-            clearInterval(protectionMonitor);
+            if (protectionMonitorRef.current) {
+                clearInterval(protectionMonitorRef.current);
+                protectionMonitorRef.current = null;
+            }
+            // Reset setup flags on cleanup
+            isScrollProtectionSetupRef.current = false;
+            hasInitializedRef.current = false;
         };
     }, [setupScrollProtection]);
 
@@ -340,7 +368,8 @@ const RichTextEditor = ({
         }
         
         // Re-apply scroll protection in case React recreated the element
-        if (editorRef.current) {
+        // Only if protection hasn't been set up yet
+        if (editorRef.current && !isScrollProtectionSetupRef.current) {
             setupScrollProtection(editorRef.current);
         }
     }, [value, setupScrollProtection]);
