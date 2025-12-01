@@ -215,8 +215,14 @@ const ManagementMeetingNotes = () => {
         const preventScrollToTop = (e) => {
             // Check if the event is on a text input/textarea
             const target = e.target;
-            if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || 
-                target.contentEditable === 'true' || target.closest('[contenteditable="true"]'))) {
+            if (!target || typeof target !== 'object') return;
+            
+            // Check if target is a DOM element
+            const isTextInput = target.tagName === 'TEXTAREA' || target.tagName === 'INPUT';
+            const isContentEditable = target.contentEditable === 'true';
+            const hasContentEditableParent = target.closest && typeof target.closest === 'function' && target.closest('[contenteditable="true"]');
+            
+            if (isTextInput || isContentEditable || hasContentEditableParent) {
                 // Save current scroll position IMMEDIATELY
                 savedScrollPosition = window.scrollY || window.pageYOffset;
                 
@@ -262,8 +268,13 @@ const ManagementMeetingNotes = () => {
         // Also prevent on mousedown
         const preventScrollOnMouseDown = (e) => {
             const target = e.target;
-            if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || 
-                target.contentEditable === 'true' || target.closest('[contenteditable="true"]'))) {
+            if (!target || typeof target !== 'object') return;
+            
+            const isTextInput = target.tagName === 'TEXTAREA' || target.tagName === 'INPUT';
+            const isContentEditable = target.contentEditable === 'true';
+            const hasContentEditableParent = target.closest && typeof target.closest === 'function' && target.closest('[contenteditable="true"]');
+            
+            if (isTextInput || isContentEditable || hasContentEditableParent) {
                 savedScrollPosition = window.scrollY || window.pageYOffset;
                 if (savedScrollPosition > 0) {
                     window.scrollTo(0, savedScrollPosition);
