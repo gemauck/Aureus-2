@@ -584,52 +584,6 @@ function initializeProjectDetail() {
         return loadPromise;
     }, [projectModalComponent]);
     
-    // Listen for openTask event (for programmatic task opening) - MUST be after ensure functions
-    useEffect(() => {
-        if (!project?.id || !tasks || tasks.length === 0) return;
-        
-        const handleOpenTask = async (event) => {
-            if (!event.detail || !event.detail.taskId) return;
-            
-            const taskId = event.detail.taskId;
-            const tab = event.detail.tab || 'details';
-            
-            try {
-                // Find the task in the tasks array (including subtasks)
-                let foundTask = tasks.find(t => t.id === taskId || String(t.id) === String(taskId));
-                let foundParent = null;
-                
-                // If not found in main tasks, check subtasks
-                if (!foundTask) {
-                    for (const task of tasks) {
-                        if (task.subtasks && Array.isArray(task.subtasks)) {
-                            const subtask = task.subtasks.find(st => st.id === taskId || String(st.id) === String(taskId));
-                            if (subtask) {
-                                foundTask = subtask;
-                                foundParent = task;
-                                break;
-                            }
-                        }
-                    }
-                }
-                
-                if (foundTask) {
-                    // Ensure task detail modal is loaded
-                    await ensureTaskDetailModalLoaded();
-                    
-                    setViewingTask(foundTask);
-                    setViewingTaskParent(foundParent);
-                    setShowTaskDetailModal(true);
-                }
-            } catch (error) {
-                console.warn('⚠️ ProjectDetail: failed to open task from event:', error);
-            }
-        };
-        
-        window.addEventListener('openTask', handleOpenTask);
-        return () => window.removeEventListener('openTask', handleOpenTask);
-    }, [project?.id, tasks, ensureTaskDetailModalLoaded]);
-    
     // Check if required components are loaded
     const requiredComponents = {
         ListModal: window.ListModal,
@@ -697,6 +651,52 @@ function initializeProjectDetail() {
             }
         }
     }, [project?.id]); // Only depend on project ID, not tasks array (which may be recreated on every render)
+    
+    // Listen for openTask event (for programmatic task opening) - MUST be after tasks state is declared
+    useEffect(() => {
+        if (!project?.id || !tasks || tasks.length === 0) return;
+        
+        const handleOpenTask = async (event) => {
+            if (!event.detail || !event.detail.taskId) return;
+            
+            const taskId = event.detail.taskId;
+            const tab = event.detail.tab || 'details';
+            
+            try {
+                // Find the task in the tasks array (including subtasks)
+                let foundTask = tasks.find(t => t.id === taskId || String(t.id) === String(taskId));
+                let foundParent = null;
+                
+                // If not found in main tasks, check subtasks
+                if (!foundTask) {
+                    for (const task of tasks) {
+                        if (task.subtasks && Array.isArray(task.subtasks)) {
+                            const subtask = task.subtasks.find(st => st.id === taskId || String(st.id) === String(taskId));
+                            if (subtask) {
+                                foundTask = subtask;
+                                foundParent = task;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                if (foundTask) {
+                    // Ensure task detail modal is loaded
+                    await ensureTaskDetailModalLoaded();
+                    
+                    setViewingTask(foundTask);
+                    setViewingTaskParent(foundParent);
+                    setShowTaskDetailModal(true);
+                }
+            } catch (error) {
+                console.warn('⚠️ ProjectDetail: failed to open task from event:', error);
+            }
+        };
+        
+        window.addEventListener('openTask', handleOpenTask);
+        return () => window.removeEventListener('openTask', handleOpenTask);
+    }, [project?.id, tasks, ensureTaskDetailModalLoaded]);
     
     // Memoize the back callback to prevent DocumentCollectionProcessSection from re-rendering
     const handleBackToOverview = useCallback(() => {
