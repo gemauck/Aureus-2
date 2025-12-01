@@ -1264,6 +1264,43 @@ const Projects = () => {
         }
     };
 
+    // Helper function to update client's projectIds - must be defined before handleSaveProject
+    const updateClientProjectIds = useCallback(async (oldClientName, newClientName, projectId) => {
+        try {
+            if (window.dataService && typeof window.dataService.getClients === 'function' && typeof window.dataService.setClients === 'function') {
+                const clients = await window.dataService.getClients() || [];
+                const updatedClients = clients.map(client => {
+                    if (oldClientName && client.name === oldClientName) {
+                        // Remove project from old client
+                        return {
+                            ...client,
+                            projectIds: Array.isArray(client.projectIds) ? client.projectIds.filter(id => id !== projectId) : []
+                        };
+                    }
+                    if (newClientName && client.name === newClientName) {
+                        // Add project to new client
+                        const projectIds = client.projectIds || [];
+                        if (!projectIds.includes(projectId)) {
+                            return {
+                                ...client,
+                                projectIds: [...projectIds, projectId]
+                            };
+                        }
+                    }
+                    return client;
+                });
+                await window.dataService.setClients(updatedClients);
+                
+                // Dispatch event to notify other components
+                window.dispatchEvent(new CustomEvent('clientsUpdated'));
+            } else {
+                console.warn('DataService not available for updating client project IDs');
+            }
+        } catch (error) {
+            console.error('Error updating client project IDs:', error);
+        }
+    }, []);
+
     const handleSaveProject = useCallback(async (projectData) => {
         
         // Validate required fields
@@ -1362,43 +1399,6 @@ const Projects = () => {
             alert('Failed to save project: ' + error.message);
         }
     }, [selectedProject, projects, logout, updateClientProjectIds]);
-
-    // Helper function to update client's projectIds
-    const updateClientProjectIds = useCallback(async (oldClientName, newClientName, projectId) => {
-        try {
-            if (window.dataService && typeof window.dataService.getClients === 'function' && typeof window.dataService.setClients === 'function') {
-                const clients = await window.dataService.getClients() || [];
-                const updatedClients = clients.map(client => {
-                    if (oldClientName && client.name === oldClientName) {
-                        // Remove project from old client
-                        return {
-                            ...client,
-                            projectIds: Array.isArray(client.projectIds) ? client.projectIds.filter(id => id !== projectId) : []
-                        };
-                    }
-                    if (newClientName && client.name === newClientName) {
-                        // Add project to new client
-                        const projectIds = client.projectIds || [];
-                        if (!projectIds.includes(projectId)) {
-                            return {
-                                ...client,
-                                projectIds: [...projectIds, projectId]
-                            };
-                        }
-                    }
-                    return client;
-                });
-                await window.dataService.setClients(updatedClients);
-                
-                // Dispatch event to notify other components
-                window.dispatchEvent(new CustomEvent('clientsUpdated'));
-            } else {
-                console.warn('DataService not available for updating client project IDs');
-            }
-        } catch (error) {
-            console.error('Error updating client project IDs:', error);
-        }
-    }, []);
 
     const handleDeleteProject = useCallback(async (projectId) => {
         // Show confirmation modal instead of browser confirm
