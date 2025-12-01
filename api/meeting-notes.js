@@ -4,6 +4,7 @@ import { prisma } from './_lib/prisma.js'
 import { badRequest, ok, serverError, forbidden } from './_lib/response.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { isConnectionError, logDatabaseError } from './_lib/dbErrorHandler.js'
 
 // Department definitions
 const DEPARTMENTS = [
@@ -159,8 +160,12 @@ async function handler(req, res) {
 
       return ok(res, { monthlyNotes })
     } catch (error) {
+      logDatabaseError(error, 'fetch monthly meeting notes')
+      if (isConnectionError(error)) {
+        return serverError(res, 'Database connection failed', 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+      }
       console.error('Error fetching monthly meeting notes:', error)
-      return serverError(res, 'Failed to fetch meeting notes')
+      return serverError(res, 'Failed to fetch meeting notes', error.message)
     }
   }
 
@@ -259,8 +264,12 @@ async function handler(req, res) {
 
       return ok(res, { monthlyNotes })
     } catch (error) {
-      console.error('Error fetching monthly meeting notes:', error)
-      return serverError(res, 'Failed to fetch meeting notes')
+      logDatabaseError(error, 'fetch monthly meeting notes by monthKey')
+      if (isConnectionError(error)) {
+        return serverError(res, 'Database connection failed', 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+      }
+      console.error('Error fetching monthly meeting notes by monthKey:', error)
+      return serverError(res, 'Failed to fetch meeting notes', error.message)
     }
   }
 

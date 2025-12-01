@@ -683,6 +683,42 @@ app.all('/api/leads', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for meeting-notes operations (GET, POST, PUT, DELETE /api/meeting-notes)
+app.all('/api/meeting-notes', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'meeting-notes.js'))
+    if (!handler) {
+      console.error('❌ Meeting-notes handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') {
+      await result
+    }
+    return result
+  } catch (e) {
+    console.error('❌ Error in meeting-notes handler:', e)
+    console.error('❌ Error stack:', e.stack)
+    console.error('❌ Error details:', {
+      message: e.message,
+      name: e.name,
+      code: e.code,
+      url: req.url,
+      method: req.method,
+      query: req.query,
+      hasBody: !!req.body
+    })
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
 // Explicit mapping for client RSS subscription endpoints (GET, POST /api/clients/[id]/rss-subscription)
 app.all('/api/clients/:id/rss-subscription', async (req, res, next) => {
   try {

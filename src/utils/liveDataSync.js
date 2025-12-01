@@ -332,11 +332,11 @@ class LiveDataSync {
             }
             
             // Check for failures - handle both rejected promises and failed syncData results
-            // Skip results that were skipped due to pause
+            // Skip results that were skipped due to pause or circuit breaker
             const failures = results.filter(result => {
                 if (result.status === 'rejected') return true;
                 // Check if the result itself indicates failure (but not skipped)
-                if (result.status === 'fulfilled' && result.value && !result.value.success && !result.value.skipped) {
+                if (result.status === 'fulfilled' && result.value && !result.value.success && !result.value.skipped && !result.value.circuitBreaker) {
                     return true;
                 }
                 return false;
@@ -529,6 +529,23 @@ class LiveDataSync {
             const getLog = () => window.debug?.log || (() => {});
             const log = getLog();
             const errorMessage = error.message || String(error);
+            
+            // Check if it's a circuit breaker error (endpoint temporarily unavailable)
+            const isCircuitBreakerError = error.circuitBreaker === true || 
+                                         error.code === 'CIRCUIT_BREAKER_OPEN' ||
+                                         (errorMessage.includes('circuit breaker') && errorMessage.includes('open'));
+            
+            // Handle circuit breaker errors by skipping the sync (no error logged)
+            if (isCircuitBreakerError) {
+                log(`⏭️ Skipping ${dataType} sync - circuit breaker open (server unavailable)`);
+                return { 
+                    dataType, 
+                    success: false, 
+                    skipped: true, 
+                    circuitBreaker: true,
+                    remainingSeconds: error.remainingSeconds 
+                };
+            }
             
             // Check if it's a network or database connection error
             const isNetworkError = errorMessage.includes('Failed to fetch') || 

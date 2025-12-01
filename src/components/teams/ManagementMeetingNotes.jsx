@@ -1543,6 +1543,46 @@ const ManagementMeetingNotes = () => {
             setLoading(true);
             console.log('💾 Saving department notes to DB:', { departmentNotesId, fieldsToSave });
             
+            // CRITICAL: Save any unsaved action items for this department before saving department notes
+            // Action items with temp IDs (starting with "temp-") haven't been saved yet
+            const unsavedActionItems = (deptNote.actionItems || []).filter(item => 
+                item.id && typeof item.id === 'string' && item.id.startsWith('temp-')
+            );
+            
+            if (unsavedActionItems.length > 0) {
+                console.log(`💾 Saving ${unsavedActionItems.length} unsaved action items before department save...`);
+                // Save each unsaved action item
+                for (const actionItem of unsavedActionItems) {
+                    try {
+                        // Prepare action item data for saving (remove temp ID)
+                        const actionItemData = {
+                            ...actionItem,
+                            departmentNotesId: departmentNotesId,
+                            monthlyNotesId: currentMonthlyNotes?.id || null,
+                            weeklyNotesId: week.id || null
+                        };
+                        // Remove the temp ID - server will assign a real ID
+                        delete actionItemData.id;
+                        
+                        const response = await window.DatabaseAPI.createActionItem(actionItemData);
+                        const savedActionItem = response?.data?.actionItem || response?.actionItem;
+                        
+                        if (savedActionItem) {
+                            // Track temp ID mapping
+                            if (actionItem.id) {
+                                tempActionItemIds.current[actionItem.id] = savedActionItem.id;
+                            }
+                            // Update local state with real ID
+                            updateActionItemLocal(savedActionItem, false, actionItem.id);
+                            console.log(`✅ Saved action item: ${actionItem.title}`);
+                        }
+                    } catch (error) {
+                        console.error(`❌ Error saving action item "${actionItem.title}":`, error);
+                        // Continue saving other action items even if one fails
+                    }
+                }
+            }
+            
             // Save to database
             const response = await window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, fieldsToSave);
             

@@ -42,6 +42,11 @@ const DatabaseAPI = {
     _last502ErrorLog: 0, // Track last time we logged 502 error summary
     _502ErrorLogInterval: 5000, // Log 502 error summary every 5 seconds
     
+    // Circuit breaker for endpoints with persistent 502 errors
+    _circuitBreaker: new Map(), // Track failing endpoints: endpoint -> { failures: number, lastFailure: timestamp, openUntil: timestamp }
+    _circuitBreakerThreshold: 3, // Open circuit after 3 consecutive failures
+    _circuitBreakerCooldown: 60000, // Keep circuit open for 60 seconds
+    
     // Clear old cache entries periodically
     _cleanCache() {
         const now = Date.now();
@@ -168,6 +173,51 @@ const DatabaseAPI = {
         );
     },
 
+    // Check circuit breaker status for an endpoint
+    _checkCircuitBreaker(endpoint) {
+        const breaker = this._circuitBreaker.get(endpoint);
+        if (!breaker) return { open: false };
+        
+        const now = Date.now();
+        
+        // Check if circuit should be reset (cooldown period passed)
+        if (breaker.openUntil && now >= breaker.openUntil) {
+            this._circuitBreaker.delete(endpoint);
+            return { open: false };
+        }
+        
+        // Circuit is open if failures exceed threshold and still in cooldown
+        if (breaker.failures >= this._circuitBreakerThreshold && breaker.openUntil && now < breaker.openUntil) {
+            const remainingSeconds = Math.ceil((breaker.openUntil - now) / 1000);
+            return { 
+                open: true, 
+                remainingSeconds,
+                failures: breaker.failures
+            };
+        }
+        
+        return { open: false };
+    },
+    
+    // Record a failure in circuit breaker
+    _recordFailure(endpoint) {
+        const breaker = this._circuitBreaker.get(endpoint) || { failures: 0 };
+        breaker.failures += 1;
+        breaker.lastFailure = Date.now();
+        
+        // Open circuit if threshold reached
+        if (breaker.failures >= this._circuitBreakerThreshold) {
+            breaker.openUntil = Date.now() + this._circuitBreakerCooldown;
+        }
+        
+        this._circuitBreaker.set(endpoint, breaker);
+    },
+    
+    // Reset circuit breaker on success
+    _resetCircuitBreaker(endpoint) {
+        this._circuitBreaker.delete(endpoint);
+    },
+
     // Helper function to make authenticated requests with retry logic
     async makeRequest(endpoint, options = {}) {
         // Clean old cache entries periodically
@@ -177,6 +227,17 @@ const DatabaseAPI = {
         const method = (options.method || 'GET').toUpperCase();
         const cacheKey = `${method}:${endpoint}`;
         
+        // Check circuit breaker for this endpoint
+        const circuitStatus = this._checkCircuitBreaker(endpoint);
+        if (circuitStatus.open) {
+            const error = new Error(`Endpoint temporarily unavailable (circuit breaker open). Server is experiencing issues. Will retry in ${circuitStatus.remainingSeconds}s.`);
+            error.status = 502;
+            error.code = 'CIRCUIT_BREAKER_OPEN';
+            error.circuitBreaker = true;
+            error.remainingSeconds = circuitStatus.remainingSeconds;
+            throw error;
+        }
+        
         // Check cache first (only for GET requests)
         if (method === 'GET') {
             const cached = this._responseCache.get(cacheKey);
@@ -185,6 +246,8 @@ const DatabaseAPI = {
                 const ttl = this._endpointCacheTTL[endpoint] || this._cacheTTL;
                 const age = Date.now() - cached.timestamp;
                 if (age < ttl) {
+                    // Reset circuit breaker on successful cache hit
+                    this._resetCircuitBreaker(endpoint);
                     return cached.data;
                 } else {
                     // Remove expired cache entry
@@ -225,9 +288,17 @@ const DatabaseAPI = {
                 });
             }
             
+            // Reset circuit breaker on success
+            this._resetCircuitBreaker(endpoint);
+            
             return result;
         } catch (error) {
             // Don't cache errors
+            // Note: Circuit breaker failures are already recorded in _executeRequest
+            // Only record here for circuit breaker errors thrown before request
+            if (error.circuitBreaker) {
+                // Circuit breaker is already recorded, just rethrow
+            }
             throw error;
         }
     },
@@ -620,9 +691,10 @@ const DatabaseAPI = {
                     // 500 errors are often temporary server issues and should be retried
                     const isRetryableServerError = response.status === 500 || response.status === 502 || response.status === 503 || response.status === 504;
                     
-                    // For 502 errors, use fewer retries (2 instead of 5) to fail faster
+                    // For 502 errors, use fewer retries (1 instead of 5) to fail faster
+                    // 502 errors often indicate server is down, so quick failure is better
                     const is502Error = response.status === 502;
-                    const effectiveMaxRetries = is502Error ? 2 : maxRetries;
+                    const effectiveMaxRetries = is502Error ? 1 : maxRetries;
                     
                     if (isRetryableServerError && attempt < effectiveMaxRetries) {
                         // Use shorter delays for 502 errors (Bad Gateway - often transient)
@@ -685,6 +757,9 @@ const DatabaseAPI = {
                     
                     // Handle 502 Bad Gateway errors
                     if (response.status === 502) {
+                        // Record failure in circuit breaker
+                        this._recordFailure(endpoint);
+                        
                         // Track 502 errors for aggregation
                         const now = Date.now();
                         this._recent502Errors.push({
@@ -697,13 +772,23 @@ const DatabaseAPI = {
                             err => now - err.timestamp < 30000
                         );
                         
+                        // Check circuit breaker status
+                        const circuitStatus = this._checkCircuitBreaker(endpoint);
+                        
                         // Log aggregated summary periodically instead of every error
                         // Only log if we have multiple errors to reduce noise
                         if (now - this._last502ErrorLog > this._502ErrorLogInterval) {
                             const recentCount = this._recent502Errors.length;
                             if (recentCount > 1) { // Only log if more than 1 error
                                 const uniqueEndpoints = [...new Set(this._recent502Errors.map(e => e.endpoint))];
-                                console.warn(`⚠️ Server unavailable (502): ${recentCount} error(s) across ${uniqueEndpoints.length} endpoint(s) in the last 30s. The server may be temporarily down.`);
+                                const circuitBrokenEndpoints = Array.from(this._circuitBreaker.entries())
+                                    .filter(([ep, breaker]) => breaker.failures >= this._circuitBreakerThreshold && breaker.openUntil && Date.now() < breaker.openUntil)
+                                    .map(([ep]) => ep);
+                                if (circuitBrokenEndpoints.length > 0) {
+                                    console.warn(`⚠️ Server unavailable (502): ${recentCount} error(s) across ${uniqueEndpoints.length} endpoint(s). Circuit breaker open for: ${circuitBrokenEndpoints.join(', ')}`);
+                                } else {
+                                    console.warn(`⚠️ Server unavailable (502): ${recentCount} error(s) across ${uniqueEndpoints.length} endpoint(s) in the last 30s. The server may be temporarily down.`);
+                                }
                                 this._last502ErrorLog = now;
                                 // Clear tracked errors after logging
                                 this._recent502Errors = [];
@@ -715,8 +800,15 @@ const DatabaseAPI = {
                         }
                         
                         // Include "502" in the error message so catch block can recognize it
-                        const errorMessage = serverErrorMessage || `Bad Gateway (502): The server is temporarily unavailable. All retry attempts exhausted.`;
-                        throw new Error(`502: ${errorMessage}`);
+                        let errorMessage = serverErrorMessage || `Bad Gateway (502): The server is temporarily unavailable.`;
+                        if (circuitStatus.open) {
+                            errorMessage += ` Circuit breaker open. Will retry in ${circuitStatus.remainingSeconds}s.`;
+                        } else if (attempt >= effectiveMaxRetries) {
+                            errorMessage += ` All retry attempts exhausted.`;
+                        }
+                        const error = new Error(`502: ${errorMessage}`);
+                        error.status = 502;
+                        throw error;
                     }
                     
                     // Handle 503 Service Unavailable errors

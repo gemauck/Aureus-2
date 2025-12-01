@@ -21,13 +21,27 @@ const RichTextEditor = ({
 
     // Function to set up scroll protection on editor
     const setupScrollProtection = useCallback((editor) => {
-        if (!editor) return;
+        if (!editor) {
+            console.warn('🔒 RichTextEditor: setupScrollProtection called with no editor');
+            return;
+        }
         
         // Check if already overridden (to avoid re-overriding)
         const scrollIntoViewString = editor.scrollIntoView.toString();
-        if (scrollIntoViewString.includes('savedScrollPositionRef') || scrollIntoViewString.length > 100) {
+        const isAlreadyOverridden = scrollIntoViewString.includes('savedScrollPositionRef') || 
+                                     scrollIntoViewString.includes('scrollLockRef') ||
+                                     scrollIntoViewString.length > 100;
+        
+        if (isAlreadyOverridden) {
+            console.log('🔒 RichTextEditor: scrollIntoView already overridden, skipping');
             return; // Already overridden
         }
+        
+        console.log('🔒 RichTextEditor: Setting up scroll protection on editor', {
+            scrollIntoViewType: typeof editor.scrollIntoView,
+            scrollIntoViewString: scrollIntoViewString.substring(0, 100),
+            isNative: scrollIntoViewString.includes('[native code]')
+        });
         
         // CRITICAL: Override scrollIntoView to COMPLETELY prevent browser's default scroll behavior
         if (!originalScrollIntoViewRef.current) {
@@ -38,11 +52,18 @@ const RichTextEditor = ({
         savedScrollPositionRef.current = window.scrollY || window.pageYOffset;
         
         // COMPLETE OVERRIDE - Never call the original, just restore scroll
-        editor.scrollIntoView = function(options) {
+        // Use Object.defineProperty to make it harder to override
+        const overrideFunction = function(options) {
             // Save current scroll position
             const currentScroll = window.scrollY || window.pageYOffset;
             savedScrollPositionRef.current = currentScroll;
             scrollLockRef.current = true;
+            
+            console.log('🔒 RichTextEditor: scrollIntoView called, preventing scroll', {
+                currentScroll,
+                savedPosition: savedScrollPositionRef.current,
+                options
+            });
             
             // DO NOT CALL ORIGINAL - just restore scroll immediately
             window.scrollTo(0, savedScrollPositionRef.current);
@@ -78,12 +99,44 @@ const RichTextEditor = ({
             return false;
         };
         
+        // Set the override function - make it writable so React can work with it
+        try {
+            Object.defineProperty(editor, 'scrollIntoView', {
+                value: overrideFunction,
+                writable: true, // Allow React to work with it
+                configurable: true, // Allow reconfiguration if needed
+                enumerable: true
+            });
+        } catch (e) {
+            // Fallback if defineProperty fails (shouldn't happen but be safe)
+            editor.scrollIntoView = overrideFunction;
+        }
+        
+        // Verify the override was applied
+        const verifyOverride = editor.scrollIntoView.toString();
+        if (!verifyOverride.includes('savedScrollPositionRef') && verifyOverride.length < 100) {
+            console.warn('🔒 RichTextEditor: Override verification failed, retrying direct assignment', {
+                verifyOverride: verifyOverride.substring(0, 100)
+            });
+            // Override didn't stick, try direct assignment
+            editor.scrollIntoView = overrideFunction;
+        } else {
+            console.log('✅ RichTextEditor: scrollIntoView override verified successfully');
+        }
+        
         // Also override focus method to prevent scroll
         const originalFocus = editor.focus;
         editor.focus = function(options) {
             // Save scroll before focus
-            savedScrollPositionRef.current = window.scrollY || window.pageYOffset;
+            const scrollBefore = window.scrollY || window.pageYOffset;
+            savedScrollPositionRef.current = scrollBefore;
             scrollLockRef.current = true;
+            
+            console.log('🔒 RichTextEditor: focus called, preventing scroll', {
+                scrollBefore,
+                savedPosition: savedScrollPositionRef.current,
+                options
+            });
             
             // Call original focus but immediately restore scroll
             const result = originalFocus.call(this, options);
@@ -196,6 +249,7 @@ const RichTextEditor = ({
             }
         };
         
+        console.log('🔒 RichTextEditor: Adding event listeners for scroll protection');
         editor.addEventListener('mousedown', handleMouseDown, true);
         editor.addEventListener('focus', handleFocus, true);
         editor.addEventListener('click', handleMouseDown, true);
@@ -214,6 +268,21 @@ const RichTextEditor = ({
                 }
             }
         }, 5); // Check more frequently
+        
+        // Re-apply scroll protection if it gets lost (React might recreate elements)
+        const protectionMonitor = setInterval(() => {
+            if (editor && editor.scrollIntoView) {
+                const scrollIntoViewString = editor.scrollIntoView.toString();
+                // If override was lost, re-apply it
+                if (!scrollIntoViewString.includes('savedScrollPositionRef') && scrollIntoViewString.length < 100) {
+                    console.warn('🔒 RichTextEditor: Override lost, re-applying protection', {
+                        scrollIntoViewString: scrollIntoViewString.substring(0, 100),
+                        isNative: scrollIntoViewString.includes('[native code]')
+                    });
+                    setupScrollProtection(editor);
+                }
+            }
+        }, 100); // Check every 100ms
         
         return () => {
             // Restore original scrollIntoView - use ref to avoid scope issues
@@ -236,6 +305,7 @@ const RichTextEditor = ({
             window.removeEventListener('wheel', globalScrollLock, { capture: true });
             window.removeEventListener('touchmove', globalScrollLock, { capture: true });
             clearInterval(scrollMonitor);
+            clearInterval(protectionMonitor);
         };
     }, [setupScrollProtection]);
 
