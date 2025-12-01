@@ -1831,20 +1831,13 @@ const ManagementMeetingNotes = () => {
             // This ensures the saved data appears on screen right away without any reload
             const monthlyId = currentMonthlyNotes?.id || null;
             
-            // Batch state updates to minimize re-renders
+            // Update local state immediately with saved values (NO PAGE REFRESH)
+            // This ensures the saved data appears on screen right away
             updateDepartmentNotesLocal(departmentNotesId, 'successes', fieldsToSave.successes, monthlyId);
             updateDepartmentNotesLocal(departmentNotesId, 'weekToFollow', fieldsToSave.weekToFollow, monthlyId);
             updateDepartmentNotesLocal(departmentNotesId, 'frustrations', fieldsToSave.frustrations, monthlyId);
             
-            // Show success feedback (non-blocking, no reload)
-            if (typeof window.showNotification === 'function') {
-                window.showNotification('Changes saved successfully', 'success');
-            } else if (typeof alert === 'function') {
-                // Use setTimeout to prevent blocking
-                setTimeout(() => {
-                    alert('Changes saved successfully');
-                }, 0);
-            }
+            // No notifications - save happens silently
             
             // Preserve scroll position - ensure we stay exactly where we are
             // Use requestAnimationFrame to ensure smooth scroll preservation
