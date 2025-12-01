@@ -351,7 +351,7 @@ async function request(path, options = {}) {
         return null; // Silently ignore heartbeat method errors
       }
       
-      throw new Error(errorMessage || `Request failed with status ${res.status}`)
+      throw new Error(errorMessage || `Request failed with status ${res.status}`);
     }
 
     return data
@@ -381,6 +381,7 @@ async function request(path, options = {}) {
     }
     throw error;
   }
+  });
 }
 
 // Initial load coordinator to stagger component mounts
