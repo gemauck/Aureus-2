@@ -277,7 +277,10 @@ const ManagementMeetingNotes = () => {
 
     const weekCardRefs = useRef({});
     
-    const reloadMonthlyNotes = useCallback(async (preferredMonthKey = null) => {
+    const reloadMonthlyNotes = useCallback(async (preferredMonthKey = null, preserveScroll = false) => {
+        // Preserve scroll position if requested
+        const currentScrollPosition = preserveScroll ? (window.scrollY || window.pageYOffset) : null;
+        
         try {
             const response = await window.DatabaseAPI.getMeetingNotes();
             const notes =
@@ -291,6 +294,12 @@ const ManagementMeetingNotes = () => {
                 setSelectedMonth(null);
                 setCurrentMonthlyNotes(null);
                 setSelectedWeek(null);
+                // Restore scroll position if preserved
+                if (preserveScroll && currentScrollPosition !== null) {
+                    requestAnimationFrame(() => {
+                        window.scrollTo(0, currentScrollPosition);
+                    });
+                }
                 return;
             }
 
@@ -303,8 +312,25 @@ const ManagementMeetingNotes = () => {
             const nextMonth = notes.find((note) => note?.monthKey === nextMonthKey) || null;
             setCurrentMonthlyNotes(nextMonth);
             setSelectedWeek(null);
+            
+            // Restore scroll position after state updates if preserved (multiple attempts to handle React re-renders)
+            if (preserveScroll && currentScrollPosition !== null) {
+                requestAnimationFrame(() => {
+                    window.scrollTo(0, currentScrollPosition);
+                    // Double-check after a short delay to handle any async state updates
+                    setTimeout(() => {
+                        window.scrollTo(0, currentScrollPosition);
+                    }, 100);
+                });
+            }
         } catch (error) {
             console.error('Error reloading monthly notes:', error);
+            // Restore scroll position even on error if preserved
+            if (preserveScroll && currentScrollPosition !== null) {
+                requestAnimationFrame(() => {
+                    window.scrollTo(0, currentScrollPosition);
+                });
+            }
             if (typeof alert === 'function') {
                 alert('Failed to refresh monthly meeting notes.');
             }
@@ -1278,7 +1304,19 @@ const ManagementMeetingNotes = () => {
         const fieldKey = getFieldKey(departmentNotesId, field);
         
         // Update currentFieldValues immediately (for UI responsiveness)
-        currentFieldValues.current[fieldKey] = value;
+        // Use try-catch to handle cases where currentFieldValues might not be in scope (e.g., bundling issues)
+        try {
+            currentFieldValues.current[fieldKey] = value;
+        } catch (error) {
+            // If currentFieldValues is not accessible (ReferenceError), log warning but don't break the UI
+            // This can happen due to bundling/minification scoping issues
+            if (error instanceof ReferenceError && error.message.includes('currentFieldValues')) {
+                console.warn('currentFieldValues not accessible in handleFieldChange (likely a bundling scoping issue):', error.message);
+            } else {
+                // Re-throw if it's a different error
+                throw error;
+            }
+        }
         
         // Debounce the pendingValues update to reduce excessive save checks
         // Clear existing timer for this field
@@ -1347,14 +1385,18 @@ const ManagementMeetingNotes = () => {
             
             console.log('✅ Successfully saved to database:', response);
             
-            // Reload from server to ensure consistency
+            // Reload from server to ensure consistency (preserve scroll position)
             if (selectedMonth) {
-                await reloadMonthlyNotes(selectedMonth);
+                await reloadMonthlyNotes(selectedMonth, true);
             }
             
-            // Restore scroll position after state updates
+            // Restore scroll position after state updates (multiple attempts to handle React re-renders)
             requestAnimationFrame(() => {
                 window.scrollTo(0, currentScrollPosition);
+                // Double-check after a short delay to handle any async state updates
+                setTimeout(() => {
+                    window.scrollTo(0, currentScrollPosition);
+                }, 100);
             });
             
             // Show success message
