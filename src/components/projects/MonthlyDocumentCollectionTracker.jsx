@@ -885,13 +885,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         setEditingSection(null);
     };
     
-    const handleDeleteSection = (sectionId) => {
+    const handleDeleteSection = (sectionId, event) => {
+        // Prevent event propagation to avoid interfering with other handlers
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        
         // Normalize IDs to strings for comparison
         const normalizedSectionId = String(sectionId);
-        const section = sections.find(s => String(s.id) === normalizedSectionId);
+        
+        // Use sectionsByYear directly to get the most up-to-date state
+        const currentSections = sectionsByYear[selectedYear] || [];
+        const section = currentSections.find(s => String(s.id) === normalizedSectionId);
         
         if (!section) {
-            console.error('❌ Section not found for deletion. ID:', sectionId, 'Available sections:', sections.map(s => ({ id: s.id, name: s.name })));
+            console.error('❌ Section not found for deletion. ID:', sectionId, 'Available sections:', currentSections.map(s => ({ id: s.id, name: s.name })));
             alert(`Error: Section not found. Cannot delete.`);
             return;
         }
@@ -900,9 +909,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return;
         }
         
-        setSections(prev => {
-            const filtered = prev.filter(s => String(s.id) !== normalizedSectionId);
-            return filtered;
+        // Use functional update with sectionsByYear to ensure we have the latest state
+        setSectionsByYear(prev => {
+            const yearSections = prev[selectedYear] || [];
+            const filtered = yearSections.filter(s => String(s.id) !== normalizedSectionId);
+            return {
+                ...prev,
+                [selectedYear]: filtered
+            };
         });
     };
     
@@ -966,14 +980,23 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         setEditingSectionId(null);
     };
     
-    const handleDeleteDocument = (sectionId, documentId) => {
+    const handleDeleteDocument = (sectionId, documentId, event) => {
+        // Prevent event propagation to avoid interfering with other handlers
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        
         // Normalize IDs to strings for comparison
         const normalizedSectionId = String(sectionId);
         const normalizedDocumentId = String(documentId);
         
-        const section = sections.find(s => String(s.id) === normalizedSectionId);
+        // Use sectionsByYear directly to get the most up-to-date state
+        const currentSections = sectionsByYear[selectedYear] || [];
+        const section = currentSections.find(s => String(s.id) === normalizedSectionId);
+        
         if (!section) {
-            console.error('❌ Section not found for document deletion. Section ID:', sectionId);
+            console.error('❌ Section not found for document deletion. Section ID:', sectionId, 'Available sections:', currentSections.map(s => ({ id: s.id, name: s.name })));
             alert(`Error: Section not found. Cannot delete document.`);
             return;
         }
@@ -989,16 +1012,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return;
         }
         
-        setSections(prev => prev.map(section => {
-            if (String(section.id) === normalizedSectionId) {
-                const filteredDocuments = section.documents.filter(doc => String(doc.id) !== normalizedDocumentId);
-                return {
-                    ...section,
-                    documents: filteredDocuments
-                };
-            }
-            return section;
-        }));
+        // Use functional update with sectionsByYear to ensure we have the latest state
+        setSectionsByYear(prev => {
+            const yearSections = prev[selectedYear] || [];
+            const updatedSections = yearSections.map(section => {
+                if (String(section.id) === normalizedSectionId) {
+                    const filteredDocuments = section.documents.filter(doc => String(doc.id) !== normalizedDocumentId);
+                    return {
+                        ...section,
+                        documents: filteredDocuments
+                    };
+                }
+                return section;
+            });
+            
+            return {
+                ...prev,
+                [selectedYear]: updatedSections
+            };
+        });
     };
     
     // ============================================================
@@ -2312,8 +2344,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         <i className="fas fa-edit text-xs"></i>
                                     </button>
                                     <button
-                                        onClick={() => handleDeleteSection(section.id)}
+                                        onClick={(e) => handleDeleteSection(section.id, e)}
                                         className="text-gray-600 hover:text-red-600 p-1"
+                                        type="button"
                                     >
                                         <i className="fas fa-trash text-xs"></i>
                                     </button>
@@ -2389,8 +2422,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                                 <i className="fas fa-edit text-xs"></i>
                                                             </button>
                                                             <button
-                                                                onClick={() => handleDeleteDocument(section.id, document.id)}
+                                                                onClick={(e) => handleDeleteDocument(section.id, document.id, e)}
                                                                 className="text-gray-600 hover:text-red-600 p-1"
+                                                                type="button"
                                                             >
                                                                 <i className="fas fa-trash text-xs"></i>
                                                             </button>
