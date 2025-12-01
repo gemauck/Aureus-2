@@ -322,11 +322,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         // Don't refresh if a save is in progress to avoid race conditions
         if (isSavingRef.current && !forceUpdate) {
+            console.log('⏸️ Refresh skipped: save in progress');
             return;
         }
         
         // Don't refresh if a delete operation just happened (give it time to save)
+        // This is critical to prevent the deletion from being overwritten by stale data
         if (isDeletingRef.current && !forceUpdate) {
+            console.log('⏸️ Refresh skipped: deletion in progress');
             return;
         }
         
@@ -360,16 +363,29 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             // Check if we have unsaved local changes
             const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
             
+            // Double-check deletion flag before updating (defensive programming)
+            // This prevents race conditions where the flag might be checked but then cleared
+            // between the check and the state update
+            if (isDeletingRef.current && !forceUpdate) {
+                console.log('⏸️ Refresh aborted: deletion flag detected during update');
+                return;
+            }
+            
             if (freshSnapshot !== currentSnapshot) {
                 // Update if:
                 // 1. No unsaved local changes (safe to update), OR
                 // 2. Database matches what we last saved (database hasn't changed, safe to update), OR
                 // 3. Force update requested
                 if (!hasUnsavedChanges || freshSnapshot === lastSavedSnapshotRef.current || forceUpdate) {
-                    setSectionsByYear(normalized);
-                    // Update snapshot reference to match database state
-                    if (freshSnapshot === lastSavedSnapshotRef.current || !hasUnsavedChanges) {
-                        lastSavedSnapshotRef.current = freshSnapshot;
+                    // Final check before updating state
+                    if (!isDeletingRef.current || forceUpdate) {
+                        setSectionsByYear(normalized);
+                        // Update snapshot reference to match database state
+                        if (freshSnapshot === lastSavedSnapshotRef.current || !hasUnsavedChanges) {
+                            lastSavedSnapshotRef.current = freshSnapshot;
+                        }
+                    } else {
+                        console.log('⏸️ State update skipped: deletion in progress');
                     }
                 } else {
                 }
@@ -916,7 +932,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
         
         // Set deleting flag to prevent refresh from overwriting
+        // Use a longer timeout (10 seconds) to ensure polling doesn't interfere
+        // Polling happens every 5 seconds, so 10 seconds gives us 2 polling cycles
         isDeletingRef.current = true;
+        
+        // Capture the current snapshot before deletion for comparison
+        const snapshotBeforeDeletion = serializeSections(sectionsRef.current);
         
         // Use functional update with sectionsByYear to ensure we have the latest state
         // Also update sectionsRef immediately to prevent race conditions with auto-save
@@ -945,8 +966,29 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         // Save immediately with the updated sections
         try {
+            // Wait for save to complete and verify it succeeded
             await saveToDatabase({ skipParentUpdate: false });
+            
+            // Verify the save by checking if lastSavedSnapshotRef was updated
+            const snapshotAfterSave = serializeSections(sectionsRef.current);
+            const savedSnapshot = lastSavedSnapshotRef.current;
+            
+            if (savedSnapshot !== snapshotAfterSave) {
+                // Save might not have completed properly, wait a bit and retry
+                console.warn('⚠️ Save snapshot mismatch, waiting and retrying...');
+                await new Promise(resolve => setTimeout(resolve, 500));
+                await saveToDatabase({ skipParentUpdate: false });
+            }
+            
             console.log('✅ Section deletion saved successfully');
+            
+            // Clear the deleting flag after a longer delay to ensure polling doesn't interfere
+            // Use 10 seconds (2 polling cycles) to ensure the save is fully persisted and propagated
+            setTimeout(() => {
+                isDeletingRef.current = false;
+                console.log('✅ Deletion flag cleared, polling can resume');
+            }, 10000);
+            
         } catch (error) {
             console.error('❌ Error saving section deletion:', error);
             // Revert the deletion if save failed
@@ -961,16 +1003,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
                 return prev;
             });
+            // Also revert the ref
+            sectionsRef.current = JSON.parse(snapshotBeforeDeletion);
             alert('Failed to delete section. Please try again.');
             isDeletingRef.current = false;
             return;
         }
-        
-        // Clear the deleting flag after a longer delay to ensure polling doesn't interfere
-        // Give it 5 seconds to ensure the save is fully persisted
-        setTimeout(() => {
-            isDeletingRef.current = false;
-        }, 5000);
     };
     
     // ============================================================
