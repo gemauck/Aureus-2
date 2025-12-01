@@ -1586,12 +1586,107 @@ const ManagementMeetingNotes = () => {
             return;
         }
         
-        // Get field values directly from React state (updated by handleFieldChange)
-        const fieldsToSave = {
-            successes: deptNote.successes || '',
-            weekToFollow: deptNote.weekToFollow || '',
-            frustrations: deptNote.frustrations || ''
+        // CRITICAL: Get field values directly from DOM (RichTextEditor contentEditable divs)
+        // This ensures we capture the latest content even if React state hasn't updated yet
+        // Strategy: Find the Save button that was clicked, traverse up to find department section,
+        // then find all contentEditable divs in order (successes, weekToFollow, frustrations)
+        
+        // Get the event target (Save button) - we'll use a closure to capture it
+        let saveButtonElement = null;
+        try {
+            // Try to get the active element (the button that was just clicked)
+            saveButtonElement = document.activeElement;
+            // If that doesn't work, find all Save buttons and match by departmentNotesId
+            if (!saveButtonElement || !saveButtonElement.textContent?.includes('Save Department')) {
+                const allSaveButtons = Array.from(document.querySelectorAll('button')).filter(btn => 
+                    btn.textContent?.includes('Save Department')
+                );
+                // We'll find the right one by context below
+                saveButtonElement = allSaveButtons[0] || null;
+            }
+        } catch (e) {
+            console.warn('Could not find save button element:', e);
+        }
+        
+        const getCurrentFieldValue = (fieldName) => {
+            // Try textarea fallback first (has data attributes)
+            const textarea = document.querySelector(`textarea[data-dept-note-id="${departmentNotesId}"][data-field="${fieldName}"]`);
+            if (textarea && textarea.value !== undefined) {
+                return textarea.value;
+            }
+            
+            // Find department section: traverse up from Save button or search by department note ID
+            let departmentSection = null;
+            
+            if (saveButtonElement) {
+                // Traverse up to find the department container
+                let current = saveButtonElement.parentElement;
+                let depth = 0;
+                while (current && depth < 10) {
+                    // Look for contentEditable divs - if we find them, we're in the right section
+                    if (current.querySelectorAll('[contenteditable="true"]').length >= 3) {
+                        departmentSection = current;
+                        break;
+                    }
+                    current = current.parentElement;
+                    depth++;
+                }
+            }
+            
+            // If not found, search by finding elements with the field labels
+            if (!departmentSection) {
+                const fieldLabel = fieldName === 'successes' ? "Last Week's Successes" :
+                                  fieldName === 'weekToFollow' ? 'Weekly Plan' :
+                                  fieldName === 'frustrations' ? 'Frustrations/Challenges' : '';
+                
+                const labels = Array.from(document.querySelectorAll('*')).filter(el => {
+                    const text = el.textContent || '';
+                    return text.trim() === fieldLabel;
+                });
+                
+                if (labels.length > 0) {
+                    const label = labels.find(l => {
+                        // Find the one that's in a section with our department note
+                        const section = l.closest('[class*="rounded"]');
+                        return section && section.querySelector('[contenteditable="true"]');
+                    });
+                    
+                    if (label) {
+                        departmentSection = label.closest('[class*="rounded"]') || label.parentElement?.parentElement;
+                    }
+                }
+            }
+            
+            if (departmentSection) {
+                // Find all contentEditable divs in this section
+                const editors = Array.from(departmentSection.querySelectorAll('[contenteditable="true"]'));
+                
+                // Match by field order: successes (0), weekToFollow (1), frustrations (2)
+                const fieldIndex = fieldName === 'successes' ? 0 : 
+                                  fieldName === 'weekToFollow' ? 1 : 
+                                  fieldName === 'frustrations' ? 2 : -1;
+                
+                if (fieldIndex >= 0 && editors[fieldIndex] && editors[fieldIndex].innerHTML !== undefined) {
+                    return editors[fieldIndex].innerHTML;
+                }
+            }
+            
+            // Final fallback: Use React state
+            return deptNote[fieldName] || '';
         };
+        
+        // Get current values from DOM (most up-to-date)
+        const fieldsToSave = {
+            successes: getCurrentFieldValue('successes'),
+            weekToFollow: getCurrentFieldValue('weekToFollow'),
+            frustrations: getCurrentFieldValue('frustrations')
+        };
+        
+        console.log('💾 Captured field values from DOM:', { 
+            departmentNotesId, 
+            fieldsToSave,
+            fromDOM: 'successes' in fieldsToSave && fieldsToSave.successes !== (deptNote.successes || '')
+        });
         
         try {
             setLoading(true);
