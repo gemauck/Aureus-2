@@ -15,12 +15,43 @@ const RichTextEditor = ({
     const editorRef = useRef(null);
     const [html, setHtml] = useState(value || '');
     const isInternalUpdateRef = useRef(false);
+    const scrollLockRef = useRef(false);
+    const savedScrollPositionRef = useRef(0);
 
     // Initialize editor content on mount
     useEffect(() => {
         if (editorRef.current && !editorRef.current.innerHTML && value) {
             editorRef.current.innerHTML = value;
             setHtml(value);
+        }
+        
+        // Override focus behavior to prevent scroll
+        if (editorRef.current) {
+            const originalFocus = editorRef.current.focus.bind(editorRef.current);
+            editorRef.current.focus = function(options) {
+                savedScrollPositionRef.current = window.scrollY || window.pageYOffset;
+                scrollLockRef.current = true;
+                
+                // Call original focus
+                originalFocus(options);
+                
+                // Immediately restore scroll
+                window.scrollTo(0, savedScrollPositionRef.current);
+                
+                // Keep restoring for a short period
+                const restoreInterval = setInterval(() => {
+                    if (scrollLockRef.current) {
+                        window.scrollTo(0, savedScrollPositionRef.current);
+                    } else {
+                        clearInterval(restoreInterval);
+                    }
+                }, 10);
+                
+                setTimeout(() => {
+                    scrollLockRef.current = false;
+                    clearInterval(restoreInterval);
+                }, 500);
+            };
         }
     }, []);
 
@@ -156,31 +187,31 @@ const RichTextEditor = ({
                 onInput={handleInput}
                 onFocus={(e) => {
                     // Aggressively preserve scroll position when focusing RichTextEditor
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const currentScroll = window.scrollY || window.pageYOffset;
+                    savedScrollPositionRef.current = window.scrollY || window.pageYOffset;
+                    scrollLockRef.current = true;
                     
                     // Immediate restoration
-                    window.scrollTo(0, currentScroll);
+                    window.scrollTo(0, savedScrollPositionRef.current);
                     
                     // Use multiple restoration attempts with more delays
                     requestAnimationFrame(() => {
-                        window.scrollTo(0, currentScroll);
+                        window.scrollTo(0, savedScrollPositionRef.current);
                     });
                     setTimeout(() => {
-                        window.scrollTo(0, currentScroll);
+                        window.scrollTo(0, savedScrollPositionRef.current);
                     }, 0);
                     setTimeout(() => {
-                        window.scrollTo(0, currentScroll);
+                        window.scrollTo(0, savedScrollPositionRef.current);
                     }, 10);
                     setTimeout(() => {
-                        window.scrollTo(0, currentScroll);
+                        window.scrollTo(0, savedScrollPositionRef.current);
                     }, 50);
                     setTimeout(() => {
-                        window.scrollTo(0, currentScroll);
+                        window.scrollTo(0, savedScrollPositionRef.current);
                     }, 100);
                     setTimeout(() => {
-                        window.scrollTo(0, currentScroll);
+                        window.scrollTo(0, savedScrollPositionRef.current);
+                        scrollLockRef.current = false;
                     }, 200);
                 }}
                 onClick={(e) => {
@@ -201,9 +232,10 @@ const RichTextEditor = ({
                     }, 50);
                 }}
                 onMouseDown={(e) => {
-                    // Prevent scroll on mousedown as well
-                    const currentScroll = window.scrollY || window.pageYOffset;
-                    window.scrollTo(0, currentScroll);
+                    // Prevent scroll on mousedown as well - save position before focus
+                    savedScrollPositionRef.current = window.scrollY || window.pageYOffset;
+                    scrollLockRef.current = true;
+                    window.scrollTo(0, savedScrollPositionRef.current);
                 }}
                 onBlur={(e) => {
                     if (onBlur && editorRef.current) {
