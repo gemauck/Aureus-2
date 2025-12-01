@@ -1874,17 +1874,15 @@ const ManagementMeetingNotes = () => {
             // Restore scroll position even on error
             if (currentScrollPosition > 0) {
                 window.scrollTo(0, currentScrollPosition);
-            requestAnimationFrame(() => {
-                window.scrollTo(0, currentScrollPosition);
-            });
+                requestAnimationFrame(() => {
+                    window.scrollTo(0, currentScrollPosition);
+                });
                 setTimeout(() => {
                     window.scrollTo(0, currentScrollPosition);
                 }, 0);
             }
             
-            // Error logged silently - no popup messages else {
-                console.error('Failed to save:', errorMessage);
-            }
+            // Error logged silently - no popup messages
         } finally {
             setLoading(false);
         }
