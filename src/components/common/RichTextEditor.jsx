@@ -28,6 +28,47 @@ const RichTextEditor = ({
         const editor = editorRef.current;
         if (!editor) return;
         
+        // CRITICAL: Override scrollIntoView to prevent browser's default scroll behavior
+        const originalScrollIntoView = editor.scrollIntoView.bind(editor);
+        editor.scrollIntoView = function(options) {
+            // Save current scroll position before any scroll happens
+            savedScrollPositionRef.current = window.scrollY || window.pageYOffset;
+            scrollLockRef.current = true;
+            
+            // Use 'nearest' to prevent scrolling if possible, or preventScroll if supported
+            if (options && typeof options === 'object') {
+                options.block = 'nearest';
+                options.inline = 'nearest';
+            } else {
+                options = { block: 'nearest', inline: 'nearest' };
+            }
+            
+            // Call original but with preventScroll option if available
+            try {
+                originalScrollIntoView({ ...options, preventScroll: true });
+            } catch (e) {
+                // Fallback if preventScroll not supported
+                originalScrollIntoView(options);
+            }
+            
+            // Immediately restore scroll
+            window.scrollTo(0, savedScrollPositionRef.current);
+            
+            // Keep restoring for a period
+            const restoreInterval = setInterval(() => {
+                if (scrollLockRef.current) {
+                    window.scrollTo(0, savedScrollPositionRef.current);
+                } else {
+                    clearInterval(restoreInterval);
+                }
+            }, 10);
+            
+            setTimeout(() => {
+                scrollLockRef.current = false;
+                clearInterval(restoreInterval);
+            }, 500);
+        };
+        
         // Save scroll position before any focus/click events
         const saveScroll = () => {
             savedScrollPositionRef.current = window.scrollY || window.pageYOffset;
@@ -65,12 +106,15 @@ const RichTextEditor = ({
         
         // Global scroll interceptor - restore if scroll jumps to 0 unexpectedly
         let lastKnownScroll = window.scrollY || window.pageYOffset;
-        const scrollInterceptor = () => {
+        const scrollInterceptor = (e) => {
             const currentScroll = window.scrollY || window.pageYOffset;
             
             // If scroll jumped to 0 and we have a saved position, restore it
             if (currentScroll === 0 && savedScrollPositionRef.current > 100 && scrollLockRef.current) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
                 window.scrollTo(0, savedScrollPositionRef.current);
+                return false;
             } else {
                 lastKnownScroll = currentScroll;
             }
@@ -79,7 +123,7 @@ const RichTextEditor = ({
         editor.addEventListener('mousedown', handleMouseDown, true);
         editor.addEventListener('focus', handleFocus, true);
         editor.addEventListener('click', handleMouseDown, true);
-        window.addEventListener('scroll', scrollInterceptor, { passive: false });
+        window.addEventListener('scroll', scrollInterceptor, { passive: false, capture: true });
         
         // Continuous scroll monitor while locked
         const scrollMonitor = setInterval(() => {
@@ -92,10 +136,14 @@ const RichTextEditor = ({
         }, 10);
         
         return () => {
+            // Restore original scrollIntoView
+            if (editor.scrollIntoView && editor.scrollIntoView !== originalScrollIntoView) {
+                editor.scrollIntoView = originalScrollIntoView;
+            }
             editor.removeEventListener('mousedown', handleMouseDown, true);
             editor.removeEventListener('focus', handleFocus, true);
             editor.removeEventListener('click', handleMouseDown, true);
-            window.removeEventListener('scroll', scrollInterceptor);
+            window.removeEventListener('scroll', scrollInterceptor, { capture: true });
             clearInterval(scrollMonitor);
         };
     }, []);
