@@ -175,7 +175,9 @@ const LeadDetailModal = ({
             billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {}),
             proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []),
             sites: typeof lead.sites === 'string' ? JSON.parse(lead.sites || '[]') : (lead.sites || []),
-            thumbnail: lead.thumbnail || ''
+            thumbnail: lead.thumbnail || '',
+            // Extract externalAgentId from externalAgent object if it exists
+            externalAgentId: lead.externalAgentId || (lead.externalAgent?.id || null)
         } : defaultFormData;
         
         return parsedLead;
