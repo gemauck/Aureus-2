@@ -18,15 +18,15 @@ const RichTextEditor = ({
     const scrollLockRef = useRef(false);
     const savedScrollPositionRef = useRef(0);
 
-    // Initialize editor content on mount and set up scroll protection
-    useEffect(() => {
-        if (editorRef.current && !editorRef.current.innerHTML && value) {
-            editorRef.current.innerHTML = value;
-            setHtml(value);
-        }
-        
-        const editor = editorRef.current;
+    // Function to set up scroll protection on editor
+    const setupScrollProtection = useCallback((editor) => {
         if (!editor) return;
+        
+        // Check if already overridden (to avoid re-overriding)
+        const scrollIntoViewString = editor.scrollIntoView.toString();
+        if (scrollIntoViewString.includes('savedScrollPositionRef') || scrollIntoViewString.length > 100) {
+            return; // Already overridden
+        }
         
         // CRITICAL: Override scrollIntoView to prevent browser's default scroll behavior
         const originalScrollIntoView = editor.scrollIntoView.bind(editor);
@@ -68,6 +68,20 @@ const RichTextEditor = ({
                 clearInterval(restoreInterval);
             }, 500);
         };
+    }, []);
+    
+    // Initialize editor content on mount and set up scroll protection
+    useEffect(() => {
+        if (editorRef.current && !editorRef.current.innerHTML && value) {
+            editorRef.current.innerHTML = value;
+            setHtml(value);
+        }
+        
+        const editor = editorRef.current;
+        if (!editor) return;
+        
+        // Set up scrollIntoView override
+        setupScrollProtection(editor);
         
         // Save scroll position before any focus/click events
         const saveScroll = () => {
@@ -148,7 +162,7 @@ const RichTextEditor = ({
         };
     }, []);
 
-    // Update editor when value prop changes (external updates)
+        // Update editor when value prop changes (external updates)
     useEffect(() => {
         if (isInternalUpdateRef.current) {
             isInternalUpdateRef.current = false;
@@ -162,7 +176,12 @@ const RichTextEditor = ({
                 editorRef.current.innerHTML = value || '';
             }
         }
-    }, [value]);
+        
+        // Re-apply scroll protection in case React recreated the element
+        if (editorRef.current) {
+            setupScrollProtection(editorRef.current);
+        }
+    }, [value, setupScrollProtection]);
 
     const handleInput = () => {
         if (!editorRef.current) return;
