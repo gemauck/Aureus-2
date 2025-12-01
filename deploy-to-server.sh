@@ -169,11 +169,6 @@ fi
 echo ""
 echo "🔄 Restarting application..."
 if command -v pm2 &> /dev/null; then
-    # Kill PM2 completely to ensure fresh start
-    pm2 delete all 2>/dev/null || true
-    pm2 kill 2>/dev/null || true
-    sleep 2
-    
     # Source environment to ensure DATABASE_URL is loaded
     set -a
     [ -f /etc/environment ] && source /etc/environment
@@ -198,7 +193,7 @@ if command -v pm2 &> /dev/null; then
     
     # Start PM2 with explicit environment including cache-busting vars
     cd /var/www/abcotronics-erp
-    pm2 start server.js --name abcotronics-erp --update-env --env production
+    pm2 restart abcotronics-erp --update-env || pm2 start server.js --name abcotronics-erp --update-env --env production
     echo "✅ Application restarted with PM2 (environment variables updated)"
     pm2 save || true
 elif command -v systemctl &> /dev/null; then

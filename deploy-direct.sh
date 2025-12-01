@@ -141,19 +141,14 @@ npx prisma generate || echo "⚠️  Prisma generate skipped"
 
 echo ""
 echo "🔄 Restarting application with updated environment..."
-# Kill PM2 completely to ensure fresh start
-pm2 delete all 2>/dev/null || true
-pm2 kill 2>/dev/null || true
-sleep 2
-
 # Source environment to ensure DATABASE_URL is loaded
 set -a
 [ -f /etc/environment ] && source /etc/environment
 set +a
 
-# Start PM2 with explicit environment
+# Use pm2 restart which is safer than delete/start
 cd /var/www/abcotronics-erp
-pm2 start server.js --name abcotronics-erp --update-env
+pm2 restart abcotronics-erp --update-env || pm2 start server.js --name abcotronics-erp --update-env
 
 echo ""
 echo "✅ Deployment complete!"

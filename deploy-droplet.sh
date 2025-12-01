@@ -119,14 +119,12 @@ if command -v pm2 &> /dev/null; then
     rm -rf node_modules/.prisma 2>/dev/null || true
     npx prisma generate || echo "⚠️  Prisma generate skipped"
     
-    pm2 delete all 2>/dev/null || true
-    pm2 kill 2>/dev/null || true
-    sleep 2
+    # Use pm2 restart which is safer than delete/start
     set -a
     [ -f /etc/environment ] && source /etc/environment
     set +a
     cd /var/www/abcotronics-erp
-    pm2 start server.js --name abcotronics-erp --update-env
+    pm2 restart abcotronics-erp --update-env || pm2 start server.js --name abcotronics-erp --update-env
     pm2 save
     echo "   ✅ Application restarted with PM2"
 # Try systemctl

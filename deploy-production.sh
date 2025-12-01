@@ -159,7 +159,8 @@ if [ ! -f .env ]; then
 NODE_ENV=production
 PORT=3000
 DATABASE_URL="${DATABASE_URL}"
-JWT_SECRET=0266f788ee2255e2aa973f0984903fb61f3fb1d9f528b315c9dbd0bf53fe5ea8
+# JWT_SECRET should be set via environment variable, not hardcoded
+# JWT_SECRET="${JWT_SECRET:-0266f788ee2255e2aa973f0984903fb61f3fb1d9f528b315c9dbd0bf53fe5ea8}"
 APP_URL=https://abcoafrica.co.za
 ENVEOF
     echo "✅ .env file created"
@@ -238,14 +239,12 @@ npx prisma generate || echo "⚠️  Prisma generate skipped"
 
 echo ""
 echo "🔄 Restarting application..."
-pm2 delete all 2>/dev/null || true
-pm2 kill 2>/dev/null || true
-sleep 2
+# Use pm2 restart which is safer than delete/start
 set -a
 [ -f /etc/environment ] && source /etc/environment
 set +a
 cd /var/www/abcotronics-erp
-pm2 start server.js --name abcotronics-erp --update-env
+pm2 restart abcotronics-erp --update-env || pm2 start server.js --name abcotronics-erp --update-env
 
 echo ""
 echo "✅ Deployment complete!"
