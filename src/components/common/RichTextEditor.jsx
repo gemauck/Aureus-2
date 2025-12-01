@@ -33,15 +33,18 @@ const RichTextEditor = ({
                                      scrollIntoViewString.length > 100;
         
         if (isAlreadyOverridden) {
-            console.log('🔒 RichTextEditor: scrollIntoView already overridden, skipping');
+            // Silently skip if already overridden (no need to log every time)
             return; // Already overridden
         }
         
-        console.log('🔒 RichTextEditor: Setting up scroll protection on editor', {
-            scrollIntoViewType: typeof editor.scrollIntoView,
-            scrollIntoViewString: scrollIntoViewString.substring(0, 100),
-            isNative: scrollIntoViewString.includes('[native code]')
-        });
+        // Only log setup in debug mode (reduce console noise)
+        if (window.DEBUG_RICHTEXT_EDITOR) {
+            console.log('🔒 RichTextEditor: Setting up scroll protection on editor', {
+                scrollIntoViewType: typeof editor.scrollIntoView,
+                scrollIntoViewString: scrollIntoViewString.substring(0, 100),
+                isNative: scrollIntoViewString.includes('[native code]')
+            });
+        }
         
         // CRITICAL: Override scrollIntoView to COMPLETELY prevent browser's default scroll behavior
         if (!originalScrollIntoViewRef.current) {
@@ -59,11 +62,14 @@ const RichTextEditor = ({
             savedScrollPositionRef.current = currentScroll;
             scrollLockRef.current = true;
             
-            console.log('🔒 RichTextEditor: scrollIntoView called, preventing scroll', {
-                currentScroll,
-                savedPosition: savedScrollPositionRef.current,
-                options
-            });
+            // Only log in debug mode (reduce console noise)
+            if (window.DEBUG_RICHTEXT_EDITOR) {
+                console.log('🔒 RichTextEditor: scrollIntoView called, preventing scroll', {
+                    currentScroll,
+                    savedPosition: savedScrollPositionRef.current,
+                    options
+                });
+            }
             
             // DO NOT CALL ORIGINAL - just restore scroll immediately
             window.scrollTo(0, savedScrollPositionRef.current);
@@ -121,7 +127,10 @@ const RichTextEditor = ({
             // Override didn't stick, try direct assignment
             editor.scrollIntoView = overrideFunction;
         } else {
-            console.log('✅ RichTextEditor: scrollIntoView override verified successfully');
+            // Only log verification in debug mode (reduce console noise)
+            if (window.DEBUG_RICHTEXT_EDITOR) {
+                console.log('✅ RichTextEditor: scrollIntoView override verified successfully');
+            }
         }
         
         // Also override focus method to prevent scroll
@@ -132,11 +141,14 @@ const RichTextEditor = ({
             savedScrollPositionRef.current = scrollBefore;
             scrollLockRef.current = true;
             
-            console.log('🔒 RichTextEditor: focus called, preventing scroll', {
-                scrollBefore,
-                savedPosition: savedScrollPositionRef.current,
-                options
-            });
+            // Only log in debug mode (reduce console noise)
+            if (window.DEBUG_RICHTEXT_EDITOR) {
+                console.log('🔒 RichTextEditor: focus called, preventing scroll', {
+                    scrollBefore,
+                    savedPosition: savedScrollPositionRef.current,
+                    options
+                });
+            }
             
             // Call original focus but immediately restore scroll
             const result = originalFocus.call(this, options);
@@ -249,7 +261,10 @@ const RichTextEditor = ({
             }
         };
         
-        console.log('🔒 RichTextEditor: Adding event listeners for scroll protection');
+        // Only log in debug mode (reduce console noise)
+        if (window.DEBUG_RICHTEXT_EDITOR) {
+            console.log('🔒 RichTextEditor: Adding event listeners for scroll protection');
+        }
         editor.addEventListener('mousedown', handleMouseDown, true);
         editor.addEventListener('focus', handleFocus, true);
         editor.addEventListener('click', handleMouseDown, true);
