@@ -46,6 +46,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const sectionsRef = useRef({});
     const lastSavedSnapshotRef = useRef('{}');
     const apiRef = useRef(window.DocumentCollectionAPI || null);
+    const isDeletingRef = useRef(false);
     
     const getSnapshotKey = (projectId) => projectId ? `documentCollectionSnapshot_${projectId}` : null;
 
@@ -321,6 +322,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         // Don't refresh if a save is in progress to avoid race conditions
         if (isSavingRef.current && !forceUpdate) {
+            return;
+        }
+        
+        // Don't refresh if a delete operation just happened (give it time to save)
+        if (isDeletingRef.current && !forceUpdate) {
             return;
         }
         
@@ -909,15 +915,30 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return;
         }
         
+        // Set deleting flag to prevent refresh from overwriting
+        isDeletingRef.current = true;
+        
         // Use functional update with sectionsByYear to ensure we have the latest state
+        // Also update sectionsRef immediately to prevent race conditions with auto-save
         setSectionsByYear(prev => {
             const yearSections = prev[selectedYear] || [];
             const filtered = yearSections.filter(s => String(s.id) !== normalizedSectionId);
-            return {
+            
+            const updated = {
                 ...prev,
                 [selectedYear]: filtered
             };
+            
+            // Immediately update the ref to prevent race conditions with auto-save
+            sectionsRef.current = updated;
+            
+            return updated;
         });
+        
+        // Clear the deleting flag after auto-save completes (2 seconds should be enough)
+        setTimeout(() => {
+            isDeletingRef.current = false;
+        }, 2000);
     };
     
     // ============================================================
@@ -1012,7 +1033,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return;
         }
         
+        // Set deleting flag to prevent refresh from overwriting
+        isDeletingRef.current = true;
+        
         // Use functional update with sectionsByYear to ensure we have the latest state
+        // Also update sectionsRef immediately to prevent race conditions with auto-save
         setSectionsByYear(prev => {
             const yearSections = prev[selectedYear] || [];
             const updatedSections = yearSections.map(section => {
@@ -1026,11 +1051,21 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 return section;
             });
             
-            return {
+            const updated = {
                 ...prev,
                 [selectedYear]: updatedSections
             };
+            
+            // Immediately update the ref to prevent race conditions with auto-save
+            sectionsRef.current = updated;
+            
+            return updated;
         });
+        
+        // Clear the deleting flag after auto-save completes (2 seconds should be enough)
+        setTimeout(() => {
+            isDeletingRef.current = false;
+        }, 2000);
     };
     
     // ============================================================
