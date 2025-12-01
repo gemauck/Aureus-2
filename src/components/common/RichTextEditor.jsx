@@ -155,25 +155,55 @@ const RichTextEditor = ({
                 contentEditable
                 onInput={handleInput}
                 onFocus={(e) => {
-                    // Preserve scroll position when focusing RichTextEditor
+                    // Aggressively preserve scroll position when focusing RichTextEditor
+                    e.preventDefault();
+                    e.stopPropagation();
                     const currentScroll = window.scrollY || window.pageYOffset;
-                    // Use multiple restoration attempts
+                    
+                    // Immediate restoration
+                    window.scrollTo(0, currentScroll);
+                    
+                    // Use multiple restoration attempts with more delays
                     requestAnimationFrame(() => {
                         window.scrollTo(0, currentScroll);
-                        setTimeout(() => {
-                            window.scrollTo(0, currentScroll);
-                        }, 0);
-                        setTimeout(() => {
-                            window.scrollTo(0, currentScroll);
-                        }, 50);
                     });
+                    setTimeout(() => {
+                        window.scrollTo(0, currentScroll);
+                    }, 0);
+                    setTimeout(() => {
+                        window.scrollTo(0, currentScroll);
+                    }, 10);
+                    setTimeout(() => {
+                        window.scrollTo(0, currentScroll);
+                    }, 50);
+                    setTimeout(() => {
+                        window.scrollTo(0, currentScroll);
+                    }, 100);
+                    setTimeout(() => {
+                        window.scrollTo(0, currentScroll);
+                    }, 200);
                 }}
                 onClick={(e) => {
-                    // Preserve scroll position when clicking
+                    // Aggressively preserve scroll position when clicking
                     const currentScroll = window.scrollY || window.pageYOffset;
+                    
+                    // Immediate restoration
+                    window.scrollTo(0, currentScroll);
+                    
                     requestAnimationFrame(() => {
                         window.scrollTo(0, currentScroll);
                     });
+                    setTimeout(() => {
+                        window.scrollTo(0, currentScroll);
+                    }, 0);
+                    setTimeout(() => {
+                        window.scrollTo(0, currentScroll);
+                    }, 50);
+                }}
+                onMouseDown={(e) => {
+                    // Prevent scroll on mousedown as well
+                    const currentScroll = window.scrollY || window.pageYOffset;
+                    window.scrollTo(0, currentScroll);
                 }}
                 onBlur={(e) => {
                     if (onBlur && editorRef.current) {

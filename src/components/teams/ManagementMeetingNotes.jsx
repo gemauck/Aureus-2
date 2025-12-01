@@ -211,46 +211,97 @@ const ManagementMeetingNotes = () => {
             }, 100);
         };
         
-        // Prevent scroll to top on focus/click events
+        // Prevent scroll to top on focus/click events - AGGRESSIVE VERSION
         const preventScrollToTop = (e) => {
             // Check if the event is on a text input/textarea
             const target = e.target;
             if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || 
                 target.contentEditable === 'true' || target.closest('[contenteditable="true"]'))) {
-                // Save current scroll position
+                // Save current scroll position IMMEDIATELY
                 savedScrollPosition = window.scrollY || window.pageYOffset;
                 
-                // Restore scroll position after a short delay
+                // IMMEDIATE restoration - don't wait
+                if (savedScrollPosition > 0) {
+                    window.scrollTo(0, savedScrollPosition);
+                }
+                
+                // Aggressive restoration with multiple attempts
                 requestAnimationFrame(() => {
-                    if (window.scrollY === 0 && savedScrollPosition > 0) {
+                    if (savedScrollPosition > 0) {
                         window.scrollTo(0, savedScrollPosition);
                     }
-                    setTimeout(() => {
-                        if (window.scrollY === 0 && savedScrollPosition > 0) {
-                            window.scrollTo(0, savedScrollPosition);
-                        }
-                    }, 0);
-                    setTimeout(() => {
-                        if (window.scrollY === 0 && savedScrollPosition > 0) {
-                            window.scrollTo(0, savedScrollPosition);
-                        }
-                    }, 50);
                 });
+                setTimeout(() => {
+                    if (savedScrollPosition > 0) {
+                        window.scrollTo(0, savedScrollPosition);
+                    }
+                }, 0);
+                setTimeout(() => {
+                    if (savedScrollPosition > 0) {
+                        window.scrollTo(0, savedScrollPosition);
+                    }
+                }, 10);
+                setTimeout(() => {
+                    if (savedScrollPosition > 0) {
+                        window.scrollTo(0, savedScrollPosition);
+                    }
+                }, 50);
+                setTimeout(() => {
+                    if (savedScrollPosition > 0) {
+                        window.scrollTo(0, savedScrollPosition);
+                    }
+                }, 100);
+                setTimeout(() => {
+                    if (savedScrollPosition > 0) {
+                        window.scrollTo(0, savedScrollPosition);
+                    }
+                }, 200);
+            }
+        };
+        
+        // Also prevent on mousedown
+        const preventScrollOnMouseDown = (e) => {
+            const target = e.target;
+            if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || 
+                target.contentEditable === 'true' || target.closest('[contenteditable="true"]'))) {
+                savedScrollPosition = window.scrollY || window.pageYOffset;
+                if (savedScrollPosition > 0) {
+                    window.scrollTo(0, savedScrollPosition);
+                }
             }
         };
         
         window.addEventListener('scroll', handleScroll, { passive: true });
         window.addEventListener('focus', preventScrollToTop, true);
         window.addEventListener('click', preventScrollToTop, true);
+        window.addEventListener('mousedown', preventScrollOnMouseDown, true);
         
-        // Save scroll position periodically
-        const scrollInterval = setInterval(saveScroll, 100);
+        // Save scroll position more frequently
+        const scrollInterval = setInterval(saveScroll, 50);
+        
+        // Also monitor scroll position continuously for contentEditable elements
+        const scrollMonitor = setInterval(() => {
+            const activeElement = document.activeElement;
+            if (activeElement && (activeElement.contentEditable === 'true' || 
+                activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'INPUT')) {
+                const currentScroll = window.scrollY || window.pageYOffset;
+                if (currentScroll === 0 && savedScrollPosition > 0) {
+                    // Scroll was reset to 0, restore it
+                    window.scrollTo(0, savedScrollPosition);
+                } else if (currentScroll > 0) {
+                    // Update saved position
+                    savedScrollPosition = currentScroll;
+                }
+            }
+        }, 50);
         
         return () => {
             window.removeEventListener('scroll', handleScroll);
             window.removeEventListener('focus', preventScrollToTop, true);
             window.removeEventListener('click', preventScrollToTop, true);
+            window.removeEventListener('mousedown', preventScrollOnMouseDown, true);
             clearInterval(scrollInterval);
+            clearInterval(scrollMonitor);
         };
     }, []);
 
