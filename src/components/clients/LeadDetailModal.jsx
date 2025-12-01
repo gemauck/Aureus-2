@@ -177,7 +177,9 @@ const LeadDetailModal = ({
             sites: typeof lead.sites === 'string' ? JSON.parse(lead.sites || '[]') : (lead.sites || []),
             thumbnail: lead.thumbnail || '',
             // Extract externalAgentId from externalAgent object if it exists
-            externalAgentId: lead.externalAgentId || (lead.externalAgent?.id || null)
+            externalAgentId: lead.externalAgentId || (lead.externalAgent?.id || null),
+            // Initialize firstContactDate from createdAt if available, otherwise preserve existing value or use default
+            firstContactDate: lead.firstContactDate || (lead.createdAt ? new Date(lead.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0])
         } : defaultFormData;
         
         return parsedLead;
@@ -1274,7 +1276,11 @@ const LeadDetailModal = ({
                 ...currentFormData,
                 notes: latestNotes, // Always use the latest notes from textarea
                 projectIds: selectedProjectIds,
-                lastContact: new Date().toISOString().split('T')[0]
+                // Explicitly include externalAgentId to ensure it's saved (even if null)
+                externalAgentId: currentFormData.externalAgentId !== undefined ? currentFormData.externalAgentId : null,
+                // Only update lastContact if it's not already set or if user explicitly changed it
+                // Don't overwrite with today's date on every save
+                lastContact: currentFormData.lastContact || new Date().toISOString().split('T')[0]
             };
 
             // Use throttled request wrapper for API calls
@@ -2759,7 +2765,11 @@ const LeadDetailModal = ({
                 ...formData,
                 notes: latestNotes, // Always use the latest notes from textarea
                 projectIds: selectedProjectIds,
-                lastContact: new Date().toISOString().split('T')[0]
+                // Explicitly include externalAgentId to ensure it's saved (even if null)
+                externalAgentId: formData.externalAgentId !== undefined ? formData.externalAgentId : null,
+                // Only update lastContact if it's not already set or if user explicitly changed it
+                // Don't overwrite with today's date on every save
+                lastContact: formData.lastContact || new Date().toISOString().split('T')[0]
             };
             
             // Use onSave prop if provided, otherwise fall back to direct API calls
