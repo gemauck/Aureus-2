@@ -203,6 +203,72 @@ const LeadDetailModal = ({
             };
         }
     }, [lead, formData]);
+    
+    // Track the last lead ID we processed to detect when a new lead is loaded
+    const lastProcessedLeadIdRef = useRef(null);
+    
+    // Update formData when lead changes (e.g., when fetched from API or when navigating to a different lead)
+    // This ensures externalAgentId and other fields are properly initialized from the lead data
+    // We only update if the lead ID has changed or if formData hasn't been initialized yet
+    useEffect(() => {
+        if (lead && lead.id) {
+            const currentLeadId = lead.id;
+            const isDifferentLead = lastProcessedLeadIdRef.current !== currentLeadId;
+            const leadExternalAgentId = lead.externalAgentId || (lead.externalAgent?.id || null);
+            
+            // Check if we need to update formData
+            // 1. Different lead (new lead loaded)
+            // 2. Same lead but externalAgentId is missing in formData and exists in lead
+            // 3. Not currently saving proposals (to avoid overwriting during save)
+            const needsUpdate = isDifferentLead || 
+                (formData.id === currentLeadId && 
+                 formData.externalAgentId !== leadExternalAgentId && 
+                 !isSavingProposalsRef.current);
+            
+            if (needsUpdate) {
+                setFormData(prev => {
+                    // If it's a different lead, initialize from the new lead
+                    if (isDifferentLead) {
+                        lastProcessedLeadIdRef.current = currentLeadId;
+                        const parsedLead = {
+                            ...lead,
+                            stage: lead.stage || 'Awareness',
+                            status: normalizeLifecycleStage(lead.status),
+                            contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
+                            followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
+                            projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
+                            comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
+                            activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
+                            billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {}),
+                            proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []),
+                            sites: typeof lead.sites === 'string' ? JSON.parse(lead.sites || '[]') : (lead.sites || []),
+                            thumbnail: lead.thumbnail || '',
+                            externalAgentId: leadExternalAgentId,
+                            firstContactDate: lead.firstContactDate || (lead.createdAt ? new Date(lead.createdAt).toISOString().split('T')[0] : defaultFormData.firstContactDate)
+                        };
+                        console.log('🔄 Updated formData for new lead:', { leadId: currentLeadId, externalAgentId: leadExternalAgentId });
+                        return parsedLead;
+                    } else {
+                        // Same lead, just update externalAgentId if it's different
+                        if (prev.externalAgentId !== leadExternalAgentId) {
+                            console.log('🔄 Updated externalAgentId in formData:', { 
+                                old: prev.externalAgentId, 
+                                new: leadExternalAgentId 
+                            });
+                            return {
+                                ...prev,
+                                externalAgentId: leadExternalAgentId
+                            };
+                        }
+                    }
+                    return prev;
+                });
+            }
+        } else if (!lead) {
+            // Lead was cleared, reset the ref
+            lastProcessedLeadIdRef.current = null;
+        }
+    }, [lead]);
     const isSavingProposalsRef = useRef(false); // Track when proposals are being saved
     const isCreatingProposalRef = useRef(false); // Track when a proposal is being created (use ref for immediate updates)
     const isEditingRef = useRef(false); // Track when user is actively typing/editing
