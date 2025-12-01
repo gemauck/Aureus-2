@@ -1566,8 +1566,15 @@ const ManagementMeetingNotes = () => {
 
     // Save all fields for a department at once
     const handleSaveDepartment = async (departmentNotesId, event = null) => {
+        console.log('💾 handleSaveDepartment called:', { departmentNotesId, hasEvent: !!event });
+        
         if (!departmentNotesId) {
-            console.error('No departmentNotesId provided');
+            console.error('❌ No departmentNotesId provided');
+            if (typeof window.showNotification === 'function') {
+                window.showNotification('Error: Missing department ID. Please refresh the page.', 'error');
+            } else if (typeof alert === 'function') {
+                alert('Error: Missing department ID. Please refresh the page.');
+            }
             return;
         }
         
@@ -1644,13 +1651,11 @@ const ManagementMeetingNotes = () => {
         }
         
         const getCurrentFieldValue = (fieldName) => {
-            // Strategy 1: Try textarea fallback first (has data attributes) - most reliable
-            const textarea = document.querySelector(`textarea[data-dept-note-id="${departmentNotesId}"][data-field="${fieldName}"]`);
-            if (textarea && textarea.value !== undefined && textarea.value !== null) {
-                return textarea.value;
-            }
+            // Strategy 1: Use React state first (updated immediately by handleFieldChange) - most reliable
+            const stateValue = deptNote[fieldName] || '';
             
-            // Strategy 2: Find department section by traversing from Save button
+            // Strategy 2: Try to get from DOM contentEditable (for RichTextEditor)
+            // Find department section by traversing from Save button
             let departmentSection = null;
             
             if (saveButtonElement) {
@@ -1671,7 +1676,7 @@ const ManagementMeetingNotes = () => {
                 }
             }
             
-            // Strategy 3: Find by textarea with department note ID (even if field doesn't match)
+            // Strategy 3: Find by textarea with department note ID
             if (!departmentSection) {
                 const anyDeptTextarea = document.querySelector(`textarea[data-dept-note-id="${departmentNotesId}"]`);
                 if (anyDeptTextarea) {
@@ -1679,47 +1684,28 @@ const ManagementMeetingNotes = () => {
                 }
             }
             
-            // Strategy 4: Search by finding elements with the field labels
-            if (!departmentSection) {
-                const fieldLabel = fieldName === 'successes' ? "Last Week's Successes" :
-                                  fieldName === 'weekToFollow' ? 'Weekly Plan' :
-                                  fieldName === 'frustrations' ? 'Frustrations/Challenges' : '';
-                
-                if (fieldLabel) {
-                    const labels = Array.from(document.querySelectorAll('label, *')).filter(el => {
-                        const text = el.textContent || '';
-                        return text.trim() === fieldLabel || text.includes(fieldLabel);
-                    });
-                    
-                    if (labels.length > 0) {
-                        // Find the label that's in a section with contentEditable or our department note
-                        const label = labels.find(l => {
-                            const section = l.closest('[class*="rounded"], [class*="space-y"], div');
-                            if (!section) return false;
-                            
-                            // Check if this section has contentEditable or our department textarea
-                            const hasEditor = section.querySelector('[contenteditable="true"]');
-                            const hasDeptField = section.querySelector(`textarea[data-dept-note-id="${departmentNotesId}"]`);
-                            return hasEditor || hasDeptField;
-                        });
-                        
-                        if (label) {
-                            departmentSection = label.closest('[class*="rounded"], [class*="space-y"], div');
-                        }
-                    }
-                }
-            }
-            
-            // Strategy 5: If we found the department section, extract field values
+            // Strategy 4: If we found the department section, try to get value from DOM
             if (departmentSection) {
-                // First try to find by data-field attribute
+                // Try to find by data-field attribute first
                 const fieldByAttribute = departmentSection.querySelector(`[data-field="${fieldName}"]`);
                 if (fieldByAttribute) {
                     if (fieldByAttribute.tagName === 'TEXTAREA' && fieldByAttribute.value !== undefined) {
-                        return fieldByAttribute.value;
+                        const domValue = fieldByAttribute.value;
+                        // Use DOM value if it's different (more recent) than state
+                        if (domValue !== stateValue) {
+                            console.log(`📝 Using DOM value for ${fieldName} (more recent than state)`);
+                            return domValue;
+                        }
                     }
                     if (fieldByAttribute.contentEditable === 'true' && fieldByAttribute.innerHTML !== undefined) {
-                        return fieldByAttribute.innerHTML;
+                        const domValue = fieldByAttribute.innerHTML;
+                        // Clean empty HTML
+                        if (domValue && domValue.trim() && domValue !== '<br>' && domValue !== '<div><br></div>') {
+                            if (domValue !== stateValue) {
+                                console.log(`📝 Using DOM value for ${fieldName} (more recent than state)`);
+                                return domValue;
+                            }
+                        }
                     }
                 }
                 
@@ -1733,36 +1719,45 @@ const ManagementMeetingNotes = () => {
                 
                 if (fieldIndex >= 0 && editors[fieldIndex] && editors[fieldIndex].innerHTML !== undefined) {
                     const html = editors[fieldIndex].innerHTML;
-                    // Return empty string if it's just a placeholder or whitespace
+                    // Return if it's not just a placeholder or whitespace
                     if (html && html.trim() && html !== '<br>' && html !== '<div><br></div>') {
-                        return html;
+                        if (html !== stateValue) {
+                            console.log(`📝 Using DOM contentEditable value for ${fieldName} (more recent than state)`);
+                            return html;
+                        }
                     }
                 }
                 
                 // Also try textareas in order
-                const textareas = Array.from(departmentSection.querySelectorAll('textarea[data-dept-note-id]'));
+                const textareas = Array.from(departmentSection.querySelectorAll(`textarea[data-dept-note-id="${departmentNotesId}"]`));
                 if (fieldIndex >= 0 && textareas[fieldIndex] && textareas[fieldIndex].value !== undefined) {
-                    return textareas[fieldIndex].value;
+                    const domValue = textareas[fieldIndex].value;
+                    if (domValue !== stateValue) {
+                        console.log(`📝 Using DOM textarea value for ${fieldName} (more recent than state)`);
+                        return domValue;
+                    }
                 }
             }
             
-            // Strategy 6: Final fallback - Use React state (may not have latest if RichTextEditor hasn't updated)
-            const stateValue = deptNote[fieldName] || '';
-            console.warn(`⚠️ Using React state fallback for ${fieldName} (may not be latest):`, stateValue);
+            // Strategy 5: Fallback to React state (should be up-to-date from handleFieldChange)
             return stateValue;
         };
         
-        // Get current values from DOM (most up-to-date)
+        // Get current values - prefer React state (updated immediately), fallback to DOM
         const fieldsToSave = {
             successes: getCurrentFieldValue('successes'),
             weekToFollow: getCurrentFieldValue('weekToFollow'),
             frustrations: getCurrentFieldValue('frustrations')
         };
         
-        console.log('💾 Captured field values from DOM:', { 
+        console.log('💾 Captured field values for save:', { 
             departmentNotesId, 
             fieldsToSave,
-            fromDOM: 'successes' in fieldsToSave && fieldsToSave.successes !== (deptNote.successes || '')
+            stateValues: {
+                successes: deptNote.successes || '',
+                weekToFollow: deptNote.weekToFollow || '',
+                frustrations: deptNote.frustrations || ''
+            }
         });
         
         try {
@@ -1809,14 +1804,40 @@ const ManagementMeetingNotes = () => {
                 }
             }
             
+            // Validate that we have a valid departmentNotesId
+            if (!departmentNotesId || typeof departmentNotesId !== 'string') {
+                throw new Error('Invalid department notes ID');
+            }
+            
+            // Validate that DatabaseAPI is available
+            if (!window.DatabaseAPI || typeof window.DatabaseAPI.updateDepartmentNotes !== 'function') {
+                throw new Error('Database API is not available. Please refresh the page.');
+            }
+            
             // Save to database
+            console.log('💾 Calling updateDepartmentNotes with:', { departmentNotesId, fieldsToSave });
             const response = await window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, fieldsToSave);
             
             if (!response) {
                 throw new Error('No response from database API');
             }
             
+            // Check if response indicates an error
+            if (response.error || response.message) {
+                const errorMsg = response.error || response.message;
+                if (errorMsg.toLowerCase().includes('error') || errorMsg.toLowerCase().includes('fail')) {
+                    throw new Error(errorMsg);
+                }
+            }
+            
             console.log('✅ Successfully saved to database:', response);
+            
+            // Show success feedback
+            if (typeof window.showNotification === 'function') {
+                window.showNotification('Changes saved successfully', 'success');
+            } else if (typeof alert === 'function') {
+                alert('Changes saved successfully');
+            }
             
             // Reload from server to ensure consistency (preserve scroll position)
             if (selectedMonth) {
@@ -1857,19 +1878,29 @@ const ManagementMeetingNotes = () => {
                 }, 500);
             }
             
-            // Save completed silently - no messages
-            
         } catch (error) {
             console.error('❌ Error saving department notes:', error);
-            const errorMessage = error?.message || 'Unknown error occurred';
+            const errorMessage = error?.message || error?.error || 'Unknown error occurred';
             
             // Restore scroll position even on error
             requestAnimationFrame(() => {
                 window.scrollTo(0, currentScrollPosition);
             });
             
-            // Error logged silently - no popup messages
-            console.error('Failed to save:', errorMessage);
+            // Show error feedback to user
+            const userFriendlyMessage = errorMessage.includes('Network') || errorMessage.includes('fetch') 
+                ? 'Failed to save. Please check your internet connection and try again.'
+                : errorMessage.includes('401') || errorMessage.includes('403')
+                ? 'You do not have permission to save. Please contact an administrator.'
+                : `Failed to save: ${errorMessage}`;
+            
+            if (typeof window.showNotification === 'function') {
+                window.showNotification(userFriendlyMessage, 'error');
+            } else if (typeof alert === 'function') {
+                alert(userFriendlyMessage);
+            } else {
+                console.error('Failed to save:', errorMessage);
+            }
         } finally {
             setLoading(false);
         }
@@ -3398,15 +3429,17 @@ const ManagementMeetingNotes = () => {
                                                         {/* Save Button */}
                                                         <button
                                                             type="button"
+                                                            disabled={loading}
                                                             onClick={async (e) => {
                                                                 e.preventDefault();
                                                                 e.stopPropagation();
+                                                                console.log('💾 Save button clicked for department:', deptNote.id);
                                                                 await handleSaveDepartment(deptNote.id, e);
                                                             }}
-                                                            className={`w-full text-xs px-3 py-2 rounded font-medium transition ${isDark ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
+                                                            className={`w-full text-xs px-3 py-2 rounded font-medium transition ${loading ? 'opacity-50 cursor-not-allowed' : ''} ${isDark ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
                                                         >
-                                                            <i className="fas fa-save mr-1"></i>
-                                                            Save
+                                                            <i className={`fas ${loading ? 'fa-spinner fa-spin' : 'fa-save'} mr-1`}></i>
+                                                            {loading ? 'Saving...' : 'Save'}
                                                         </button>
                                                     </div>
                                                 </>
