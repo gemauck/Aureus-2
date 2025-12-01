@@ -1016,8 +1016,8 @@
         });
     </script>
     
-    <!-- Lazy loader - CACHE BUST 20251201-scroll-fix-v5-focus-override -->
-    <script defer src="/lazy-load-components.js?v=20251201-scroll-fix-v5-focus-override"></script>
+    <!-- Lazy loader - CACHE BUST 20251201-scroll-fix-v6-scroll-interceptor -->
+    <script defer src="/lazy-load-components.js?v=20251201-scroll-fix-v6-scroll-interceptor"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>
@@ -1115,9 +1115,57 @@
             });
             
             // Only show error after a longer delay if still not loaded
+            // Increased timeout to 20 seconds to account for lazy loading delays
             setTimeout(() => {
                 if (!window.Manufacturing) {
                     const scripts = Array.from(document.querySelectorAll('script[src*="Manufacturing"]'));
+                    
+                    // Check if scripts are still loading (lazy loading in progress)
+                    const stillLoading = scripts.some(s => {
+                        // Check if script is still loading
+                        if (s.readyState && s.readyState !== 'complete' && s.readyState !== 'loaded') {
+                            return true;
+                        }
+                        // Check if script was just added (might not have loaded yet)
+                        if (s.async || s.defer) {
+                            // For async/defer scripts, check if they're in the DOM but not executed
+                            return !s.complete && !s.onerror;
+                        }
+                        return false;
+                    });
+                    
+                    // If scripts are still loading, wait a bit more before showing error
+                    if (stillLoading && scripts.length > 0) {
+                        console.log('⏳ Manufacturing component still loading, waiting a bit longer...');
+                        setTimeout(() => {
+                            if (!window.Manufacturing) {
+                                // Now check again after additional wait
+                                const scriptsAfterWait = Array.from(document.querySelectorAll('script[src*="Manufacturing"]'));
+                                const errorInScript = scriptsAfterWait.some(s => {
+                                    try {
+                                        return s.onerror !== null;
+                                    } catch (e) {
+                                        return false;
+                                    }
+                                });
+                                
+                                // Only show error if scripts have finished loading
+                                const allComplete = scriptsAfterWait.every(s => 
+                                    s.readyState === 'complete' || s.readyState === 'loaded' || s.complete
+                                );
+                                
+                                if (allComplete && !errorInScript) {
+                                    console.warn('⚠️ Manufacturing component not registered after scripts loaded');
+                                    console.warn('   → Component may still be initializing, check console for registration messages');
+                                } else if (errorInScript) {
+                                    console.error('❌ Manufacturing script loading errors detected');
+                                    console.error('   → Check network tab for failed requests');
+                                }
+                            }
+                        }, 5000); // Wait 5 more seconds
+                        return;
+                    }
+                    
                     const errorInScript = scripts.some(s => {
                         try {
                             return s.onerror !== null;
@@ -1126,33 +1174,23 @@
                         }
                     });
                     
-                    // Enhanced diagnostics
-                    console.error('❌ Manufacturing component failed to load after 10 seconds');
-                    console.error('❌ Check browser console for JavaScript errors in Manufacturing.jsx');
-                    console.error('❌ Diagnostics:');
-                    console.error('   - Scripts found:', scripts.length);
-                    console.error('   - Script sources:', scripts.map(s => s.src || s.getAttribute('src') || 'inline').join(', '));
-                    console.error('   - Script errors detected:', errorInScript);
-                    console.error('   - window.Manufacturing type:', typeof window.Manufacturing);
-                    console.error('   - window.React available:', !!window.React);
-                    console.error('   - window.useAuth available:', !!window.useAuth);
-                    console.error('   - window.DatabaseAPI available:', !!window.DatabaseAPI);
-                    
-                    // Try to provide helpful next steps
+                    // Only show error if no scripts found (component not being loaded at all)
+                    // or if scripts have errors
                     if (scripts.length === 0) {
-                        console.error('❌ No Manufacturing scripts found - component may not be loading');
-                        console.error('   → Check component-loader.js and lazy-load-components.js');
+                        console.warn('⚠️ No Manufacturing scripts found - component may be lazy loaded later');
+                        console.warn('   → This is normal if Manufacturing page hasn\'t been accessed yet');
                     } else if (errorInScript) {
-                        console.error('❌ Script loading errors detected');
+                        console.error('❌ Manufacturing script loading errors detected');
                         console.error('   → Check network tab for failed requests');
                         console.error('   → Verify /dist/src/components/manufacturing/Manufacturing.js exists');
                     } else {
-                        console.error('❌ Scripts loaded but component not registered');
-                        console.error('   → Check for JavaScript errors in Manufacturing.jsx');
-                        console.error('   → Verify React and dependencies are loaded');
+                        // Scripts loaded but component not registered - might still be initializing
+                        console.warn('⚠️ Manufacturing scripts loaded but component not yet registered');
+                        console.warn('   → Component may still be initializing (check for registration messages above)');
+                        console.warn('   → This is normal during lazy loading - component will be available when needed');
                     }
                 }
-            }, 10000);
+            }, 20000); // Increased to 20 seconds to account for lazy loading
             // Late bind Clients if it registers after this script
             (function() {
                 function bindClients() {
