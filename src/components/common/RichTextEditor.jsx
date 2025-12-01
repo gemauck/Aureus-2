@@ -18,41 +18,86 @@ const RichTextEditor = ({
     const scrollLockRef = useRef(false);
     const savedScrollPositionRef = useRef(0);
 
-    // Initialize editor content on mount
+    // Initialize editor content on mount and set up scroll protection
     useEffect(() => {
         if (editorRef.current && !editorRef.current.innerHTML && value) {
             editorRef.current.innerHTML = value;
             setHtml(value);
         }
         
-        // Override focus behavior to prevent scroll
-        if (editorRef.current) {
-            const originalFocus = editorRef.current.focus.bind(editorRef.current);
-            editorRef.current.focus = function(options) {
-                savedScrollPositionRef.current = window.scrollY || window.pageYOffset;
-                scrollLockRef.current = true;
-                
-                // Call original focus
-                originalFocus(options);
-                
-                // Immediately restore scroll
-                window.scrollTo(0, savedScrollPositionRef.current);
-                
-                // Keep restoring for a short period
-                const restoreInterval = setInterval(() => {
-                    if (scrollLockRef.current) {
-                        window.scrollTo(0, savedScrollPositionRef.current);
-                    } else {
-                        clearInterval(restoreInterval);
-                    }
-                }, 10);
-                
-                setTimeout(() => {
-                    scrollLockRef.current = false;
-                    clearInterval(restoreInterval);
-                }, 500);
+        const editor = editorRef.current;
+        if (!editor) return;
+        
+        // Save scroll position before any focus/click events
+        const saveScroll = () => {
+            savedScrollPositionRef.current = window.scrollY || window.pageYOffset;
+        };
+        
+        // Set up scroll protection using multiple approaches
+        const handleMouseDown = (e) => {
+            saveScroll();
+            scrollLockRef.current = true;
+        };
+        
+        const handleFocus = (e) => {
+            saveScroll();
+            scrollLockRef.current = true;
+            
+            // Immediately restore
+            window.scrollTo(0, savedScrollPositionRef.current);
+            
+            // Aggressive restoration
+            const restore = () => {
+                if (scrollLockRef.current && savedScrollPositionRef.current > 0) {
+                    window.scrollTo(0, savedScrollPositionRef.current);
+                }
             };
-        }
+            
+            requestAnimationFrame(restore);
+            setTimeout(restore, 0);
+            setTimeout(restore, 10);
+            setTimeout(restore, 50);
+            setTimeout(() => {
+                restore();
+                scrollLockRef.current = false;
+            }, 100);
+        };
+        
+        // Global scroll interceptor - restore if scroll jumps to 0 unexpectedly
+        let lastKnownScroll = window.scrollY || window.pageYOffset;
+        const scrollInterceptor = () => {
+            const currentScroll = window.scrollY || window.pageYOffset;
+            
+            // If scroll jumped to 0 and we have a saved position, restore it
+            if (currentScroll === 0 && savedScrollPositionRef.current > 100 && scrollLockRef.current) {
+                window.scrollTo(0, savedScrollPositionRef.current);
+            } else {
+                lastKnownScroll = currentScroll;
+            }
+        };
+        
+        editor.addEventListener('mousedown', handleMouseDown, true);
+        editor.addEventListener('focus', handleFocus, true);
+        editor.addEventListener('click', handleMouseDown, true);
+        window.addEventListener('scroll', scrollInterceptor, { passive: false });
+        
+        // Continuous scroll monitor while locked
+        const scrollMonitor = setInterval(() => {
+            if (scrollLockRef.current && savedScrollPositionRef.current > 0) {
+                const currentScroll = window.scrollY || window.pageYOffset;
+                if (currentScroll === 0 || Math.abs(currentScroll - savedScrollPositionRef.current) > 200) {
+                    window.scrollTo(0, savedScrollPositionRef.current);
+                }
+            }
+        }, 10);
+        
+        return () => {
+            editor.removeEventListener('mousedown', handleMouseDown, true);
+            editor.removeEventListener('focus', handleFocus, true);
+            editor.removeEventListener('click', handleMouseDown, true);
+            window.removeEventListener('scroll', scrollInterceptor);
+            clearInterval(scrollMonitor);
+        };
     }, []);
 
     // Update editor when value prop changes (external updates)
