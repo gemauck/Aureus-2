@@ -1,5 +1,5 @@
 // Rich text editor component with formatting toolbar
-const { useState, useRef, useEffect } = React;
+const { useState, useRef, useEffect, useCallback } = React;
 
 const RichTextEditor = ({ 
     value = '', 
