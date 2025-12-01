@@ -1182,6 +1182,10 @@ const ManagementMeetingNotes = () => {
             e.preventDefault();
             e.stopPropagation();
         }
+        
+        // Preserve scroll position to prevent navigation to top
+        const currentScrollPosition = window.scrollY || window.pageYOffset;
+        
         const fieldKey = getFieldKey(departmentNotesId, field);
         const value = tempFieldValues[fieldKey] ?? '';
         
@@ -1203,8 +1207,19 @@ const ManagementMeetingNotes = () => {
                 delete updated[fieldKey];
                 return updated;
             });
+            
+            // Restore scroll position after state updates
+            requestAnimationFrame(() => {
+                window.scrollTo(0, currentScrollPosition);
+            });
         } catch (error) {
             console.error('Error updating department notes:', error);
+            
+            // Restore scroll position even on error
+            requestAnimationFrame(() => {
+                window.scrollTo(0, currentScrollPosition);
+            });
+            
             if (typeof alert === 'function') {
                 alert('Failed to update department notes.');
             }
@@ -1242,6 +1257,12 @@ const ManagementMeetingNotes = () => {
     
     // Track the last saved value per field to avoid duplicate saves
     const lastSavedValues = useRef({});
+    
+    // Track current field values for UI responsiveness
+    const currentFieldValues = useRef({});
+    
+    // Track pending values for unsaved changes
+    const pendingValues = useRef({});
     
     // Debounce timer refs for field changes
     const fieldChangeDebounceTimers = useRef({});
@@ -1291,6 +1312,9 @@ const ManagementMeetingNotes = () => {
             return;
         }
         
+        // Preserve scroll position to prevent navigation to top
+        const currentScrollPosition = window.scrollY || window.pageYOffset;
+        
         // Find the department note
         const week = currentMonthlyNotes?.weeklyNotes?.find(w => 
             w.departmentNotes?.some(dn => dn.id === departmentNotesId)
@@ -1328,6 +1352,11 @@ const ManagementMeetingNotes = () => {
                 await reloadMonthlyNotes(selectedMonth);
             }
             
+            // Restore scroll position after state updates
+            requestAnimationFrame(() => {
+                window.scrollTo(0, currentScrollPosition);
+            });
+            
             // Show success message
             if (typeof window.showToast === 'function') {
                 window.showToast('Department notes saved successfully', 'success');
@@ -1338,6 +1367,11 @@ const ManagementMeetingNotes = () => {
         } catch (error) {
             console.error('❌ Error saving department notes:', error);
             const errorMessage = error?.message || 'Unknown error occurred';
+            
+            // Restore scroll position even on error
+            requestAnimationFrame(() => {
+                window.scrollTo(0, currentScrollPosition);
+            });
             
             if (typeof alert === 'function') {
                 alert(`Failed to save department notes: ${errorMessage}`);
