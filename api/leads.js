@@ -14,13 +14,6 @@ function parseClientJsonFields(client) {
     const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
     const parsed = { ...client }
     
-    // Extract tags from ClientTag relations if present
-    if (client.tags && Array.isArray(client.tags)) {
-      parsed.tags = client.tags.map(ct => ct.tag).filter(Boolean)
-    } else {
-      parsed.tags = []
-    }
-    
     // Parse JSON fields
     for (const field of jsonFields) {
       const value = parsed[field]
@@ -154,7 +147,6 @@ async function handler(req, res) {
           hasExternalAgentId = false
         }
         
-        // Include tags for list view - needed for Tags column
         let leads = []
         try {
           // IMPORTANT: Return ALL leads regardless of ownerId - all users should see all leads
@@ -162,11 +154,6 @@ async function handler(req, res) {
           // Use defensive includes - if relations fail, try without them
           try {
             const includeObj = {
-              tags: {
-                include: {
-                  tag: true
-                }
-              },
               // Only include externalAgent if the column exists
               ...(hasExternalAgentId ? { externalAgent: true } : {}),
               // Include starredBy relation only if we have a valid userId
@@ -205,11 +192,6 @@ async function handler(req, res) {
                     type: 'lead'
                   },
                   include: {
-                    tags: {
-                      include: {
-                        tag: true
-                      }
-                    },
                     // Skip externalAgent relation
                     ...(validUserId ? {
                       starredBy: {
@@ -236,8 +218,8 @@ async function handler(req, res) {
                   },
                   orderBy: { createdAt: 'desc' } 
                 })
-                // Add empty tags array and null externalAgent to each lead
-                leads = leads.map(l => ({ ...l, tags: [], externalAgent: null }))
+                // Add null externalAgent to each lead
+                leads = leads.map(l => ({ ...l, externalAgent: null }))
               }
             } else {
               // Other relation errors - try query without relations
@@ -248,8 +230,8 @@ async function handler(req, res) {
                 },
                 orderBy: { createdAt: 'desc' } 
               })
-              // Add empty tags array to each lead
-              leads = leads.map(l => ({ ...l, tags: [], externalAgent: null }))
+              // Add null externalAgent to each lead
+              leads = leads.map(l => ({ ...l, externalAgent: null }))
             }
           }
           
@@ -411,7 +393,7 @@ async function handler(req, res) {
                       }
                       return false
                     })
-                    .map(l => ({ ...l, tags: [], externalAgent: null }))
+                    .map(l => ({ ...l, externalAgent: null }))
                 }
               } else {
                 // Last resort: query without any relations
@@ -717,11 +699,23 @@ async function handler(req, res) {
           proposals: body.proposals !== undefined ? (typeof body.proposals === 'string' ? body.proposals : JSON.stringify(body.proposals)) : undefined,
           externalAgentId: body.externalAgentId !== undefined ? (body.externalAgentId || null) : undefined
         }
+        
+        // Debug logging for externalAgentId
+        if (body.externalAgentId !== undefined) {
+          console.log('📥 Received externalAgentId in update request:', body.externalAgentId, '→', updateData.externalAgentId);
+        }
+        
         Object.keys(updateData).forEach(key => {
           if (updateData[key] === undefined) {
             delete updateData[key]
           }
         })
+        
+        // Ensure externalAgentId is included even if null (to allow clearing it)
+        if (body.externalAgentId !== undefined && !('externalAgentId' in updateData)) {
+          updateData.externalAgentId = body.externalAgentId || null;
+          console.log('🔧 Added externalAgentId to updateData:', updateData.externalAgentId);
+        }
         
         
         try {
@@ -747,6 +741,18 @@ async function handler(req, res) {
         if (verifyLead.status !== updateData.status) {
           console.error('❌ CRITICAL: Database did not persist status change!')
           console.error('   Expected:', updateData.status, 'Got:', verifyLead.status)
+        }
+        
+        // Verify externalAgentId was persisted correctly
+        if (body.externalAgentId !== undefined) {
+          const expectedExternalAgentId = body.externalAgentId || null;
+          const actualExternalAgentId = verifyLead.externalAgentId || null;
+          if (expectedExternalAgentId !== actualExternalAgentId) {
+            console.error('❌ CRITICAL: Database did not persist externalAgentId change!')
+            console.error('   Expected:', expectedExternalAgentId, 'Got:', actualExternalAgentId)
+          } else {
+            console.log('✅ externalAgentId persisted correctly:', actualExternalAgentId);
+          }
         }
         
         return ok(res, { lead })

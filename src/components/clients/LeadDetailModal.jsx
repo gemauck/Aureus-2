@@ -416,12 +416,20 @@ const LeadDetailModal = ({
                 
                 // Select the newly created agent
                 if (newAgent && newAgent.id) {
+                    console.log('✅ External agent created and selected:', {
+                        id: newAgent.id,
+                        name: newAgent.name,
+                        fullAgent: newAgent
+                    });
                     setFormData(prev => {
                         const updated = {...prev, externalAgentId: newAgent.id};
                         formDataRef.current = updated;
                         userEditedFieldsRef.current.add('externalAgentId');
+                        console.log('🔵 Updated formData with externalAgentId:', newAgent.id);
                         return updated;
                     });
+                } else {
+                    console.warn('⚠️ New external agent created but no ID found:', newAgent);
                 }
                 
                 // Close modal and reset form
@@ -1272,16 +1280,30 @@ const LeadDetailModal = ({
             // This fixes the issue where notes typed in the textarea might not be saved on PC
             const latestNotes = notesTextareaRef.current?.value || currentFormData.notes || '';
             
+            // CRITICAL: Always read externalAgentId from formDataRef to ensure we have the latest value
+            // This fixes the issue where external agent selection might not be saved
+            // Convert empty strings to null for consistency
+            const latestExternalAgentId = formDataRef.current?.externalAgentId !== undefined && formDataRef.current?.externalAgentId !== ''
+                ? formDataRef.current.externalAgentId
+                : (currentFormData.externalAgentId !== undefined && currentFormData.externalAgentId !== '' 
+                    ? currentFormData.externalAgentId 
+                    : null);
+            
             const leadData = {
                 ...currentFormData,
                 notes: latestNotes, // Always use the latest notes from textarea
                 projectIds: selectedProjectIds,
                 // Explicitly include externalAgentId to ensure it's saved (even if null)
-                externalAgentId: currentFormData.externalAgentId !== undefined ? currentFormData.externalAgentId : null,
+                externalAgentId: latestExternalAgentId,
                 // Only update lastContact if it's not already set or if user explicitly changed it
                 // Don't overwrite with today's date on every save
                 lastContact: currentFormData.lastContact || new Date().toISOString().split('T')[0]
             };
+            
+            // Debug logging for externalAgentId
+            if (latestExternalAgentId !== null && latestExternalAgentId !== undefined) {
+                console.log('💾 Saving lead with externalAgentId:', latestExternalAgentId);
+            }
 
             // Use throttled request wrapper for API calls
             const performSave = async () => {
@@ -1690,195 +1712,6 @@ const LeadDetailModal = ({
         await Promise.all(notificationPromises);
     };
     
-    // Tag management state
-    const [leadTags, setLeadTags] = useState([]);
-    const [allTags, setAllTags] = useState([]);
-    const [showTagSelector, setShowTagSelector] = useState(false);
-    const [showNewTagForm, setShowNewTagForm] = useState(false);
-    const [newTagName, setNewTagName] = useState('');
-    const [newTagColor, setNewTagColor] = useState('#3B82F6');
-    
-    // Load tags when lead changes - stagger calls to prevent rate limiting
-    useEffect(() => {
-        if (lead?.id) {
-            // Stagger API calls to prevent burst of requests
-            loadLeadTags();
-            setTimeout(() => {
-                loadAllTags();
-            }, 300);
-        }
-    }, [lead?.id]);
-    
-    // Load lead tags
-    const loadLeadTags = async () => {
-        if (!lead?.id) return;
-        try {
-            // Check rate limit before making request
-            if (window.RateLimitManager?.isRateLimited()) {
-                console.warn('⏸️ Rate limit active. Skipping lead tags load.');
-                return;
-            }
-            
-            const token = window.storage?.getToken?.();
-            if (!token) return;
-            
-            // Use throttled request
-            const response = await window.RateLimitManager?.throttleRequest?.(
-                () => fetch(`/api/clients/${lead.id}/tags`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                }),
-                3 // Lower priority
-            ) || await fetch(`/api/clients/${lead.id}/tags`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                setLeadTags(data.data?.tags || []);
-            } else if (response.status === 404) {
-                // Lead was deleted or doesn't exist - clear tags silently
-                setLeadTags([]);
-            }
-        } catch (error) {
-            // Don't log rate limit or 404 errors
-            if (error.status !== 429 && error.code !== 'RATE_LIMIT_EXCEEDED' && 
-                error.message && !error.message.includes('404')) {
-                console.error('Error loading lead tags:', error);
-            }
-            setLeadTags([]);
-        }
-    };
-    
-    // Load all available tags
-    const loadAllTags = async () => {
-        try {
-            // Check rate limit before making request
-            if (window.RateLimitManager?.isRateLimited()) {
-                console.warn('⏸️ Rate limit active. Skipping all tags load.');
-                return;
-            }
-            
-            const token = window.storage?.getToken?.();
-            if (!token) return;
-            
-            // Use throttled request
-            const response = await window.RateLimitManager?.throttleRequest?.(
-                () => fetch('/api/tags', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                }),
-                2 // Lower priority
-            ) || await fetch('/api/tags', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                setAllTags(data.data?.tags || []);
-            }
-        } catch (error) {
-            // Don't log rate limit errors
-            if (error.status !== 429 && error.code !== 'RATE_LIMIT_EXCEEDED') {
-                console.error('Error loading tags:', error);
-            }
-        }
-    };
-    
-    // Add tag to lead
-    const handleAddTag = async (tagId) => {
-        if (!lead?.id) return;
-        try {
-            const token = window.storage?.getToken?.();
-            if (!token) return;
-            
-            const response = await fetch(`/api/clients/${lead.id}/tags`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ tagId })
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                setLeadTags(prev => [...prev, data.data.tag]);
-                loadLeadTags(); // Reload to ensure consistency
-            } else {
-                const error = await response.json();
-                alert(error.error?.message || 'Failed to add tag');
-            }
-        } catch (error) {
-            console.error('Error adding tag:', error);
-            alert('Failed to add tag: ' + error.message);
-        }
-    };
-    
-    // Remove tag from lead
-    const handleRemoveTag = async (tagId) => {
-        if (!lead?.id) return;
-        try {
-            const token = window.storage?.getToken?.();
-            if (!token) return;
-            
-            const response = await fetch(`/api/clients/${lead.id}/tags?tagId=${tagId}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            
-            if (response.ok) {
-                setLeadTags(prev => prev.filter(t => t.id !== tagId));
-            } else {
-                const error = await response.json();
-                alert(error.error?.message || 'Failed to remove tag');
-            }
-        } catch (error) {
-            console.error('Error removing tag:', error);
-            alert('Failed to remove tag: ' + error.message);
-        }
-    };
-    
-    // Create new tag
-    const handleCreateTag = async () => {
-        if (!newTagName.trim()) {
-            alert('Please enter a tag name');
-            return;
-        }
-        
-        try {
-            const token = window.storage?.getToken?.();
-            if (!token) return;
-            
-            const response = await fetch('/api/tags', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    name: newTagName.trim(),
-                    color: newTagColor
-                })
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                const newTag = data.data.tag;
-                setAllTags(prev => [...prev, newTag]);
-                setShowNewTagForm(false);
-                setNewTagName('');
-                setNewTagColor('#3B82F6');
-                
-                // Automatically add to lead
-                await handleAddTag(newTag.id);
-            } else {
-                const error = await response.json();
-                alert(error.error?.message || 'Failed to create tag');
-            }
-        } catch (error) {
-            console.error('Error creating tag:', error);
-            alert('Failed to create tag: ' + error.message);
-        }
-    };
 
     const handleAddTagFromInput = () => {
         const raw = (newNoteTagsInput || '').trim();
@@ -2766,7 +2599,10 @@ const LeadDetailModal = ({
                 notes: latestNotes, // Always use the latest notes from textarea
                 projectIds: selectedProjectIds,
                 // Explicitly include externalAgentId to ensure it's saved (even if null)
-                externalAgentId: formData.externalAgentId !== undefined ? formData.externalAgentId : null,
+                // Convert empty strings to null for consistency
+                externalAgentId: formData.externalAgentId !== undefined && formData.externalAgentId !== '' 
+                    ? formData.externalAgentId 
+                    : null,
                 // Only update lastContact if it's not already set or if user explicitly changed it
                 // Don't overwrite with today's date on every save
                 lastContact: formData.lastContact || new Date().toISOString().split('T')[0]
@@ -3331,8 +3167,15 @@ const LeadDetailModal = ({
                                                     isEditingRef.current = false;
                                                     notifyEditingChange(false);
                                                 }, 5000);
+                                                const selectedValue = e.target.value || null;
+                                                const selectedAgent = externalAgents.find(a => a.id === selectedValue);
+                                                console.log('🔵 External agent selected:', {
+                                                    value: selectedValue,
+                                                    agent: selectedAgent ? selectedAgent.name : 'none',
+                                                    allAgents: externalAgents.map(a => ({ id: a.id, name: a.name }))
+                                                });
                                                 setFormData(prev => {
-                                                    const updated = {...prev, externalAgentId: e.target.value || null};
+                                                    const updated = {...prev, externalAgentId: selectedValue};
                                                     formDataRef.current = updated;
                                                     return updated;
                                                 });
@@ -3536,138 +3379,6 @@ const LeadDetailModal = ({
                                             {formData.rssSubscribed !== false ? 'Subscribed' : 'Not Subscribed'}
                                         </button>
                                     </div>
-                                </div>
-
-                                {/* Tags Section */}
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
-                                    <div className="flex flex-wrap gap-2 mb-3">
-                                        {leadTags.map(tag => (
-                                            <span
-                                                key={tag.id}
-                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full border transition"
-                                                style={{
-                                                    backgroundColor: tag.color ? `${tag.color}20` : '#3B82F620',
-                                                    color: tag.color || '#3B82F6',
-                                                    borderColor: tag.color || '#3B82F6'
-                                                }}
-                                            >
-                                                <i className="fas fa-tag"></i>
-                                                {tag.name}
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleRemoveTag(tag.id)}
-                                                    className="ml-1 hover:opacity-70"
-                                                    title="Remove tag"
-                                                >
-                                                    <i className="fas fa-times"></i>
-                                                </button>
-                                            </span>
-                                        ))}
-                                    </div>
-                                    
-                                    <div className="flex gap-2">
-                                        <div className="flex-1 relative">
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowTagSelector(!showTagSelector)}
-                                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center justify-between"
-                                            >
-                                                <span className="text-gray-600">Add Tag</span>
-                                                <i className={`fas fa-chevron-${showTagSelector ? 'up' : 'down'} text-gray-400`}></i>
-                                            </button>
-                                            
-                                            {showTagSelector && (
-                                                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                                                    {allTags.filter(tag => !leadTags.find(lt => lt.id === tag.id)).map(tag => (
-                                                        <button
-                                                            key={tag.id}
-                                                            type="button"
-                                                            onClick={() => {
-                                                                handleAddTag(tag.id);
-                                                                setShowTagSelector(false);
-                                                            }}
-                                                            className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
-                                                        >
-                                                            <span
-                                                                className="w-3 h-3 rounded-full"
-                                                                style={{ backgroundColor: tag.color || '#3B82F6' }}
-                                                            ></span>
-                                                            {tag.name}
-                                                        </button>
-                                                    ))}
-                                                    {allTags.filter(tag => !leadTags.find(lt => lt.id === tag.id)).length === 0 && (
-                                                        <div className="px-3 py-2 text-sm text-gray-500 text-center">No available tags</div>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                        
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setShowNewTagForm(true);
-                                                setNewTagName('');
-                                                setNewTagColor('#3B82F6');
-                                            }}
-                                            className="px-3 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
-                                        >
-                                            <i className="fas fa-plus mr-1"></i>
-                                            New Tag
-                                        </button>
-                                    </div>
-                                    
-                                    {showNewTagForm && (
-                                        <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <input
-                                                    type="text"
-                                                    value={newTagName}
-                                                    onChange={(e) => setNewTagName(e.target.value)}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter') {
-                                                            e.preventDefault();
-                                                            handleCreateTag();
-                                                        } else if (e.key === 'Escape') {
-                                                            setShowNewTagForm(false);
-                                                            setNewTagName('');
-                                                            setNewTagColor('#3B82F6');
-                                                        }
-                                                    }}
-                                                    placeholder="Tag name"
-                                                    className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded"
-                                                    autoFocus
-                                                />
-                                                <input
-                                                    type="color"
-                                                    value={newTagColor}
-                                                    onChange={(e) => setNewTagColor(e.target.value)}
-                                                    className="w-10 h-8 border border-gray-300 rounded cursor-pointer"
-                                                    title="Select tag color"
-                                                />
-                                            </div>
-                                            <div className="flex gap-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={handleCreateTag}
-                                                    className="px-3 py-1 text-sm bg-primary-600 text-white rounded hover:bg-primary-700"
-                                                >
-                                                    Create & Add
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setShowNewTagForm(false);
-                                                        setNewTagName('');
-                                                        setNewTagColor('#3B82F6');
-                                                    }}
-                                                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100"
-                                                >
-                                                    Cancel
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
 
                                 {/* Delete Lead Section */}

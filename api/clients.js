@@ -22,22 +22,6 @@ function parseClientJsonFields(client) {
     const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
     const parsed = { ...client }
     
-    // Extract tags from ClientTag relations if present
-    if (client.tags && Array.isArray(client.tags)) {
-      // client.tags is an array of ClientTag objects, each with a 'tag' property containing the Tag object
-      parsed.tags = client.tags
-        .map(ct => ct.tag) // Extract the Tag object from each ClientTag
-        .filter(Boolean) // Remove any null/undefined tags
-        .map(tag => ({
-          id: tag.id,
-          name: tag.name,
-          color: tag.color || '#3B82F6',
-          description: tag.description || ''
-        })) // Ensure consistent format with id, name, color
-    } else {
-      parsed.tags = []
-    }
-    
     // Optimized: Parse JSON fields with minimal error handling overhead
     for (const field of jsonFields) {
       const value = parsed[field]
@@ -107,11 +91,6 @@ async function handler(req, res) {
                 type: 'client'
               },
               include: {
-                tags: {
-                  include: {
-                    tag: true
-                  }
-                },
                 ...(validUserId ? {
                   starredBy: {
                     where: {
@@ -139,8 +118,6 @@ async function handler(req, res) {
                 createdAt: 'desc'
               }
             })
-            // Add empty tags array to each client
-            rawClients = rawClients.map(c => ({ ...c, tags: [] }))
           }
         } catch (typeError) {
           // If type column doesn't exist or query fails, try without type filter
@@ -160,11 +137,6 @@ async function handler(req, res) {
           try {
             rawClients = await prisma.client.findMany({
               include: {
-                tags: {
-                  include: {
-                    tag: true
-                  }
-                },
                 ...(validUserId ? {
                   starredBy: {
                     where: {
@@ -195,7 +167,6 @@ async function handler(req, res) {
             // Filter manually and add empty tags
             rawClients = rawClients
               .filter(c => !c.type || c.type === 'client' || c.type === null)
-              .map(c => ({ ...c, tags: [] }))
           }
         }
         
@@ -514,15 +485,9 @@ async function handler(req, res) {
             }
           }
           
-          // Include tags for detail view (single client queries are fast)
           const client = await prisma.client.findUnique({ 
             where: { id },
             include: {
-              tags: {
-                include: {
-                  tag: true
-                }
-              },
               ...(validUserId ? {
                 starredBy: {
                   where: {

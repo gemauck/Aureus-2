@@ -1,4 +1,5 @@
 // Use React from window
+console.log('🔵 Manufacturing.jsx: Script started loading...');
 
 // Safely access React hooks from the global window.React without throwing
 // If React isn't ready yet, we fall back to an empty object so the script
@@ -8869,6 +8870,8 @@ try {
 // Make available globally - Register immediately
 // Wrap in IIFE to catch any errors during component definition
 (function() {
+    console.log('🔵 Manufacturing.jsx: Starting registration IIFE...');
+    console.log('🔵 Manufacturing variable type:', typeof Manufacturing);
     try {
         // Check if Manufacturing was defined (might be undefined if there was an error earlier)
         if (typeof Manufacturing !== 'undefined') {
@@ -8972,3 +8975,71 @@ setTimeout(() => {
         }
     }
 }, 1000);
+
+// BULLETPROOF: Ensure Manufacturing is always registered, even if everything else fails
+// This is a final safety net to prevent the "failed to load" error
+(function ensureManufacturingRegistered() {
+    // Check multiple times with increasing delays
+    const checkAndRegister = (attempt = 1, maxAttempts = 10) => {
+        if (window.Manufacturing) {
+            console.log(`✅ Manufacturing component registered (verified on attempt ${attempt})`);
+            return;
+        }
+        
+        if (attempt > maxAttempts) {
+            console.error('❌ Manufacturing component failed to register after all attempts');
+            // Register a minimal fallback component
+            const ReactForFallback = window.React || {};
+            window.Manufacturing = () => {
+                if (ReactForFallback.createElement) {
+                    return ReactForFallback.createElement('div', { 
+                        className: 'text-center py-12 text-gray-500',
+                        style: { padding: '3rem' }
+                    },
+                        ReactForFallback.createElement('p', null, '❌ Manufacturing component failed to load.'),
+                        ReactForFallback.createElement('p', null, 'Please refresh the page or check the console for errors.'),
+                        ReactForFallback.createElement('button', {
+                            onClick: () => window.location.reload(),
+                            className: 'mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700',
+                            style: { cursor: 'pointer' }
+                        }, 'Reload Page')
+                    );
+                }
+                // If React isn't available, return a simple object
+                return {
+                    type: 'div',
+                    props: {
+                        className: 'text-center py-12 text-gray-500',
+                        dangerouslySetInnerHTML: {
+                            __html: '❌ Manufacturing component failed to load. <button onclick="window.location.reload()" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Reload Page</button>'
+                        }
+                    }
+                };
+            };
+            console.log('✅ Registered fallback Manufacturing component');
+            return;
+        }
+        
+        // Try to register if Manufacturing variable exists
+        if (typeof Manufacturing !== 'undefined') {
+            console.log(`🔄 Attempting to register Manufacturing (attempt ${attempt}/${maxAttempts})...`);
+            window.Manufacturing = Manufacturing;
+            
+            // Dispatch event
+            if (typeof window.dispatchEvent === 'function') {
+                try {
+                    window.dispatchEvent(new CustomEvent('manufacturingComponentReady'));
+                } catch (e) {
+                    // Ignore event dispatch errors
+                }
+            }
+        }
+        
+        // Schedule next check with exponential backoff
+        const delay = Math.min(100 * Math.pow(2, attempt - 1), 2000);
+        setTimeout(() => checkAndRegister(attempt + 1, maxAttempts), delay);
+    };
+    
+    // Start checking after initial delay
+    setTimeout(() => checkAndRegister(), 500);
+})();

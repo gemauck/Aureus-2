@@ -351,51 +351,6 @@ function processClientData(rawClients, cacheKey) {
             notes: ''
         }),
         services: Array.isArray(c.services) ? c.services : (typeof c.services === 'string' ? JSON.parse(c.services || '[]') : []),
-        tags: (() => {
-            // Handle tags: API returns either nested ClientTag objects or already-extracted Tag objects
-            if (!c.tags || !Array.isArray(c.tags)) {
-                return [];
-            }
-            // Extract tags from nested structure if needed: [{ tag: { id, name, color } }] -> [{ id, name, color }]
-            const processedTags = c.tags
-                .map(t => {
-                    // If it's already a Tag object with id and name, use it
-                    if (t && typeof t === 'object' && t.id && t.name) {
-                        return {
-                            id: t.id,
-                            name: t.name,
-                            color: t.color || '#3B82F6',
-                            description: t.description || ''
-                        };
-                    }
-                    // If it's nested in a tag property, extract it
-                    if (t && typeof t === 'object' && t.tag && typeof t.tag === 'object') {
-                        return {
-                            id: t.tag.id,
-                            name: t.tag.name,
-                            color: t.tag.color || '#3B82F6',
-                            description: t.tag.description || ''
-                        };
-                    }
-                    // If it's just a string, convert to object
-                    if (typeof t === 'string' && t.trim()) {
-                        return {
-                            id: null,
-                            name: t,
-                            color: '#3B82F6',
-                            description: ''
-                        };
-                    }
-                    return null;
-                })
-                .filter(Boolean);
-            
-            // Debug logging for clients with tags
-            if (processedTags.length > 0) {
-            }
-            
-            return processedTags;
-        })(),
         ownerId: c.ownerId || null,
         isStarred,
         createdAt: c.createdAt,
@@ -1265,22 +1220,13 @@ const Clients = React.memo(() => {
                 );
                 
                 // Show cached clients IMMEDIATELY
-                // Ensure tags field exists (even if empty) for proper rendering
                 if (filteredCachedClients.length > 0) {
-                    const clientsWithTagsField = filteredCachedClients.map(client => ({
-                        ...client,
-                        tags: Array.isArray(client.tags) ? client.tags : []
-                    }));
-                    setClients(clientsWithTagsField);
+                    setClients(filteredCachedClients);
                 }
                 
                 // Show cached leads IMMEDIATELY (this is critical for fast loading!)
-                // Ensure tags field exists (even if empty) for proper rendering
                 if (cachedLeads.length > 0) {
-                    const normalizedCachedLeads = normalizeLeadStages(cachedLeads).map(lead => ({
-                        ...lead,
-                        tags: Array.isArray(lead.tags) ? lead.tags : []
-                    }));
+                    const normalizedCachedLeads = normalizeLeadStages(cachedLeads);
                     setLeads(normalizedCachedLeads);
                     setLeadsCount(normalizedCachedLeads.length);
                 }
@@ -1304,7 +1250,6 @@ const Clients = React.memo(() => {
                             const updated = filteredCachedClients.map(client => ({
                                 ...client,
                                 opportunities: opportunitiesByClient[client.id] || client.opportunities || []
-                                // Tags are preserved from client object (may be from cache, will be updated by API)
                             }));
                             setClients(updated);
                             safeStorage.setClients(updated);
@@ -1335,29 +1280,9 @@ const Clients = React.memo(() => {
             const now = Date.now();
             const timeSinceLastCall = now - lastApiCallTimestamp;
             
-            // Check if cached clients are missing tags - if so, always fetch from API
-            // IMPORTANT: Check the original cached data, not the state (which may have empty arrays set)
-            const cachedClientsMissingTags = cachedClients && cachedClients.length > 0 && 
-                cachedClients.some(client => {
-                    const hasTags = client.tags && Array.isArray(client.tags) && client.tags.length > 0;
-                    return !hasTags;
-                });
-            const clientsMissingTags = clients.length > 0 && 
-                clients.some(client => {
-                    const hasTags = client.tags && Array.isArray(client.tags) && client.tags.length > 0;
-                    return !hasTags;
-                });
-            const needsTagsRefresh = cachedClientsMissingTags || clientsMissingTags;
-            
-            // Debug: Log if tags refresh is needed
-            if (needsTagsRefresh) {
-                console.log('🔄 Tags missing - forcing API call to fetch tags');
-            }
-            
             // If we have cached clients AND it's been less than 10 seconds since last call, skip API entirely
             // This prevents unnecessary network requests when data is fresh
-            // UNLESS forceRefresh is true OR tags are missing - then ALWAYS call API (bypass throttling)
-            if (!forceRefresh && !needsTagsRefresh && timeSinceLastCall < API_CALL_INTERVAL && (clients.length > 0 || (cachedClients && cachedClients.length > 0))) {
+            if (!forceRefresh && timeSinceLastCall < API_CALL_INTERVAL && (clients.length > 0 || (cachedClients && cachedClients.length > 0))) {
                 
                 // But still trigger LiveDataSync in background to get updates
                 if (window.LiveDataSync?.forceSync) {
@@ -1422,33 +1347,14 @@ const Clients = React.memo(() => {
                 // DatabaseAPI returns { data: { clients: [...] } }, while api.listClients might return { data: { clients: [...] } }
                 const apiClients = res?.data?.clients || res?.clients || [];
                 
-                // Debug: Check if any clients have tags in API response
-                const clientsWithTags = apiClients.filter(c => c.tags && Array.isArray(c.tags) && c.tags.length > 0);
-                if (clientsWithTags.length > 0) {
-                } else {
-                }
-                
                 // If API returns no clients, use cached data
                 if (apiClients.length === 0 && cachedClients && cachedClients.length > 0) {
                     return; // Keep showing cached data
                 }
                 
-                // Clear processClientData cache if tags are missing - ensures fresh processing with tags
-                if (needsTagsRefresh) {
-                    clientDataCache = null;
-                    clientDataCacheTimestamp = 0;
-                }
-                
                 // Use memoized data processor for better performance
                 const processStartTime = performance.now();
                 const processedClients = processClientData(apiClients);
-                
-                // Debug: Check processed clients for tags
-                const processedWithTags = processedClients.filter(c => c.tags && Array.isArray(c.tags) && c.tags.length > 0);
-                if (processedWithTags.length > 0) {
-                } else {
-                }
-                
                 // Separate clients and leads based on type
                 // Include records with type='client' OR null/undefined (legacy clients without type field)
                 const clientsOnly = processedClients.filter(c => c.type === 'client' || c.type === null || c.type === undefined);
@@ -1470,7 +1376,6 @@ const Clients = React.memo(() => {
                     if (cachedClient?.opportunities && Array.isArray(cachedClient.opportunities) && cachedClient.opportunities.length > 0) {
                         merged.opportunities = cachedClient.opportunities;
                     }
-                    // Tags are already in merged from client (API response) - they take precedence over cache
                     // This ensures tags always come from the API, not stale cache
                     return merged;
                 });
@@ -1520,7 +1425,6 @@ const Clients = React.memo(() => {
                             const updated = clientsOnly.map(client => ({
                                 ...client,
                                 opportunities: opportunitiesByClient[client.id] || []
-                                // Tags are already in client from processClientData - preserve them
                             }));
                             
                             const totalOpps = updated.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
@@ -2253,31 +2157,13 @@ const Clients = React.memo(() => {
                 
                 // Check if cached leads are missing tags - if so, always fetch from API
                 // IMPORTANT: Check the original cached data, not the state (which may have empty arrays set)
-                const cachedLeadsMissingTags = cachedLeads && Array.isArray(cachedLeads) && cachedLeads.length > 0 && 
-                    cachedLeads.some(lead => {
-                        const hasTags = lead.tags && Array.isArray(lead.tags) && lead.tags.length > 0;
-                        return !hasTags;
-                    });
-                const leadsMissingTags = leads.length > 0 && 
-                    leads.some(lead => {
-                        const hasTags = lead.tags && Array.isArray(lead.tags) && lead.tags.length > 0;
-                        return !hasTags;
-                    });
-                const needsTagsRefresh = cachedLeadsMissingTags || leadsMissingTags;
-                
-                // Debug: Log if tags refresh is needed
-                if (needsTagsRefresh) {
-                    console.log('🔄 Lead tags missing - forcing API call to fetch tags');
-                }
-                
                 // Check if we should skip API call:
                 // 1. If we have leads in state AND recent API call - skip
                 // 2. If we have leads in localStorage (just loaded above) AND recent API call - skip
-                // UNLESS forceRefresh is true OR tags are missing - then ALWAYS call API
                 const hasLeadsInState = leads.length > 0;
                 const hasLeadsInCache = cachedLeads && Array.isArray(cachedLeads) && cachedLeads.length > 0;
                 
-                if (!forceRefresh && !needsTagsRefresh && timeSinceLastCall < API_CALL_INTERVAL && (hasLeadsInState || hasLeadsInCache)) {
+                if (!forceRefresh && timeSinceLastCall < API_CALL_INTERVAL && (hasLeadsInState || hasLeadsInCache)) {
                     const leadCount = hasLeadsInState ? leads.length : cachedLeads.length;
                     
                     // But still trigger LiveDataSync in background to get updates
@@ -2330,11 +2216,6 @@ const Clients = React.memo(() => {
             const rawLeads = apiResponse?.data?.leads || apiResponse?.leads || [];
             
             // DEBUG: Check if any leads have tags in API response
-            const leadsWithTags = rawLeads.filter(l => l.tags && Array.isArray(l.tags) && l.tags.length > 0);
-            if (leadsWithTags.length > 0) {
-            } else {
-            }
-            
             // DEBUG: Log lead details and ownerIds for visibility debugging
             const currentUser = window.storage?.getUser?.();
             const userEmail = currentUser?.email || 'unknown';
@@ -2498,11 +2379,6 @@ const Clients = React.memo(() => {
             // Log count update for debugging
             
             // Debug: Check processed leads for tags
-            const processedLeadsWithTags = mappedLeads.filter(l => l.tags && Array.isArray(l.tags) && l.tags.length > 0);
-            if (processedLeadsWithTags.length > 0) {
-            } else {
-            }
-            
             // Persist leads to localStorage for fast loading on next boot
             if (window.storage?.setLeads) {
                 try {
@@ -2955,7 +2831,9 @@ const Clients = React.memo(() => {
                     activityLog: Array.isArray(leadFormData.activityLog) ? leadFormData.activityLog : (selectedLead.activityLog || []),
                     projectIds: Array.isArray(leadFormData.projectIds) ? leadFormData.projectIds : (selectedLead.projectIds || []),
                     proposals: Array.isArray(leadFormData.proposals) ? leadFormData.proposals : (selectedLead.proposals || []),
-                    services: Array.isArray(leadFormData.services) ? leadFormData.services : (selectedLead.services || [])
+                    services: Array.isArray(leadFormData.services) ? leadFormData.services : (selectedLead.services || []),
+                    // Explicitly include externalAgentId to ensure it's saved (even if null)
+                    externalAgentId: leadFormData.externalAgentId !== undefined ? (leadFormData.externalAgentId || null) : (selectedLead.externalAgentId || null)
                 };
                 
                 
@@ -3150,6 +3028,8 @@ const Clients = React.memo(() => {
                     id: Date.now().toString(), // Generate local ID
                     type: 'lead', // Ensure it's marked as a lead
                     lastContact: new Date().toISOString().split('T')[0],
+                    // Explicitly include externalAgentId to ensure it's saved (even if null)
+                    externalAgentId: leadFormData.externalAgentId !== undefined ? (leadFormData.externalAgentId || null) : null,
                     activityLog: [{
                         id: Date.now(),
                         type: 'Lead Created',
@@ -4280,9 +4160,6 @@ const Clients = React.memo(() => {
                             <th className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
                                 Services
                             </th>
-                            <th className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
-                                Tags
-                            </th>
                             <th 
                                 className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
                                 onClick={() => handleSort('status')}
@@ -4355,52 +4232,6 @@ const Clients = React.memo(() => {
                                                         )}
                                                         {services.length === 0 && (
                                                             <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>None</span>
-                                                        )}
-                                                    </>
-                                                );
-                                            })()}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-2 whitespace-nowrap">
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {(() => {
-                                                const tags = Array.isArray(client.tags) ? client.tags : [];
-                                                
-                                                // Debug logging for tags rendering
-                                                if (tags.length > 0) {
-                                                }
-                                                
-                                                const MAX = 3;
-                                                const visible = tags.slice(0, MAX);
-                                                const remaining = tags.length - visible.length;
-                                                return (
-                                                    <>
-                                                        {visible.map((tag, idx) => {
-                                                            // Ensure tag is an object with name and color
-                                                            const tagObj = tag && typeof tag === 'object' 
-                                                                ? { 
-                                                                    id: tag.id || idx, 
-                                                                    name: tag.name || String(tag), 
-                                                                    color: tag.color || '#3B82F6' 
-                                                                }
-                                                                : { id: idx, name: String(tag || ''), color: '#3B82F6' };
-                                                            const tagColor = tagObj.color || '#3B82F6';
-                                                            const tagName = tagObj.name || '-';
-                                                            return (
-                                                                <span 
-                                                                    key={tagObj.id || idx} 
-                                                                    className={`inline-flex items-center px-2 py-0.5 text-[10px] rounded text-white`}
-                                                                    style={{ backgroundColor: tagColor }}
-                                                                >
-                                                                    <i className="fas fa-tag mr-1"></i>{tagName}
-                                                                </span>
-                                                            );
-                                                        })}
-                                                        {remaining > 0 && (
-                                                            <span className={`inline-flex items-center px-2 py-0.5 text-[10px] rounded ${isDark ? 'bg-primary-900 text-primary-200' : 'bg-primary-100 text-primary-700'}`}>+{remaining}</span>
-                                                        )}
-                                                        {tags.length === 0 && (
-                                                            <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>—</span>
                                                         )}
                                                     </>
                                                 );
@@ -4915,50 +4746,6 @@ const Clients = React.memo(() => {
                                         }`}>
                                             {lead.stage || 'Awareness'}
                                         </span>
-                                    </td>
-                                    <td className="px-6 py-2">
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {(() => {
-                                                const tags = Array.isArray(lead.tags) ? lead.tags : [];
-                                                
-                                                // Debug logging for tags rendering
-                                                if (tags.length > 0) {
-                                                } else if (lead.tags) {
-                                                }
-                                                
-                                                if (tags.length === 0) {
-                                                    return <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>—</span>;
-                                                }
-                                                
-                                                return tags.map((tag, index) => {
-                                                    // Handle both nested and flat tag structures
-                                                    const tagObj = tag && typeof tag === 'object' && tag.name
-                                                        ? tag // Already a tag object with name
-                                                        : (tag && typeof tag === 'object' && tag.tag && typeof tag.tag === 'object')
-                                                            ? tag.tag // Extract from nested structure
-                                                            : { id: index, name: String(tag || ''), color: '#3B82F6' }; // Fallback
-                                                    
-                                                    const tagName = tagObj?.name || String(tag || '');
-                                                    const tagColor = tagObj?.color || '#3B82F6';
-                                                    const tagId = tagObj?.id || index;
-                                                    
-                                                    return (
-                                                        <span
-                                                            key={tagId}
-                                                            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full border transition"
-                                                            style={{
-                                                                backgroundColor: `${tagColor}20`,
-                                                                color: tagColor,
-                                                                borderColor: tagColor
-                                                            }}
-                                                        >
-                                                            <i className="fas fa-tag text-[10px]"></i>
-                                                            {tagName}
-                                                        </span>
-                                                    );
-                                                });
-                                            })()}
-                                        </div>
                                     </td>
                                     <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
                                         {lead.externalAgent?.name || '—'}

@@ -271,19 +271,9 @@ const ManagementMeetingNotes = () => {
     
     // Save status removed - saves happen silently in background
     
-    // State for blocking navigation when saves are in progress
-    const [isBlockingNavigation, setIsBlockingNavigation] = useState(false);
+    // Removed: isBlockingNavigation - no longer needed since we don't auto-save
 
-    // Track pending saves to ensure they complete before navigation
-    const pendingSaves = useRef(new Set());
-    
-    // Debounce timers for auto-save
-    const saveTimers = useRef({});
-    // Latest values waiting to be saved (for flush on blur)
-    const pendingValues = useRef({});
-    
-    // Track current React state values for all fields (fallback if DOM capture fails)
-    const currentFieldValues = useRef({}); // { [fieldKey]: value }
+    // No change tracking - values are saved directly from form fields when Save button is clicked
 
     const weekCardRefs = useRef({});
     
@@ -646,708 +636,22 @@ const ManagementMeetingNotes = () => {
         scrollToWeekId(selectedWeek);
     }, [selectedWeek, weeks, scrollToWeekId]);
 
-    // Track active save promises to wait for completion
-    const activeSavePromises = useRef(new Set());
-    
-    // Expose flush function and pending status for parent components (initialized after flushPendingSaves is defined)
+    // Expose functions for parent components (no tracking - always returns false)
     const managementMeetingNotesRef = useRef({
-        flushPendingSaves: null,
         hasPendingSaves: () => {
-            return pendingSaves.current.size > 0 || 
-                   Object.keys(pendingValues.current).length > 0 || 
-                   activeSavePromises.current.size > 0;
-        },
-        isBlockingNavigation: () => isBlockingNavigation
+            // No tracking - always return false
+            return false;
+        }
     });
     
-    // CRITICAL: Capture current values from DOM inputs before flushing
-    // This ensures we get the absolute latest typed values even if onChange hasn't fired
-    const captureCurrentFieldValues = useCallback(() => {
-        const capturedValues = {};
-        
-        // Find all textarea elements with data attributes (our department note fields)
-        const textareas = document.querySelectorAll('textarea[data-dept-note-id][data-field]');
-        textareas.forEach(textarea => {
-            const deptNoteId = textarea.getAttribute('data-dept-note-id');
-            const fieldName = textarea.getAttribute('data-field');
-            const value = textarea.value || '';
-            
-            if (deptNoteId && fieldName) {
-                const fieldKey = `${deptNoteId}-${fieldName}`;
-                // ALWAYS update with current DOM value - it's the source of truth
-                capturedValues[fieldKey] = {
-                    departmentNotesId: deptNoteId,
-                    field: fieldName,
-                    value: value
-                };
-                console.log(`📸 Captured textarea DOM value for ${fieldKey}:`, value.substring(0, 50) + '...');
-            }
-        });
-        
-        // CRITICAL: Find RichTextEditor contentEditable divs
-        // Strategy: Find labels for our fields, then find the contentEditable div that follows
-        const labels = document.querySelectorAll('label');
-        labels.forEach(label => {
-            const labelText = (label.textContent || '').toLowerCase();
-            let fieldName = null;
-            
-            // Determine field name from label text
-            if (labelText.includes('success')) {
-                fieldName = 'successes';
-            } else if ((labelText.includes('week') || labelText.includes('plan')) && (labelText.includes('follow') || labelText.includes('plan'))) {
-                fieldName = 'weekToFollow';
-            } else if (labelText.includes('frustrat')) {
-                fieldName = 'frustrations';
-            }
-            
-            if (fieldName) {
-                // Find the contentEditable div that follows this label (RichTextEditor)
-                let nextSibling = label.nextElementSibling;
-                let contentEditableDiv = null;
-                
-                // Look for contentEditable in next sibling or its children
-                while (nextSibling && !contentEditableDiv) {
-                    contentEditableDiv = nextSibling.querySelector('[contenteditable="true"]') || 
-                                       (nextSibling.getAttribute('contenteditable') === 'true' ? nextSibling : null);
-                    if (contentEditableDiv) break;
-                    nextSibling = nextSibling.nextElementSibling;
-                }
-                
-                if (contentEditableDiv) {
-                    // Find the department note ID by walking up the DOM tree
-                    let parent = label.closest('[class*="department"], [class*="dept"], [class*="note"]') || label.parentElement;
-                    let deptNoteId = null;
-                    
-                    // Walk up to find department note context - look for week cards or department note containers
-                    while (parent && parent !== document.body) {
-                        // Check if we're in a week card that contains department notes
-                        // The department note ID should be in the currentMonthlyNotes data
-                        // We'll need to match by department and week
-                        const weekCard = parent.closest('[class*="week"], [data-week-id]');
-                        if (weekCard) {
-                            // Try to find deptNote by matching department and week from currentMonthlyNotes
-                            // For now, we'll use a different strategy - find by matching the field value
-                            // Actually, let's use the React state fallback for RichTextEditor
-                            // and focus on textarea capture which has data attributes
-                            break;
-                        }
-                        parent = parent.parentElement;
-                    }
-                    
-                    // If we found contentEditable but no deptNoteId, we'll rely on React state fallback
-                    // But try to extract from the DOM structure if possible
-                    const html = contentEditableDiv.innerHTML || '';
-                    if (html.trim()) {
-                        // We'll match this later using React state fallback
-                        // Store with a temporary key that we'll resolve
-                        console.log(`📸 Found RichTextEditor for ${fieldName}, will match via React state`);
-                    }
-                }
-            }
-        });
-        
-        // Alternative: Find all contentEditable divs and try to match them to department notes
-        // by checking if they're in a department note section
-        const allContentEditables = document.querySelectorAll('[contenteditable="true"]');
-        allContentEditables.forEach(div => {
-            // Check if this is near a label we care about
-            const label = div.closest('div')?.querySelector('label');
-            if (label) {
-                const labelText = (label.textContent || '').toLowerCase();
-                let fieldName = null;
-                
-                if (labelText.includes('success')) {
-                    fieldName = 'successes';
-                } else if ((labelText.includes('week') || labelText.includes('plan')) && (labelText.includes('follow') || labelText.includes('plan'))) {
-                    fieldName = 'weekToFollow';
-                } else if (labelText.includes('frustrat')) {
-                    fieldName = 'frustrations';
-                }
-                
-                if (fieldName) {
-                    const html = div.innerHTML || '';
-                    // We'll match this to the correct deptNoteId using React state fallback
-                    console.log(`📸 Found RichTextEditor ${fieldName} with content, will match via React state`);
-                }
-            }
-        });
-        
-        // CRITICAL FALLBACK: Use React state values from currentMonthlyNotes
-        // BUT ONLY capture values that have actually changed (not already saved)
-        if (currentMonthlyNotes?.weeklyNotes) {
-            currentMonthlyNotes.weeklyNotes.forEach(week => {
-                if (week?.departmentNotes) {
-                    week.departmentNotes.forEach(deptNote => {
-                        if (deptNote?.id) {
-                            // Capture all three fields, but only if they differ from last saved
-                            ['successes', 'weekToFollow', 'frustrations'].forEach(field => {
-                                const fieldKey = `${deptNote.id}-${field}`;
-                                const value = deptNote[field] || '';
-                                const lastSaved = lastSavedValues.current[fieldKey];
-                                
-                                // Only capture if:
-                                // 1. Not already captured from DOM
-                                // 2. Value is already in pendingValues (user typed something) OR
-                                // 3. Value differs from last saved AND lastSaved is defined (meaning it was previously saved)
-                                // This prevents capturing all fields on first load when lastSaved is undefined
-                                const isAlreadyPending = pendingValues.current[fieldKey];
-                                const hasChanged = lastSaved !== undefined && value !== lastSaved;
-                                
-                                if (!capturedValues[fieldKey] && (isAlreadyPending || hasChanged)) {
-                                    capturedValues[fieldKey] = {
-                                        departmentNotesId: deptNote.id,
-                                        field: field,
-                                        value: value
-                                    };
-                                    console.log(`📸 Captured React state value for ${fieldKey} (${isAlreadyPending ? 'pending' : 'changed'}):`, String(value).substring(0, 50) + '...');
-                                }
-                            });
-                        }
-                    });
-                }
-            });
-        }
-        
-        // Also use currentFieldValues ref as additional fallback
-        // But only if the value has changed or is already pending
-        Object.entries(currentFieldValues.current).forEach(([fieldKey, value]) => {
-            if (!capturedValues[fieldKey] && value) {
-                const lastSaved = lastSavedValues.current[fieldKey];
-                const isAlreadyPending = pendingValues.current[fieldKey];
-                const hasChanged = lastSaved !== undefined && value !== lastSaved;
-                
-                // Only capture if it's already pending or has changed
-                if (isAlreadyPending || hasChanged) {
-                    // Parse fieldKey to get deptNoteId and field
-                    const parts = fieldKey.split('-');
-                    if (parts.length >= 2) {
-                        const deptNoteId = parts[0];
-                        const field = parts.slice(1).join('-'); // Handle fields with dashes
-                        capturedValues[fieldKey] = {
-                            departmentNotesId: deptNoteId,
-                            field: field,
-                            value: value
-                        };
-                        console.log(`📸 Captured currentFieldValues ref for ${fieldKey} (${isAlreadyPending ? 'pending' : 'changed'}):`, String(value).substring(0, 50) + '...');
-                    }
-                }
-            }
-        });
-        
-        return capturedValues;
-    }, [currentMonthlyNotes]); // Include currentMonthlyNotes to access latest React state
-    
-    // Flush all pending saves and wait for them to complete - NO TIMEOUTS, wait for ALL saves
-    const flushPendingSaves = useCallback(async () => {
-        // Set blocking state IMMEDIATELY
-        setIsBlockingNavigation(true);
-        console.log('🔒 BLOCKING NAVIGATION - Starting save flush...');
-        
-        // CRITICAL: Capture current values from DOM before flushing
-        // This ensures we get the absolute latest typed values even if onChange hasn't fired yet
-        const capturedValues = captureCurrentFieldValues();
-        console.log('📸 Captured current field values from DOM:', Object.keys(capturedValues).length);
-        
-        // Merge captured values into pendingValues - but only if they differ from last saved
-        Object.entries(capturedValues).forEach(([fieldKey, data]) => {
-            if (data) {
-                const lastSaved = lastSavedValues.current[fieldKey];
-                // Only add to pending if:
-                // 1. It's already in pendingValues (user typed something), OR
-                // 2. It's different from last saved AND lastSaved is defined (previously saved)
-                const isAlreadyPending = pendingValues.current[fieldKey];
-                const hasChanged = lastSaved !== undefined && data.value !== lastSaved;
-                
-                if (isAlreadyPending || hasChanged) {
-                    pendingValues.current[fieldKey] = data;
-                    pendingSaves.current.add(fieldKey); // Ensure it's marked as pending
-                    console.log(`📝 Updated pending value for ${fieldKey} from DOM capture`);
-                } else {
-                    console.log(`⏭️ Skipping ${fieldKey} - no changes detected`);
-                }
-            }
-        });
-        
-        // Clear all debounce timers
-        Object.keys(saveTimers.current).forEach(fieldKey => {
-            clearTimeout(saveTimers.current[fieldKey]);
-            delete saveTimers.current[fieldKey];
-        });
-        
-        // Set a timeout to prevent indefinite blocking (always set, not just on failure)
-        const blockingTimeout = setTimeout(() => {
-            if (isBlockingNavigation) {
-                console.warn('⚠️ Save flush timed out after 15 seconds. Unblocking navigation with potential unsaved changes.');
-                setIsBlockingNavigation(false);
-                // Clear any remaining pending saves to prevent re-blocking
-                pendingSaves.current.clear();
-                // Keep pendingValues in case they need to be saved later
-            }
-        }, 15000); // 15 seconds timeout
-        
-        // Wait for ALL existing active save promises to complete - with timeout for 502 errors
-        const existingPromises = Array.from(activeSavePromises.current);
-        if (existingPromises.length > 0) {
-            console.log(`⏳ Waiting for ${existingPromises.length} existing save(s) to complete...`);
-            try {
-                // Use Promise.allSettled to allow some failures (e.g., 502 errors)
-                // Wrap each promise with a timeout to fail fast on server errors
-                const timeoutPromises = existingPromises.map(promise => 
-                    Promise.race([
-                        promise,
-                        new Promise((_, reject) => 
-                            setTimeout(() => reject(new Error('Save timeout after 8 seconds')), 8000)
-                        )
-                    ]).catch(error => {
-                        // Check if it's a 502 error - fail fast
-                        const errorMsg = error?.message || String(error);
-                        if (errorMsg.includes('502') || errorMsg.includes('Bad Gateway')) {
-                            console.warn('⚠️ 502 error detected, failing fast:', errorMsg);
-                            // Remove from active promises immediately
-                            activeSavePromises.current.delete(promise);
-                            throw error;
-                        }
-                        throw error;
-                    })
-                );
-                await Promise.allSettled(timeoutPromises);
-                console.log('✅ All existing saves completed (some may have failed)');
-            } catch (error) {
-                console.error('Error waiting for existing saves:', error);
-            }
-        }
-        
-        // Then, save any remaining pending values - ENSURE we use the LATEST value
-        const pendingEntries = Object.entries(pendingValues.current);
-        const newSavePromises = [];
-        
-        pendingEntries.forEach(([fieldKey, data]) => {
-            if (data) {
-                // Get auth token
-                const token = localStorage.getItem('abcotronics_token') || sessionStorage.getItem('abcotronics_token');
-                const baseUrl = window.API_BASE_URL || '/api';
-                const url = `${baseUrl}/department-notes/${data.departmentNotesId}`;
-                
-                // Use the value from pendingValues - this is the latest
-                const valueToSave = data.value;
-                const payload = JSON.stringify({ [data.field]: valueToSave });
-                
-                console.log(`💾 Saving ${fieldKey}:`, valueToSave.substring(0, 50) + '...');
-                
-                // Create save promise - CRITICAL: Use keepalive for guaranteed delivery
-                // Wrap with timeout to fail fast on 502 errors
-                const savePromise = Promise.race([
-                    window.DatabaseAPI.updateDepartmentNotes(data.departmentNotesId, { [data.field]: valueToSave }),
-                    new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error('Save timeout after 8 seconds')), 8000)
-                    )
-                ])
-                    .then(() => {
-                        // Only remove if this is still the latest value
-                        const currentPending = pendingValues.current[fieldKey];
-                        if (currentPending && currentPending.value === valueToSave) {
-                            delete pendingValues.current[fieldKey];
-                        }
-                        // Update last saved value
-                        lastSavedValues.current[fieldKey] = valueToSave;
-                        // Remove from pending saves
-                        pendingSaves.current.delete(fieldKey);
-                        activeSavePromises.current.delete(savePromise);
-                        console.log(`✅ Saved field ${fieldKey}`);
-                    })
-                    .catch((error) => {
-                        const errorMsg = error?.message || String(error);
-                        const is502Error = errorMsg.includes('502') || errorMsg.includes('Bad Gateway');
-                        
-                        console.error(`Error flushing save ${fieldKey}:`, errorMsg);
-                        
-                        // For 502 errors, fail fast - don't retry with fallback
-                        if (is502Error) {
-                            console.warn(`⚠️ 502 error for ${fieldKey}, failing fast. Changes will be lost.`);
-                            // Remove from queue to prevent blocking navigation
-                            delete pendingValues.current[fieldKey];
-                            pendingSaves.current.delete(fieldKey);
-                            activeSavePromises.current.delete(savePromise);
-                            return; // Exit early for 502 errors
-                        }
-                        
-                        // On other errors, try fetch with keepalive as fallback - CRITICAL
-                        fetch(url, {
-                            method: 'PUT',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': token ? `Bearer ${token}` : ''
-                            },
-                            body: payload,
-                            keepalive: true // Survives page unload
-                        }).then(() => {
-                            console.log(`✅ Fallback save succeeded for ${fieldKey}`);
-                            const currentPending = pendingValues.current[fieldKey];
-                            if (currentPending && currentPending.value === valueToSave) {
-                                delete pendingValues.current[fieldKey];
-                            }
-                            // Update last saved value
-                            lastSavedValues.current[fieldKey] = valueToSave;
-                            // Remove from pending saves
-                            pendingSaves.current.delete(fieldKey);
-                        }).catch(() => {
-                            console.error(`❌ Fallback save also failed for ${fieldKey}`);
-                        });
-                        activeSavePromises.current.delete(savePromise);
-                    });
-                
-                activeSavePromises.current.add(savePromise);
-                newSavePromises.push(savePromise);
-            }
-        });
-        
-        // Wait for ALL new saves to complete - use allSettled to allow some failures
-        if (newSavePromises.length > 0) {
-            console.log(`⏳ Waiting for ${newSavePromises.length} new save(s) to complete...`);
-            try {
-                const results = await Promise.allSettled(newSavePromises);
-                const failed = results.filter(r => r.status === 'rejected');
-                if (failed.length > 0) {
-                    console.warn(`⚠️ ${failed.length} save(s) failed (may be 502 errors):`, 
-                        failed.map(r => r.reason?.message || 'Unknown error'));
-                }
-                console.log(`✅ ${results.length - failed.length}/${results.length} new saves completed`);
-            } catch (error) {
-                console.error('Error waiting for new saves to complete:', error);
-            }
-        }
-        
-        // Final check - wait for ANY remaining active promises - with timeout
-        let attempts = 0;
-        const maxAttempts = 10; // Reduced from 15 to fail faster
-        while (activeSavePromises.current.size > 0 && attempts < maxAttempts) {
-            const remainingPromises = Array.from(activeSavePromises.current);
-            console.log(`⏳ Final check: Waiting for ${remainingPromises.length} remaining save(s)...`);
-            try {
-                // Use allSettled and timeout to allow failures
-                const timeoutPromises = remainingPromises.map(promise => 
-                    Promise.race([
-                        promise,
-                        new Promise((_, reject) => 
-                            setTimeout(() => reject(new Error('Save timeout')), 5000)
-                        )
-                    ])
-                );
-                const results = await Promise.allSettled(timeoutPromises);
-                const failed = results.filter(r => r.status === 'rejected');
-                if (failed.length > 0) {
-                    // Remove failed promises from active set
-                    failed.forEach((_, index) => {
-                        if (remainingPromises[index]) {
-                            activeSavePromises.current.delete(remainingPromises[index]);
-                        }
-                    });
-                }
-                console.log(`✅ ${results.length - failed.length}/${results.length} remaining saves completed`);
-            } catch (error) {
-                console.error('Error waiting for remaining saves:', error);
-            }
-            attempts++;
-            // Small delay between attempts
-            if (activeSavePromises.current.size > 0) {
-                await new Promise(resolve => setTimeout(resolve, 200));
-            }
-        }
-        
-        // Clear any remaining promises that timed out (likely 502 errors)
-        if (activeSavePromises.current.size > 0) {
-            console.warn(`⚠️ Clearing ${activeSavePromises.current.size} timed-out save(s) (likely 502 errors)`);
-            activeSavePromises.current.clear();
-        }
-        
-        // Verify saves are complete - but allow navigation even if some failed
-        const finalCheck = pendingSaves.current.size === 0 && 
-                          Object.keys(pendingValues.current).length === 0 && 
-                          activeSavePromises.current.size === 0;
-        
-        if (!finalCheck) {
-            const failedCount = pendingSaves.current.size + Object.keys(pendingValues.current).length;
-            console.warn('⚠️ WARNING: Some saves may have failed (likely 502 errors):', {
-                pendingSaves: pendingSaves.current.size,
-                pendingValues: Object.keys(pendingValues.current).length,
-                activePromises: activeSavePromises.current.size,
-                message: failedCount > 0 ? `${failedCount} save(s) failed due to server errors. Changes may be lost.` : 'Some saves may still be pending.'
-            });
-            
-            // Clear failed saves to prevent re-blocking
-            pendingSaves.current.clear();
-            // Keep pendingValues for potential retry later, but don't block navigation
-            
-            // Still unblock navigation after timeout - user can retry manually
-            clearTimeout(blockingTimeout);
-            setIsBlockingNavigation(false);
-            console.log('🔓 UNBLOCKING NAVIGATION - Some saves may have failed');
-            return;
-        }
-        
-        // Clear the timeout since we completed successfully
-        clearTimeout(blockingTimeout);
-        
-        console.log('🔓 UNBLOCKING NAVIGATION - All saves complete');
-        // Clear blocking state ONLY after verification
-        setIsBlockingNavigation(false);
-    }, [captureCurrentFieldValues, isBlockingNavigation]);
-
-    // Ensure all pending saves complete before navigation
+    // No tracking - removed all navigation blocking and change tracking code
+    // Expose ref to window for Teams component (hasPendingSaves always returns false)
     useEffect(() => {
-        const handleBeforeUnload = async (e) => {
-            // If there are pending saves or active save promises, warn the user
-            if (pendingSaves.current.size > 0 || 
-                Object.keys(pendingValues.current).length > 0 || 
-                activeSavePromises.current.size > 0) {
-                // Flush any pending saves before unload (async, but we can't await in beforeunload)
-                flushPendingSaves().catch(() => {});
-                
-                // Modern browsers ignore custom messages, but this triggers the confirmation dialog
-                e.preventDefault();
-                e.returnValue = '';
-                return '';
-            }
-        };
-
-        const handleVisibilityChange = async () => {
-            // When tab becomes hidden (user navigating away), flush all pending saves
-            if (document.hidden) {
-                await flushPendingSaves();
-            }
-        };
-
-        // Intercept navigation clicks to block when saves are pending
-        const handleNavClick = async (e) => {
-            const target = e.target.closest('a, button, [role="button"]');
-            if (!target) return;
-            
-            // CRITICAL: Exclude clicks on form elements, editor toolbars, and meeting notes component
-            // Don't block clicks on inputs, textareas, contentEditable, or their toolbars
-            // Also exclude any buttons/links inside the meeting notes component itself
-            if (target.tagName === 'INPUT' || 
-                target.tagName === 'TEXTAREA' || 
-                target.getAttribute('contenteditable') === 'true' ||
-                target.closest('textarea') ||
-                target.closest('input') ||
-                target.closest('[contenteditable="true"]') ||
-                target.closest('[class*="toolbar"]') ||
-                target.closest('[class*="editor"]') ||
-                target.closest('[class*="RichTextEditor"]') ||
-                target.closest('[data-rich-text-editor]') ||
-                target.closest('[class*="meeting-notes"]') ||
-                target.closest('[class*="ManagementMeetingNotes"]') ||
-                target.closest('form') ||
-                // Exclude any button that's clearly a form/editor button (not navigation)
-                (target.tagName === 'BUTTON' && (
-                    target.closest('[class*="department"]') ||
-                    target.closest('[class*="week"]') ||
-                    target.textContent?.match(/(Bold|Italic|Underline|Bullet|Number|Link|Image|Format)/i)
-                ))) {
-                return; // Allow these clicks - they're not navigation
-            }
-            
-            // Check if it's a navigation element (link or nav button)
-            const href = target.getAttribute('href') || target.closest('a')?.getAttribute('href');
-            const isNavLink = target.tagName === 'A' || 
-                href ||
-                // Only check for navigation in sidebar or main nav, not form buttons
-                (target.closest('nav') && !target.closest('form')) || 
-                target.closest('[data-nav]') ||
-                target.classList.contains('nav-link') ||
-                // Check for Teams component tab buttons (but not buttons inside meeting notes)
-                (target.closest('[class*="tab"]') && 
-                 !target.closest('[class*="meeting-notes"]') &&
-                 target.textContent?.match(/(Documents|Workflows|Checklists|Notices|Meeting Notes|Overview)/i)) ||
-                // Check for sidebar navigation (but not form elements in sidebar)
-                (target.closest('[class*="sidebar"]') && !target.closest('form')) ||
-                (target.closest('[class*="nav"]') && !target.closest('form')) ||
-                // Check for sidebar menu items (common patterns)
-                (target.closest('[class*="menu-item"]') && !target.closest('form')) ||
-                (target.closest('[class*="nav-item"]') && !target.closest('form'));
-            
-            if (isNavLink) {
-                const hasPendingSaves = pendingSaves.current.size > 0 || 
-                    Object.keys(pendingValues.current).length > 0 || 
-                    activeSavePromises.current.size > 0;
-                
-                if (hasPendingSaves || isBlockingNavigation) {
-                    
-                    // ALWAYS prevent navigation when saves are pending
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.stopImmediatePropagation();
-                    
-                    // Show blocking overlay if not already shown
-                    if (!isBlockingNavigation) {
-                        setIsBlockingNavigation(true);
-                    }
-                    
-                    // Wait for all saves to complete - VERIFY before allowing navigation
-                    try {
-                        await flushPendingSaves();
-                        
-                        // VERIFY all saves are actually complete before allowing navigation
-                        let verifyAttempts = 0;
-                        while ((pendingSaves.current.size > 0 || 
-                               Object.keys(pendingValues.current).length > 0 || 
-                               activeSavePromises.current.size > 0) && 
-                               verifyAttempts < 5) {
-                            console.log('🔍 Verifying saves complete...', {
-                                pendingSaves: pendingSaves.current.size,
-                                pendingValues: Object.keys(pendingValues.current).length,
-                                activePromises: activeSavePromises.current.size
-                            });
-                            await new Promise(resolve => setTimeout(resolve, 200));
-                            verifyAttempts++;
-                        }
-                        
-                        // Final verification - if still pending, wait more
-                        if (pendingSaves.current.size > 0 || 
-                            Object.keys(pendingValues.current).length > 0 || 
-                            activeSavePromises.current.size > 0) {
-                            console.warn('⚠️ Still has pending saves, waiting more...');
-                            await new Promise(resolve => setTimeout(resolve, 1000));
-                        }
-                        
-                        // Only allow navigation if truly complete
-                        const isComplete = pendingSaves.current.size === 0 && 
-                                          Object.keys(pendingValues.current).length === 0 && 
-                                          activeSavePromises.current.size === 0;
-                        
-                        if (isComplete) {
-                            console.log('✅ VERIFIED: All saves completed, allowing navigation');
-                            // Wait a bit more for DOM updates
-                            await new Promise(resolve => setTimeout(resolve, 300));
-                            
-                            // Re-trigger the click after saves complete
-                            if (target.tagName === 'A') {
-                                window.location.href = target.href;
-                            } else if (target.onclick) {
-                                target.onclick(e);
-                            } else {
-                                // Use setTimeout to ensure the click happens after current execution
-                                setTimeout(() => {
-                                    target.click();
-                                }, 100);
-                            }
-                        } else {
-                            console.error('❌ BLOCKED: Saves not complete, preventing navigation');
-                            setIsBlockingNavigation(true);
-                            // Don't allow navigation - keep blocking
-                        }
-                    } catch (error) {
-                        console.error('Error waiting for saves before navigation:', error);
-                        // On error, keep blocking to be safe
-                        setIsBlockingNavigation(true);
-                    }
-                }
-            }
-        };
-
-        window.addEventListener('beforeunload', handleBeforeUnload);
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        document.addEventListener('click', handleNavClick, true); // Capture phase
-        
-        // CRITICAL: Intercept RouteState navigation (MainLayout page changes)
-        const interceptRouteState = () => {
-            if (!window.RouteState) return null;
-            
-            const originalSetPage = window.RouteState.setPage;
-            const originalSetPageSubpath = window.RouteState.setPageSubpath;
-            
-            // Wrap setPage to check for pending saves
-            window.RouteState.setPage = async function(...args) {
-                const meetingNotesRef = window.ManagementMeetingNotesRef;
-                if (meetingNotesRef?.current?.hasPendingSaves?.() || 
-                    meetingNotesRef?.current?.isBlockingNavigation?.()) {
-                    console.log('🚫 RouteState.setPage BLOCKED - saves in progress...');
-                    await meetingNotesRef.current.flushPendingSaves();
-                    
-                    // Verify saves complete
-                    let verifyAttempts = 0;
-                    while ((meetingNotesRef?.current?.hasPendingSaves?.() || 
-                           meetingNotesRef?.current?.isBlockingNavigation?.()) && 
-                           verifyAttempts < 10) {
-                        await new Promise(resolve => setTimeout(resolve, 200));
-                        verifyAttempts++;
-                    }
-                    
-                    if (!meetingNotesRef?.current?.hasPendingSaves?.() && 
-                        !meetingNotesRef?.current?.isBlockingNavigation?.()) {
-                        console.log('✅ RouteState.setPage: All saves complete, allowing navigation');
-                        return originalSetPage.apply(this, args);
-                    } else {
-                        console.error('❌ RouteState.setPage: Saves not complete, blocking navigation');
-                        return; // Block navigation
-                    }
-                }
-                return originalSetPage.apply(this, args);
-            };
-            
-            // Wrap setPageSubpath to check for pending saves
-            window.RouteState.setPageSubpath = async function(...args) {
-                const meetingNotesRef = window.ManagementMeetingNotesRef;
-                if (meetingNotesRef?.current?.hasPendingSaves?.() || 
-                    meetingNotesRef?.current?.isBlockingNavigation?.()) {
-                    console.log('🚫 RouteState.setPageSubpath BLOCKED - saves in progress...');
-                    await meetingNotesRef.current.flushPendingSaves();
-                    
-                    // Verify saves complete
-                    let verifyAttempts = 0;
-                    while ((meetingNotesRef?.current?.hasPendingSaves?.() || 
-                           meetingNotesRef?.current?.isBlockingNavigation?.()) && 
-                           verifyAttempts < 10) {
-                        await new Promise(resolve => setTimeout(resolve, 200));
-                        verifyAttempts++;
-                    }
-                    
-                    if (!meetingNotesRef?.current?.hasPendingSaves?.() && 
-                        !meetingNotesRef?.current?.isBlockingNavigation?.()) {
-                        console.log('✅ RouteState.setPageSubpath: All saves complete, allowing navigation');
-                        return originalSetPageSubpath.apply(this, args);
-                    } else {
-                        console.error('❌ RouteState.setPageSubpath: Saves not complete, blocking navigation');
-                        return; // Block navigation
-                    }
-                }
-                return originalSetPageSubpath.apply(this, args);
-            };
-            
-            return () => {
-                // Restore original functions on cleanup
-                if (window.RouteState && originalSetPage) {
-                    window.RouteState.setPage = originalSetPage;
-                }
-                if (window.RouteState && originalSetPageSubpath) {
-                    window.RouteState.setPageSubpath = originalSetPageSubpath;
-                }
-            };
-        };
-        
-        const cleanupRouteState = interceptRouteState();
-
-        return () => {
-            window.removeEventListener('beforeunload', handleBeforeUnload);
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-            document.removeEventListener('click', handleNavClick, true);
-            if (cleanupRouteState) cleanupRouteState();
-            
-            // Cleanup: flush pending saves and clear timers on unmount
-            flushPendingSaves().catch(() => {});
-        };
-    }, [flushPendingSaves, isBlockingNavigation]);
-    
-    // Update ref when flushPendingSaves changes and expose to window
-    useEffect(() => {
-        managementMeetingNotesRef.current.flushPendingSaves = flushPendingSaves;
-        managementMeetingNotesRef.current.flushPendingSaving = flushPendingSaves; // Alias for Teams.jsx
-        managementMeetingNotesRef.current.isBlockingNavigation = () => isBlockingNavigation;
         window.ManagementMeetingNotesRef = managementMeetingNotesRef;
         return () => {
             delete window.ManagementMeetingNotesRef;
         };
-    }, [flushPendingSaves, isBlockingNavigation]);
+    }, []);
 
     // Get all action items for the month
     const allActionItems = useMemo(() => {
@@ -1939,121 +1243,53 @@ const ManagementMeetingNotes = () => {
     // Track the last saved value per field to avoid duplicate saves
     const lastSavedValues = useRef({});
     
-    // Immediate save function - saves on every change with no debounce
+    // Debounce timer refs for field changes
+    const fieldChangeDebounceTimers = useRef({});
+    const DEBOUNCE_DELAY = 300; // 300ms debounce delay
+    
+    // Track field changes - NO auto-save, only updates local state
+    // Debounced to prevent excessive updates on every keystroke
     const handleFieldChange = (departmentNotesId, field, value) => {
-        // Update local state immediately for responsive UI
+        // Update local state immediately for responsive UI (no debounce on UI updates)
         const monthlyId = currentMonthlyNotes?.id || null;
         updateDepartmentNotesLocal(departmentNotesId, field, value, monthlyId);
         
         const fieldKey = getFieldKey(departmentNotesId, field);
         
-        // ALWAYS store the latest value - this is critical for navigation blocking
-        pendingValues.current[fieldKey] = { departmentNotesId, field, value };
-        
-        // CRITICAL: Also track in currentFieldValues for DOM capture fallback
+        // Update currentFieldValues immediately (for UI responsiveness)
         currentFieldValues.current[fieldKey] = value;
         
-        // NO SAVE STATUS MESSAGES - save silently in background
-        
-        // Mark as pending save
-        pendingSaves.current.add(fieldKey);
-        
-        // Create save promise and track it - CRITICAL: This must complete before navigation
-        // Wrap with timeout to fail fast on 502 errors
-        const savePromise = Promise.race([
-            window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value }),
-            new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Save timeout after 8 seconds')), 8000)
-            )
-        ])
-            .then(() => {
-                // Successfully saved - but only remove from pending if this is still the latest value
-                const currentPending = pendingValues.current[fieldKey];
-                if (currentPending && currentPending.value === value) {
-                    // This is still the latest value, safe to remove
-                    delete pendingValues.current[fieldKey];
-                }
-                // Always track last saved value
-                lastSavedValues.current[fieldKey] = value;
-                
-                // NO SAVE STATUS MESSAGES - save silently
-            })
-            .catch(error => {
-                const errorMsg = error?.message || String(error);
-                const is502Error = errorMsg.includes('502') || errorMsg.includes('Bad Gateway');
-                
-                if (is502Error) {
-                    console.warn(`⚠️ 502 error auto-saving ${fieldKey}, will retry on navigation`);
-                    // For 502 errors, keep in pendingValues but don't block indefinitely
-                    // The navigation flush will handle it with faster timeout
-                } else {
-                    console.error('Error auto-saving department notes:', error);
-                }
-                // Keep in pendingValues on error - blur/navigation will retry
-                // DO NOT remove from pendingValues on error - it must be saved
-                
-                // NO SAVE STATUS MESSAGES - save silently
-            })
-            .finally(() => {
-                pendingSaves.current.delete(fieldKey);
-                activeSavePromises.current.delete(savePromise);
-            });
-        
-        // Track the save promise so we can wait for it during navigation
-        activeSavePromises.current.add(savePromise);
-        
-        // CRITICAL: If blocking is not active but we have pending saves, set it
-        // This ensures the overlay shows immediately when user types
-        if (!isBlockingNavigation && (pendingSaves.current.size > 0 || Object.keys(pendingValues.current).length > 0)) {
-            // Don't set blocking yet - only set it when navigation is attempted
-            // But ensure we're ready to block
+        // Debounce the pendingValues update to reduce excessive save checks
+        // Clear existing timer for this field
+        if (fieldChangeDebounceTimers.current[fieldKey]) {
+            clearTimeout(fieldChangeDebounceTimers.current[fieldKey]);
         }
+        
+        // Set new timer to update pendingValues after user stops typing
+        fieldChangeDebounceTimers.current[fieldKey] = setTimeout(() => {
+            // Store the latest value for tracking unsaved changes
+            pendingValues.current[fieldKey] = { departmentNotesId, field, value };
+            // Clean up timer reference
+            delete fieldChangeDebounceTimers.current[fieldKey];
+        }, DEBOUNCE_DELAY);
+        
+        // NO AUTO-SAVE - changes are only saved when Save button is clicked
     };
     
-    // Flush save on blur - immediately saves the latest value
+    // Update field value on blur (just updates local state)
     const handleFieldBlur = (departmentNotesId, field, value) => {
-        const fieldKey = getFieldKey(departmentNotesId, field);
-        
-        // Clear any pending debounce timer
-        if (saveTimers.current[fieldKey]) {
-            clearTimeout(saveTimers.current[fieldKey]);
-            delete saveTimers.current[fieldKey];
-        }
-        
-        // Get the most recent value (either from pending or passed in)
-        const pendingData = pendingValues.current[fieldKey];
-        const valueToSave = pendingData ? pendingData.value : value;
-        
-        // Mark as pending
-        pendingSaves.current.add(fieldKey);
-        
-        // Create save promise and track it
-        const savePromise = window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: valueToSave })
-            .then(() => {
-                // Successfully saved - clear from pending values
-                delete pendingValues.current[fieldKey];
-            })
-            .catch(error => {
-                console.error('Error saving department notes on blur:', error);
-                if (selectedMonth) {
-                    reloadMonthlyNotes(selectedMonth).catch(() => {});
-                }
-            })
-            .finally(() => {
-                pendingSaves.current.delete(fieldKey);
-                activeSavePromises.current.delete(savePromise);
-            });
-        
-        // Track the save promise
-        activeSavePromises.current.add(savePromise);
+        // Update local state with the value
+        const monthlyId = currentMonthlyNotes?.id || null;
+        updateDepartmentNotesLocal(departmentNotesId, field, value, monthlyId);
+        // No tracking, no auto-save - only saved when Save button is clicked
     };
 
     // Save all fields for a department at once
     const handleSaveDepartment = async (departmentNotesId) => {
-        if (!departmentNotesId) return;
-        
-        // Preserve scroll position - capture before any async operations
-        const currentScrollPosition = window.scrollY || window.pageYOffset;
+        if (!departmentNotesId) {
+            console.error('No departmentNotesId provided');
+            return;
+        }
         
         // Find the department note
         const week = currentMonthlyNotes?.weeklyNotes?.find(w => 
@@ -2062,64 +1298,54 @@ const ManagementMeetingNotes = () => {
         if (!week) return;
         
         const deptNote = week.departmentNotes?.find(dn => dn.id === departmentNotesId);
-        if (!deptNote) return;
+        if (!deptNote) {
+            console.error('Department note not found:', departmentNotesId);
+            return;
+        }
         
-        // Collect all field values
+        // Get field values directly from React state (updated by handleFieldChange)
         const fieldsToSave = {
             successes: deptNote.successes || '',
             weekToFollow: deptNote.weekToFollow || '',
             frustrations: deptNote.frustrations || ''
         };
         
-        // Function to restore scroll position
-        const restoreScroll = () => {
-            // Use multiple methods to ensure scroll is restored
-            requestAnimationFrame(() => {
-                window.scrollTo({
-                    top: currentScrollPosition,
-                    left: 0,
-                    behavior: 'instant'
-                });
-                // Also set directly as fallback
-                if (window.scrollY !== currentScrollPosition) {
-                    window.scrollTo(0, currentScrollPosition);
-                }
-            });
-        };
-        
         try {
             setLoading(true);
-            // Save all fields at once
-            await window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, fieldsToSave);
+            console.log('💾 Saving department notes to DB:', { departmentNotesId, fieldsToSave });
             
-            // Clear any pending saves for this department
-            Object.keys(fieldsToSave).forEach(field => {
-                const fieldKey = getFieldKey(departmentNotesId, field);
-                delete pendingValues.current[fieldKey];
-                lastSavedValues.current[fieldKey] = fieldsToSave[field];
-            });
+            // Save to database
+            const response = await window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, fieldsToSave);
             
-            // Restore scroll position after save - use setTimeout to ensure DOM updates are complete
-            setTimeout(() => {
-                restoreScroll();
-            }, 0);
+            if (!response) {
+                throw new Error('No response from database API');
+            }
             
-            // Also restore immediately and after a short delay
-            restoreScroll();
+            console.log('✅ Successfully saved to database:', response);
+            
+            // Reload from server to ensure consistency
+            if (selectedMonth) {
+                await reloadMonthlyNotes(selectedMonth);
+            }
+            
+            // Show success message
+            if (typeof window.showToast === 'function') {
+                window.showToast('Department notes saved successfully', 'success');
+            } else if (typeof alert === 'function') {
+                alert('Department notes saved successfully');
+            }
+            
         } catch (error) {
-            console.error('Error saving department notes:', error);
-            alert('Failed to save department notes. Please try again.');
-            // Restore scroll position even on error
-            setTimeout(() => {
-                restoreScroll();
-            }, 0);
-            restoreScroll();
+            console.error('❌ Error saving department notes:', error);
+            const errorMessage = error?.message || 'Unknown error occurred';
+            
+            if (typeof alert === 'function') {
+                alert(`Failed to save department notes: ${errorMessage}`);
+            } else {
+                console.error('Failed to save:', errorMessage);
+            }
         } finally {
             setLoading(false);
-            // Final scroll restoration after loading state updates
-            setTimeout(() => {
-                restoreScroll();
-            }, 50);
         }
     };
 

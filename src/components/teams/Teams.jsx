@@ -280,56 +280,18 @@ const Teams = () => {
         if (currentTab === 'meeting-notes' && newTab !== 'meeting-notes') {
             const meetingNotesRef = window.ManagementMeetingNotesRef;
             
-            // SYNCHRONOUS CHECK - if there are pending saves, BLOCK IMMEDIATELY
-            if (meetingNotesRef?.current?.hasPendingSaves?.() || meetingNotesRef?.current?.isBlockingNavigation?.()) {
-                console.log('🚫 Tab switch BLOCKED - saves in progress...');
-                
-                // Trigger flush and wait - DO NOT allow state change until complete
-                if (meetingNotesRef?.current?.flushPendingSaves) {
-                    try {
-                        // Wait for saves to complete - NO TIMEOUT, wait for actual completion
-                        await meetingNotesRef.current.flushPendingSaves();
-                        
-                        // Verify saves are complete - keep checking until truly done
-                        let verifyAttempts = 0;
-                        const maxVerifyAttempts = 20; // More attempts
-                        while ((meetingNotesRef?.current?.hasPendingSaves?.() || 
-                               meetingNotesRef?.current?.isBlockingNavigation?.()) && 
-                               verifyAttempts < maxVerifyAttempts) {
-                            await new Promise(resolve => setTimeout(resolve, 200));
-                            verifyAttempts++;
-                        }
-                        
-                        // Final check - only switch if truly complete
-                        const isComplete = !meetingNotesRef?.current?.hasPendingSaves?.() && 
-                                          !meetingNotesRef?.current?.isBlockingNavigation?.();
-                        
-                        if (isComplete) {
-                            console.log('✅ VERIFIED: All saves completed, switching tab');
-                            await new Promise(resolve => setTimeout(resolve, 300));
-                            setActiveTabState(newTab);
-                        } else {
-                            console.error('❌ BLOCKED: Saves not complete after verification, preventing tab switch');
-                            // DO NOT switch - return early, keep on meeting-notes tab
-                            return;
-                        }
-                    } catch (error) {
-                        console.error('Error waiting for saves before tab switch:', error);
-                        // On error, DO NOT switch to be safe
+            // Check for unsaved changes
+            if (meetingNotesRef?.current?.hasPendingSaves?.()) {
+                // Warn user about unsaved changes
+                const hasUnsaved = await meetingNotesRef.current.flushPendingSaves();
+                if (hasUnsaved) {
+                    const confirmMessage = 'You have unsaved changes in meeting notes. Are you sure you want to switch tabs?';
+                    if (!window.confirm(confirmMessage)) {
+                        // User cancelled - don't switch tabs
                         return;
                     }
-                } else {
-                    // If flushPendingSaves not available, wait and check
-                    await new Promise(resolve => setTimeout(resolve, 2000));
-                    if (meetingNotesRef?.current?.hasPendingSaves?.() || 
-                        meetingNotesRef?.current?.isBlockingNavigation?.()) {
-                        console.warn('⚠️ Still has pending saves after wait, blocking tab switch');
-                        return; // Don't switch tabs - return early
-                    }
-                    setActiveTabState(newTab);
+                    // User confirmed - allow tab switch (changes will remain unsaved)
                 }
-                // Return here to prevent fall-through
-                return;
             }
         }
         
@@ -461,24 +423,31 @@ const Teams = () => {
             // Read tab from URL
             const urlTab = getTabFromURL();
             
-            // If we're leaving meeting-notes, wait for saves
+            // If we're leaving meeting-notes, check for unsaved changes
             // Use setActiveTabState with functional update to get current value
             setActiveTabState((currentTab) => {
                 if (currentTab === 'meeting-notes' && urlTab !== 'meeting-notes') {
                     const meetingNotesRef = window.ManagementMeetingNotesRef;
                     if (meetingNotesRef?.current?.hasPendingSaves?.()) {
-                        // Wait for saves asynchronously (can't await in setState callback)
-                        Promise.race([
-                            meetingNotesRef.current.flushPendingSaves(),
-                            new Promise(resolve => setTimeout(resolve, 2000))
-                        ]).then(() => {
-                            // After saves complete, update tab
-                            setActiveTabState(urlTab);
+                        // Check for unsaved changes and warn user
+                        meetingNotesRef.current.flushPendingSaves().then((hasUnsaved) => {
+                            if (hasUnsaved) {
+                                const confirmMessage = 'You have unsaved changes in meeting notes. Are you sure you want to switch tabs?';
+                                if (window.confirm(confirmMessage)) {
+                                    // User confirmed - switch tab
+                                    setActiveTabState(urlTab);
+                                }
+                                // If user cancelled, stay on current tab (don't switch)
+                            } else {
+                                // No unsaved changes - switch tab
+                                setActiveTabState(urlTab);
+                            }
                         }).catch((error) => {
-                            console.error('Error waiting for saves before navigation:', error);
+                            console.error('Error checking for unsaved changes:', error);
+                            // On error, allow navigation
                             setActiveTabState(urlTab);
                         });
-                        // Return current tab for now, will be updated after saves
+                        // Return current tab for now, will be updated after confirmation
                         return currentTab;
                     }
                 }

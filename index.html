@@ -1107,6 +1107,13 @@
                 }
             }, 3000); // Check after lazy loading has started
             
+            // Listen for manufacturingComponentReady event
+            window.addEventListener('manufacturingComponentReady', () => {
+                if (window.Manufacturing) {
+                    console.log('✅ Manufacturing component ready event received');
+                }
+            });
+            
             // Only show error after a longer delay if still not loaded
             setTimeout(() => {
                 if (!window.Manufacturing) {
@@ -1118,9 +1125,31 @@
                             return false;
                         }
                     });
-                    if (errorInScript || scripts.length === 0) {
-                        console.error('❌ Manufacturing component failed to load after 10 seconds');
-                        console.error('❌ Check browser console for JavaScript errors in Manufacturing.jsx');
+                    
+                    // Enhanced diagnostics
+                    console.error('❌ Manufacturing component failed to load after 10 seconds');
+                    console.error('❌ Check browser console for JavaScript errors in Manufacturing.jsx');
+                    console.error('❌ Diagnostics:');
+                    console.error('   - Scripts found:', scripts.length);
+                    console.error('   - Script sources:', scripts.map(s => s.src || s.getAttribute('src') || 'inline').join(', '));
+                    console.error('   - Script errors detected:', errorInScript);
+                    console.error('   - window.Manufacturing type:', typeof window.Manufacturing);
+                    console.error('   - window.React available:', !!window.React);
+                    console.error('   - window.useAuth available:', !!window.useAuth);
+                    console.error('   - window.DatabaseAPI available:', !!window.DatabaseAPI);
+                    
+                    // Try to provide helpful next steps
+                    if (scripts.length === 0) {
+                        console.error('❌ No Manufacturing scripts found - component may not be loading');
+                        console.error('   → Check component-loader.js and lazy-load-components.js');
+                    } else if (errorInScript) {
+                        console.error('❌ Script loading errors detected');
+                        console.error('   → Check network tab for failed requests');
+                        console.error('   → Verify /dist/src/components/manufacturing/Manufacturing.js exists');
+                    } else {
+                        console.error('❌ Scripts loaded but component not registered');
+                        console.error('   → Check for JavaScript errors in Manufacturing.jsx');
+                        console.error('   → Verify React and dependencies are loaded');
                     }
                 }
             }, 10000);
