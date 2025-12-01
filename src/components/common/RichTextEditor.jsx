@@ -17,6 +17,7 @@ const RichTextEditor = ({
     const isInternalUpdateRef = useRef(false);
     const scrollLockRef = useRef(false);
     const savedScrollPositionRef = useRef(0);
+    const originalScrollIntoViewRef = useRef(null);
 
     // Function to set up scroll protection on editor
     const setupScrollProtection = useCallback((editor) => {
@@ -29,43 +30,65 @@ const RichTextEditor = ({
         }
         
         // CRITICAL: Override scrollIntoView to prevent browser's default scroll behavior
-        const originalScrollIntoView = editor.scrollIntoView.bind(editor);
+        if (!originalScrollIntoViewRef.current) {
+            originalScrollIntoViewRef.current = editor.scrollIntoView.bind(editor);
+        }
+        const originalScrollIntoView = originalScrollIntoViewRef.current;
         editor.scrollIntoView = function(options) {
-            // Save current scroll position before any scroll happens
-            savedScrollPositionRef.current = window.scrollY || window.pageYOffset;
+            // Save current scroll position BEFORE any scroll happens
+            const currentScroll = window.scrollY || window.pageYOffset;
+            savedScrollPositionRef.current = currentScroll;
             scrollLockRef.current = true;
             
-            // Use 'nearest' to prevent scrolling if possible, or preventScroll if supported
+            // IMMEDIATELY prevent any scroll by restoring position
+            window.scrollTo(0, savedScrollPositionRef.current);
+            
+            // Try to use preventScroll if available (modern browsers)
             if (options && typeof options === 'object') {
                 options.block = 'nearest';
                 options.inline = 'nearest';
+                // Try preventScroll first
+                try {
+                    originalScrollIntoView({ ...options, preventScroll: true });
+                } catch (e) {
+                    // If preventScroll fails, just don't call it at all
+                    // The scroll restoration below will handle it
+                }
             } else {
-                options = { block: 'nearest', inline: 'nearest' };
+                // Try preventScroll with default options
+                try {
+                    originalScrollIntoView({ block: 'nearest', inline: 'nearest', preventScroll: true });
+                } catch (e) {
+                    // If preventScroll not supported, don't call original at all
+                }
             }
             
-            // Call original but with preventScroll option if available
-            try {
-                originalScrollIntoView({ ...options, preventScroll: true });
-            } catch (e) {
-                // Fallback if preventScroll not supported
-                originalScrollIntoView(options);
-            }
+            // Aggressively restore scroll position multiple times
+            const restoreScroll = () => {
+                const nowScroll = window.scrollY || window.pageYOffset;
+                if (nowScroll === 0 || Math.abs(nowScroll - savedScrollPositionRef.current) > 50) {
+                    window.scrollTo(0, savedScrollPositionRef.current);
+                }
+            };
             
-            // Immediately restore scroll
-            window.scrollTo(0, savedScrollPositionRef.current);
+            // Immediate restoration
+            restoreScroll();
+            requestAnimationFrame(restoreScroll);
             
-            // Keep restoring for a period
+            // Keep restoring for a period with multiple attempts
             const restoreInterval = setInterval(() => {
                 if (scrollLockRef.current) {
-                    window.scrollTo(0, savedScrollPositionRef.current);
+                    restoreScroll();
                 } else {
                     clearInterval(restoreInterval);
                 }
-            }, 10);
+            }, 5); // More frequent checks
             
             setTimeout(() => {
                 scrollLockRef.current = false;
                 clearInterval(restoreInterval);
+                // Final restoration
+                restoreScroll();
             }, 500);
         };
     }, []);
@@ -90,32 +113,45 @@ const RichTextEditor = ({
         
         // Set up scroll protection using multiple approaches
         const handleMouseDown = (e) => {
-            saveScroll();
+            // Save scroll position BEFORE any browser behavior
+            savedScrollPositionRef.current = window.scrollY || window.pageYOffset;
             scrollLockRef.current = true;
         };
         
         const handleFocus = (e) => {
-            saveScroll();
+            // CRITICAL: Save scroll BEFORE any browser behavior
+            const scrollBeforeFocus = window.scrollY || window.pageYOffset;
+            savedScrollPositionRef.current = scrollBeforeFocus;
             scrollLockRef.current = true;
             
-            // Immediately restore
+            // Immediately restore - multiple times to catch any async scroll
             window.scrollTo(0, savedScrollPositionRef.current);
             
-            // Aggressive restoration
+            // Aggressive restoration with more attempts
             const restore = () => {
+                const currentScroll = window.scrollY || window.pageYOffset;
                 if (scrollLockRef.current && savedScrollPositionRef.current > 0) {
-                    window.scrollTo(0, savedScrollPositionRef.current);
+                    // If scroll jumped to 0 or changed significantly, restore it
+                    if (currentScroll === 0 || Math.abs(currentScroll - savedScrollPositionRef.current) > 50) {
+                        window.scrollTo(0, savedScrollPositionRef.current);
+                    }
                 }
             };
             
+            // Immediate restoration attempts - more aggressive timing
             requestAnimationFrame(restore);
             setTimeout(restore, 0);
+            setTimeout(restore, 1);
+            setTimeout(restore, 5);
             setTimeout(restore, 10);
+            setTimeout(restore, 20);
             setTimeout(restore, 50);
+            setTimeout(restore, 100);
+            setTimeout(restore, 150);
             setTimeout(() => {
                 restore();
                 scrollLockRef.current = false;
-            }, 100);
+            }, 300);
         };
         
         // Global scroll interceptor - restore if scroll jumps to 0 unexpectedly
@@ -139,20 +175,30 @@ const RichTextEditor = ({
         editor.addEventListener('click', handleMouseDown, true);
         window.addEventListener('scroll', scrollInterceptor, { passive: false, capture: true });
         
-        // Continuous scroll monitor while locked
+        // Continuous scroll monitor while locked - more aggressive
         const scrollMonitor = setInterval(() => {
             if (scrollLockRef.current && savedScrollPositionRef.current > 0) {
                 const currentScroll = window.scrollY || window.pageYOffset;
-                if (currentScroll === 0 || Math.abs(currentScroll - savedScrollPositionRef.current) > 200) {
+                // If scroll jumped to 0 or changed significantly, restore it immediately
+                if (currentScroll === 0 || Math.abs(currentScroll - savedScrollPositionRef.current) > 50) {
                     window.scrollTo(0, savedScrollPositionRef.current);
                 }
             }
-        }, 10);
+        }, 5); // Check more frequently
         
         return () => {
-            // Restore original scrollIntoView
-            if (editor.scrollIntoView && editor.scrollIntoView !== originalScrollIntoView) {
-                editor.scrollIntoView = originalScrollIntoView;
+            // Restore original scrollIntoView - use ref to avoid scope issues
+            try {
+                if (editor && editor.scrollIntoView && originalScrollIntoViewRef.current) {
+                    // Only restore if it's still our override
+                    const currentMethod = editor.scrollIntoView.toString();
+                    if (currentMethod.includes('savedScrollPositionRef') || currentMethod.length > 100) {
+                        editor.scrollIntoView = originalScrollIntoViewRef.current;
+                    }
+                }
+            } catch (error) {
+                // Silently fail if editor is no longer available
+                console.warn('Could not restore scrollIntoView:', error);
             }
             editor.removeEventListener('mousedown', handleMouseDown, true);
             editor.removeEventListener('focus', handleFocus, true);
@@ -160,7 +206,7 @@ const RichTextEditor = ({
             window.removeEventListener('scroll', scrollInterceptor, { capture: true });
             clearInterval(scrollMonitor);
         };
-    }, []);
+    }, [setupScrollProtection]);
 
         // Update editor when value prop changes (external updates)
     useEffect(() => {
@@ -298,56 +344,82 @@ const RichTextEditor = ({
                 contentEditable
                 onInput={handleInput}
                 onFocus={(e) => {
-                    // Aggressively preserve scroll position when focusing RichTextEditor
-                    savedScrollPositionRef.current = window.scrollY || window.pageYOffset;
+                    // CRITICAL: Save scroll position BEFORE any browser behavior
+                    const scrollBeforeFocus = window.scrollY || window.pageYOffset;
+                    savedScrollPositionRef.current = scrollBeforeFocus;
                     scrollLockRef.current = true;
                     
-                    // Immediate restoration
-                    window.scrollTo(0, savedScrollPositionRef.current);
+                    // Immediate restoration - multiple attempts
+                    const restoreScroll = () => {
+                        const currentScroll = window.scrollY || window.pageYOffset;
+                        if (currentScroll === 0 || Math.abs(currentScroll - savedScrollPositionRef.current) > 50) {
+                            window.scrollTo(0, savedScrollPositionRef.current);
+                        }
+                    };
                     
-                    // Use multiple restoration attempts with more delays
-                    requestAnimationFrame(() => {
-                        window.scrollTo(0, savedScrollPositionRef.current);
-                    });
+                    restoreScroll();
+                    requestAnimationFrame(restoreScroll);
+                    setTimeout(restoreScroll, 0);
+                    setTimeout(restoreScroll, 1);
+                    setTimeout(restoreScroll, 5);
+                    setTimeout(restoreScroll, 10);
+                    setTimeout(restoreScroll, 20);
+                    setTimeout(restoreScroll, 50);
+                    setTimeout(restoreScroll, 100);
+                    setTimeout(restoreScroll, 150);
                     setTimeout(() => {
-                        window.scrollTo(0, savedScrollPositionRef.current);
-                    }, 0);
-                    setTimeout(() => {
-                        window.scrollTo(0, savedScrollPositionRef.current);
-                    }, 10);
-                    setTimeout(() => {
-                        window.scrollTo(0, savedScrollPositionRef.current);
-                    }, 50);
-                    setTimeout(() => {
-                        window.scrollTo(0, savedScrollPositionRef.current);
-                    }, 100);
-                    setTimeout(() => {
-                        window.scrollTo(0, savedScrollPositionRef.current);
+                        restoreScroll();
                         scrollLockRef.current = false;
-                    }, 200);
+                    }, 300);
                 }}
                 onClick={(e) => {
-                    // Aggressively preserve scroll position when clicking
-                    const currentScroll = window.scrollY || window.pageYOffset;
+                    // CRITICAL: Save scroll position BEFORE any browser behavior
+                    const scrollBeforeClick = window.scrollY || window.pageYOffset;
+                    savedScrollPositionRef.current = scrollBeforeClick;
+                    scrollLockRef.current = true;
                     
                     // Immediate restoration
-                    window.scrollTo(0, currentScroll);
+                    const restoreScroll = () => {
+                        const currentScroll = window.scrollY || window.pageYOffset;
+                        if (currentScroll === 0 || Math.abs(currentScroll - savedScrollPositionRef.current) > 50) {
+                            window.scrollTo(0, savedScrollPositionRef.current);
+                        }
+                    };
                     
-                    requestAnimationFrame(() => {
-                        window.scrollTo(0, currentScroll);
-                    });
+                    restoreScroll();
+                    requestAnimationFrame(restoreScroll);
+                    setTimeout(restoreScroll, 0);
+                    setTimeout(restoreScroll, 1);
+                    setTimeout(restoreScroll, 5);
+                    setTimeout(restoreScroll, 10);
+                    setTimeout(restoreScroll, 50);
                     setTimeout(() => {
-                        window.scrollTo(0, currentScroll);
-                    }, 0);
-                    setTimeout(() => {
-                        window.scrollTo(0, currentScroll);
-                    }, 50);
+                        restoreScroll();
+                        scrollLockRef.current = false;
+                    }, 100);
                 }}
                 onMouseDown={(e) => {
-                    // Prevent scroll on mousedown as well - save position before focus
-                    savedScrollPositionRef.current = window.scrollY || window.pageYOffset;
+                    // CRITICAL: Save scroll position BEFORE any browser behavior
+                    const scrollBeforeMouseDown = window.scrollY || window.pageYOffset;
+                    savedScrollPositionRef.current = scrollBeforeMouseDown;
                     scrollLockRef.current = true;
+                    
+                    // Immediate restoration
                     window.scrollTo(0, savedScrollPositionRef.current);
+                    
+                    // Multiple restoration attempts
+                    requestAnimationFrame(() => {
+                        const currentScroll = window.scrollY || window.pageYOffset;
+                        if (currentScroll === 0 && savedScrollPositionRef.current > 0) {
+                            window.scrollTo(0, savedScrollPositionRef.current);
+                        }
+                    });
+                    setTimeout(() => {
+                        const currentScroll = window.scrollY || window.pageYOffset;
+                        if (currentScroll === 0 && savedScrollPositionRef.current > 0) {
+                            window.scrollTo(0, savedScrollPositionRef.current);
+                        }
+                    }, 0);
                 }}
                 onBlur={(e) => {
                     if (onBlur && editorRef.current) {
