@@ -2706,6 +2706,13 @@ function initializeProjectDetail() {
                 // Only check if we're in a browser environment
                 if (typeof window === 'undefined') return;
                 
+                // Check if there are any tasks - if not, no table will be rendered (expected)
+                const hasTasks = taskLists.some(list => list.tasks && list.tasks.length > 0);
+                if (!hasTasks) {
+                    // No tasks means no table - this is expected, no need to check or warn
+                    return;
+                }
+                
                 let attempts = 0;
                 const maxAttempts = 5;
                 const delays = [500, 1000, 2000, 3000, 5000]; // Progressive delays
@@ -2723,15 +2730,15 @@ function initializeProjectDetail() {
                         const delay = attempts === 1 ? delays[0] : delays[attempts] - delays[attempts - 1];
                         setTimeout(checkTable, delay);
                     } else {
-                        // Only warn if we've checked multiple times and still no table
-                        // This might be normal if component isn't in list view mode or has no tasks
-                        console.warn('⚠️ Table version check: No table with data-task-table-version="3.0" found after multiple attempts. This may be normal if not in list view or if there are no tasks.');
+                        // Only warn if we have tasks but no table found after multiple attempts
+                        // This indicates a potential issue since we expect a table when tasks exist
+                        console.warn('⚠️ Table version check: No table with data-task-table-version="3.0" found after multiple attempts, but tasks exist. This may indicate a rendering issue.');
                     }
                 };
                 
                 // Start checking after initial delay
                 setTimeout(checkTable, delays[0]);
-            }, []);
+            }, [taskLists]);
             
             const formatChecklistProgress = (checklist = []) => {
                 if (!Array.isArray(checklist) || checklist.length === 0) {

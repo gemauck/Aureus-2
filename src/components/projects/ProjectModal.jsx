@@ -32,6 +32,7 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
     });
 
     const [clients, setClients] = useState([]);
+    const [users, setUsers] = useState([]);
     const [showNewClientInput, setShowNewClientInput] = useState(false);
     const [newClientName, setNewClientName] = useState('');
     const [isSaving, setIsSaving] = useState(false);
@@ -52,7 +53,25 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
                 setClients([]);
             }
         };
+        
+        // Load users from dataService
+        const loadUsers = async () => {
+            try {
+                if (window.dataService && typeof window.dataService.getUsers === 'function') {
+                    const userData = await window.dataService.getUsers() || [];
+                    setUsers(userData);
+                } else {
+                    console.warn('DataService not available for loading users');
+                    setUsers([]);
+                }
+            } catch (error) {
+                console.error('Error loading users:', error);
+                setUsers([]);
+            }
+        };
+        
         loadClients();
+        loadUsers();
     }, []);
 
     const handleSubmit = async (e) => {
@@ -248,8 +267,23 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
                                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                             >
                                 <option value="">Select Team Member</option>
-                                <option>Gareth Mauck</option>
-                                <option>David Buttemer</option>
+                                {users && Array.isArray(users) && users.length > 0 ? (
+                                    users
+                                        .filter(user => user && (user.name || user.email || user.fullName))
+                                        .sort((a, b) => {
+                                            const nameA = (a.name || a.email || a.fullName || '').toLowerCase();
+                                            const nameB = (b.name || b.email || b.fullName || '').toLowerCase();
+                                            return nameA.localeCompare(nameB);
+                                        })
+                                        .map(user => {
+                                            const displayName = user.name || user.email || user.fullName || 'Unknown User';
+                                            return (
+                                                <option key={user.id || user._id || displayName} value={displayName}>
+                                                    {displayName}
+                                                </option>
+                                            );
+                                        })
+                                ) : null}
                             </select>
                         </div>
                     </div>
