@@ -1565,7 +1565,7 @@ const ManagementMeetingNotes = () => {
     };
 
     // Save all fields for a department at once
-    const handleSaveDepartment = async (departmentNotesId) => {
+    const handleSaveDepartment = async (departmentNotesId, event = null) => {
         if (!departmentNotesId) {
             console.error('No departmentNotesId provided');
             return;
@@ -1578,7 +1578,10 @@ const ManagementMeetingNotes = () => {
         const week = currentMonthlyNotes?.weeklyNotes?.find(w => 
             w.departmentNotes?.some(dn => dn.id === departmentNotesId)
         );
-        if (!week) return;
+        if (!week) {
+            console.error('Week not found for departmentNotesId:', departmentNotesId);
+            return;
+        }
         
         const deptNote = week.departmentNotes?.find(dn => dn.id === departmentNotesId);
         if (!deptNote) {
@@ -1591,40 +1594,75 @@ const ManagementMeetingNotes = () => {
         // Strategy: Find the Save button that was clicked, traverse up to find department section,
         // then find all contentEditable divs in order (successes, weekToFollow, frustrations)
         
-        // Get the event target (Save button) - we'll use a closure to capture it
+        // Get the event target (Save button) - prefer event.target if provided
         let saveButtonElement = null;
         try {
-            // Try to get the active element (the button that was just clicked)
-            saveButtonElement = document.activeElement;
-            // If that doesn't work, find all Save buttons and match by departmentNotesId
-            if (!saveButtonElement || !saveButtonElement.textContent?.includes('Save Department')) {
-                const allSaveButtons = Array.from(document.querySelectorAll('button')).filter(btn => 
-                    btn.textContent?.includes('Save Department')
-                );
-                // We'll find the right one by context below
-                saveButtonElement = allSaveButtons[0] || null;
+            // First try to use the event target if provided
+            if (event && event.target) {
+                // Find the button element (might be the icon or text node)
+                saveButtonElement = event.target.closest('button');
+            }
+            
+            // If not found, try to get the active element
+            if (!saveButtonElement) {
+                saveButtonElement = document.activeElement;
+                // Verify it's actually a button
+                if (saveButtonElement && saveButtonElement.tagName !== 'BUTTON') {
+                    saveButtonElement = null;
+                }
+            }
+            
+            // If still not found, find all Save buttons and match by context
+            if (!saveButtonElement || !saveButtonElement.textContent?.includes('Save')) {
+                // Find buttons with "Save" text (not just "Save Department")
+                const allSaveButtons = Array.from(document.querySelectorAll('button')).filter(btn => {
+                    const text = btn.textContent || '';
+                    return text.includes('Save') && !text.includes('Save All');
+                });
+                
+                // Try to find the one in the same department section by traversing from department note data attributes
+                // Find textareas with matching department note ID to locate the right section
+                const deptTextarea = document.querySelector(`textarea[data-dept-note-id="${departmentNotesId}"]`);
+                if (deptTextarea && allSaveButtons.length > 0) {
+                    // Find the Save button closest to this textarea
+                    const deptSection = deptTextarea.closest('[class*="rounded"], [class*="space-y"]');
+                    if (deptSection) {
+                        const sectionSaveButton = deptSection.querySelector('button');
+                        if (sectionSaveButton && sectionSaveButton.textContent?.includes('Save')) {
+                            saveButtonElement = sectionSaveButton;
+                        }
+                    }
+                }
+                
+                // Fallback to first Save button if still not found
+                if (!saveButtonElement && allSaveButtons.length > 0) {
+                    saveButtonElement = allSaveButtons[0];
+                }
             }
         } catch (e) {
             console.warn('Could not find save button element:', e);
         }
         
         const getCurrentFieldValue = (fieldName) => {
-            // Try textarea fallback first (has data attributes)
+            // Strategy 1: Try textarea fallback first (has data attributes) - most reliable
             const textarea = document.querySelector(`textarea[data-dept-note-id="${departmentNotesId}"][data-field="${fieldName}"]`);
-            if (textarea && textarea.value !== undefined) {
+            if (textarea && textarea.value !== undefined && textarea.value !== null) {
                 return textarea.value;
             }
             
-            // Find department section: traverse up from Save button or search by department note ID
+            // Strategy 2: Find department section by traversing from Save button
             let departmentSection = null;
             
             if (saveButtonElement) {
                 // Traverse up to find the department container
                 let current = saveButtonElement.parentElement;
                 let depth = 0;
-                while (current && depth < 10) {
-                    // Look for contentEditable divs - if we find them, we're in the right section
-                    if (current.querySelectorAll('[contenteditable="true"]').length >= 3) {
+                while (current && depth < 15) {
+                    // Look for contentEditable divs or textareas with our department note ID
+                    const hasContentEditable = current.querySelectorAll('[contenteditable="true"]').length >= 3;
+                    const hasDeptTextarea = current.querySelector(`textarea[data-dept-note-id="${departmentNotesId}"]`);
+                    
+                    if (hasContentEditable || hasDeptTextarea) {
                         departmentSection = current;
                         break;
                     }
@@ -1633,31 +1671,58 @@ const ManagementMeetingNotes = () => {
                 }
             }
             
-            // If not found, search by finding elements with the field labels
+            // Strategy 3: Find by textarea with department note ID (even if field doesn't match)
+            if (!departmentSection) {
+                const anyDeptTextarea = document.querySelector(`textarea[data-dept-note-id="${departmentNotesId}"]`);
+                if (anyDeptTextarea) {
+                    departmentSection = anyDeptTextarea.closest('[class*="space-y"], [class*="rounded"], div');
+                }
+            }
+            
+            // Strategy 4: Search by finding elements with the field labels
             if (!departmentSection) {
                 const fieldLabel = fieldName === 'successes' ? "Last Week's Successes" :
                                   fieldName === 'weekToFollow' ? 'Weekly Plan' :
                                   fieldName === 'frustrations' ? 'Frustrations/Challenges' : '';
                 
-                const labels = Array.from(document.querySelectorAll('*')).filter(el => {
-                    const text = el.textContent || '';
-                    return text.trim() === fieldLabel;
-                });
-                
-                if (labels.length > 0) {
-                    const label = labels.find(l => {
-                        // Find the one that's in a section with our department note
-                        const section = l.closest('[class*="rounded"]');
-                        return section && section.querySelector('[contenteditable="true"]');
+                if (fieldLabel) {
+                    const labels = Array.from(document.querySelectorAll('label, *')).filter(el => {
+                        const text = el.textContent || '';
+                        return text.trim() === fieldLabel || text.includes(fieldLabel);
                     });
                     
-                    if (label) {
-                        departmentSection = label.closest('[class*="rounded"]') || label.parentElement?.parentElement;
+                    if (labels.length > 0) {
+                        // Find the label that's in a section with contentEditable or our department note
+                        const label = labels.find(l => {
+                            const section = l.closest('[class*="rounded"], [class*="space-y"], div');
+                            if (!section) return false;
+                            
+                            // Check if this section has contentEditable or our department textarea
+                            const hasEditor = section.querySelector('[contenteditable="true"]');
+                            const hasDeptField = section.querySelector(`textarea[data-dept-note-id="${departmentNotesId}"]`);
+                            return hasEditor || hasDeptField;
+                        });
+                        
+                        if (label) {
+                            departmentSection = label.closest('[class*="rounded"], [class*="space-y"], div');
+                        }
                     }
                 }
             }
             
+            // Strategy 5: If we found the department section, extract field values
             if (departmentSection) {
+                // First try to find by data-field attribute
+                const fieldByAttribute = departmentSection.querySelector(`[data-field="${fieldName}"]`);
+                if (fieldByAttribute) {
+                    if (fieldByAttribute.tagName === 'TEXTAREA' && fieldByAttribute.value !== undefined) {
+                        return fieldByAttribute.value;
+                    }
+                    if (fieldByAttribute.contentEditable === 'true' && fieldByAttribute.innerHTML !== undefined) {
+                        return fieldByAttribute.innerHTML;
+                    }
+                }
+                
                 // Find all contentEditable divs in this section
                 const editors = Array.from(departmentSection.querySelectorAll('[contenteditable="true"]'));
                 
@@ -1667,12 +1732,24 @@ const ManagementMeetingNotes = () => {
                                   fieldName === 'frustrations' ? 2 : -1;
                 
                 if (fieldIndex >= 0 && editors[fieldIndex] && editors[fieldIndex].innerHTML !== undefined) {
-                    return editors[fieldIndex].innerHTML;
+                    const html = editors[fieldIndex].innerHTML;
+                    // Return empty string if it's just a placeholder or whitespace
+                    if (html && html.trim() && html !== '<br>' && html !== '<div><br></div>') {
+                        return html;
+                    }
+                }
+                
+                // Also try textareas in order
+                const textareas = Array.from(departmentSection.querySelectorAll('textarea[data-dept-note-id]'));
+                if (fieldIndex >= 0 && textareas[fieldIndex] && textareas[fieldIndex].value !== undefined) {
+                    return textareas[fieldIndex].value;
                 }
             }
             
-            // Final fallback: Use React state
-            return deptNote[fieldName] || '';
+            // Strategy 6: Final fallback - Use React state (may not have latest if RichTextEditor hasn't updated)
+            const stateValue = deptNote[fieldName] || '';
+            console.warn(`⚠️ Using React state fallback for ${fieldName} (may not be latest):`, stateValue);
+            return stateValue;
         };
         
         // Get current values from DOM (most up-to-date)
@@ -3324,7 +3401,7 @@ const ManagementMeetingNotes = () => {
                                                             onClick={async (e) => {
                                                                 e.preventDefault();
                                                                 e.stopPropagation();
-                                                                await handleSaveDepartment(deptNote.id);
+                                                                await handleSaveDepartment(deptNote.id, e);
                                                             }}
                                                             className={`w-full text-xs px-3 py-2 rounded font-medium transition ${isDark ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
                                                         >

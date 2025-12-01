@@ -259,29 +259,65 @@
         const runIcon = document.getElementById('run-icon');
         
         let originalConsoleLog = console.log;
+        let originalConsoleError = console.error;
+        let originalConsoleWarn = console.warn;
         
-        // Override console.log to capture output
+        // Override console methods to capture output
         function captureLog(message, type = 'info') {
             const div = document.createElement('div');
-            div.className = `log-${type}`;
             
             // Format message with emoji detection
-            if (message.startsWith('✅')) {
-                div.className = 'log-success';
-            } else if (message.startsWith('❌')) {
-                div.className = 'log-error';
-            } else if (message.startsWith('⚠️')) {
-                div.className = 'log-warn';
+            if (typeof message === 'string') {
+                if (message.startsWith('✅')) {
+                    div.className = 'log-success';
+                } else if (message.startsWith('❌')) {
+                    div.className = 'log-error';
+                } else if (message.startsWith('⚠️')) {
+                    div.className = 'log-warn';
+                } else {
+                    div.className = 'log-info';
+                }
             } else {
-                div.className = 'log-info';
+                div.className = `log-${type}`;
             }
             
-            div.textContent = message;
+            div.textContent = typeof message === 'string' ? message : JSON.stringify(message);
             output.appendChild(div);
             output.scrollTop = output.scrollHeight;
+        }
+        
+        // Override console.log to capture all output
+        function setupConsoleCapture() {
+            console.log = function(...args) {
+                const message = args.map(arg => 
+                    typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+                ).join(' ');
+                captureLog(message, 'info');
+                originalConsoleLog.apply(console, args);
+            };
             
-            // Also log to actual console
-            originalConsoleLog(message);
+            console.error = function(...args) {
+                const message = args.map(arg => 
+                    typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+                ).join(' ');
+                captureLog(message, 'error');
+                originalConsoleError.apply(console, args);
+            };
+            
+            console.warn = function(...args) {
+                const message = args.map(arg => 
+                    typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+                ).join(' ');
+                captureLog(message, 'warn');
+                originalConsoleWarn.apply(console, args);
+            };
+        }
+        
+        // Restore original console methods
+        function restoreConsole() {
+            console.log = originalConsoleLog;
+            console.error = originalConsoleError;
+            console.warn = originalConsoleWarn;
         }
         
         function clearOutput() {
@@ -314,26 +350,34 @@
             summary.style.display = 'block';
             
             try {
-                // Override testResults console to use our capture function
-                const originalTestLog = window.log;
-                window.log = captureLog;
+                // Setup console capture before running tests
+                setupConsoleCapture();
                 
-                // Run tests
-                const result = await runAllTests();
+                // Run tests (it's actually synchronous but we keep async for future compatibility)
+                const result = runAllTests();
                 
-                // Restore original log
-                window.log = originalTestLog;
+                // Handle both sync and async results
+                const finalResult = result instanceof Promise ? await result : result;
+                
+                // Restore console after tests
+                restoreConsole();
                 
                 // Display summary
-                displaySummary(result);
+                displaySummary(finalResult);
                 
                 runIcon.innerHTML = '▶';
-                status.textContent = result.success ? 'All Tests Passed!' : 'Some Tests Failed';
-                status.className = result.success ? 'status complete' : 'status error';
+                if (finalResult && finalResult.success !== undefined) {
+                    status.textContent = finalResult.success ? 'All Tests Passed!' : 'Some Tests Failed';
+                    status.className = finalResult.success ? 'status complete' : 'status error';
+                } else {
+                    status.textContent = 'Tests Completed';
+                    status.className = 'status complete';
+                }
                 
             } catch (error) {
+                restoreConsole();
                 captureLog(`❌ Test execution error: ${error.message}`, 'error');
-                console.error(error);
+                originalConsoleError(error);
                 
                 runIcon.innerHTML = '▶';
                 status.textContent = 'Test Execution Failed';

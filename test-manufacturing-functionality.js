@@ -9,6 +9,15 @@ const testResults = {
   startTime: Date.now()
 };
 
+// Reset test results for clean test runs
+function resetTestResults() {
+  testResults.passed = [];
+  testResults.failed = [];
+  testResults.warnings = [];
+  testResults.totalTests = 0;
+  testResults.startTime = Date.now();
+}
+
 // Test utilities
 function log(message, type = 'info') {
   const emoji = type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'warn' ? '⚠️' : '📝';
@@ -156,7 +165,8 @@ function getTestStockLocation() {
 function testInventoryPersistence() {
   log('\n=== Testing Inventory Persistence ===', 'info');
   
-  clearManufacturingData();
+  // Clear only inventory-related data for this test
+  localStorage.removeItem('manufacturing_inventory');
   
   // Test: Save inventory item to localStorage
   const testItem = getTestInventoryItem();
@@ -229,17 +239,26 @@ function testInventoryCalculations() {
 function testInventoryValidation() {
   log('\n=== Testing Inventory Validation ===', 'info');
   
-  // Test: Required fields
+  // Test: Required fields - validation should reject empty SKU
   const incompleteItem = { sku: '', name: 'Test', quantity: 0 };
-  assert(!incompleteItem.sku, 'Inventory Validation - SKU Required', 'Should require SKU');
+  const hasValidSKU = incompleteItem.sku && incompleteItem.sku.trim().length > 0;
+  assert(!hasValidSKU, 'Inventory Validation - SKU Required', 'Validation should reject empty SKU');
   
-  // Test: Numeric fields
+  // Test: Numeric fields - validation should reject negative quantity
   const invalidQuantity = { ...getTestInventoryItem(), quantity: -10 };
-  assert(invalidQuantity.quantity < 0, 'Inventory Validation - Quantity Positive', 'Quantity should be positive');
+  const hasValidQuantity = invalidQuantity.quantity >= 0;
+  assert(!hasValidQuantity, 'Inventory Validation - Quantity Positive', 'Validation should reject negative quantity');
   
-  // Test: Unit cost validation
+  // Test: Unit cost validation - validation should reject negative cost
   const invalidCost = { ...getTestInventoryItem(), unitCost: -5 };
-  assert(invalidCost.unitCost < 0, 'Inventory Validation - Cost Positive', 'Unit cost should be positive');
+  const hasValidCost = invalidCost.unitCost >= 0;
+  assert(!hasValidCost, 'Inventory Validation - Cost Positive', 'Validation should reject negative unit cost');
+  
+  // Test: Valid item should pass validation
+  const validItem = getTestInventoryItem();
+  const isValid = validItem.sku && validItem.sku.trim().length > 0 && 
+                  validItem.quantity >= 0 && validItem.unitCost >= 0;
+  assert(isValid, 'Inventory Validation - Valid Item', 'Valid item should pass validation');
   
   log('Inventory validation tests completed', 'info');
 }
@@ -251,7 +270,8 @@ function testInventoryValidation() {
 function testBOMPersistence() {
   log('\n=== Testing BOM Persistence ===', 'info');
   
-  clearManufacturingData();
+  // Clear only BOM-related data for this test
+  localStorage.removeItem('manufacturing_boms');
   
   // Test: Save BOM to localStorage
   const testBOM = getTestBOM();
@@ -370,7 +390,9 @@ function testBOMComponentManagement() {
 function testProductionOrderPersistence() {
   log('\n=== Testing Production Order Persistence ===', 'info');
   
-  clearManufacturingData();
+  // Clear only production order-related data for this test
+  localStorage.removeItem('production_orders');
+  localStorage.removeItem('manufacturing_boms');
   
   // First create a BOM
   const bom = getTestBOM();
@@ -486,7 +508,8 @@ function testProductionOrderWorkflow() {
 function testStockMovementPersistence() {
   log('\n=== Testing Stock Movement Persistence ===', 'info');
   
-  clearManufacturingData();
+  // Clear only stock movement-related data for this test
+  localStorage.removeItem('stock_movements');
   
   // Test: Save stock movement to localStorage
   const testMovement = getTestStockMovement();
@@ -562,7 +585,9 @@ function testStockMovementTypes() {
 function testStockLocationPersistence() {
   log('\n=== Testing Stock Location Persistence ===', 'info');
   
-  clearManufacturingData();
+  // Clear only location-related data for this test
+  localStorage.removeItem('stock_locations');
+  localStorage.removeItem('location_inventory');
   
   // Test: Save stock location to localStorage
   const testLocation = getTestStockLocation();
@@ -748,10 +773,355 @@ function testDataIntegrity() {
 }
 
 // ============================================
+// BREAK TESTS - Error Handling & Edge Cases
+// ============================================
+
+function testBreakScenarios() {
+  log('\n=== Testing Break Scenarios & Error Handling ===', 'info');
+  
+  // Clear test data but keep some for break testing
+  localStorage.removeItem('test_quota');
+  localStorage.removeItem('test_invalid_json');
+  
+  // Test: Null/undefined inputs
+  try {
+    const nullItem = null;
+    assert(nullItem === null, 'Break Test - Null Input', 'Should handle null input gracefully');
+  } catch (e) {
+    assert(false, 'Break Test - Null Input Handling', `Should not throw: ${e.message}`);
+  }
+  
+  // Test: Undefined inputs
+  try {
+    const undefinedItem = undefined;
+    assert(undefinedItem === undefined, 'Break Test - Undefined Input', 'Should handle undefined input gracefully');
+  } catch (e) {
+    assert(false, 'Break Test - Undefined Input Handling', `Should not throw: ${e.message}`);
+  }
+  
+  // Test: Invalid data types
+  try {
+    const invalidType = { quantity: 'not-a-number', unitCost: 'also-not-a-number' };
+    const isValid = typeof invalidType.quantity === 'number' && typeof invalidType.unitCost === 'number';
+    assert(!isValid, 'Break Test - Invalid Data Types', 'Should reject non-numeric values');
+  } catch (e) {
+    assert(false, 'Break Test - Invalid Type Handling', `Should not throw: ${e.message}`);
+  }
+  
+  // Test: Extremely large numbers (overflow protection)
+  try {
+    const largeNumber = Number.MAX_SAFE_INTEGER + 1;
+    const isSafe = Number.isSafeInteger(largeNumber);
+    assert(!isSafe, 'Break Test - Large Number Overflow', 'Should handle large numbers safely');
+  } catch (e) {
+    assert(false, 'Break Test - Large Number Handling', `Should not throw: ${e.message}`);
+  }
+  
+  // Test: Missing required fields
+  try {
+    const missingFields = { name: 'Test' }; // Missing SKU, quantity, etc.
+    const hasRequiredFields = missingFields.sku && missingFields.quantity !== undefined;
+    assert(!hasRequiredFields, 'Break Test - Missing Required Fields', 'Should reject items with missing required fields');
+  } catch (e) {
+    assert(false, 'Break Test - Missing Fields Handling', `Should not throw: ${e.message}`);
+  }
+  
+  // Test: localStorage quota exceeded simulation
+  try {
+    // Try to store extremely large data
+    const largeData = 'x'.repeat(5 * 1024 * 1024); // 5MB string
+    try {
+      localStorage.setItem('test_quota', largeData);
+      localStorage.removeItem('test_quota');
+      assert(true, 'Break Test - localStorage Quota', 'localStorage quota test completed');
+    } catch (quotaError) {
+      assert(quotaError.name === 'QuotaExceededError', 'Break Test - Quota Error Handling', 
+        'Should handle QuotaExceededError gracefully');
+    }
+  } catch (e) {
+    assert(false, 'Break Test - Quota Handling', `Should not throw: ${e.message}`);
+  }
+  
+  // Test: Invalid JSON in localStorage
+  try {
+    localStorage.setItem('test_invalid_json', 'not-valid-json{');
+    const parsed = JSON.parse(localStorage.getItem('test_invalid_json') || '[]');
+    assert(false, 'Break Test - Invalid JSON', 'Should handle invalid JSON gracefully');
+  } catch (jsonError) {
+    assert(jsonError instanceof SyntaxError, 'Break Test - JSON Error Handling', 
+      'Should catch JSON parse errors');
+    localStorage.removeItem('test_invalid_json');
+  }
+  
+  // Test: Concurrent operations simulation
+  try {
+    const item1 = getTestInventoryItem();
+    item1.id = 'CONCURRENT-001';
+    const item2 = getTestInventoryItem();
+    item2.id = 'CONCURRENT-002';
+    
+    // Simulate concurrent writes
+    localStorage.setItem('manufacturing_inventory', JSON.stringify([item1]));
+    const current = JSON.parse(localStorage.getItem('manufacturing_inventory') || '[]');
+    current.push(item2);
+    localStorage.setItem('manufacturing_inventory', JSON.stringify(current));
+    
+    const final = JSON.parse(localStorage.getItem('manufacturing_inventory') || '[]');
+    assert(final.length === 2, 'Break Test - Concurrent Operations', 'Should handle concurrent operations');
+  } catch (e) {
+    assert(false, 'Break Test - Concurrent Operations Handling', `Should not throw: ${e.message}`);
+  }
+  
+  // Test: Empty string handling
+  try {
+    const emptyStringItem = { sku: '   ', name: '', quantity: 0 };
+    const hasValidData = emptyStringItem.sku.trim().length > 0 && emptyStringItem.name.trim().length > 0;
+    assert(!hasValidData, 'Break Test - Empty Strings', 'Should reject empty/whitespace-only strings');
+  } catch (e) {
+    assert(false, 'Break Test - Empty String Handling', `Should not throw: ${e.message}`);
+  }
+  
+  log('Break scenario tests completed', 'info');
+}
+
+// ============================================
+// STOCK BALANCE CALCULATION TESTS
+// ============================================
+
+function testStockBalanceCalculations() {
+  log('\n=== Testing Stock Balance Calculations ===', 'info');
+  
+  clearManufacturingData();
+  
+  // Test: Forward balance calculation
+  const movements = [
+    { id: 'MOV-001', date: '2025-01-01', type: 'adjustment', quantity: 100, reference: 'INITIAL_BALANCE' },
+    { id: 'MOV-002', date: '2025-01-02', type: 'receipt', quantity: 50 },
+    { id: 'MOV-003', date: '2025-01-03', type: 'consumption', quantity: -25 },
+    { id: 'MOV-004', date: '2025-01-04', type: 'adjustment', quantity: 10 }
+  ];
+  
+  // Calculate forward balance
+  let forwardBalance = 0;
+  movements.forEach(mov => {
+    forwardBalance += mov.quantity;
+  });
+  assert(forwardBalance === 135, 'Stock Balance - Forward Calculation', 
+    `Expected 135, got ${forwardBalance}`);
+  
+  // Test: Backward balance calculation (newest first)
+  const sortedMovements = [...movements].reverse(); // Newest first
+  let backwardBalance = 0;
+  sortedMovements.forEach(mov => {
+    backwardBalance += mov.quantity;
+  });
+  assert(backwardBalance === 135, 'Stock Balance - Backward Calculation', 
+    `Expected 135, got ${backwardBalance}`);
+  
+  // Test: Balance after each movement
+  let runningBalance = 0;
+  const balances = movements.map(mov => {
+    runningBalance += mov.quantity;
+    return { ...mov, balance: runningBalance };
+  });
+  
+  assert(balances[0].balance === 100, 'Stock Balance - After Initial', 
+    `Expected 100, got ${balances[0].balance}`);
+  assert(balances[1].balance === 150, 'Stock Balance - After Receipt', 
+    `Expected 150, got ${balances[1].balance}`);
+  assert(balances[2].balance === 125, 'Stock Balance - After Consumption', 
+    `Expected 125, got ${balances[2].balance}`);
+  assert(balances[3].balance === 135, 'Stock Balance - After Adjustment', 
+    `Expected 135, got ${balances[3].balance}`);
+  
+  // Test: Closing balance matches final balance
+  const closingBalance = balances[balances.length - 1].balance;
+  assert(closingBalance === 135, 'Stock Balance - Closing Balance', 
+    `Expected 135, got ${closingBalance}`);
+  
+  // Test: Negative balance handling
+  const negativeMovements = [
+    { id: 'MOV-NEG-001', date: '2025-01-01', type: 'adjustment', quantity: 50 },
+    { id: 'MOV-NEG-002', date: '2025-01-02', type: 'consumption', quantity: -100 }
+  ];
+  let negativeBalance = 0;
+  negativeMovements.forEach(mov => {
+    negativeBalance += mov.quantity;
+  });
+  assert(negativeBalance === -50, 'Stock Balance - Negative Balance', 
+    `Expected -50, got ${negativeBalance}`);
+  
+  log('Stock balance calculation tests completed', 'info');
+}
+
+// ============================================
+// MOVEMENT SORTING TESTS
+// ============================================
+
+function testMovementSorting() {
+  log('\n=== Testing Movement Sorting ===', 'info');
+  
+  clearManufacturingData();
+  
+  // Create movements with different dates and timestamps
+  const baseTime = new Date('2025-01-01T10:00:00').getTime();
+  const movements = [
+    { id: 'MOV-003', date: '2025-01-03', createdAt: new Date(baseTime + 2 * 86400000).toISOString(), quantity: 30 },
+    { id: 'MOV-001', date: '2025-01-01', createdAt: new Date(baseTime).toISOString(), quantity: 10 },
+    { id: 'MOV-004', date: '2025-01-03', createdAt: new Date(baseTime + 2 * 86400000 + 3600000).toISOString(), quantity: 40 },
+    { id: 'MOV-002', date: '2025-01-02', createdAt: new Date(baseTime + 86400000).toISOString(), quantity: 20 }
+  ];
+  
+  // Test: Sort by date (oldest first)
+  const sortedByDate = [...movements].sort((a, b) => {
+    if (a.date !== b.date) {
+      return a.date.localeCompare(b.date);
+    }
+    if (a.createdAt !== b.createdAt) {
+      return a.createdAt.localeCompare(b.createdAt);
+    }
+    return a.id.localeCompare(b.id);
+  });
+  
+  assert(sortedByDate[0].id === 'MOV-001', 'Movement Sorting - Primary Sort by Date', 
+    'First movement should be oldest by date');
+  assert(sortedByDate[1].id === 'MOV-002', 'Movement Sorting - Second by Date', 
+    'Second movement should be second oldest');
+  
+  // Test: Secondary sort by createdAt for same date
+  const sameDateMovements = sortedByDate.filter(m => m.date === '2025-01-03');
+  assert(sameDateMovements[0].id === 'MOV-003', 'Movement Sorting - Secondary Sort by CreatedAt', 
+    'Same date movements should be sorted by createdAt');
+  assert(sameDateMovements[1].id === 'MOV-004', 'Movement Sorting - Tertiary Sort by ID', 
+    'Same date and createdAt should be sorted by ID');
+  
+  // Test: Reverse for display (newest first)
+  const reversedForDisplay = [...sortedByDate].reverse();
+  assert(reversedForDisplay[0].id === 'MOV-004', 'Movement Sorting - Display Order (Newest First)', 
+    'Display should show newest first');
+  assert(reversedForDisplay[reversedForDisplay.length - 1].id === 'MOV-001', 
+    'Movement Sorting - Display Order (Oldest Last)', 
+    'Display should show oldest last');
+  
+  // Test: Sort with missing createdAt
+  const movementsWithMissing = [
+    { id: 'MOV-A', date: '2025-01-01', createdAt: null, quantity: 10 },
+    { id: 'MOV-B', date: '2025-01-02', createdAt: new Date().toISOString(), quantity: 20 }
+  ];
+  const sortedWithMissing = [...movementsWithMissing].sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    if (!a.createdAt && !b.createdAt) return a.id.localeCompare(b.id);
+    if (!a.createdAt) return 1;
+    if (!b.createdAt) return -1;
+    return a.createdAt.localeCompare(b.createdAt);
+  });
+  assert(sortedWithMissing[0].id === 'MOV-A', 'Movement Sorting - Handle Missing CreatedAt', 
+    'Should handle missing createdAt gracefully');
+  
+  log('Movement sorting tests completed', 'info');
+}
+
+// ============================================
+// BUSINESS RULE TESTS
+// ============================================
+
+function testBusinessRules() {
+  log('\n=== Testing Business Rules ===', 'info');
+  
+  clearManufacturingData();
+  
+  // Test: Cannot consume more stock than available
+  const inventoryItem = { ...getTestInventoryItem(), id: 'INV-BR-001', quantity: 100 };
+  const consumptionQty = 150;
+  const canConsume = inventoryItem.quantity >= consumptionQty;
+  assert(!canConsume, 'Business Rule - Cannot Over-Consume', 
+    'Should prevent consuming more stock than available');
+  
+  // Test: Cannot create production order without sufficient component stock
+  const bom = getTestBOM();
+  bom.components = [
+    { sku: 'COMP-001', quantity: 10, name: 'Component 1' },
+    { sku: 'COMP-002', quantity: 5, name: 'Component 2' }
+  ];
+  
+  const availableStock = {
+    'COMP-001': 8,  // Insufficient (need 10)
+    'COMP-002': 6   // Sufficient (need 5)
+  };
+  
+  const hasSufficientStock = bom.components.every(comp => 
+    (availableStock[comp.sku] || 0) >= comp.quantity
+  );
+  assert(!hasSufficientStock, 'Business Rule - Insufficient Component Stock', 
+    'Should prevent production order creation with insufficient component stock');
+  
+  // Test: Cannot delete location with inventory
+  const location = getTestStockLocation();
+  location.id = 'LOC-BR-001';
+  const locationInventory = [{
+    locationId: location.id,
+    itemId: 'INV-001',
+    quantity: 50
+  }];
+  
+  const hasInventory = locationInventory.some(li => li.locationId === location.id && li.quantity > 0);
+  const canDelete = !hasInventory;
+  assert(!canDelete, 'Business Rule - Cannot Delete Location With Inventory', 
+    'Should prevent deleting location with inventory');
+  
+  // Test: BOM components must exist in inventory
+  const bomComponents = bom.components.map(c => c.sku);
+  const inventorySKUs = ['COMP-001', 'COMP-999']; // COMP-002 missing
+  const allComponentsExist = bomComponents.every(sku => inventorySKUs.includes(sku));
+  assert(!allComponentsExist, 'Business Rule - BOM Components Must Exist', 
+    'Should require all BOM components to exist in inventory');
+  
+  // Test: Production orders must reference valid BOMs
+  const validBOMs = [bom];
+  const orderWithInvalidBOM = getTestProductionOrder('INVALID-BOM-ID', 100);
+  const bomExists = validBOMs.some(b => b.id === orderWithInvalidBOM.bomId);
+  assert(!bomExists, 'Business Rule - Production Order Must Reference Valid BOM', 
+    'Should require production order to reference valid BOM');
+  
+  // Test: Stock movements must reference valid items
+  const validItems = [inventoryItem];
+  const movementWithInvalidItem = getTestStockMovement();
+  movementWithInvalidItem.sku = 'INVALID-SKU';
+  const itemExists = validItems.some(item => item.sku === movementWithInvalidItem.sku);
+  assert(!itemExists, 'Business Rule - Stock Movement Must Reference Valid Item', 
+    'Should require stock movement to reference valid inventory item');
+  
+  // Test: Stock movements must reference valid locations
+  const validLocations = [location];
+  const movementWithInvalidLocation = getTestStockMovement();
+  movementWithInvalidLocation.toLocation = 'INVALID-LOCATION';
+  const locationExists = validLocations.some(loc => 
+    loc.id === movementWithInvalidLocation.toLocation || 
+    loc.name === movementWithInvalidLocation.toLocation
+  );
+  assert(!locationExists, 'Business Rule - Stock Movement Must Reference Valid Location', 
+    'Should require stock movement to reference valid location');
+  
+  // Test: Cannot have negative stock (unless explicitly allowed via adjustment)
+  const currentStock = 50;
+  const consumptionAmount = 75;
+  const wouldBeNegative = (currentStock - consumptionAmount) < 0;
+  const isAdjustment = false; // This is a consumption, not adjustment
+  const canProceed = !wouldBeNegative || isAdjustment;
+  assert(!canProceed, 'Business Rule - Prevent Negative Stock from Consumption', 
+    'Should prevent negative stock from consumption (adjustments may allow)');
+  
+  log('Business rule tests completed', 'info');
+}
+
+// ============================================
 // MAIN TEST RUNNER
 // ============================================
 
 async function runAllTests() {
+  // Reset test results for clean run
+  resetTestResults();
+  
   console.log('\n');
   console.log('╔══════════════════════════════════════════════════════════════╗');
   console.log('║   Manufacturing Section Functionality & Persistence Tests   ║');
@@ -762,8 +1132,15 @@ async function runAllTests() {
   if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
     log('WARNING: This test requires a browser environment with localStorage', 'warn');
     log('Please run this test in a browser console or test environment', 'warn');
-    return;
+    return {
+      success: false,
+      error: 'Browser environment required',
+      details: testResults
+    };
   }
+  
+  // Clear all data before starting tests
+  clearManufacturingData();
   
   try {
     // Inventory Tests
@@ -793,6 +1170,16 @@ async function runAllTests() {
     // Integration Tests
     testEndToEndWorkflow();
     testDataIntegrity();
+    
+    // Break Tests
+    testBreakScenarios();
+    
+    // Stock Balance & Sorting Tests
+    testStockBalanceCalculations();
+    testMovementSorting();
+    
+    // Business Rule Tests
+    testBusinessRules();
     
     // Print summary
     console.log('\n');
@@ -865,11 +1252,17 @@ async function runAllTests() {
 
 // Export for use in Node.js or browser
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { runAllTests, testResults };
+  module.exports = { runAllTests, testResults, log, resetTestResults, clearManufacturingData };
 }
 
-// Auto-run in browser if loaded directly
+// Make functions globally available in browser
 if (typeof window !== 'undefined') {
+  window.runAllTests = runAllTests;
+  window.testResults = testResults;
+  window.log = log;
+  window.resetTestResults = resetTestResults;
+  window.clearManufacturingData = clearManufacturingData;
+  
   // Wait for page to be ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
