@@ -1827,46 +1827,47 @@ const ManagementMeetingNotes = () => {
             
             console.log('✅ Successfully saved to database:', response);
             
-            // Update local state immediately with saved values (NO PAGE REFRESH)
-            // This ensures the saved data appears on screen right away
+            // Update local state immediately with saved values (NO PAGE REFRESH, NO RELOAD)
+            // This ensures the saved data appears on screen right away without any reload
             const monthlyId = currentMonthlyNotes?.id || null;
+            
+            // Batch state updates to minimize re-renders
             updateDepartmentNotesLocal(departmentNotesId, 'successes', fieldsToSave.successes, monthlyId);
             updateDepartmentNotesLocal(departmentNotesId, 'weekToFollow', fieldsToSave.weekToFollow, monthlyId);
             updateDepartmentNotesLocal(departmentNotesId, 'frustrations', fieldsToSave.frustrations, monthlyId);
             
+            // Show success feedback (non-blocking, no reload)
+            if (typeof window.showNotification === 'function') {
+                window.showNotification('Changes saved successfully', 'success');
+            } else if (typeof alert === 'function') {
+                // Use setTimeout to prevent blocking
+                setTimeout(() => {
+                    alert('Changes saved successfully');
+                }, 0);
+            }
+            
             // Preserve scroll position - ensure we stay exactly where we are
+            // Use requestAnimationFrame to ensure smooth scroll preservation
             if (currentScrollPosition > 0) {
                 // Immediate restoration
                 window.scrollTo(0, currentScrollPosition);
                 
-            requestAnimationFrame(() => {
-                window.scrollTo(0, currentScrollPosition);
+                requestAnimationFrame(() => {
+                    window.scrollTo(0, currentScrollPosition);
                 });
                 
-                setTimeout(() => {
-                    window.scrollTo(0, currentScrollPosition);
-                }, 0);
-                
+                // Minimal scroll restoration attempts (reduced from 6 to 2)
                 setTimeout(() => {
                     window.scrollTo(0, currentScrollPosition);
                 }, 10);
                 
                 setTimeout(() => {
                     window.scrollTo(0, currentScrollPosition);
-                }, 50);
-                
-                setTimeout(() => {
-                    window.scrollTo(0, currentScrollPosition);
                 }, 100);
-                
-                setTimeout(() => {
-                    window.scrollTo(0, currentScrollPosition);
-                }, 200);
-                
-                setTimeout(() => {
-                    window.scrollTo(0, currentScrollPosition);
-                }, 500);
             }
+            
+            // DO NOT RELOAD - Just update local state and continue
+            // No reloadMonthlyNotes call - data is already updated locally
             
         } catch (error) {
             console.error('❌ Error saving department notes:', error);
