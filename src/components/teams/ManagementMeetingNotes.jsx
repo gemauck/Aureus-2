@@ -190,6 +190,47 @@ const ManagementMeetingNotes = () => {
         }
     }, [isAdminUser, currentUser]);
 
+    // Preserve scroll position on page load/refresh
+    useEffect(() => {
+        // Save scroll position before page unload
+        const saveScrollOnUnload = () => {
+            const scrollY = window.scrollY || window.pageYOffset;
+            if (scrollY > 0) {
+                sessionStorage.setItem('managementMeetingNotes_scroll', scrollY.toString());
+            }
+        };
+        
+        // Restore scroll position on page load
+        const restoreScrollOnLoad = () => {
+            const savedScroll = sessionStorage.getItem('managementMeetingNotes_scroll');
+            if (savedScroll) {
+                const scrollY = parseInt(savedScroll, 10);
+                if (scrollY > 0) {
+                    // Wait for page to fully load before restoring
+                    requestAnimationFrame(() => {
+                        window.scrollTo(0, scrollY);
+                        setTimeout(() => {
+                            window.scrollTo(0, scrollY);
+                        }, 100);
+                        setTimeout(() => {
+                            window.scrollTo(0, scrollY);
+                        }, 500);
+                    });
+                }
+            }
+        };
+        
+        // Restore scroll on mount
+        restoreScrollOnLoad();
+        
+        // Save scroll on unload
+        window.addEventListener('beforeunload', saveScrollOnUnload);
+        
+        return () => {
+            window.removeEventListener('beforeunload', saveScrollOnUnload);
+        };
+    }, []);
+    
     // Global scroll preservation - prevent unwanted scroll to top
     useEffect(() => {
         let savedScrollPosition = window.scrollY || window.pageYOffset;
