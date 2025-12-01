@@ -190,7 +190,7 @@ const ManagementMeetingNotes = () => {
         }
     }, [isAdminUser, currentUser]);
 
-    // Preserve scroll position on page load/refresh
+    // Preserve scroll position on page load/refresh - AGGRESSIVE VERSION
     useEffect(() => {
         // Save scroll position before page unload
         const saveScrollOnUnload = () => {
@@ -200,34 +200,74 @@ const ManagementMeetingNotes = () => {
             }
         };
         
-        // Restore scroll position on page load
+        // Restore scroll position on page load - AGGRESSIVE with multiple attempts
         const restoreScrollOnLoad = () => {
             const savedScroll = sessionStorage.getItem('managementMeetingNotes_scroll');
             if (savedScroll) {
                 const scrollY = parseInt(savedScroll, 10);
                 if (scrollY > 0) {
-                    // Wait for page to fully load before restoring
+                    // Immediate restoration
+                    window.scrollTo(0, scrollY);
+                    
+                    // Multiple restoration attempts to handle React re-renders and DOM updates
                     requestAnimationFrame(() => {
                         window.scrollTo(0, scrollY);
-                        setTimeout(() => {
-                            window.scrollTo(0, scrollY);
-                        }, 100);
-                        setTimeout(() => {
-                            window.scrollTo(0, scrollY);
-                        }, 500);
                     });
+                    
+                    setTimeout(() => {
+                        window.scrollTo(0, scrollY);
+                    }, 0);
+                    
+                    setTimeout(() => {
+                        window.scrollTo(0, scrollY);
+                    }, 10);
+                    
+                    setTimeout(() => {
+                        window.scrollTo(0, scrollY);
+                    }, 50);
+                    
+                    setTimeout(() => {
+                        window.scrollTo(0, scrollY);
+                    }, 100);
+                    
+                    setTimeout(() => {
+                        window.scrollTo(0, scrollY);
+                    }, 200);
+                    
+                    setTimeout(() => {
+                        window.scrollTo(0, scrollY);
+                    }, 500);
+                    
+                    setTimeout(() => {
+                        window.scrollTo(0, scrollY);
+                    }, 1000);
                 }
             }
         };
         
-        // Restore scroll on mount
+        // Restore scroll on mount - immediate
         restoreScrollOnLoad();
+        
+        // Also restore on DOMContentLoaded if not already restored
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', restoreScrollOnLoad);
+        }
         
         // Save scroll on unload
         window.addEventListener('beforeunload', saveScrollOnUnload);
         
+        // Also save scroll periodically
+        const scrollSaveInterval = setInterval(() => {
+            const scrollY = window.scrollY || window.pageYOffset;
+            if (scrollY > 0) {
+                sessionStorage.setItem('managementMeetingNotes_scroll', scrollY.toString());
+            }
+        }, 1000);
+        
         return () => {
             window.removeEventListener('beforeunload', saveScrollOnUnload);
+            document.removeEventListener('DOMContentLoaded', restoreScrollOnLoad);
+            clearInterval(scrollSaveInterval);
         };
     }, []);
     
@@ -480,15 +520,38 @@ const ManagementMeetingNotes = () => {
             setCurrentMonthlyNotes(nextMonth);
             setSelectedWeek(null);
             
-            // Restore scroll position after state updates if preserved (multiple attempts to handle React re-renders)
-            if (preserveScroll && currentScrollPosition !== null) {
+            // Restore scroll position after state updates if preserved - AGGRESSIVE with multiple attempts
+            if (preserveScroll && currentScrollPosition !== null && currentScrollPosition > 0) {
+                // Immediate restoration
+                window.scrollTo(0, currentScrollPosition);
+                
                 requestAnimationFrame(() => {
                     window.scrollTo(0, currentScrollPosition);
-                    // Double-check after a short delay to handle any async state updates
-                    setTimeout(() => {
-                        window.scrollTo(0, currentScrollPosition);
-                    }, 100);
                 });
+                
+                setTimeout(() => {
+                    window.scrollTo(0, currentScrollPosition);
+                }, 0);
+                
+                setTimeout(() => {
+                    window.scrollTo(0, currentScrollPosition);
+                }, 10);
+                
+                setTimeout(() => {
+                    window.scrollTo(0, currentScrollPosition);
+                }, 50);
+                
+                setTimeout(() => {
+                    window.scrollTo(0, currentScrollPosition);
+                }, 100);
+                
+                setTimeout(() => {
+                    window.scrollTo(0, currentScrollPosition);
+                }, 200);
+                
+                setTimeout(() => {
+                    window.scrollTo(0, currentScrollPosition);
+                }, 500);
             }
         } catch (error) {
             console.error('Error reloading monthly notes:', error);
@@ -499,7 +562,7 @@ const ManagementMeetingNotes = () => {
                 });
             }
             if (typeof alert === 'function') {
-                alert('Failed to refresh monthly meeting notes.');
+                console.error('Failed to refresh monthly meeting notes.');
             }
         }
     }, []);
@@ -899,9 +962,7 @@ const ManagementMeetingNotes = () => {
             );
 
         if (!monthKey) {
-            if (typeof alert === 'function') {
-                alert('Please provide a valid month in YYYY-MM format.');
-            }
+            // Invalid month - return silently
             return null;
         }
 
@@ -920,9 +981,7 @@ const ManagementMeetingNotes = () => {
             setCurrentMonthlyNotes(existingNotes);
             setSelectedWeek(null);
             setNewMonthKey('');
-            if (triggeredByInput && typeof alert === 'function') {
-                alert('Monthly notes already exist for this month. Loaded the existing plan instead.');
-            }
+            // Existing notes loaded silently
             return existingNotes;
         }
 
@@ -978,21 +1037,21 @@ const ManagementMeetingNotes = () => {
                         setSelectedWeek(null);
                         setNewMonthKey('');
                         if (triggeredByInput && typeof alert === 'function') {
-                            alert('Monthly notes already exist for this month. Loaded the existing plan instead.');
+                            // Existing notes loaded silently
                         }
                         return duplicateNotes;
                     }
                     if (typeof alert === 'function') {
-                        alert('Monthly notes already exist for this month.');
+                        // Monthly notes already exist - handled silently
                     }
                 } catch (loadError) {
                     console.error('Failed to load existing monthly notes after duplicate warning:', loadError);
                     if (typeof alert === 'function') {
-                        alert('Monthly notes already exist for this month, but we could not load them automatically. Please refresh and try again.');
+                        console.error('Monthly notes already exist but could not load automatically.');
                     }
                 }
             } else if (typeof alert === 'function') {
-                alert('Failed to create monthly notes');
+                console.error('Failed to create monthly notes');
             }
         } finally {
             setLoading(false);
@@ -1019,9 +1078,7 @@ const ManagementMeetingNotes = () => {
         if (existingNotes) {
             setCurrentMonthlyNotes(existingNotes);
             setSelectedMonth(currentMonthKey);
-            if (typeof alert === 'function') {
-                alert('Monthly notes already exist for this month. Loaded the existing plan instead.');
-            }
+            // Existing notes loaded silently
             return;
         }
 
@@ -1077,20 +1134,20 @@ const ManagementMeetingNotes = () => {
                         });
                         setSelectedMonth(currentMonthKey);
                         if (typeof alert === 'function') {
-                            alert('Monthly notes already exist for this month. Loaded the existing plan instead.');
+                            // Existing notes loaded silently
                         }
                     } else if (typeof alert === 'function') {
-                        alert('Monthly notes already exist for this month.');
+                        // Monthly notes already exist - handled silently
                     }
                 } catch (loadError) {
                     console.error('Failed to load existing monthly notes after duplicate warning:', loadError);
                     if (typeof alert === 'function') {
-                        alert('Monthly notes already exist for this month, but we could not load them automatically. Please refresh and try again.');
+                        console.error('Monthly notes already exist but could not load automatically.');
                     }
                 }
             } else {
                 if (typeof alert === 'function') {
-                    alert('Failed to generate monthly plan');
+                    console.error('Failed to generate monthly plan');
                 }
             }
         } finally {
@@ -1111,7 +1168,7 @@ const ManagementMeetingNotes = () => {
         } catch (error) {
             console.error('Error deleting monthly notes:', error);
             if (typeof alert === 'function') {
-                alert('Failed to delete monthly meeting notes.');
+                console.error('Failed to delete monthly meeting notes.');
             }
         } finally {
             setLoading(false);
@@ -1130,7 +1187,7 @@ const ManagementMeetingNotes = () => {
         } catch (error) {
             console.error('Error purging meeting notes:', error);
             if (typeof alert === 'function') {
-                alert('Failed to delete all meeting notes.');
+                console.error('Failed to delete all meeting notes.');
             }
         } finally {
             setLoading(false);
@@ -1166,7 +1223,7 @@ const ManagementMeetingNotes = () => {
         } catch (error) {
             console.error('Error deleting weekly notes:', error);
             if (typeof alert === 'function') {
-                alert('Failed to delete weekly notes.');
+                console.error('Failed to delete weekly notes.');
             }
         } finally {
             setLoading(false);
@@ -1180,7 +1237,7 @@ const ManagementMeetingNotes = () => {
 
         if (weekInputValue && !weekDetails) {
             if (typeof alert === 'function') {
-                alert('Please provide a valid week start date in YYYY-MM-DD format.');
+                // Invalid week date - return silently
             }
             return null;
         }
@@ -1191,7 +1248,7 @@ const ManagementMeetingNotes = () => {
 
         if (!weekDetails) {
             if (typeof alert === 'function') {
-                alert('Unable to determine the week to create.');
+                // Unable to determine week - return silently
             }
             return null;
         }
@@ -1245,7 +1302,7 @@ const ManagementMeetingNotes = () => {
             setSelectedWeek(weekDetails.weekKey);
             setNewWeekStartInput('');
             if (triggeredByInput && typeof alert === 'function') {
-                alert('Weekly notes already exist for the selected dates. Loaded the existing notes instead.');
+                // Existing weekly notes loaded silently
             }
             return existingWeek;
         }
@@ -1255,7 +1312,7 @@ const ManagementMeetingNotes = () => {
             const monthId = targetMonth?.id;
             if (!monthId) {
                 if (typeof alert === 'function') {
-                    alert('Unable to locate monthly notes for the selected week.');
+                    console.error('Unable to locate monthly notes for the selected week.');
                 }
                 return null;
             }
@@ -1318,16 +1375,16 @@ const ManagementMeetingNotes = () => {
                     setSelectedWeek(weekDetails.weekKey);
                     setNewWeekStartInput('');
                     if (triggeredByInput && typeof alert === 'function') {
-                        alert('Weekly notes already exist for the selected dates. Loaded the existing notes instead.');
+                        // Existing weekly notes loaded silently
                     }
                 } catch (loadError) {
                     console.error('Failed to reload monthly notes after duplicate weekly warning:', loadError);
                     if (typeof alert === 'function') {
-                        alert('Weekly notes already exist for the selected dates, but we could not load them automatically. Please refresh and try again.');
+                        console.error('Weekly notes already exist but could not load automatically.');
                     }
                 }
             } else if (typeof alert === 'function') {
-                alert('Failed to create weekly notes');
+                console.error('Failed to create weekly notes');
             }
         } finally {
             setLoading(false);
@@ -1413,9 +1470,8 @@ const ManagementMeetingNotes = () => {
                 window.scrollTo(0, currentScrollPosition);
             });
             
-            if (typeof alert === 'function') {
-                alert('Failed to update department notes.');
-            }
+            // Error logged silently - no popup messages
+            console.error('Failed to update department notes.');
             // Reload to revert local changes on error
             if (selectedMonth) {
                 await reloadMonthlyNotes(selectedMonth);
@@ -1437,9 +1493,7 @@ const ManagementMeetingNotes = () => {
             await window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, { [field]: value });
         } catch (error) {
             console.error('Error updating department notes:', error);
-            if (typeof alert === 'function') {
-                alert('Failed to update department notes.');
-            }
+            // Error logged silently - no popup messages
             if (selectedMonth) {
                 await reloadMonthlyNotes(selectedMonth);
             }
@@ -1597,21 +1651,41 @@ const ManagementMeetingNotes = () => {
                 await reloadMonthlyNotes(selectedMonth, true);
             }
             
-            // Restore scroll position after state updates (multiple attempts to handle React re-renders)
-            requestAnimationFrame(() => {
+            // Restore scroll position after state updates - AGGRESSIVE with multiple attempts
+            if (currentScrollPosition > 0) {
+                // Immediate restoration
                 window.scrollTo(0, currentScrollPosition);
-                // Double-check after a short delay to handle any async state updates
+                
+                requestAnimationFrame(() => {
+                    window.scrollTo(0, currentScrollPosition);
+                });
+                
+                setTimeout(() => {
+                    window.scrollTo(0, currentScrollPosition);
+                }, 0);
+                
+                setTimeout(() => {
+                    window.scrollTo(0, currentScrollPosition);
+                }, 10);
+                
+                setTimeout(() => {
+                    window.scrollTo(0, currentScrollPosition);
+                }, 50);
+                
                 setTimeout(() => {
                     window.scrollTo(0, currentScrollPosition);
                 }, 100);
-            });
-            
-            // Show success message
-            if (typeof window.showToast === 'function') {
-                window.showToast('Department notes saved successfully', 'success');
-            } else if (typeof alert === 'function') {
-                alert('Department notes saved successfully');
+                
+                setTimeout(() => {
+                    window.scrollTo(0, currentScrollPosition);
+                }, 200);
+                
+                setTimeout(() => {
+                    window.scrollTo(0, currentScrollPosition);
+                }, 500);
             }
+            
+            // Save completed silently - no messages
             
         } catch (error) {
             console.error('❌ Error saving department notes:', error);
@@ -1622,11 +1696,8 @@ const ManagementMeetingNotes = () => {
                 window.scrollTo(0, currentScrollPosition);
             });
             
-            if (typeof alert === 'function') {
-                alert(`Failed to save department notes: ${errorMessage}`);
-            } else {
-                console.error('Failed to save:', errorMessage);
-            }
+            // Error logged silently - no popup messages
+            console.error('Failed to save:', errorMessage);
         } finally {
             setLoading(false);
         }
@@ -1807,7 +1878,7 @@ const ManagementMeetingNotes = () => {
             
             // Validate required fields
             if (!actionItemData.title || !actionItemData.title.trim()) {
-                alert('Please enter a title for the action item');
+                // Title required - validation handled silently
                 return;
             }
 
@@ -1900,7 +1971,7 @@ const ManagementMeetingNotes = () => {
                     })
                     .catch(err => console.error('Error reverting changes:', err));
             }
-            alert('Failed to save action item: ' + (error.message || 'Unknown error'));
+            console.error('Failed to save action item:', error.message || 'Unknown error');
         } finally {
             setLoading(false);
         }
@@ -1983,7 +2054,7 @@ const ManagementMeetingNotes = () => {
                     );
                 });
             }
-            alert('Failed to delete action item');
+            console.error('Failed to delete action item');
         } finally {
             setLoading(false);
         }
@@ -2234,7 +2305,7 @@ const ManagementMeetingNotes = () => {
                     })
                     .catch(err => console.error('Error reverting changes:', err));
             }
-            alert('Failed to create comment');
+            console.error('Failed to create comment');
         } finally {
             setLoading(false);
         }
@@ -2280,7 +2351,7 @@ const ManagementMeetingNotes = () => {
                     );
                 });
             }
-            alert('Failed to delete comment: ' + (error.message || 'Unknown error'));
+            console.error('Failed to delete comment:', error.message || 'Unknown error');
         } finally {
             setLoading(false);
         }
@@ -2299,7 +2370,7 @@ const ManagementMeetingNotes = () => {
             setShowAllocationModal(false);
         } catch (error) {
             console.error('Error updating allocation:', error);
-            alert('Failed to update allocation');
+            console.error('Failed to update allocation');
         } finally {
             setLoading(false);
         }
@@ -2317,7 +2388,7 @@ const ManagementMeetingNotes = () => {
             setCurrentMonthlyNotes(monthResponse.data?.monthlyNotes);
         } catch (error) {
             console.error('Error deleting allocation:', error);
-            alert('Failed to delete allocation');
+            console.error('Failed to delete allocation');
         } finally {
             setLoading(false);
         }
