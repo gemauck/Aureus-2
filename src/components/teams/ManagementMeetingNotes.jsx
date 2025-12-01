@@ -190,6 +190,70 @@ const ManagementMeetingNotes = () => {
         }
     }, [isAdminUser, currentUser]);
 
+    // Global scroll preservation - prevent unwanted scroll to top
+    useEffect(() => {
+        let savedScrollPosition = window.scrollY || window.pageYOffset;
+        let isUserScrolling = false;
+        
+        // Save scroll position periodically
+        const saveScroll = () => {
+            if (!isUserScrolling) {
+                savedScrollPosition = window.scrollY || window.pageYOffset;
+            }
+        };
+        
+        // Monitor scroll events
+        const handleScroll = () => {
+            isUserScrolling = true;
+            savedScrollPosition = window.scrollY || window.pageYOffset;
+            setTimeout(() => {
+                isUserScrolling = false;
+            }, 100);
+        };
+        
+        // Prevent scroll to top on focus/click events
+        const preventScrollToTop = (e) => {
+            // Check if the event is on a text input/textarea
+            const target = e.target;
+            if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT' || 
+                target.contentEditable === 'true' || target.closest('[contenteditable="true"]'))) {
+                // Save current scroll position
+                savedScrollPosition = window.scrollY || window.pageYOffset;
+                
+                // Restore scroll position after a short delay
+                requestAnimationFrame(() => {
+                    if (window.scrollY === 0 && savedScrollPosition > 0) {
+                        window.scrollTo(0, savedScrollPosition);
+                    }
+                    setTimeout(() => {
+                        if (window.scrollY === 0 && savedScrollPosition > 0) {
+                            window.scrollTo(0, savedScrollPosition);
+                        }
+                    }, 0);
+                    setTimeout(() => {
+                        if (window.scrollY === 0 && savedScrollPosition > 0) {
+                            window.scrollTo(0, savedScrollPosition);
+                        }
+                    }, 50);
+                });
+            }
+        };
+        
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        window.addEventListener('focus', preventScrollToTop, true);
+        window.addEventListener('click', preventScrollToTop, true);
+        
+        // Save scroll position periodically
+        const scrollInterval = setInterval(saveScroll, 100);
+        
+        return () => {
+            window.removeEventListener('scroll', handleScroll);
+            window.removeEventListener('focus', preventScrollToTop, true);
+            window.removeEventListener('click', preventScrollToTop, true);
+            clearInterval(scrollInterval);
+        };
+    }, []);
+
     const [monthlyNotesList, setMonthlyNotesList] = useState([]);
     const [currentMonthlyNotes, setCurrentMonthlyNotes] = useState(null);
     
@@ -2679,6 +2743,19 @@ const ManagementMeetingNotes = () => {
                                                                     value={deptNote.successes || ''}
                                                                     onChange={(html) => handleFieldChange(deptNote.id, 'successes', html)}
                                                                     onBlur={(html) => handleFieldBlur(deptNote.id, 'successes', html)}
+                                                                    onFocus={() => {
+                                                                        // Preserve scroll position when focusing RichTextEditor
+                                                                        const currentScroll = window.scrollY || window.pageYOffset;
+                                                                        requestAnimationFrame(() => {
+                                                                            window.scrollTo(0, currentScroll);
+                                                                            setTimeout(() => {
+                                                                                window.scrollTo(0, currentScroll);
+                                                                            }, 0);
+                                                                            setTimeout(() => {
+                                                                                window.scrollTo(0, currentScroll);
+                                                                            }, 50);
+                                                                        });
+                                                                    }}
                                 placeholder="What went well during the week? (Use formatting toolbar for bullets, bold, etc.)"
                                                                     rows={4}
                                                                     isDark={isDark}
@@ -2690,8 +2767,22 @@ const ManagementMeetingNotes = () => {
                                                                     onBlur={(e) => handleFieldBlur(deptNote.id, 'successes', e.target.value)}
                                                                     onFocus={(e) => {
                                                                         // Preserve scroll position when focusing
+                                                                        e.preventDefault();
                                                                         const currentScroll = window.scrollY || window.pageYOffset;
-                                                                        e.target.focus();
+                                                                        // Use multiple restoration attempts
+                                                                        requestAnimationFrame(() => {
+                                                                            window.scrollTo(0, currentScroll);
+                                                                            setTimeout(() => {
+                                                                                window.scrollTo(0, currentScroll);
+                                                                            }, 0);
+                                                                            setTimeout(() => {
+                                                                                window.scrollTo(0, currentScroll);
+                                                                            }, 50);
+                                                                        });
+                                                                    }}
+                                                                    onClick={(e) => {
+                                                                        // Preserve scroll position when clicking
+                                                                        const currentScroll = window.scrollY || window.pageYOffset;
                                                                         requestAnimationFrame(() => {
                                                                             window.scrollTo(0, currentScroll);
                                                                         });
@@ -2726,8 +2817,22 @@ const ManagementMeetingNotes = () => {
                                                                     onBlur={(e) => handleFieldBlur(deptNote.id, 'weekToFollow', e.target.value)}
                                                                     onFocus={(e) => {
                                                                         // Preserve scroll position when focusing
+                                                                        e.preventDefault();
                                                                         const currentScroll = window.scrollY || window.pageYOffset;
-                                                                        e.target.focus();
+                                                                        // Use multiple restoration attempts
+                                                                        requestAnimationFrame(() => {
+                                                                            window.scrollTo(0, currentScroll);
+                                                                            setTimeout(() => {
+                                                                                window.scrollTo(0, currentScroll);
+                                                                            }, 0);
+                                                                            setTimeout(() => {
+                                                                                window.scrollTo(0, currentScroll);
+                                                                            }, 50);
+                                                                        });
+                                                                    }}
+                                                                    onClick={(e) => {
+                                                                        // Preserve scroll position when clicking
+                                                                        const currentScroll = window.scrollY || window.pageYOffset;
                                                                         requestAnimationFrame(() => {
                                                                             window.scrollTo(0, currentScroll);
                                                                         });
@@ -2762,8 +2867,22 @@ const ManagementMeetingNotes = () => {
                                                                     onBlur={(e) => handleFieldBlur(deptNote.id, 'frustrations', e.target.value)}
                                                                     onFocus={(e) => {
                                                                         // Preserve scroll position when focusing
+                                                                        e.preventDefault();
                                                                         const currentScroll = window.scrollY || window.pageYOffset;
-                                                                        e.target.focus();
+                                                                        // Use multiple restoration attempts
+                                                                        requestAnimationFrame(() => {
+                                                                            window.scrollTo(0, currentScroll);
+                                                                            setTimeout(() => {
+                                                                                window.scrollTo(0, currentScroll);
+                                                                            }, 0);
+                                                                            setTimeout(() => {
+                                                                                window.scrollTo(0, currentScroll);
+                                                                            }, 50);
+                                                                        });
+                                                                    }}
+                                                                    onClick={(e) => {
+                                                                        // Preserve scroll position when clicking
+                                                                        const currentScroll = window.scrollY || window.pageYOffset;
                                                                         requestAnimationFrame(() => {
                                                                             window.scrollTo(0, currentScroll);
                                                                         });
