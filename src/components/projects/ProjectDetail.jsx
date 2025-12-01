@@ -394,175 +394,8 @@ function initializeProjectDetail() {
         const commentsPopupLoadPromiseRef = useRef(null);
         const projectModalLoadPromiseRef = useRef(null);
     
-    // Check if required components are loaded
-    const requiredComponents = {
-        ListModal: window.ListModal,
-        ProjectModal: window.ProjectModal,
-        CustomFieldModal: window.CustomFieldModal,
-        TaskDetailModal: window.TaskDetailModal,
-        KanbanView: window.KanbanView,
-        CommentsPopup: window.CommentsPopup,
-        DocumentCollectionModal: window.DocumentCollectionModal,
-        MonthlyDocumentCollectionTracker: window.MonthlyDocumentCollectionTracker
-    };
-    
-    const missingComponents = Object.entries(requiredComponents)
-        .filter(([name, component]) => !component)
-        .map(([name]) => name);
-    
-    if (missingComponents.length > 0) {
-        console.error('❌ ProjectDetail: Missing required components:', missingComponents);
-        console.error('🔍 Available window components:', Object.keys(window).filter(key => 
-            key.includes('Modal') || key.includes('View') || key.includes('Tracker') || key.includes('Popup')
-        ));
-    } else {
-    }
-    
-    // Tab navigation state
-    // Always default to the Overview tab when opening a project.
-    // We intentionally do NOT restore the last viewed tab from storage anymore,
-    // as per product decision to keep the entry point consistent.
-    const [activeSection, setActiveSection] = useState('overview');
-    
-    // Initialize taskLists with project-specific data
-    const [taskLists, setTaskLists] = useState(
-        project.taskLists || [
-            { id: 1, name: 'To Do', color: 'blue', description: '' }
-        ]
-    );
-
-    // Initialize tasks with project-specific data
-    const [tasks, setTasks] = useState(project.tasks || []);
-    // Use a ref to store current tasks value to avoid TDZ issues in closures
-    const tasksRef = useRef(project.tasks || []);
-    // Keep ref in sync with state
-    useEffect(() => {
-        tasksRef.current = tasks;
-    }, [tasks]);
-    const [taskFilters, setTaskFilters] = useState({
-        search: '',
-        status: 'all',
-        assignee: 'all',
-        priority: 'all',
-        list: 'all',
-        includeSubtasks: true
-    });
-    
-    // Sync tasks when project prop changes (e.g., after reload or navigation)
-    // Use a ref to track previous project ID to prevent infinite loops
-    const previousProjectIdRef = useRef(project?.id);
-    useEffect(() => {
-        // Only sync if project ID changed (switching to a different project)
-        if (project?.id !== previousProjectIdRef.current) {
-            previousProjectIdRef.current = project?.id;
-            if (project?.tasks && Array.isArray(project.tasks)) {
-                setTasks(project.tasks);
-                tasksRef.current = project.tasks; // Also update ref
-            }
-        }
-    }, [project?.id]); // Only depend on project ID, not tasks array (which may be recreated on every render)
-    
-    // Memoize the back callback to prevent DocumentCollectionProcessSection from re-rendering
-    const handleBackToOverview = useCallback(() => {
-        setActiveSection('overview');
-    }, []);
-    
-    // Ensure we are on the overview tab when switching to a different project.
-    useEffect(() => {
-        if (!project?.id) return;
-        if (activeSection !== 'overview') {
-            setActiveSection('overview');
-        }
-    }, [project?.id]);
-
-    // If the project is opened via a deep-link to the document collection tracker
-    // (for example from an email notification), ensure the Document Collection tab
-    // is active so the MonthlyDocumentCollectionTracker can show the target comment.
-    useEffect(() => {
-        if (!project?.id) return;
-        try {
-            const search = window.location.search || '';
-            if (!search) return;
-            const params = new URLSearchParams(search);
-            const deepSectionId = params.get('docSectionId');
-            const deepDocumentId = params.get('docDocumentId');
-            const deepMonth = params.get('docMonth');
-            if (deepSectionId && deepDocumentId && deepMonth) {
-                setActiveSection('documentCollection');
-            }
-        } catch (error) {
-            console.warn('⚠️ ProjectDetail: failed to apply document collection deep-link:', error);
-        }
-    }, [project?.id]);
-    
-    // If the project is opened via a deep-link to a specific task
-    // (for example from an email notification), open the task modal
-    useEffect(() => {
-        if (!project?.id || !tasks || tasks.length === 0) return;
-        try {
-            // Check both window.location.search (for regular URLs) and hash query params (for hash-based routing)
-            let taskId = null;
-            let params = null;
-            
-            // First check hash query params (for hash-based routing like #/projects/123?task=456)
-            const hash = window.location.hash || '';
-            if (hash.includes('?')) {
-                const hashParts = hash.split('?');
-                if (hashParts.length > 1) {
-                    params = new URLSearchParams(hashParts[1]);
-                    taskId = params.get('task');
-                }
-            }
-            
-            // If not found in hash, check window.location.search (for regular URLs)
-            if (!taskId) {
-                const search = window.location.search || '';
-                if (search) {
-                    params = new URLSearchParams(search);
-                    taskId = params.get('task');
-                }
-            }
-            
-            if (taskId) {
-                // Find the task in the tasks array (including subtasks)
-                let foundTask = tasks.find(t => t.id === taskId || String(t.id) === String(taskId));
-                let foundParent = null;
-                
-                // If not found in main tasks, check subtasks
-                if (!foundTask) {
-                    for (const task of tasks) {
-                        if (task.subtasks && Array.isArray(task.subtasks)) {
-                            const subtask = task.subtasks.find(st => st.id === taskId || String(st.id) === String(taskId));
-                            if (subtask) {
-                                foundTask = subtask;
-                                foundParent = task;
-                                break;
-                            }
-                        }
-                    }
-                }
-                
-                if (foundTask) {
-                    setViewingTask(foundTask);
-                    setViewingTaskParent(foundParent);
-                    setShowTaskDetailModal(true);
-                    // Remove the task parameter from URL to clean it up
-                    if (params) {
-                        params.delete('task');
-                        const newSearch = params.toString();
-                        const newHash = window.location.hash.split('?')[0] + (newSearch ? `?${newSearch}` : '');
-                        if (window.history && window.history.replaceState) {
-                            window.history.replaceState(null, '', newHash);
-                        }
-                    }
-                }
-            }
-        } catch (error) {
-            console.warn('⚠️ ProjectDetail: failed to apply task deep-link:', error);
-        }
-    }, [project?.id, tasks]);
-    
     // Ensure functions for lazy loading components - defined early to avoid TDZ issues
+    // These must be defined before any useEffect hooks that reference them
     const ensureListModalLoaded = useCallback(async () => {
         if (typeof window.ListModal === 'function') {
             if (!listModalComponent) {
@@ -750,6 +583,195 @@ function initializeProjectDetail() {
         projectModalLoadPromiseRef.current = loadPromise;
         return loadPromise;
     }, [projectModalComponent]);
+    
+    // Check if required components are loaded
+    const requiredComponents = {
+        ListModal: window.ListModal,
+        ProjectModal: window.ProjectModal,
+        CustomFieldModal: window.CustomFieldModal,
+        TaskDetailModal: window.TaskDetailModal,
+        KanbanView: window.KanbanView,
+        CommentsPopup: window.CommentsPopup,
+        DocumentCollectionModal: window.DocumentCollectionModal,
+        MonthlyDocumentCollectionTracker: window.MonthlyDocumentCollectionTracker
+    };
+    
+    const missingComponents = Object.entries(requiredComponents)
+        .filter(([name, component]) => !component)
+        .map(([name]) => name);
+    
+    if (missingComponents.length > 0) {
+        console.error('❌ ProjectDetail: Missing required components:', missingComponents);
+        console.error('🔍 Available window components:', Object.keys(window).filter(key => 
+            key.includes('Modal') || key.includes('View') || key.includes('Tracker') || key.includes('Popup')
+        ));
+    } else {
+    }
+    
+    // Tab navigation state
+    // Always default to the Overview tab when opening a project.
+    // We intentionally do NOT restore the last viewed tab from storage anymore,
+    // as per product decision to keep the entry point consistent.
+    const [activeSection, setActiveSection] = useState('overview');
+    
+    // Initialize taskLists with project-specific data
+    const [taskLists, setTaskLists] = useState(
+        project.taskLists || [
+            { id: 1, name: 'To Do', color: 'blue', description: '' }
+        ]
+    );
+
+    // Initialize tasks with project-specific data
+    const [tasks, setTasks] = useState(project.tasks || []);
+    // Use a ref to store current tasks value to avoid TDZ issues in closures
+    const tasksRef = useRef(project.tasks || []);
+    // Keep ref in sync with state
+    useEffect(() => {
+        tasksRef.current = tasks;
+    }, [tasks]);
+    const [taskFilters, setTaskFilters] = useState({
+        search: '',
+        status: 'all',
+        assignee: 'all',
+        priority: 'all',
+        list: 'all',
+        includeSubtasks: true
+    });
+    
+    // Sync tasks when project prop changes (e.g., after reload or navigation)
+    // Use a ref to track previous project ID to prevent infinite loops
+    const previousProjectIdRef = useRef(project?.id);
+    useEffect(() => {
+        // Only sync if project ID changed (switching to a different project)
+        if (project?.id !== previousProjectIdRef.current) {
+            previousProjectIdRef.current = project?.id;
+            if (project?.tasks && Array.isArray(project.tasks)) {
+                setTasks(project.tasks);
+                tasksRef.current = project.tasks; // Also update ref
+            }
+        }
+    }, [project?.id]); // Only depend on project ID, not tasks array (which may be recreated on every render)
+    
+    // Memoize the back callback to prevent DocumentCollectionProcessSection from re-rendering
+    const handleBackToOverview = useCallback(() => {
+        setActiveSection('overview');
+    }, []);
+    
+    // Ensure we are on the overview tab when switching to a different project.
+    useEffect(() => {
+        if (!project?.id) return;
+        if (activeSection !== 'overview') {
+            setActiveSection('overview');
+        }
+    }, [project?.id]);
+
+    // If the project is opened via a deep-link to the document collection tracker
+    // (for example from an email notification), ensure the Document Collection tab
+    // is active so the MonthlyDocumentCollectionTracker can show the target comment.
+    useEffect(() => {
+        if (!project?.id) return;
+        try {
+            const search = window.location.search || '';
+            if (!search) return;
+            const params = new URLSearchParams(search);
+            const deepSectionId = params.get('docSectionId');
+            const deepDocumentId = params.get('docDocumentId');
+            const deepMonth = params.get('docMonth');
+            if (deepSectionId && deepDocumentId && deepMonth) {
+                setActiveSection('documentCollection');
+            }
+        } catch (error) {
+            console.warn('⚠️ ProjectDetail: failed to apply document collection deep-link:', error);
+        }
+    }, [project?.id]);
+    
+    // If the project is opened via a deep-link to a specific task
+    // (for example from an email notification), open the task modal
+    // Note: This useEffect is defined before ensureTaskDetailModalLoaded to avoid TDZ issues
+    // We'll handle the modal loading inside the effect
+    useEffect(() => {
+        if (!project?.id || !tasks || tasks.length === 0) return;
+        
+        const handleDeepLink = async () => {
+            try {
+                // Check both window.location.search (for regular URLs) and hash query params (for hash-based routing)
+                let taskId = null;
+                let params = null;
+                
+                // First check hash query params (for hash-based routing like #/projects/123?task=456)
+                const hash = window.location.hash || '';
+                if (hash.includes('?')) {
+                    const hashParts = hash.split('?');
+                    if (hashParts.length > 1) {
+                        params = new URLSearchParams(hashParts[1]);
+                        taskId = params.get('task');
+                    }
+                }
+                
+                // If not found in hash, check window.location.search (for regular URLs)
+                if (!taskId) {
+                    const search = window.location.search || '';
+                    if (search) {
+                        params = new URLSearchParams(search);
+                        taskId = params.get('task');
+                    }
+                }
+                
+                if (taskId) {
+                    // Find the task in the tasks array (including subtasks)
+                    let foundTask = tasks.find(t => t.id === taskId || String(t.id) === String(taskId));
+                    let foundParent = null;
+                    
+                    // If not found in main tasks, check subtasks
+                    if (!foundTask) {
+                        for (const task of tasks) {
+                            if (task.subtasks && Array.isArray(task.subtasks)) {
+                                const subtask = task.subtasks.find(st => st.id === taskId || String(st.id) === String(taskId));
+                                if (subtask) {
+                                    foundTask = subtask;
+                                    foundParent = task;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (foundTask) {
+                        // Ensure task detail modal is loaded before opening
+                        // Use a safe check to avoid TDZ issues
+                        if (typeof window.TaskDetailModal === 'function') {
+                            setViewingTask(foundTask);
+                            setViewingTaskParent(foundParent);
+                            setShowTaskDetailModal(true);
+                        } else {
+                            // If modal not loaded yet, wait a bit and try again
+                            setTimeout(() => {
+                                if (typeof window.TaskDetailModal === 'function') {
+                                    setViewingTask(foundTask);
+                                    setViewingTaskParent(foundParent);
+                                    setShowTaskDetailModal(true);
+                                }
+                            }, 500);
+                        }
+                        
+                        // Remove the task parameter from URL to clean it up
+                        if (params) {
+                            params.delete('task');
+                            const newSearch = params.toString();
+                            const newHash = window.location.hash.split('?')[0] + (newSearch ? `?${newSearch}` : '');
+                            if (window.history && window.history.replaceState) {
+                                window.history.replaceState(null, '', newHash);
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.warn('⚠️ ProjectDetail: failed to apply task deep-link:', error);
+            }
+        };
+        
+        handleDeepLink();
+    }, [project?.id, tasks]);
     
     // Listen for openTask event (for programmatic task opening)
     useEffect(() => {
