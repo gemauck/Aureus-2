@@ -226,17 +226,17 @@ const ManagementMeetingNotes = () => {
                         window.scrollTo(0, scrollY);
                     }, 50);
                     
-                    setTimeout(() => {
-                        window.scrollTo(0, scrollY);
-                    }, 100);
+                        setTimeout(() => {
+                            window.scrollTo(0, scrollY);
+                        }, 100);
                     
                     setTimeout(() => {
                         window.scrollTo(0, scrollY);
                     }, 200);
                     
-                    setTimeout(() => {
-                        window.scrollTo(0, scrollY);
-                    }, 500);
+                        setTimeout(() => {
+                            window.scrollTo(0, scrollY);
+                        }, 500);
                     
                     setTimeout(() => {
                         window.scrollTo(0, scrollY);
@@ -541,9 +541,9 @@ const ManagementMeetingNotes = () => {
                     window.scrollTo(0, currentScrollPosition);
                 }, 50);
                 
-                setTimeout(() => {
-                    window.scrollTo(0, currentScrollPosition);
-                }, 100);
+                    setTimeout(() => {
+                        window.scrollTo(0, currentScrollPosition);
+                    }, 100);
                 
                 setTimeout(() => {
                     window.scrollTo(0, currentScrollPosition);
@@ -1570,11 +1570,6 @@ const ManagementMeetingNotes = () => {
         
         if (!departmentNotesId) {
             console.error('❌ No departmentNotesId provided');
-            if (typeof window.showNotification === 'function') {
-                window.showNotification('Error: Missing department ID. Please refresh the page.', 'error');
-            } else if (typeof alert === 'function') {
-                alert('Error: Missing department ID. Please refresh the page.');
-            }
             return;
         }
         
@@ -1754,9 +1749,9 @@ const ManagementMeetingNotes = () => {
             departmentNotesId, 
             fieldsToSave,
             stateValues: {
-                successes: deptNote.successes || '',
-                weekToFollow: deptNote.weekToFollow || '',
-                frustrations: deptNote.frustrations || ''
+            successes: deptNote.successes || '',
+            weekToFollow: deptNote.weekToFollow || '',
+            frustrations: deptNote.frustrations || ''
             }
         });
         
@@ -1832,25 +1827,20 @@ const ManagementMeetingNotes = () => {
             
             console.log('✅ Successfully saved to database:', response);
             
-            // Show success feedback
-            if (typeof window.showNotification === 'function') {
-                window.showNotification('Changes saved successfully', 'success');
-            } else if (typeof alert === 'function') {
-                alert('Changes saved successfully');
-            }
+            // Update local state immediately with saved values (NO PAGE REFRESH)
+            // This ensures the saved data appears on screen right away
+            const monthlyId = currentMonthlyNotes?.id || null;
+            updateDepartmentNotesLocal(departmentNotesId, 'successes', fieldsToSave.successes, monthlyId);
+            updateDepartmentNotesLocal(departmentNotesId, 'weekToFollow', fieldsToSave.weekToFollow, monthlyId);
+            updateDepartmentNotesLocal(departmentNotesId, 'frustrations', fieldsToSave.frustrations, monthlyId);
             
-            // Reload from server to ensure consistency (preserve scroll position)
-            if (selectedMonth) {
-                await reloadMonthlyNotes(selectedMonth, true);
-            }
-            
-            // Restore scroll position after state updates - AGGRESSIVE with multiple attempts
+            // Preserve scroll position - ensure we stay exactly where we are
             if (currentScrollPosition > 0) {
                 // Immediate restoration
                 window.scrollTo(0, currentScrollPosition);
                 
-                requestAnimationFrame(() => {
-                    window.scrollTo(0, currentScrollPosition);
+            requestAnimationFrame(() => {
+                window.scrollTo(0, currentScrollPosition);
                 });
                 
                 setTimeout(() => {
@@ -1880,25 +1870,19 @@ const ManagementMeetingNotes = () => {
             
         } catch (error) {
             console.error('❌ Error saving department notes:', error);
-            const errorMessage = error?.message || error?.error || 'Unknown error occurred';
             
             // Restore scroll position even on error
+            if (currentScrollPosition > 0) {
+                window.scrollTo(0, currentScrollPosition);
             requestAnimationFrame(() => {
                 window.scrollTo(0, currentScrollPosition);
             });
+                setTimeout(() => {
+                    window.scrollTo(0, currentScrollPosition);
+                }, 0);
+            }
             
-            // Show error feedback to user
-            const userFriendlyMessage = errorMessage.includes('Network') || errorMessage.includes('fetch') 
-                ? 'Failed to save. Please check your internet connection and try again.'
-                : errorMessage.includes('401') || errorMessage.includes('403')
-                ? 'You do not have permission to save. Please contact an administrator.'
-                : `Failed to save: ${errorMessage}`;
-            
-            if (typeof window.showNotification === 'function') {
-                window.showNotification(userFriendlyMessage, 'error');
-            } else if (typeof alert === 'function') {
-                alert(userFriendlyMessage);
-            } else {
+            // Error logged silently - no popup messages else {
                 console.error('Failed to save:', errorMessage);
             }
         } finally {
