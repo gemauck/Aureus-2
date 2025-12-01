@@ -5,6 +5,7 @@ import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { searchAndSaveNewsForClient } from '../client-news/search.js'
+import { logDatabaseError, isConnectionError } from '../_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
   try {
@@ -26,64 +27,60 @@ async function handler(req, res) {
     if (req.method === 'GET') {
       try {
         const client = await prisma.client.findUnique({ 
-          where: { id },
-          include: {
-            tags: {
-              include: {
-                tag: true
-              }
-            }
-          }
+          where: { id }
         })
         if (!client) return notFound(res)
         
-        // Parse JSON fields (proposals, contacts, etc.) and extract tags
+        // Parse JSON fields (proposals, contacts, etc.)
         const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
         const parsedClient = { ...client }
         
-        // Parse JSON fields
+        // Parse JSON fields with error handling
         for (const field of jsonFields) {
-          const value = parsedClient[field]
-          if (typeof value === 'string' && value) {
-            try {
-              parsedClient[field] = JSON.parse(value)
-            } catch (e) {
-              // Set safe defaults on parse error
+          try {
+            const value = parsedClient[field]
+            if (typeof value === 'string' && value) {
+              try {
+                parsedClient[field] = JSON.parse(value)
+              } catch (parseError) {
+                // Set safe defaults on parse error
+                console.warn(`⚠️ Failed to parse JSON field "${field}" for client ${id}:`, parseError.message)
+                parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
+              }
+            } else if (!value) {
+              // Set defaults for missing/null fields
               parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
             }
-          } else if (!value) {
-            // Set defaults for missing/null fields
+          } catch (fieldError) {
+            console.warn(`⚠️ Error processing field "${field}" for client ${id}:`, fieldError.message)
+            // Set safe default
             parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
           }
         }
         
-        // Parse tags from ClientTag relations
-        if (client.tags && Array.isArray(client.tags)) {
-          parsedClient.tags = client.tags
-            .map(ct => ct.tag)
-            .filter(Boolean)
-            .map(tag => ({
-              id: tag.id,
-              name: tag.name,
-              color: tag.color || '#3B82F6',
-              description: tag.description || ''
-            }))
-        } else {
-          parsedClient.tags = []
-        }
-        
         return ok(res, { client: parsedClient })
       } catch (dbError) {
-        console.error('❌ Database error getting client:', {
-          message: dbError.message,
-          name: dbError.name,
-          code: dbError.code,
-          meta: dbError.meta,
-          stack: dbError.stack?.substring(0, 1000),
-          clientId: id,
-          url: req.url
-        })
-        return serverError(res, 'Failed to get client', dbError.message)
+        const isConnError = logDatabaseError(dbError, 'getting client')
+        
+        // Log additional context
+        console.error('❌ Error details for client ID:', id)
+        console.error('❌ Error code:', dbError.code)
+        console.error('❌ Error name:', dbError.name)
+        console.error('❌ Error meta:', dbError.meta)
+        
+        if (isConnError) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
+        
+        // Check for specific Prisma errors
+        if (dbError.code === 'P2025') {
+          // Record not found
+          return notFound(res)
+        }
+        
+        // Provide more detailed error message
+        const errorDetails = dbError.meta ? JSON.stringify(dbError.meta) : dbError.message
+        return serverError(res, 'Failed to get client', errorDetails || 'Unknown database error')
       }
     }
 
@@ -222,7 +219,12 @@ async function handler(req, res) {
         
         return ok(res, { client: parsedClient })
       } catch (dbError) {
+        const isConnError = logDatabaseError(dbError, 'updating client')
+        if (isConnError) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         console.error('❌ Database error updating client:', dbError)
+        console.error('❌ Error code:', dbError.code, 'Meta:', dbError.meta)
         return serverError(res, 'Failed to update client', dbError.message)
       }
     }
@@ -271,6 +273,10 @@ async function handler(req, res) {
           message: `Client deleted successfully. Also deleted ${opportunitiesDeleted.count} opportunities, ${invoicesDeleted.count} invoices, ${salesOrdersDeleted.count} sales orders, and updated ${projectsUpdated.count} projects.`
         })
       } catch (dbError) {
+        const isConnError = logDatabaseError(dbError, 'deleting client')
+        if (isConnError) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         console.error('❌ Database error deleting client:', dbError)
         console.error('❌ Full error details:', JSON.stringify(dbError, null, 2))
         return serverError(res, 'Failed to delete client', dbError.message)
