@@ -29,39 +29,23 @@ const RichTextEditor = ({
             return; // Already overridden
         }
         
-        // CRITICAL: Override scrollIntoView to prevent browser's default scroll behavior
+        // CRITICAL: Override scrollIntoView to COMPLETELY prevent browser's default scroll behavior
         if (!originalScrollIntoViewRef.current) {
             originalScrollIntoViewRef.current = editor.scrollIntoView.bind(editor);
         }
-        const originalScrollIntoView = originalScrollIntoViewRef.current;
+        
+        // Save scroll position BEFORE overriding
+        savedScrollPositionRef.current = window.scrollY || window.pageYOffset;
+        
+        // COMPLETE OVERRIDE - Never call the original, just restore scroll
         editor.scrollIntoView = function(options) {
-            // Save current scroll position BEFORE any scroll happens
+            // Save current scroll position
             const currentScroll = window.scrollY || window.pageYOffset;
             savedScrollPositionRef.current = currentScroll;
             scrollLockRef.current = true;
             
-            // IMMEDIATELY prevent any scroll by restoring position
+            // DO NOT CALL ORIGINAL - just restore scroll immediately
             window.scrollTo(0, savedScrollPositionRef.current);
-            
-            // Try to use preventScroll if available (modern browsers)
-            if (options && typeof options === 'object') {
-                options.block = 'nearest';
-                options.inline = 'nearest';
-                // Try preventScroll first
-                try {
-                    originalScrollIntoView({ ...options, preventScroll: true });
-                } catch (e) {
-                    // If preventScroll fails, just don't call it at all
-                    // The scroll restoration below will handle it
-                }
-            } else {
-                // Try preventScroll with default options
-                try {
-                    originalScrollIntoView({ block: 'nearest', inline: 'nearest', preventScroll: true });
-                } catch (e) {
-                    // If preventScroll not supported, don't call original at all
-                }
-            }
             
             // Aggressively restore scroll position multiple times
             const restoreScroll = () => {
@@ -82,14 +66,42 @@ const RichTextEditor = ({
                 } else {
                     clearInterval(restoreInterval);
                 }
-            }, 5); // More frequent checks
+            }, 5);
             
             setTimeout(() => {
                 scrollLockRef.current = false;
                 clearInterval(restoreInterval);
-                // Final restoration
                 restoreScroll();
             }, 500);
+            
+            // Return false to prevent any default behavior
+            return false;
+        };
+        
+        // Also override focus method to prevent scroll
+        const originalFocus = editor.focus;
+        editor.focus = function(options) {
+            // Save scroll before focus
+            savedScrollPositionRef.current = window.scrollY || window.pageYOffset;
+            scrollLockRef.current = true;
+            
+            // Call original focus but immediately restore scroll
+            const result = originalFocus.call(this, options);
+            
+            // Immediately restore scroll
+            window.scrollTo(0, savedScrollPositionRef.current);
+            
+            // Multiple restoration attempts
+            setTimeout(() => window.scrollTo(0, savedScrollPositionRef.current), 0);
+            setTimeout(() => window.scrollTo(0, savedScrollPositionRef.current), 1);
+            setTimeout(() => window.scrollTo(0, savedScrollPositionRef.current), 5);
+            setTimeout(() => window.scrollTo(0, savedScrollPositionRef.current), 10);
+            setTimeout(() => {
+                window.scrollTo(0, savedScrollPositionRef.current);
+                scrollLockRef.current = false;
+            }, 100);
+            
+            return result;
         };
     }, []);
     
@@ -159,10 +171,11 @@ const RichTextEditor = ({
         const scrollInterceptor = (e) => {
             const currentScroll = window.scrollY || window.pageYOffset;
             
-            // If scroll jumped to 0 and we have a saved position, restore it
-            if (currentScroll === 0 && savedScrollPositionRef.current > 100 && scrollLockRef.current) {
+            // If scroll jumped to 0 and we have a saved position, restore it IMMEDIATELY
+            if (currentScroll === 0 && savedScrollPositionRef.current > 50 && scrollLockRef.current) {
                 e.preventDefault();
                 e.stopImmediatePropagation();
+                e.stopPropagation();
                 window.scrollTo(0, savedScrollPositionRef.current);
                 return false;
             } else {
@@ -170,10 +183,26 @@ const RichTextEditor = ({
             }
         };
         
+        // Global scroll lock - prevent ANY scroll to 0 when locked
+        const globalScrollLock = (e) => {
+            if (scrollLockRef.current && savedScrollPositionRef.current > 50) {
+                const currentScroll = window.scrollY || window.pageYOffset;
+                if (currentScroll === 0) {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    window.scrollTo(0, savedScrollPositionRef.current);
+                    return false;
+                }
+            }
+        };
+        
         editor.addEventListener('mousedown', handleMouseDown, true);
         editor.addEventListener('focus', handleFocus, true);
         editor.addEventListener('click', handleMouseDown, true);
         window.addEventListener('scroll', scrollInterceptor, { passive: false, capture: true });
+        // Add wheel and touch events to prevent scroll
+        window.addEventListener('wheel', globalScrollLock, { passive: false, capture: true });
+        window.addEventListener('touchmove', globalScrollLock, { passive: false, capture: true });
         
         // Continuous scroll monitor while locked - more aggressive
         const scrollMonitor = setInterval(() => {
@@ -204,6 +233,8 @@ const RichTextEditor = ({
             editor.removeEventListener('focus', handleFocus, true);
             editor.removeEventListener('click', handleMouseDown, true);
             window.removeEventListener('scroll', scrollInterceptor, { capture: true });
+            window.removeEventListener('wheel', globalScrollLock, { capture: true });
+            window.removeEventListener('touchmove', globalScrollLock, { capture: true });
             clearInterval(scrollMonitor);
         };
     }, [setupScrollProtection]);
@@ -349,7 +380,7 @@ const RichTextEditor = ({
                     savedScrollPositionRef.current = scrollBeforeFocus;
                     scrollLockRef.current = true;
                     
-                    // Immediate restoration - multiple attempts
+                    // Immediate restoration - multiple attempts with very aggressive timing
                     const restoreScroll = () => {
                         const currentScroll = window.scrollY || window.pageYOffset;
                         if (currentScroll === 0 || Math.abs(currentScroll - savedScrollPositionRef.current) > 50) {
@@ -357,20 +388,24 @@ const RichTextEditor = ({
                         }
                     };
                     
+                    // Use microtask and multiple timings to catch scroll ASAP
                     restoreScroll();
+                    Promise.resolve().then(restoreScroll);
                     requestAnimationFrame(restoreScroll);
                     setTimeout(restoreScroll, 0);
                     setTimeout(restoreScroll, 1);
+                    setTimeout(restoreScroll, 2);
                     setTimeout(restoreScroll, 5);
                     setTimeout(restoreScroll, 10);
                     setTimeout(restoreScroll, 20);
                     setTimeout(restoreScroll, 50);
                     setTimeout(restoreScroll, 100);
                     setTimeout(restoreScroll, 150);
+                    setTimeout(restoreScroll, 200);
                     setTimeout(() => {
                         restoreScroll();
                         scrollLockRef.current = false;
-                    }, 300);
+                    }, 500);
                 }}
                 onClick={(e) => {
                     // CRITICAL: Save scroll position BEFORE any browser behavior
@@ -470,6 +505,12 @@ const RichTextEditor = ({
             
             {/* Placeholder and list styling */}
             <style>{`
+                /* Prevent scroll behavior on contentEditable focus */
+                [contenteditable="true"] {
+                    scroll-margin: 0 !important;
+                    scroll-padding: 0 !important;
+                }
+                
                 [contenteditable][data-placeholder]:empty:before {
                     content: attr(data-placeholder);
                     color: ${isDark ? '#94a3b8' : '#9ca3af'};
