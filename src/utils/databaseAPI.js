@@ -40,7 +40,7 @@ const DatabaseAPI = {
     // Error aggregation for 502 errors to reduce console noise
     _recent502Errors: [], // Track recent 502 errors
     _last502ErrorLog: 0, // Track last time we logged 502 error summary
-    _502ErrorLogInterval: 5000, // Log 502 error summary every 5 seconds
+    _502ErrorLogInterval: 10000, // Log 502 error summary every 10 seconds (increased to reduce noise)
     
     // Circuit breaker for endpoints with persistent 502 errors
     _circuitBreaker: new Map(), // Track failing endpoints: endpoint -> { failures: number, lastFailure: timestamp, openUntil: timestamp }
@@ -496,6 +496,17 @@ const DatabaseAPI = {
             // Retry loop for network errors
             let lastError = null;
             for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                // Check circuit breaker before each attempt to fail fast
+                const circuitStatus = this._checkCircuitBreaker(endpoint);
+                if (circuitStatus.open) {
+                    const error = new Error(`502: Endpoint temporarily unavailable (circuit breaker open). Server is experiencing issues. Will retry in ${circuitStatus.remainingSeconds}s.`);
+                    error.status = 502;
+                    error.code = 'CIRCUIT_BREAKER_OPEN';
+                    error.circuitBreaker = true;
+                    error.remainingSeconds = circuitStatus.remainingSeconds;
+                    throw error;
+                }
+                
                 try {
                     let response = await execute(token);
 
@@ -697,13 +708,26 @@ const DatabaseAPI = {
                     const effectiveMaxRetries = is502Error ? 1 : maxRetries;
                     
                     if (isRetryableServerError && attempt < effectiveMaxRetries) {
+                        // Check circuit breaker before retrying - if open, fail fast
+                        const circuitStatus = this._checkCircuitBreaker(endpoint);
+                        if (circuitStatus.open) {
+                            // Circuit breaker is open, don't retry - fail immediately
+                            const error = new Error(`502: Endpoint temporarily unavailable (circuit breaker open). Server is experiencing issues. Will retry in ${circuitStatus.remainingSeconds}s.`);
+                            error.status = 502;
+                            error.code = 'CIRCUIT_BREAKER_OPEN';
+                            error.circuitBreaker = true;
+                            error.remainingSeconds = circuitStatus.remainingSeconds;
+                            throw error;
+                        }
+                        
                         // Use shorter delays for 502 errors (Bad Gateway - often transient)
                         // 502 errors typically resolve quickly, so retry faster
                         const retryBaseDelay = is502Error ? 300 : baseDelay; // 300ms for 502, 1000ms for others
                         const delay = retryBaseDelay * Math.pow(2, attempt);
-                        // Suppress warnings for 500 errors (expected when backend has issues)
-                        // Only log warnings for 502/503/504 (gateway/proxy errors)
-                        if (attempt === 0 && response.status !== 500) {
+                        
+                        // Suppress all retry warnings for 502 errors - they're already aggregated
+                        // Only log warnings for 500/503/504 errors (and only on first attempt)
+                        if (attempt === 0 && response.status !== 500 && response.status !== 502) {
                             console.warn(`⚠️ Server error ${response.status} on ${endpoint} (attempt ${attempt + 1}/${effectiveMaxRetries + 1}). Retrying in ${delay}ms...`);
                         }
                         await new Promise(resolve => setTimeout(resolve, delay));
@@ -776,14 +800,16 @@ const DatabaseAPI = {
                         const circuitStatus = this._checkCircuitBreaker(endpoint);
                         
                         // Log aggregated summary periodically instead of every error
-                        // Only log if we have multiple errors to reduce noise
+                        // Only log if we have multiple errors or circuit breaker is open to reduce noise
                         if (now - this._last502ErrorLog > this._502ErrorLogInterval) {
                             const recentCount = this._recent502Errors.length;
-                            if (recentCount > 1) { // Only log if more than 1 error
+                            const circuitBrokenEndpoints = Array.from(this._circuitBreaker.entries())
+                                .filter(([ep, breaker]) => breaker.failures >= this._circuitBreakerThreshold && breaker.openUntil && Date.now() < breaker.openUntil)
+                                .map(([ep]) => ep);
+                            
+                            // Only log if we have multiple errors OR circuit breaker is open
+                            if (recentCount > 1 || circuitBrokenEndpoints.length > 0) {
                                 const uniqueEndpoints = [...new Set(this._recent502Errors.map(e => e.endpoint))];
-                                const circuitBrokenEndpoints = Array.from(this._circuitBreaker.entries())
-                                    .filter(([ep, breaker]) => breaker.failures >= this._circuitBreakerThreshold && breaker.openUntil && Date.now() < breaker.openUntil)
-                                    .map(([ep]) => ep);
                                 if (circuitBrokenEndpoints.length > 0) {
                                     console.warn(`⚠️ Server unavailable (502): ${recentCount} error(s) across ${uniqueEndpoints.length} endpoint(s). Circuit breaker open for: ${circuitBrokenEndpoints.join(', ')}`);
                                 } else {
@@ -882,12 +908,26 @@ const DatabaseAPI = {
                             delay = baseDelay * Math.pow(2, attempt);
                         }
                         
+                        // Check circuit breaker before retrying - if open, fail fast
+                        const circuitStatus = this._checkCircuitBreaker(endpoint);
+                        if (circuitStatus.open && isServerError) {
+                            // Circuit breaker is open for server errors, don't retry - fail immediately
+                            const error = new Error(`502: Endpoint temporarily unavailable (circuit breaker open). Server is experiencing issues. Will retry in ${circuitStatus.remainingSeconds}s.`);
+                            error.status = 502;
+                            error.code = 'CIRCUIT_BREAKER_OPEN';
+                            error.circuitBreaker = true;
+                            error.remainingSeconds = circuitStatus.remainingSeconds;
+                            throw error;
+                        }
+                        
                         const errorType = isConnectionReset ? 'Connection reset' : 
                                         (isTimeout ? 'Timeout error' : 
                                         (isServerError ? 'Server error' : 'Network error'));
                         
-                        // Only log first few attempts to reduce console noise
-                        if (attempt < 2) {
+                        // Suppress retry warnings for 502 errors (already aggregated)
+                        // Only log first few attempts for other errors to reduce console noise
+                        const is502Error = error?.message?.includes('502') || error?.message?.includes('Bad Gateway');
+                        if (attempt < 2 && !is502Error) {
                             console.warn(`⚠️ ${errorType} on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`, error.message);
                         }
                         await this._sleep(delay);

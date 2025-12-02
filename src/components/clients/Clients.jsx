@@ -4388,37 +4388,10 @@ const Clients = React.memo(() => {
                                     </td>
                                     <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
                                         {(() => {
-                                            // Collect all group names from parentGroup and groupMemberships
+                                            // Collect group names from Additional Group Memberships only
                                             const groupNames = [];
                                             
-                                            // Debug logging for Exxaro clients
-                                            if (client.name && client.name.toLowerCase().includes('exxaro')) {
-                                                console.log('🔍 Table render - Exxaro client:', {
-                                                    name: client.name,
-                                                    id: client.id,
-                                                    parentGroup: client.parentGroup,
-                                                    parentGroupType: typeof client.parentGroup,
-                                                    parentGroupName: client.parentGroupName,
-                                                    parentGroupId: client.parentGroupId,
-                                                    groupMemberships: client.groupMemberships,
-                                                    groupMembershipsType: typeof client.groupMemberships,
-                                                    groupMembershipsLength: Array.isArray(client.groupMemberships) ? client.groupMemberships.length : 'not array'
-                                                });
-                                            }
-                                            
-                                            // Add parent group name if exists
-                                            if (client.parentGroup) {
-                                                if (typeof client.parentGroup === 'object' && client.parentGroup !== null && client.parentGroup.name) {
-                                                    groupNames.push(client.parentGroup.name);
-                                                } else if (typeof client.parentGroup === 'string') {
-                                                    groupNames.push(client.parentGroup);
-                                                }
-                                            }
-                                            if (client.parentGroupName && !groupNames.includes(client.parentGroupName)) {
-                                                groupNames.push(client.parentGroupName);
-                                            }
-                                            
-                                            // Add all group memberships
+                                            // Add all group memberships (Additional Group Memberships)
                                             if (Array.isArray(client.groupMemberships)) {
                                                 client.groupMemberships.forEach(membership => {
                                                     if (membership?.group) {
@@ -4432,7 +4405,7 @@ const Clients = React.memo(() => {
                                                 });
                                             }
                                             
-                                            // Display all groups or "None"
+                                            // Display group memberships or "None"
                                             if (groupNames.length === 0) {
                                                 return <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>None</span>;
                                             }
