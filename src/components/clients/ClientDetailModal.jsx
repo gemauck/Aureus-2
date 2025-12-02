@@ -4345,59 +4345,53 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     Create Group
                                                 </button>
                                             </div>
-                                            {allGroups.length > 0 ? (
-                                                <div className={`space-y-2 max-h-64 overflow-y-auto ${isDark ? 'bg-gray-800' : 'bg-gray-50'} rounded-md p-3 border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                                                    {allGroups
-                                                        .filter(g => g.type === 'group')
-                                                        .map((group) => {
-                                                            const memberCount = (group._count?.childCompanies || 0) + (group._count?.groupChildren || 0);
-                                                            return (
-                                                                <div
-                                                                    key={group.id}
-                                                                    className={`flex items-center justify-between p-2 rounded-md ${isDark ? 'bg-gray-700' : 'bg-white'} border ${isDark ? 'border-gray-600' : 'border-gray-200'}`}
-                                                                >
-                                                                    <div className="flex-1">
-                                                                        <span className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                                                            {group.name}
-                                                                        </span>
-                                                                        {group.industry && (
-                                                                            <span className={`ml-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                                                ({group.industry})
-                                                                            </span>
-                                                                        )}
+                                            <div className={`space-y-2 max-h-64 overflow-y-auto ${isDark ? 'bg-gray-800' : 'bg-gray-50'} rounded-md p-3 border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                                                {allGroups
+                                                    .filter(g => g.type === 'group')
+                                                    .map((group) => {
+                                                        const memberCount = (group._count?.childCompanies || 0) + (group._count?.groupChildren || 0);
+                                                        return (
+                                                            <div
+                                                                key={group.id}
+                                                                className={`flex items-center justify-between p-2 rounded-md ${isDark ? 'bg-gray-700' : 'bg-white'} border ${isDark ? 'border-gray-600' : 'border-gray-200'}`}
+                                                            >
+                                                                <div className="flex-1">
+                                                                    <span className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                                        {group.name}
+                                                                    </span>
+                                                                    {group.industry && (
                                                                         <span className={`ml-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                                            • {memberCount} member{memberCount !== 1 ? 's' : ''}
+                                                                            ({group.industry})
                                                                         </span>
-                                                                    </div>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            setGroupToDelete(group);
-                                                                            setShowDeleteGroupModal(true);
-                                                                        }}
-                                                                        className={`px-2 py-1 text-xs rounded transition-colors ${
-                                                                            isDark
-                                                                                ? 'bg-red-600 hover:bg-red-700 text-white'
-                                                                                : 'bg-red-500 hover:bg-red-600 text-white'
-                                                                        }`}
-                                                                    >
-                                                                        <i className="fas fa-trash mr-1"></i>
-                                                                        Delete
-                                                                    </button>
+                                                                    )}
+                                                                    <span className={`ml-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                                        • {memberCount} member{memberCount !== 1 ? 's' : ''}
+                                                                    </span>
                                                                 </div>
-                                                            );
-                                                        })}
-                                                    {allGroups.filter(g => g.type === 'group').length === 0 && (
-                                                        <p className={`text-sm py-4 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                            No groups created yet. Click "Create Group" to add one.
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <p className={`text-sm py-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                    No groups available. Click "Create Group" to add one.
-                                                </p>
-                                            )}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setGroupToDelete(group);
+                                                                        setShowDeleteGroupModal(true);
+                                                                    }}
+                                                                    className={`px-2 py-1 text-xs rounded transition-colors ${
+                                                                        isDark
+                                                                            ? 'bg-red-600 hover:bg-red-700 text-white'
+                                                                            : 'bg-red-500 hover:bg-red-600 text-white'
+                                                                    }`}
+                                                                >
+                                                                    <i className="fas fa-trash mr-1"></i>
+                                                                    Delete
+                                                                </button>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                {allGroups.filter(g => g.type === 'group').length === 0 && (
+                                                    <p className={`text-sm py-4 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                        No groups created yet. Click "Create Group" to add one.
+                                                    </p>
+                                                )}
+                                            </div>
                                         </div>
 
                                         {!client?.id ? (
