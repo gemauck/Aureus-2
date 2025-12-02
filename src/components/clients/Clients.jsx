@@ -1342,13 +1342,13 @@ const Clients = React.memo(() => {
                                 const updated = prevClients.map(client => {
                                     const opps = opportunitiesByClient[client.id] || client.opportunities || [];
                                     return {
-                                        ...client,
+                                ...client,
                                         opportunities: opps,
                                         // CRITICAL: Preserve groupMemberships from current state (from API)
                                         groupMemberships: client.groupMemberships || []
                                     };
                                 });
-                                safeStorage.setClients(updated);
+                            safeStorage.setClients(updated);
                                 return updated;
                             });
                         })
@@ -1450,17 +1450,17 @@ const Clients = React.memo(() => {
                             setClients(prevClients => {
                                 const updated = prevClients.map(client => {
                                     const opps = opportunitiesByClient[client.id] || client.opportunities || [];
-                                    return {
-                                        ...client,
+                                return {
+                                    ...client,
                                         opportunities: opps,
                                         // CRITICAL: Preserve ALL group data from current state (from API)
-                                        parentGroup: client.parentGroup || null,
-                                        parentGroupId: client.parentGroupId || null,
-                                        parentGroupName: client.parentGroupName || null,
+                                    parentGroup: client.parentGroup || null,
+                                    parentGroupId: client.parentGroupId || null,
+                                    parentGroupName: client.parentGroupName || null,
                                         groupMemberships: Array.isArray(client.groupMemberships) ? client.groupMemberships : []
-                                    };
-                                });
-                                safeStorage.setClients(updated);
+                                };
+                            });
+                            safeStorage.setClients(updated);
                                 return updated;
                             });
                         })
@@ -2848,8 +2848,6 @@ const Clients = React.memo(() => {
     
     // CRITICAL FIX: If any clients are missing groupMemberships, fetch them directly from API
     // This ensures ALL clients with groups show their groups, not just those that were cached correctly
-    const groupMembershipsFetchRef = useRef(false); // Prevent multiple simultaneous fetches
-    
     useEffect(() => {
         if (!clients || clients.length === 0) return;
         
@@ -4765,23 +4763,23 @@ const Clients = React.memo(() => {
                                             }
                                             
                                             // Extract group names
-                                            memberships.forEach(membership => {
-                                                if (membership && typeof membership === 'object') {
+                                                memberships.forEach(membership => {
+                                                    if (membership && typeof membership === 'object') {
                                                     // Check for nested group object (from API: { group: { name: "Exxaro" } })
-                                                    if (membership.group) {
-                                                        const groupName = typeof membership.group === 'object' && membership.group !== null
-                                                            ? membership.group.name
-                                                            : (typeof membership.group === 'string' ? membership.group : null);
-                                                        if (groupName && !groupNames.includes(groupName)) {
-                                                            groupNames.push(groupName);
+                                                        if (membership.group) {
+                                                            const groupName = typeof membership.group === 'object' && membership.group !== null
+                                                                ? membership.group.name
+                                                                : (typeof membership.group === 'string' ? membership.group : null);
+                                                            if (groupName && !groupNames.includes(groupName)) {
+                                                                groupNames.push(groupName);
+                                                            }
+                                                        }
+                                                    // Fallback: check if membership itself has a name property
+                                                        if (!groupNames.length && membership.name && !groupNames.includes(membership.name)) {
+                                                            groupNames.push(membership.name);
                                                         }
                                                     }
-                                                    // Fallback: check if membership itself has a name property
-                                                    if (!groupNames.length && membership.name && !groupNames.includes(membership.name)) {
-                                                        groupNames.push(membership.name);
-                                                    }
-                                                }
-                                            });
+                                                });
                                             
                                             // SIMPLE: Show group name or "None"
                                             return groupNames.length > 0 
