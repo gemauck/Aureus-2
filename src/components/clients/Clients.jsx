@@ -1336,13 +1336,13 @@ const Clients = React.memo(() => {
             const timeSinceLastCall = now - lastApiCallTimestamp;
             
             // Check if cached clients are missing group data - if so, force API call
-            const clientsToCheck = clients.length > 0 ? clients : (cachedClients || []);
-            const hasMissingGroupData = clientsToCheck.some(c => {
+            // CRITICAL: Always check cachedClients (not clients state) since that's what we're displaying
+            const clientsToCheck = cachedClients || [];
+            const hasMissingGroupData = clientsToCheck.length > 0 && clientsToCheck.some(c => {
                 // Check if client has no group data at all
                 const hasNoParentGroup = !c.parentGroup && !c.parentGroupId && !c.parentGroupName;
                 const hasNoGroupMemberships = !c.groupMemberships || (Array.isArray(c.groupMemberships) && c.groupMemberships.length === 0);
-                // If client has neither parentGroup nor groupMemberships, it might be missing data
-                // But only force refresh if we have NO group data at all (not just empty)
+                // If client has neither parentGroup nor groupMemberships, it's missing data
                 return hasNoParentGroup && hasNoGroupMemberships;
             });
             
