@@ -4391,6 +4391,19 @@ const Clients = React.memo(() => {
                                             // Collect group names from Additional Group Memberships only
                                             const groupNames = [];
                                             
+                                            // Debug logging for AccuFarm
+                                            if (client.name && client.name.toLowerCase().includes('accufarm')) {
+                                                console.log('🔍 AccuFarm groupMemberships debug:', {
+                                                    name: client.name,
+                                                    id: client.id,
+                                                    groupMemberships: client.groupMemberships,
+                                                    groupMembershipsType: typeof client.groupMemberships,
+                                                    isArray: Array.isArray(client.groupMemberships),
+                                                    length: Array.isArray(client.groupMemberships) ? client.groupMemberships.length : 'not array',
+                                                    firstMembership: Array.isArray(client.groupMemberships) && client.groupMemberships.length > 0 ? client.groupMemberships[0] : null
+                                                });
+                                            }
+                                            
                                             // Add all group memberships (Additional Group Memberships)
                                             if (Array.isArray(client.groupMemberships)) {
                                                 client.groupMemberships.forEach(membership => {
