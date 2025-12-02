@@ -127,16 +127,56 @@ async function handler(req, res) {
               }
             })
           } catch (relationError) {
-            // If relations fail, try query without relations
-            console.warn('⚠️ Query with relations failed, trying without relations:', relationError.message)
-            rawClients = await prisma.client.findMany({
-              where: {
-                type: 'client'
-              },
-              orderBy: {
-                createdAt: 'desc'
-              }
-            })
+            // If relations fail, try query with minimal relations (still include groupMemberships)
+            console.warn('⚠️ Query with relations failed, trying with minimal relations:', relationError.message)
+            try {
+              rawClients = await prisma.client.findMany({
+                where: {
+                  type: 'client'
+                },
+                include: {
+                  parentGroup: {
+                    select: {
+                      id: true,
+                      name: true,
+                      type: true
+                    }
+                  },
+                  groupMemberships: {
+                    include: {
+                      group: {
+                        select: {
+                          id: true,
+                          name: true,
+                          type: true,
+                          industry: true
+                        }
+                      }
+                    }
+                  }
+                },
+                orderBy: {
+                  createdAt: 'desc'
+                }
+              })
+            } catch (minimalRelationError) {
+              // Last resort: query without relations but log the error
+              console.error('❌ Minimal relations query also failed, using query without relations:', minimalRelationError.message)
+              rawClients = await prisma.client.findMany({
+                where: {
+                  type: 'client'
+                },
+                orderBy: {
+                  createdAt: 'desc'
+                }
+              })
+              // Manually set empty groupMemberships for all clients
+              rawClients = rawClients.map(client => ({
+                ...client,
+                groupMemberships: [],
+                parentGroup: null
+              }))
+            }
           }
         } catch (typeError) {
           // If type column doesn't exist or query fails, try without type filter
@@ -386,6 +426,22 @@ async function handler(req, res) {
             parentGroupId: c.parentGroupId,
             groupMemberships: c.groupMemberships
           })))
+        }
+        
+        // Debug: Check AccuFarm in final response
+        const accufarmInResponse = parsedClients.find(c => c.name && c.name.toLowerCase().includes('accufarm'))
+        if (accufarmInResponse) {
+          console.log('🔍 Final API response - AccuFarm:', {
+            name: accufarmInResponse.name,
+            id: accufarmInResponse.id,
+            parentGroup: accufarmInResponse.parentGroup,
+            parentGroupName: accufarmInResponse.parentGroupName,
+            parentGroupId: accufarmInResponse.parentGroupId,
+            groupMemberships: accufarmInResponse.groupMemberships,
+            groupMembershipsType: typeof accufarmInResponse.groupMemberships,
+            groupMembershipsLength: Array.isArray(accufarmInResponse.groupMemberships) ? accufarmInResponse.groupMemberships.length : 'not array',
+            firstMembership: Array.isArray(accufarmInResponse.groupMemberships) && accufarmInResponse.groupMemberships.length > 0 ? accufarmInResponse.groupMemberships[0] : null
+          })
         }
         
         return ok(res, { clients: parsedClients })
