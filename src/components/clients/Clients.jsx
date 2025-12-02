@@ -652,6 +652,7 @@ const Clients = React.memo(() => {
     const selectedClientRef = useRef(null); // Ref to track selected client
     const selectedLeadRef = useRef(null); // Ref to track selected lead
     const pipelineOpportunitiesLoadedRef = useRef(new Map());
+    const latestApiClientsRef = useRef(null); // Ref to store latest API response for groupMemberships preservation
     
     // Industry management state - declared early to avoid temporal dead zone issues
     const [industries, setIndustries] = useState([]);
@@ -1496,6 +1497,9 @@ const Clients = React.memo(() => {
                 // DatabaseAPI returns { data: { clients: [...] } }, while api.listClients might return { data: { clients: [...] } }
                 const apiClients = res?.data?.clients || res?.clients || [];
                 
+                // CRITICAL: Store raw API response in ref for groupMemberships preservation
+                latestApiClientsRef.current = apiClients;
+                
                 // If API returns no clients, use cached data
                 if (apiClients.length === 0 && cachedClients && cachedClients.length > 0) {
                     return; // Keep showing cached data
@@ -1647,21 +1651,30 @@ const Clients = React.memo(() => {
                 });
                 // CRITICAL: Ensure groupMemberships is preserved in state
                 // Double-check that finalClients have groupMemberships before setting state
+                // Use raw API response from ref as the source of truth
                 const verifiedClients = finalClients.map(client => {
-                    // If groupMemberships is still undefined, try to get it from the API response
-                    if (!client.groupMemberships || !Array.isArray(client.groupMemberships)) {
-                        // Find the client in the processedClients (from API) to get fresh groupMemberships
-                        const apiClient = processedClients.find(c => c.id === client.id);
-                        if (apiClient && apiClient.groupMemberships && Array.isArray(apiClient.groupMemberships)) {
+                    // If groupMemberships is still undefined, try to get it from the raw API response
+                    if (!client.groupMemberships || !Array.isArray(client.groupMemberships) || client.groupMemberships.length === 0) {
+                        // First try processedClients (from API after processing)
+                        let apiClient = processedClients.find(c => c.id === client.id);
+                        // If not found or no groupMemberships, try raw API response from ref
+                        if ((!apiClient || !apiClient.groupMemberships || !Array.isArray(apiClient.groupMemberships)) && latestApiClientsRef.current) {
+                            apiClient = latestApiClientsRef.current.find(c => c.id === client.id);
+                        }
+                        if (apiClient && apiClient.groupMemberships && Array.isArray(apiClient.groupMemberships) && apiClient.groupMemberships.length > 0) {
+                            console.log('🔧 Restoring groupMemberships from API for:', client.name, apiClient.groupMemberships);
                             return {
                                 ...client,
                                 groupMemberships: apiClient.groupMemberships
                             };
                         }
-                        return {
-                            ...client,
-                            groupMemberships: []
-                        };
+                        // If still no groupMemberships, ensure it's at least an empty array
+                        if (!client.groupMemberships || !Array.isArray(client.groupMemberships)) {
+                            return {
+                                ...client,
+                                groupMemberships: []
+                            };
+                        }
                     }
                     return client;
                 });
