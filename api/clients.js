@@ -320,6 +320,17 @@ async function handler(req, res) {
             })
           }
           
+          // CRITICAL: Ensure group data is always present (even if null/undefined, set to null for JSON serialization)
+          // JSON.stringify drops undefined values, so we need to explicitly set them
+          if (!parsed.parentGroup && !parsed.parentGroupId) {
+            parsed.parentGroup = null
+            parsed.parentGroupId = null
+            parsed.parentGroupName = null
+          }
+          if (!parsed.groupMemberships) {
+            parsed.groupMemberships = []
+          }
+          
           return parsed
         })
         
