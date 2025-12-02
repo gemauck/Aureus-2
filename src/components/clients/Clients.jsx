@@ -356,10 +356,26 @@ function processClientData(rawClients, cacheKey) {
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
         // Preserve group data from API - handle both direct fields and nested structures
+        // CRITICAL: Preserve the entire parentGroup object if it exists
         parentGroup: c.parentGroup || null,
-        parentGroupId: c.parentGroupId || null,
-        parentGroupName: c.parentGroup?.name || c.parentGroupName || (c.parentGroup && typeof c.parentGroup === 'object' ? c.parentGroup.name : null) || null,
-        groupMemberships: Array.isArray(c.groupMemberships) ? c.groupMemberships : (c.groupMemberships || [])
+        parentGroupId: c.parentGroupId || (c.parentGroup?.id || null),
+        parentGroupName: c.parentGroup?.name || c.parentGroupName || null,
+        // Preserve groupMemberships array - handle both array of objects and nested structures
+        groupMemberships: (() => {
+            if (Array.isArray(c.groupMemberships)) {
+                return c.groupMemberships.map(m => {
+                    // If membership has a group object, preserve it
+                    if (m && typeof m === 'object') {
+                        return {
+                            ...m,
+                            group: m.group || null
+                        };
+                    }
+                    return m;
+                });
+            }
+            return [];
+        })()
         };
     });
     
@@ -1508,10 +1524,14 @@ const Clients = React.memo(() => {
                 if (exxaroBeforeProcess.length > 0) {
                     console.log('🔍 Before processClientData - Exxaro clients:', exxaroBeforeProcess.map(c => ({
                         name: c.name,
+                        id: c.id,
                         parentGroup: c.parentGroup,
                         parentGroupName: c.parentGroupName,
                         parentGroupId: c.parentGroupId,
-                        groupMemberships: c.groupMemberships
+                        groupMemberships: c.groupMemberships,
+                        // Check raw structure
+                        hasParentGroupObject: !!c.parentGroup && typeof c.parentGroup === 'object',
+                        parentGroupKeys: c.parentGroup && typeof c.parentGroup === 'object' ? Object.keys(c.parentGroup) : []
                     })));
                 }
                 
