@@ -1384,12 +1384,15 @@ const Clients = React.memo(() => {
                 forceRefresh: forceRefresh
             });
             const clientsToCheck = cachedClients || [];
+            // CRITICAL FIX: Check if ANY client is missing groupMemberships field entirely (undefined/null)
+            // This ensures we always fetch fresh data if cache doesn't have the field
             const hasMissingGroupData = clientsToCheck.length > 0 && clientsToCheck.some(c => {
-                // Check if client has no group data at all
-                const hasNoParentGroup = !c.parentGroup && !c.parentGroupId && !c.parentGroupName;
-                const hasNoGroupMemberships = !c.groupMemberships || (Array.isArray(c.groupMemberships) && c.groupMemberships.length === 0);
-                // If client has neither parentGroup nor groupMemberships, it's missing data
-                return hasNoParentGroup && hasNoGroupMemberships;
+                // Check if groupMemberships is completely missing (undefined/null) - this means cache is stale
+                const groupMembershipsMissing = c.groupMemberships === undefined || c.groupMemberships === null;
+                // Also check if it's a string (old cache format) that needs parsing
+                const needsParsing = typeof c.groupMemberships === 'string';
+                // If groupMemberships is missing or needs parsing, we need fresh data
+                return groupMembershipsMissing || needsParsing;
             });
             
             // Debug: Log the check result
@@ -1417,6 +1420,7 @@ const Clients = React.memo(() => {
             // UNLESS cached data is missing group data - then force refresh to get it
             // This prevents unnecessary network requests when data is fresh
             // Group data should come from the main API response, not individual enrichment calls
+            // CRITICAL: Always make API call if groupMemberships is missing from cache
             if (!forceRefresh && !hasMissingGroupData && timeSinceLastCall < API_CALL_INTERVAL && (clients.length > 0 || (cachedClients && cachedClients.length > 0))) {
                 
                 // But still trigger LiveDataSync in background to get updates
