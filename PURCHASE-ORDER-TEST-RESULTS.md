@@ -233,3 +233,4 @@ From Stock Movements page:
 **The purchase order stock receipt logic is working correctly!**
 
 
+

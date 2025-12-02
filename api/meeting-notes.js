@@ -32,10 +32,16 @@ function normalizePermissions(permissions) {
         return parsed
       }
     } catch (error) {
-      return permissions
-        .split(',')
-        .map((value) => value.trim())
-        .filter(Boolean)
+      // If JSON parsing fails, try comma-separated string
+      try {
+        return permissions
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean)
+      } catch (splitError) {
+        console.warn('Error parsing permissions:', splitError)
+        return []
+      }
     }
   }
   return []
@@ -44,26 +50,58 @@ function normalizePermissions(permissions) {
 function isAdminUser(user) {
   if (!user) return false
 
-  const role = (user.role || '').toString().trim().toLowerCase()
-  if (ADMIN_ROLES.has(role)) {
-    return true
+  try {
+    const role = (user.role || '').toString().trim().toLowerCase()
+    if (ADMIN_ROLES.has(role)) {
+      return true
+    }
+
+    const normalizedPermissions = normalizePermissions(user.permissions).map((permission) =>
+      (permission || '').toString().trim().toLowerCase()
+    )
+
+    return normalizedPermissions.some((permission) => ADMIN_PERMISSION_KEYS.has(permission))
+  } catch (error) {
+    console.error('Error checking admin status:', error)
+    return false
   }
-
-  const normalizedPermissions = normalizePermissions(user.permissions).map((permission) =>
-    (permission || '').toString().trim().toLowerCase()
-  )
-
-  return normalizedPermissions.some((permission) => ADMIN_PERMISSION_KEYS.has(permission))
 }
 
 async function handler(req, res) {
-  if (!isAdminUser(req.user)) {
-    console.warn('Management meeting notes access denied for non-admin user', {
-      userId: req.user?.id || req.user?.sub,
-      email: req.user?.email,
-      role: req.user?.role
-    })
-    return forbidden(res, FORBIDDEN_MESSAGE)
+  try {
+    // Fetch full user data from database to get permissions
+    let user = req.user
+    if (req.user?.sub) {
+      try {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: req.user.sub },
+          select: { id: true, email: true, role: true, permissions: true, name: true }
+        })
+        if (dbUser) {
+          user = dbUser
+        }
+      } catch (dbError) {
+        console.error('❌ Error fetching user for admin check:', dbError)
+        logDatabaseError(dbError, 'fetch user for admin check')
+        // Continue with JWT user if DB fetch fails
+      }
+    }
+
+    if (!isAdminUser(user)) {
+      console.warn('⚠️ Management meeting notes access denied for non-admin user', {
+        userId: user?.id || user?.sub,
+        email: user?.email,
+        role: user?.role
+      })
+      return forbidden(res, FORBIDDEN_MESSAGE)
+    }
+  } catch (error) {
+    console.error('❌ Error in meeting-notes handler admin check:', error)
+    logDatabaseError(error, 'admin check')
+    if (isConnectionError(error)) {
+      return serverError(res, 'Database connection failed', 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+    }
+    return serverError(res, 'Failed to verify user permissions', error.message)
   }
 
   const rawActionParam = req.query?.action ?? req.body?.action ?? ''
@@ -72,6 +110,7 @@ async function handler(req, res) {
   // Get all monthly meeting notes
   if (req.method === 'GET' && !req.query.monthKey && !req.query.id) {
     try {
+      console.log('📋 Fetching all monthly meeting notes...')
       const monthlyNotes = await prisma.monthlyMeetingNotes.findMany({
         include: {
           weeklyNotes: {
@@ -158,20 +197,28 @@ async function handler(req, res) {
         orderBy: { monthKey: 'desc' }
       })
 
+      console.log(`✅ Successfully fetched ${monthlyNotes.length} monthly meeting notes`)
       return ok(res, { monthlyNotes })
     } catch (error) {
+      console.error('❌ Error fetching monthly meeting notes:', error)
+      console.error('❌ Error details:', {
+        message: error.message,
+        code: error.code,
+        meta: error.meta,
+        stack: error.stack
+      })
       logDatabaseError(error, 'fetch monthly meeting notes')
       if (isConnectionError(error)) {
         return serverError(res, 'Database connection failed', 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
       }
-      console.error('Error fetching monthly meeting notes:', error)
-      return serverError(res, 'Failed to fetch meeting notes', error.message)
+      return serverError(res, 'Failed to fetch meeting notes', error.message || 'Unknown database error')
     }
   }
 
   // Get specific monthly meeting notes by monthKey
   if (req.method === 'GET' && req.query.monthKey) {
     try {
+      console.log(`📋 Fetching monthly meeting notes for monthKey: ${req.query.monthKey}`)
       const monthlyNotes = await prisma.monthlyMeetingNotes.findUnique({
         where: { monthKey: req.query.monthKey },
         include: {
@@ -259,17 +306,25 @@ async function handler(req, res) {
       })
 
       if (!monthlyNotes) {
+        console.log(`ℹ️ No monthly meeting notes found for monthKey: ${req.query.monthKey}`)
         return ok(res, { monthlyNotes: null })
       }
 
+      console.log(`✅ Successfully fetched monthly meeting notes for monthKey: ${req.query.monthKey}`)
       return ok(res, { monthlyNotes })
     } catch (error) {
+      console.error(`❌ Error fetching monthly meeting notes by monthKey (${req.query.monthKey}):`, error)
+      console.error('❌ Error details:', {
+        message: error.message,
+        code: error.code,
+        meta: error.meta,
+        stack: error.stack
+      })
       logDatabaseError(error, 'fetch monthly meeting notes by monthKey')
       if (isConnectionError(error)) {
         return serverError(res, 'Database connection failed', 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
       }
-      console.error('Error fetching monthly meeting notes by monthKey:', error)
-      return serverError(res, 'Failed to fetch meeting notes', error.message)
+      return serverError(res, 'Failed to fetch meeting notes', error.message || 'Unknown database error')
     }
   }
 
@@ -501,7 +556,7 @@ async function handler(req, res) {
   // Update department notes
   if (req.method === 'PUT' && action === 'department') {
     try {
-      const { id, successes, weekToFollow, frustrations, agendaPoints, assignedUserId } = req.body
+      const { id, successes, weekToFollow, frustrations, agendaPoints, attachments, assignedUserId } = req.body
 
       if (!id) {
         return badRequest(res, 'id is required')
@@ -514,6 +569,7 @@ async function handler(req, res) {
           ...(weekToFollow !== undefined && { weekToFollow }),
           ...(frustrations !== undefined && { frustrations }),
           ...(agendaPoints !== undefined && { agendaPoints: typeof agendaPoints === 'string' ? agendaPoints : JSON.stringify(agendaPoints) }),
+          ...(attachments !== undefined && { attachments: typeof attachments === 'string' ? attachments : JSON.stringify(attachments) }),
           ...(assignedUserId !== undefined && { assignedUserId })
         },
         include: {
@@ -868,5 +924,20 @@ async function handler(req, res) {
   return badRequest(res, 'Invalid request')
 }
 
-export default withHttp(withLogging(authRequired(handler)))
+// Wrap handler in additional error handling
+const wrappedHandler = async (req, res) => {
+  try {
+    return await handler(req, res)
+  } catch (error) {
+    console.error('❌ Unhandled error in meeting-notes handler:', error)
+    console.error('❌ Error stack:', error.stack)
+    logDatabaseError(error, 'unhandled error in meeting-notes handler')
+    if (isConnectionError(error)) {
+      return serverError(res, 'Database connection failed', 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+    }
+    return serverError(res, 'Internal server error', error.message || 'An unexpected error occurred')
+  }
+}
+
+export default withHttp(withLogging(authRequired(wrappedHandler)))
 

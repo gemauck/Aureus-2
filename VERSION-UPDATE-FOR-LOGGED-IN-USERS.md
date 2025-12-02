@@ -120,3 +120,4 @@ To test the version update system:
 ✅ **Smart dismissal** prevents banner spam while ensuring critical updates are seen
 
 
+

@@ -81,3 +81,4 @@ echo "   2. Test API: curl https://abcoafrica.co.za/api/projects"
 echo "   3. Check browser console for 502 errors"
 
 
+

@@ -2005,10 +2005,23 @@ const ManagementMeetingNotes = () => {
         };
         
         // Get current values - prefer React state (updated immediately), fallback to DOM
+        // Get attachments from state
+        let attachments = [];
+        try {
+            if (deptNote.attachments) {
+                attachments = typeof deptNote.attachments === 'string' 
+                    ? JSON.parse(deptNote.attachments) 
+                    : deptNote.attachments;
+            }
+        } catch (e) {
+            console.warn('Error parsing attachments:', e);
+        }
+        
         const fieldsToSave = {
             successes: getCurrentFieldValue('successes'),
             weekToFollow: getCurrentFieldValue('weekToFollow'),
-            frustrations: getCurrentFieldValue('frustrations')
+            frustrations: getCurrentFieldValue('frustrations'),
+            attachments: JSON.stringify(attachments)
         };
         
         console.log('💾 Captured field values for save:', { 
@@ -2100,15 +2113,16 @@ const ManagementMeetingNotes = () => {
             // CRITICAL: Use batched update to prevent multiple re-renders that cause scroll jumps
             // Update all three fields in a single state update instead of three separate updates
             // This prevents the page from jumping to top after save
-            updateDepartmentNotesLocalBatched(
-                departmentNotesId,
-                {
-                    successes: fieldsToSave.successes,
-                    weekToFollow: fieldsToSave.weekToFollow,
-                    frustrations: fieldsToSave.frustrations
-                },
-                monthlyId
-            );
+                    updateDepartmentNotesLocalBatched(
+                        departmentNotesId,
+                        {
+                            successes: fieldsToSave.successes,
+                            weekToFollow: fieldsToSave.weekToFollow,
+                            frustrations: fieldsToSave.frustrations,
+                            attachments: fieldsToSave.attachments
+                        },
+                        monthlyId
+                    );
             
             // No notifications - save happens silently
             
@@ -2934,18 +2948,52 @@ const ManagementMeetingNotes = () => {
     // Format month display
     const formatMonth = (monthKey) => {
         if (!monthKey) return '';
-        const [year, month] = monthKey.split('-');
-        const date = new Date(year, parseInt(month) - 1, 1);
-        return date.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
+        try {
+            const parts = monthKey.split('-');
+            if (parts.length < 2) return monthKey; // Return original if format is invalid
+            
+            const year = parts[0];
+            const month = parts[1];
+            
+            if (!year || !month) return monthKey; // Return original if missing parts
+            
+            const yearNum = parseInt(year, 10);
+            const monthNum = parseInt(month, 10);
+            
+            if (isNaN(yearNum) || isNaN(monthNum) || monthNum < 1 || monthNum > 12) {
+                return monthKey; // Return original if invalid numbers
+            }
+            
+            const date = new Date(yearNum, monthNum - 1, 1);
+            if (isNaN(date.getTime())) {
+                return monthKey; // Return original if invalid date
+            }
+            
+            return date.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
+        } catch (error) {
+            console.error('Error formatting month:', error, monthKey);
+            return monthKey; // Return original on any error
+        }
     };
 
     // Format week display
     const formatWeek = (weekKey, weekStart) => {
         if (weekStart) {
-            const start = new Date(weekStart);
-            const end = new Date(start);
-            end.setDate(end.getDate() + 6);
-            return `${start.toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('en-ZA', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+            try {
+                const start = new Date(weekStart);
+                if (isNaN(start.getTime())) {
+                    return weekKey || 'Week';
+                }
+                const end = new Date(start);
+                end.setDate(end.getDate() + 6);
+                if (isNaN(end.getTime())) {
+                    return weekKey || 'Week';
+                }
+                return `${start.toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('en-ZA', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+            } catch (error) {
+                console.error('Error formatting week:', error, weekKey, weekStart);
+                return weekKey || 'Week';
+            }
         }
         return weekKey || 'Week';
     };
@@ -3703,6 +3751,85 @@ const ManagementMeetingNotes = () => {
                                                             )}
                                                         </div>
 
+                                                        {/* Attachments */}
+                                                        <div>
+                                                            <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                                                Attachments
+                                                            </label>
+                                                            
+                                                            {/* Display existing attachments */}
+                                                            {(() => {
+                                                                let attachments = [];
+                                                                try {
+                                                                    if (deptNote.attachments) {
+                                                                        attachments = typeof deptNote.attachments === 'string' 
+                                                                            ? JSON.parse(deptNote.attachments) 
+                                                                            : deptNote.attachments;
+                                                                    }
+                                                                } catch (e) {
+                                                                    console.warn('Error parsing attachments:', e);
+                                                                }
+                                                                
+                                                                return attachments.length > 0 ? (
+                                                                    <div className="space-y-1 mb-2">
+                                                                        {attachments.map((attachment, index) => (
+                                                                            <div key={index} className={`flex items-center justify-between p-2 rounded ${isDark ? 'bg-slate-700 border border-slate-600' : 'bg-gray-50 border border-gray-200'}`}>
+                                                                                <a 
+                                                                                    href={attachment.url} 
+                                                                                    target="_blank" 
+                                                                                    rel="noopener noreferrer"
+                                                                                    className={`flex items-center gap-2 flex-1 text-xs ${isDark ? 'text-primary-400 hover:text-primary-300' : 'text-primary-600 hover:text-primary-700'}`}
+                                                                                >
+                                                                                    <i className="fas fa-file"></i>
+                                                                                    <span className="truncate">{attachment.name}</span>
+                                                                                    <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                                                                                        ({(attachment.size / 1024).toFixed(1)} KB)
+                                                                                    </span>
+                                                                                </a>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={(e) => {
+                                                                                        e.preventDefault();
+                                                                                        e.stopPropagation();
+                                                                                        handleDeleteAttachment(deptNote.id, index);
+                                                                                    }}
+                                                                                    className={`p-1 rounded transition ml-2 ${isDark ? 'text-slate-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`}
+                                                                                    title="Delete attachment"
+                                                                                >
+                                                                                    <i className="fas fa-trash text-xs"></i>
+                                                                                </button>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                ) : null;
+                                                            })()}
+                                                            
+                                                            {/* File upload input */}
+                                                            <div className={`border-2 border-dashed rounded-lg p-2 ${isDark ? 'border-slate-600 bg-slate-800/50' : 'border-gray-300 bg-gray-50'}`}>
+                                                                <input
+                                                                    type="file"
+                                                                    id={`attachment-${deptNote.id}`}
+                                                                    multiple
+                                                                    onChange={(e) => {
+                                                                        if (e.target.files && e.target.files.length > 0) {
+                                                                            handleAttachmentUpload(deptNote.id, e.target.files);
+                                                                        }
+                                                                    }}
+                                                                    className="hidden"
+                                                                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.txt,.csv"
+                                                                />
+                                                                <label
+                                                                    htmlFor={`attachment-${deptNote.id}`}
+                                                                    className={`cursor-pointer flex items-center gap-2 text-xs ${isDark ? 'text-slate-300 hover:text-slate-200' : 'text-gray-700 hover:text-gray-900'}`}
+                                                                >
+                                                                    <i className={`fas ${uploadingAttachments[deptNote.id] ? 'fa-spinner fa-spin' : 'fa-paperclip'}`}></i>
+                                                                    <span>
+                                                                        {uploadingAttachments[deptNote.id] ? 'Uploading...' : 'Attach files'}
+                                                                    </span>
+                                                                </label>
+                                                            </div>
+                                                        </div>
+
                                                         {/* Action Items */}
                                                         {deptNote.actionItems && deptNote.actionItems.length > 0 && (
                                                             <div>
@@ -3763,6 +3890,8 @@ const ManagementMeetingNotes = () => {
                                                                         if (window.MentionHelper && displayContent) {
                                                                             displayContent = window.MentionHelper.highlightMentions(displayContent, isDark);
                                                                         }
+                                                                        // Convert URLs to clickable links
+                                                                        displayContent = linkifyText(displayContent);
                                                                         
                                                                         return (
                                                                             <div key={comment.id} className={`p-3 rounded-lg border transition-all duration-200 hover:shadow-sm ${isDark ? 'bg-slate-700 border-slate-600' : 'bg-gray-50 border-gray-200'}`}>

@@ -1798,68 +1798,68 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             return;
         }
 
-        try {
-            isLoadingGroupsRef.current = true;
-            setLoadingGroups(true);
+            try {
+                isLoadingGroupsRef.current = true;
+                setLoadingGroups(true);
 
-            const token = window.storage?.getToken?.();
-            if (!token) {
-                setLoadingGroups(false);
-                return;
-            }
-
-            // Fetch client's groups
-            const groupsResponse = await fetch(`/api/clients/${client.id}/groups`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
+                const token = window.storage?.getToken?.();
+                if (!token) {
+                    setLoadingGroups(false);
+                    return;
                 }
-            });
 
-            if (groupsResponse.ok) {
-                const groupsData = await groupsResponse.json();
-                const data = groupsData?.data || groupsData;
-                setPrimaryParent(data.primaryParent || null);
-                setGroupMemberships(data.groupMemberships || []);
-            }
-
-            // Fetch all available groups (including named groups with type='group' and regular clients)
-            const groupsListResponse = await fetch('/api/clients/groups', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (groupsListResponse.ok) {
-                const groupsListData = await groupsListResponse.json();
-                const groups = groupsListData?.data?.groups || groupsListData?.groups || [];
-                // Filter out current client and map to expected format
-                const availableGroups = groups
-                    .filter(g => g.id !== client.id)
-                    .map(g => ({ id: g.id, name: g.name, type: g.type || 'client', industry: g.industry || 'Other' }));
-                setAllGroups(availableGroups);
-            } else {
-                // Fallback to clients endpoint if groups endpoint fails
-                const clientsResponse = await fetch('/api/clients?limit=1000', {
+                // Fetch client's groups
+                const groupsResponse = await fetch(`/api/clients/${client.id}/groups`, {
                     headers: {
                         'Authorization': `Bearer ${token}`
                     }
                 });
 
-                if (clientsResponse.ok) {
-                    const clientsData = await clientsResponse.json();
-                    const clients = clientsData?.data?.clients || clientsData?.clients || [];
-                    const potentialGroups = clients
-                        .filter(c => c.id !== client.id && (c.type === 'client' || c.type === 'group'))
-                        .map(c => ({ id: c.id, name: c.name, type: c.type || 'client', industry: c.industry || 'Other' }));
-                    setAllGroups(potentialGroups);
+                if (groupsResponse.ok) {
+                    const groupsData = await groupsResponse.json();
+                    const data = groupsData?.data || groupsData;
+                    setPrimaryParent(data.primaryParent || null);
+                    setGroupMemberships(data.groupMemberships || []);
                 }
+
+                // Fetch all available groups (including named groups with type='group' and regular clients)
+                const groupsListResponse = await fetch('/api/clients/groups', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (groupsListResponse.ok) {
+                    const groupsListData = await groupsListResponse.json();
+                    const groups = groupsListData?.data?.groups || groupsListData?.groups || [];
+                    // Filter out current client and map to expected format
+                    const availableGroups = groups
+                        .filter(g => g.id !== client.id)
+                        .map(g => ({ id: g.id, name: g.name, type: g.type || 'client', industry: g.industry || 'Other' }));
+                    setAllGroups(availableGroups);
+                } else {
+                    // Fallback to clients endpoint if groups endpoint fails
+                    const clientsResponse = await fetch('/api/clients?limit=1000', {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+
+                    if (clientsResponse.ok) {
+                        const clientsData = await clientsResponse.json();
+                        const clients = clientsData?.data?.clients || clientsData?.clients || [];
+                        const potentialGroups = clients
+                            .filter(c => c.id !== client.id && (c.type === 'client' || c.type === 'group'))
+                            .map(c => ({ id: c.id, name: c.name, type: c.type || 'client', industry: c.industry || 'Other' }));
+                        setAllGroups(potentialGroups);
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load groups:', error);
+            } finally {
+                setLoadingGroups(false);
+                isLoadingGroupsRef.current = false;
             }
-        } catch (error) {
-            console.error('Failed to load groups:', error);
-        } finally {
-            setLoadingGroups(false);
-            isLoadingGroupsRef.current = false;
-        }
     }, [client?.id]);
 
     // Company Groups: Load groups data when groups tab is active
@@ -1927,9 +1927,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Company Groups: Handle adding client to group
     const handleAddToGroup = async () => {
         // Adding to existing group only
-        if (!client?.id || !selectedGroupId) {
-            console.warn('Cannot add group: missing client ID or selected group ID');
-            return;
+            if (!client?.id || !selectedGroupId) {
+                console.warn('Cannot add group: missing client ID or selected group ID');
+                return;
         }
 
         try {
@@ -2104,7 +2104,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             };
             
             console.log('Creating group with data:', requestBody);
-            
+
             const response = await fetch('/api/clients/groups', {
                 method: 'POST',
                 headers: {
@@ -4361,53 +4361,53 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     Create Group
                                                 </button>
                                             </div>
-                                            <div className={`space-y-2 max-h-64 overflow-y-auto ${isDark ? 'bg-gray-800' : 'bg-gray-50'} rounded-md p-3 border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                                                {allGroups
-                                                    .filter(g => g.type === 'group')
-                                                    .map((group) => {
-                                                        const memberCount = (group._count?.childCompanies || 0) + (group._count?.groupChildren || 0);
-                                                        return (
-                                                            <div
-                                                                key={group.id}
-                                                                className={`flex items-center justify-between p-2 rounded-md ${isDark ? 'bg-gray-700' : 'bg-white'} border ${isDark ? 'border-gray-600' : 'border-gray-200'}`}
-                                                            >
-                                                                <div className="flex-1">
-                                                                    <span className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                                                        {group.name}
-                                                                    </span>
-                                                                    {group.industry && (
-                                                                        <span className={`ml-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                                            ({group.industry})
-                                                                        </span>
-                                                                    )}
-                                                                    <span className={`ml-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                                        • {memberCount} member{memberCount !== 1 ? 's' : ''}
-                                                                    </span>
-                                                                </div>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        setGroupToDelete(group);
-                                                                        setShowDeleteGroupModal(true);
-                                                                    }}
-                                                                    className={`px-2 py-1 text-xs rounded transition-colors ${
-                                                                        isDark
-                                                                            ? 'bg-red-600 hover:bg-red-700 text-white'
-                                                                            : 'bg-red-500 hover:bg-red-600 text-white'
-                                                                    }`}
+                                                <div className={`space-y-2 max-h-64 overflow-y-auto ${isDark ? 'bg-gray-800' : 'bg-gray-50'} rounded-md p-3 border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                                                    {allGroups
+                                                        .filter(g => g.type === 'group')
+                                                        .map((group) => {
+                                                            const memberCount = (group._count?.childCompanies || 0) + (group._count?.groupChildren || 0);
+                                                            return (
+                                                                <div
+                                                                    key={group.id}
+                                                                    className={`flex items-center justify-between p-2 rounded-md ${isDark ? 'bg-gray-700' : 'bg-white'} border ${isDark ? 'border-gray-600' : 'border-gray-200'}`}
                                                                 >
-                                                                    <i className="fas fa-trash mr-1"></i>
-                                                                    Delete
-                                                                </button>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                {allGroups.filter(g => g.type === 'group').length === 0 && (
-                                                    <p className={`text-sm py-4 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                        No groups created yet. Click "Create Group" to add one.
-                                                    </p>
-                                                )}
-                                            </div>
+                                                                    <div className="flex-1">
+                                                                        <span className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                                            {group.name}
+                                                                        </span>
+                                                                        {group.industry && (
+                                                                            <span className={`ml-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                                                ({group.industry})
+                                                                            </span>
+                                                                        )}
+                                                                        <span className={`ml-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                                            • {memberCount} member{memberCount !== 1 ? 's' : ''}
+                                                                        </span>
+                                                                    </div>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setGroupToDelete(group);
+                                                                            setShowDeleteGroupModal(true);
+                                                                        }}
+                                                                        className={`px-2 py-1 text-xs rounded transition-colors ${
+                                                                            isDark
+                                                                                ? 'bg-red-600 hover:bg-red-700 text-white'
+                                                                                : 'bg-red-500 hover:bg-red-600 text-white'
+                                                                        }`}
+                                                                    >
+                                                                        <i className="fas fa-trash mr-1"></i>
+                                                                        Delete
+                                                                    </button>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    {allGroups.filter(g => g.type === 'group').length === 0 && (
+                                                        <p className={`text-sm py-4 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                            No groups created yet. Click "Create Group" to add one.
+                                                        </p>
+                                                    )}
+                                                </div>
                                         </div>
 
                                         {!client?.id ? (
@@ -4434,10 +4434,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 {allGroups
                                                     .filter(g => g.type !== 'group' && g.id !== client?.id)
                                                     .map((group) => (
-                                                        <option key={group.id} value={group.id}>
-                                                            {group.name} {group.industry ? `(${group.industry})` : ''}
-                                                        </option>
-                                                    ))}
+                                                    <option key={group.id} value={group.id}>
+                                                        {group.name} {group.industry ? `(${group.industry})` : ''}
+                                                    </option>
+                                                ))}
                                             </select>
                                             <p className={`mt-1 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                                 Select the primary parent company for this client (ownership hierarchy)
@@ -4575,52 +4575,52 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             </div>
                                             
                                             <div className="space-y-4">
-                                                <div>
-                                                    <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                                        Select Group
-                                                    </label>
-                                                    {(() => {
+                                                    <div>
+                                                        <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                            Select Group
+                                                        </label>
+                                                        {(() => {
                                                         // Only show groups with type='group' (created groups), not regular clients
-                                                        const availableGroups = allGroups.filter(g => 
+                                                            const availableGroups = allGroups.filter(g => 
                                                             g.type === 'group' &&
-                                                            g.id !== client?.id &&
-                                                            g.id !== primaryParent?.id && 
-                                                            !groupMemberships.some(gm => gm.group?.id === g.id)
-                                                        );
-                                                        
-                                                        if (availableGroups.length === 0) {
-                                                            return (
-                                                                <div className={`p-4 rounded-md ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                                                                    <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                                                                        No groups available. Use the "Create Group" button to create a new group first.
-                                                                    </p>
-                                                                </div>
+                                                                g.id !== client?.id &&
+                                                                g.id !== primaryParent?.id && 
+                                                                !groupMemberships.some(gm => gm.group?.id === g.id)
                                                             );
-                                                        }
-                                                        
-                                                        return (
-                                                            <select
-                                                                value={selectedGroupId}
-                                                                onChange={(e) => {
-                                                                    console.log('Group selected:', e.target.value);
-                                                                    setSelectedGroupId(e.target.value);
-                                                                }}
-                                                                className={`w-full px-3 py-2 rounded-md border ${
-                                                                    isDark 
-                                                                        ? 'bg-gray-700 border-gray-600 text-gray-100' 
-                                                                        : 'bg-white border-gray-300 text-gray-900'
-                                                                } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                                                            >
-                                                                <option value="">Select a group...</option>
-                                                                {availableGroups.map((group) => (
-                                                                    <option key={group.id} value={group.id}>
+                                                            
+                                                            if (availableGroups.length === 0) {
+                                                                return (
+                                                                    <div className={`p-4 rounded-md ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                                                                        <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                                                                        No groups available. Use the "Create Group" button to create a new group first.
+                                                                        </p>
+                                                                    </div>
+                                                                );
+                                                            }
+                                                            
+                                                            return (
+                                                                <select
+                                                                    value={selectedGroupId}
+                                                                    onChange={(e) => {
+                                                                        console.log('Group selected:', e.target.value);
+                                                                        setSelectedGroupId(e.target.value);
+                                                                    }}
+                                                                    className={`w-full px-3 py-2 rounded-md border ${
+                                                                        isDark 
+                                                                            ? 'bg-gray-700 border-gray-600 text-gray-100' 
+                                                                            : 'bg-white border-gray-300 text-gray-900'
+                                                                    } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                                                                >
+                                                                    <option value="">Select a group...</option>
+                                                                    {availableGroups.map((group) => (
+                                                                        <option key={group.id} value={group.id}>
                                                                         {group.name} {group.industry ? `(${group.industry})` : ''}
-                                                                    </option>
-                                                                ))}
-                                                            </select>
-                                                        );
-                                                    })()}
-                                                </div>
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
+                                                            );
+                                                        })()}
+                                                    </div>
                                                 
                                                 <div className="flex gap-3 justify-end">
                                                     <button
