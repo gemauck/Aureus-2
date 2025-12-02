@@ -958,28 +958,31 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const snapshotBeforeDeletion = serializeSections(sectionsRef.current);
         const sectionToDelete = JSON.parse(JSON.stringify(section)); // Deep clone for restoration
         
-        // Update state and ref atomically - OPTIMISTIC UPDATE (UI updates immediately)
-        setSectionsByYear(prev => {
-            const yearSections = prev[selectedYear] || [];
-            const filtered = yearSections.filter(s => String(s.id) !== normalizedSectionId);
+        // Defer state update to next frame so click handler returns immediately
+        // UI will update within 16ms (next animation frame)
+        requestAnimationFrame(() => {
+            // Update state and ref atomically - OPTIMISTIC UPDATE (UI updates in next frame)
+            setSectionsByYear(prev => {
+                const yearSections = prev[selectedYear] || [];
+                const filtered = yearSections.filter(s => String(s.id) !== normalizedSectionId);
+                
+                const updatedSectionsByYear = {
+                    ...prev,
+                    [selectedYear]: filtered
+                };
+                
+                // Immediately update the ref synchronously
+                sectionsRef.current = updatedSectionsByYear;
+                
+                return updatedSectionsByYear;
+            });
             
-            const updatedSectionsByYear = {
-                ...prev,
-                [selectedYear]: filtered
-            };
+            // Save in background (non-blocking) - UI already updated optimistically
+            const deletedSectionSnapshot = serializeSections(sectionsRef.current);
+            isSavingRef.current = true;
             
-            // Immediately update the ref synchronously
-            sectionsRef.current = updatedSectionsByYear;
-            
-            return updatedSectionsByYear;
-        });
-        
-        // Save in background (non-blocking) - UI already updated optimistically
-        const deletedSectionSnapshot = serializeSections(sectionsRef.current);
-        isSavingRef.current = true;
-        
-        // Perform save asynchronously without blocking the click handler
-        (async () => {
+            // Perform save asynchronously without blocking
+            (async () => {
             try {
                 const payload = sectionsRef.current || {};
                 
@@ -1046,7 +1049,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 isSavingRef.current = false;
                 isDeletingRef.current = false;
             }
-        })();
+            })();
+        });
     };
     
     // ============================================================
