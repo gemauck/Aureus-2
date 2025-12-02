@@ -506,55 +506,55 @@ const ManagementMeetingNotes = () => {
                 return false;
             };
             
-            // Aggressive restoration with multiple attempts
+            // Aggressive restoration with multiple attempts using instant behavior
             // Immediate restoration
-            window.scrollTo(0, scrollY);
+            window.scrollTo({ top: scrollY, behavior: 'instant' });
             if (checkAndClear()) return;
             
             // Restore after next paint
             requestAnimationFrame(() => {
-                window.scrollTo(0, scrollY);
+                window.scrollTo({ top: scrollY, behavior: 'instant' });
                 if (checkAndClear()) return;
             });
             
             // Restore after a short delay (for async state updates)
             setTimeout(() => {
-                window.scrollTo(0, scrollY);
+                window.scrollTo({ top: scrollY, behavior: 'instant' });
                 if (checkAndClear()) return;
             }, 0);
             
             // Restore after a longer delay (for DOM updates)
             setTimeout(() => {
-                window.scrollTo(0, scrollY);
+                window.scrollTo({ top: scrollY, behavior: 'instant' });
                 if (checkAndClear()) return;
             }, 10);
             
             // Restore after React has finished rendering
             setTimeout(() => {
-                window.scrollTo(0, scrollY);
+                window.scrollTo({ top: scrollY, behavior: 'instant' });
                 if (checkAndClear()) return;
             }, 50);
             
             // Restore after more time for delayed state updates
             setTimeout(() => {
-                window.scrollTo(0, scrollY);
+                window.scrollTo({ top: scrollY, behavior: 'instant' });
                 if (checkAndClear()) return;
             }, 100);
             
             // Additional restoration attempts for stubborn cases
             setTimeout(() => {
-                window.scrollTo(0, scrollY);
+                window.scrollTo({ top: scrollY, behavior: 'instant' });
                 if (checkAndClear()) return;
             }, 200);
             
             setTimeout(() => {
-                window.scrollTo(0, scrollY);
+                window.scrollTo({ top: scrollY, behavior: 'instant' });
                 if (checkAndClear()) return;
             }, 300);
             
             // Final restoration attempt - clear after this regardless
             setTimeout(() => {
-                window.scrollTo(0, scrollY);
+                window.scrollTo({ top: scrollY, behavior: 'instant' });
                 preservedScrollPosition.current = null;
             }, 500);
         }
