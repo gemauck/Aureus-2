@@ -4207,16 +4207,21 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     Additional Group Memberships
                                                 </label>
                                                 <button
-                                                    onClick={() => setShowAddGroupModal(true)}
-                                                    disabled={allGroups.filter(g => 
-                                                        g.id !== primaryParent?.id && 
-                                                        !groupMemberships.some(gm => gm.group?.id === g.id)
-                                                    ).length === 0}
+                                                    onClick={() => {
+                                                        console.log('Add Group button clicked', { 
+                                                            allGroupsCount: allGroups.length,
+                                                            primaryParentId: primaryParent?.id,
+                                                            groupMembershipsCount: groupMemberships.length,
+                                                            availableGroups: allGroups.filter(g => 
+                                                                g.id !== primaryParent?.id && 
+                                                                !groupMemberships.some(gm => gm.group?.id === g.id)
+                                                            ).length
+                                                        });
+                                                        setShowAddGroupModal(true);
+                                                    }}
+                                                    disabled={!client?.id}
                                                     className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                                                        allGroups.filter(g => 
-                                                            g.id !== primaryParent?.id && 
-                                                            !groupMemberships.some(gm => gm.group?.id === g.id)
-                                                        ).length === 0
+                                                        !client?.id
                                                             ? 'bg-gray-400 cursor-not-allowed text-gray-200'
                                                             : isDark
                                                                 ? 'bg-blue-600 hover:bg-blue-700 text-white'
@@ -4281,40 +4286,90 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
                                 {/* Add Group Modal */}
                                 {showAddGroupModal && (
-                                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowAddGroupModal(false)}>
+                                    <div 
+                                        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]" 
+                                        onClick={() => {
+                                            console.log('Modal backdrop clicked - closing modal');
+                                            setShowAddGroupModal(false);
+                                            setSelectedGroupId('');
+                                        }}
+                                        style={{ zIndex: 9999 }}
+                                    >
                                         <div 
                                             className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg p-6 max-w-md w-full mx-4 shadow-xl`}
-                                            onClick={(e) => e.stopPropagation()}
+                                            onClick={(e) => {
+                                                console.log('Modal content clicked - preventing close');
+                                                e.stopPropagation();
+                                            }}
+                                            style={{ zIndex: 10000 }}
                                         >
-                                            <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                                Add to Group
-                                            </h3>
+                                            <div className="flex justify-between items-center mb-4">
+                                                <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                    Add to Group
+                                                </h3>
+                                                <button
+                                                    onClick={() => {
+                                                        console.log('Close button clicked');
+                                                        setShowAddGroupModal(false);
+                                                        setSelectedGroupId('');
+                                                    }}
+                                                    className={`${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'} transition-colors`}
+                                                >
+                                                    <i className="fas fa-times text-xl"></i>
+                                                </button>
+                                            </div>
                                             <div className="space-y-4">
                                                 <div>
                                                     <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                                                         Select Group
                                                     </label>
-                                                    <select
-                                                        value={selectedGroupId}
-                                                        onChange={(e) => setSelectedGroupId(e.target.value)}
-                                                        className={`w-full px-3 py-2 rounded-md border ${
-                                                            isDark 
-                                                                ? 'bg-gray-700 border-gray-600 text-gray-100' 
-                                                                : 'bg-white border-gray-300 text-gray-900'
-                                                        } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                                                    >
-                                                        <option value="">Select a group...</option>
-                                                        {allGroups
-                                                            .filter(g => 
-                                                                g.id !== primaryParent?.id && 
-                                                                !groupMemberships.some(gm => gm.group?.id === g.id)
-                                                            )
-                                                            .map((group) => (
-                                                                <option key={group.id} value={group.id}>
-                                                                    {group.name} {group.industry ? `(${group.industry})` : ''}
-                                                                </option>
-                                                            ))}
-                                                    </select>
+                                                    {(() => {
+                                                        const availableGroups = allGroups.filter(g => 
+                                                            g.id !== client?.id &&
+                                                            g.id !== primaryParent?.id && 
+                                                            !groupMemberships.some(gm => gm.group?.id === g.id)
+                                                        );
+                                                        
+                                                        console.log('Available groups for dropdown:', {
+                                                            totalGroups: allGroups.length,
+                                                            availableCount: availableGroups.length,
+                                                            clientId: client?.id,
+                                                            primaryParentId: primaryParent?.id,
+                                                            currentMemberships: groupMemberships.length
+                                                        });
+                                                        
+                                                        if (availableGroups.length === 0) {
+                                                            return (
+                                                                <div className={`p-4 rounded-md ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                                                                    <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                                                                        No groups available to add. All clients are either already members or set as the primary parent.
+                                                                    </p>
+                                                                </div>
+                                                            );
+                                                        }
+                                                        
+                                                        return (
+                                                            <select
+                                                                value={selectedGroupId}
+                                                                onChange={(e) => {
+                                                                    console.log('Group selected:', e.target.value);
+                                                                    setSelectedGroupId(e.target.value);
+                                                                }}
+                                                                className={`w-full px-3 py-2 rounded-md border ${
+                                                                    isDark 
+                                                                        ? 'bg-gray-700 border-gray-600 text-gray-100' 
+                                                                        : 'bg-white border-gray-300 text-gray-900'
+                                                                } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                                                            >
+                                                                <option value="">Select a group...</option>
+                                                                {availableGroups.map((group) => (
+                                                                    <option key={group.id} value={group.id}>
+                                                                        {group.name} {group.industry ? `(${group.industry})` : ''}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        );
+                                                    })()}
                                                 </div>
                                                 <div className="flex gap-3 justify-end">
                                                     <button
