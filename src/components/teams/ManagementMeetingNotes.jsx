@@ -484,6 +484,68 @@ const ManagementMeetingNotes = () => {
 
     const weekCardRefs = useRef({});
     
+    // Ref to store scroll position that needs to be preserved after state updates
+    const preservedScrollPosition = useRef(null);
+    
+    // Effect to restore scroll position after state updates
+    useEffect(() => {
+        if (preservedScrollPosition.current !== null) {
+            const scrollY = preservedScrollPosition.current;
+            
+            // Helper to check if scroll is restored and clear if so
+            const checkAndClear = () => {
+                const currentScroll = window.scrollY || window.pageYOffset;
+                // If scroll is within 5px of target, consider it restored
+                if (Math.abs(currentScroll - scrollY) < 5) {
+                    preservedScrollPosition.current = null;
+                    return true;
+                }
+                return false;
+            };
+            
+            // Aggressive restoration with multiple attempts
+            // Immediate restoration
+            window.scrollTo(0, scrollY);
+            if (checkAndClear()) return;
+            
+            // Restore after next paint
+            requestAnimationFrame(() => {
+                window.scrollTo(0, scrollY);
+                if (checkAndClear()) return;
+            });
+            
+            // Restore after a short delay (for async state updates)
+            setTimeout(() => {
+                window.scrollTo(0, scrollY);
+                if (checkAndClear()) return;
+            }, 0);
+            
+            // Restore after a longer delay (for DOM updates)
+            setTimeout(() => {
+                window.scrollTo(0, scrollY);
+                if (checkAndClear()) return;
+            }, 10);
+            
+            // Restore after React has finished rendering
+            setTimeout(() => {
+                window.scrollTo(0, scrollY);
+                if (checkAndClear()) return;
+            }, 50);
+            
+            // Restore after more time for delayed state updates
+            setTimeout(() => {
+                window.scrollTo(0, scrollY);
+                if (checkAndClear()) return;
+            }, 100);
+            
+            // Final restoration attempt - clear after this regardless
+            setTimeout(() => {
+                window.scrollTo(0, scrollY);
+                preservedScrollPosition.current = null;
+            }, 300);
+        }
+    }, [currentMonthlyNotes, monthlyNotesList, loading]);
+    
     const reloadMonthlyNotes = useCallback(async (preferredMonthKey = null, preserveScroll = false) => {
         // Preserve scroll position if requested
         const currentScrollPosition = preserveScroll ? (window.scrollY || window.pageYOffset) : null;
@@ -1575,6 +1637,7 @@ const ManagementMeetingNotes = () => {
         
         // Preserve scroll position to prevent navigation to top
         const currentScrollPosition = window.scrollY || window.pageYOffset;
+        preservedScrollPosition.current = currentScrollPosition;
         
         // Find the department note
         const week = currentMonthlyNotes?.weeklyNotes?.find(w => 
@@ -1839,25 +1902,8 @@ const ManagementMeetingNotes = () => {
             
             // No notifications - save happens silently
             
-            // Preserve scroll position - ensure we stay exactly where we are
-            // Use requestAnimationFrame to ensure smooth scroll preservation
-            if (currentScrollPosition > 0) {
-                // Immediate restoration
-                window.scrollTo(0, currentScrollPosition);
-                
-                requestAnimationFrame(() => {
-                    window.scrollTo(0, currentScrollPosition);
-                });
-                
-                // Minimal scroll restoration attempts (reduced from 6 to 2)
-                setTimeout(() => {
-                    window.scrollTo(0, currentScrollPosition);
-                }, 10);
-                
-                setTimeout(() => {
-                    window.scrollTo(0, currentScrollPosition);
-                }, 100);
-            }
+            // Scroll position is preserved via preservedScrollPosition ref and useEffect
+            // No need for manual restoration here - useEffect will handle it
             
             // DO NOT RELOAD - Just update local state and continue
             // No reloadMonthlyNotes call - data is already updated locally
@@ -1865,16 +1911,8 @@ const ManagementMeetingNotes = () => {
         } catch (error) {
             console.error('❌ Error saving department notes:', error);
             
-            // Restore scroll position even on error
-            if (currentScrollPosition > 0) {
-                window.scrollTo(0, currentScrollPosition);
-                requestAnimationFrame(() => {
-                    window.scrollTo(0, currentScrollPosition);
-                });
-                setTimeout(() => {
-                    window.scrollTo(0, currentScrollPosition);
-                }, 0);
-            }
+            // Scroll position is preserved via preservedScrollPosition ref and useEffect
+            // No need for manual restoration here - useEffect will handle it
             
             // Error logged silently - no popup messages
         } finally {
@@ -2054,6 +2092,7 @@ const ManagementMeetingNotes = () => {
         try {
             // Prevent any default behavior and preserve scroll position
             const currentScrollPosition = window.scrollY || window.pageYOffset;
+            preservedScrollPosition.current = currentScrollPosition;
             
             // Validate required fields
             if (!actionItemData.title || !actionItemData.title.trim()) {
@@ -2082,10 +2121,8 @@ const ManagementMeetingNotes = () => {
             setShowActionItemModal(false);
             setEditingActionItem(null);
             
-            // Restore scroll position after state updates
-            requestAnimationFrame(() => {
-                window.scrollTo(0, currentScrollPosition);
-            });
+            // Scroll position is preserved via preservedScrollPosition ref and useEffect
+            // No need for manual restoration here - useEffect will handle it
 
             setLoading(true);
 
@@ -2344,6 +2381,7 @@ const ManagementMeetingNotes = () => {
         
         // Prevent any default behavior
         const currentScrollPosition = window.scrollY || window.pageYOffset;
+        preservedScrollPosition.current = currentScrollPosition;
         
         const currentUser = window.storage?.getUserInfo() || {};
         const tempComment = {
@@ -2361,10 +2399,8 @@ const ManagementMeetingNotes = () => {
         setShowCommentModal(false);
         setCommentContext(null);
         
-        // Restore scroll position after state updates
-        requestAnimationFrame(() => {
-            window.scrollTo(0, currentScrollPosition);
-        });
+        // Scroll position is preserved via preservedScrollPosition ref and useEffect
+        // No need for manual restoration here - useEffect will handle it
         
         try {
             setLoading(true);
