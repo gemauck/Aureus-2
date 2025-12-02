@@ -2702,7 +2702,12 @@ const ManagementMeetingNotes = () => {
                                 className={`w-36 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition shadow-sm ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'}`}
                             />
                             <button
-                                onClick={() => handleCreateMonth()}
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleCreateMonth();
+                                }}
                                 className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition shadow-sm hover:shadow-md font-medium"
                             >
                                 <i className="fas fa-plus mr-1.5"></i>
@@ -2710,7 +2715,12 @@ const ManagementMeetingNotes = () => {
                             </button>
                         </div>
                         <button
-                            onClick={handleGenerateMonth}
+                            type="button"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleGenerateMonth();
+                            }}
                             className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition shadow-sm hover:shadow-md font-medium"
                             title="Generate new month from previous month"
                         >
@@ -2719,7 +2729,12 @@ const ManagementMeetingNotes = () => {
                         </button>
                         {currentMonthlyNotes && (
                             <button
-                                onClick={() => setShowAllocationModal(true)}
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setShowAllocationModal(true);
+                                }}
                                 className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-sm hover:shadow-md font-medium"
                             >
                                 <i className="fas fa-users mr-1.5"></i>
@@ -2728,7 +2743,12 @@ const ManagementMeetingNotes = () => {
                         )}
                         {currentMonthlyNotes && (
                             <button
-                                onClick={handleDeleteMonth}
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleDeleteMonth();
+                                }}
                                 className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition shadow-sm hover:shadow-md font-medium"
                             >
                                 <i className="fas fa-trash mr-1.5"></i>
@@ -2737,7 +2757,12 @@ const ManagementMeetingNotes = () => {
                         )}
                         {monthlyNotesList.length > 0 && (
                             <button
-                                onClick={handleDeleteAllMonths}
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleDeleteAllMonths();
+                                }}
                                 className="px-4 py-2 text-sm bg-red-700 text-white rounded-lg hover:bg-red-800 transition shadow-sm hover:shadow-md font-medium"
                             >
                                 <i className="fas fa-exclamation-triangle mr-1.5"></i>
@@ -2778,7 +2803,12 @@ const ManagementMeetingNotes = () => {
                                 className={`w-36 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition shadow-sm ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'}`}
                             />
                             <button
-                                onClick={() => handleCreateWeek()}
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleCreateWeek();
+                                }}
                                 className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-sm hover:shadow-md font-medium"
                             >
                                 <i className="fas fa-plus mr-1.5"></i>
@@ -2798,7 +2828,10 @@ const ManagementMeetingNotes = () => {
                             Action Items Summary
                         </h3>
                         <button
-                            onClick={() => {
+                            type="button"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
                                 setEditingActionItem({ monthlyNotesId: currentMonthlyNotes.id });
                                 setShowActionItemModal(true);
                             }}
@@ -2837,7 +2870,10 @@ const ManagementMeetingNotes = () => {
                                 </div>
                                 <div className="flex gap-2 ml-3">
                                     <button
-                                        onClick={() => {
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
                                             setEditingActionItem(item);
                                             setShowActionItemModal(true);
                                         }}
@@ -2847,7 +2883,12 @@ const ManagementMeetingNotes = () => {
                                         <i className="fas fa-edit text-sm"></i>
                                     </button>
                                     <button
-                                        onClick={() => handleDeleteActionItem(item.id)}
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            handleDeleteActionItem(item.id);
+                                        }}
                                         className={`p-2 rounded-lg transition ${isDark ? 'text-slate-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`}
                                         title="Delete"
                                     >
@@ -2888,7 +2929,9 @@ const ManagementMeetingNotes = () => {
                                         <button
                                             key={identifier}
                                             type="button"
-                                            onClick={() => {
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
                                                 setSelectedWeek(identifier);
                                                 scrollToWeekId(identifier);
                                                 // Update URL with week parameter
@@ -2994,7 +3037,9 @@ const ManagementMeetingNotes = () => {
                                                     {!isSelected && (
                                                         <button
                                                             type="button"
-                                                            onClick={() => {
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
                                                                 setSelectedWeek(identifier);
                                                                 scrollToWeekId(identifier);
                                                                 const url = new URL(window.location);
@@ -3009,7 +3054,11 @@ const ManagementMeetingNotes = () => {
                                                     )}
                                                     <button
                                                         type="button"
-                                                        onClick={() => handleDeleteWeek(week)}
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            handleDeleteWeek(week);
+                                                        }}
                                                         className={`text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition shadow-sm hover:shadow-md ${isDark ? 'bg-red-900/50 text-red-200 hover:bg-red-800/50 border border-red-700' : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'}`}
                                                     >
                                                         <i className="fas fa-trash"></i>
@@ -3078,7 +3127,10 @@ const ManagementMeetingNotes = () => {
                                                                 </div>
                                                             )}
                                                             <button
-                                                                onClick={() => {
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
                                                                     setSelectedDepartment(dept.id);
                                                                     setShowAllocationModal(true);
                                                                 }}
@@ -3113,7 +3165,10 @@ const ManagementMeetingNotes = () => {
                                                                 </div>
                                                             )}
                                                             <button
-                                                                onClick={() => {
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
                                                                     setSelectedDepartment(dept.id);
                                                                     setShowAllocationModal(true);
                                                                 }}
@@ -3307,7 +3362,9 @@ const ManagementMeetingNotes = () => {
                                                                             <div className="flex gap-1">
                                                                                 <button
                                                                                     type="button"
-                                                                                    onClick={() => {
+                                                                                    onClick={(e) => {
+                                                                                        e.preventDefault();
+                                                                                        e.stopPropagation();
                                                                                         setEditingActionItem(item);
                                                                                         setShowActionItemModal(true);
                                                                                     }}
@@ -3349,7 +3406,11 @@ const ManagementMeetingNotes = () => {
                                                                                     </div>
                                                                                     <button
                                                                                         type="button"
-                                                                                        onClick={() => handleDeleteComment(comment.id)}
+                                                                                        onClick={(e) => {
+                                                                                            e.preventDefault();
+                                                                                            e.stopPropagation();
+                                                                                            handleDeleteComment(comment.id);
+                                                                                        }}
                                                                                         className={`p-1.5 rounded-lg transition flex-shrink-0 ${isDark ? 'text-slate-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`}
                                                                                         title="Delete comment"
                                                                                     >
@@ -3437,7 +3498,12 @@ const ManagementMeetingNotes = () => {
                         No meeting notes for {formatMonth(selectedMonth)} yet.
                     </p>
                     <button
-                        onClick={handleCreateMonth}
+                        type="button"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleCreateMonth();
+                        }}
                         className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-xs"
                     >
                         Create Month Notes
@@ -3463,7 +3529,12 @@ const ManagementMeetingNotes = () => {
                                 Allocate Users to Departments
                             </h3>
                             <button
-                                onClick={() => setShowAllocationModal(false)}
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setShowAllocationModal(false);
+                                }}
                                 className={`p-1 ${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-gray-400 hover:text-gray-600'}`}
                             >
                                 <i className="fas fa-times"></i>
@@ -3484,7 +3555,12 @@ const ManagementMeetingNotes = () => {
                                                         {getUserName(allocation.userId)} ({allocation.role})
                                                     </span>
                                                     <button
-                                                        onClick={() => handleDeleteAllocation(dept.id, allocation.userId)}
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            handleDeleteAllocation(dept.id, allocation.userId);
+                                                        }}
                                                         className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-red-900 text-red-200 hover:bg-red-800' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
                                                     >
                                                         Remove
