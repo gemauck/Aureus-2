@@ -4247,11 +4247,44 @@ const Clients = React.memo(() => {
                                     <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
                                         {(() => {
                                             // Show primary parent group if available, otherwise show first group membership
-                                            const primaryGroup = client.parentGroup?.name || client.parentGroupName;
-                                            const firstMembership = Array.isArray(client.groupMemberships) && client.groupMemberships.length > 0
-                                                ? client.groupMemberships[0]?.group?.name
-                                                : null;
+                                            // Handle different data structures: parentGroup object, parentGroupName string, or nested structure
+                                            let primaryGroup = null;
+                                            if (client.parentGroup) {
+                                                primaryGroup = typeof client.parentGroup === 'string' 
+                                                    ? client.parentGroup 
+                                                    : client.parentGroup.name || client.parentGroupName;
+                                            } else if (client.parentGroupName) {
+                                                primaryGroup = client.parentGroupName;
+                                            }
+                                            
+                                            // Check groupMemberships - handle both array of objects and array of membership objects
+                                            let firstMembership = null;
+                                            if (Array.isArray(client.groupMemberships) && client.groupMemberships.length > 0) {
+                                                const membership = client.groupMemberships[0];
+                                                if (membership?.group) {
+                                                    firstMembership = typeof membership.group === 'string'
+                                                        ? membership.group
+                                                        : membership.group.name;
+                                                } else if (membership?.name) {
+                                                    // Direct group name in membership
+                                                    firstMembership = membership.name;
+                                                }
+                                            }
+                                            
                                             const groupName = primaryGroup || firstMembership || 'None';
+                                            
+                                            // Debug logging for Exxaro clients
+                                            if (client.name && client.name.toLowerCase().includes('exxaro') && groupName === 'None') {
+                                                console.log('🔍 Exxaro client group debug:', {
+                                                    name: client.name,
+                                                    parentGroup: client.parentGroup,
+                                                    parentGroupName: client.parentGroupName,
+                                                    groupMemberships: client.groupMemberships,
+                                                    primaryGroup,
+                                                    firstMembership
+                                                });
+                                            }
+                                            
                                             return (
                                                 <span className={groupName === 'None' ? (isDark ? 'text-gray-500' : 'text-gray-400') : ''}>
                                                     {groupName}

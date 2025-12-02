@@ -282,6 +282,28 @@ async function handler(req, res) {
           const parsed = parseClientJsonFields(client)
           // Check if current user has starred this client
           parsed.isStarred = validUserId && client.starredBy && Array.isArray(client.starredBy) && client.starredBy.length > 0
+          
+          // Preserve group data (parentGroup and groupMemberships are objects, not JSON strings)
+          // These come from Prisma relations and should be preserved as-is
+          if (client.parentGroup) {
+            parsed.parentGroup = client.parentGroup
+          }
+          if (client.groupMemberships) {
+            parsed.groupMemberships = client.groupMemberships
+          }
+          
+          // Debug logging for Exxaro clients
+          if (parsed.name && parsed.name.toLowerCase().includes('exxaro')) {
+            console.log('🔍 API: Exxaro client group data:', {
+              id: parsed.id,
+              name: parsed.name,
+              parentGroup: parsed.parentGroup,
+              groupMemberships: parsed.groupMemberships,
+              rawParentGroup: client.parentGroup,
+              rawGroupMemberships: client.groupMemberships
+            })
+          }
+          
           return parsed
         })
         
