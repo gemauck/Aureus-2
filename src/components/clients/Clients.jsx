@@ -4318,71 +4318,41 @@ const Clients = React.memo(() => {
                                     </td>
                                     <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
                                         {(() => {
-                                            // Show primary parent group if available, otherwise show first group membership
-                                            // Handle different data structures: parentGroup object, parentGroupName string, or nested structure
-                                            let primaryGroup = null;
+                                            // Collect all group names from parentGroup and groupMemberships
+                                            const groupNames = [];
                                             
-                                            // Try parentGroup object first
+                                            // Add parent group name if exists
                                             if (client.parentGroup) {
-                                                if (typeof client.parentGroup === 'string') {
-                                                    primaryGroup = client.parentGroup;
-                                                } else if (typeof client.parentGroup === 'object' && client.parentGroup !== null) {
-                                                    primaryGroup = client.parentGroup.name || client.parentGroupName;
+                                                if (typeof client.parentGroup === 'object' && client.parentGroup !== null && client.parentGroup.name) {
+                                                    groupNames.push(client.parentGroup.name);
+                                                } else if (typeof client.parentGroup === 'string') {
+                                                    groupNames.push(client.parentGroup);
                                                 }
                                             }
-                                            
-                                            // Fallback to parentGroupName string
-                                            if (!primaryGroup && client.parentGroupName) {
-                                                primaryGroup = client.parentGroupName;
+                                            if (client.parentGroupName && !groupNames.includes(client.parentGroupName)) {
+                                                groupNames.push(client.parentGroupName);
                                             }
                                             
-                                            // Check groupMemberships - handle both array of objects and array of membership objects
-                                            let firstMembership = null;
-                                            if (Array.isArray(client.groupMemberships) && client.groupMemberships.length > 0) {
-                                                const membership = client.groupMemberships[0];
-                                                if (membership) {
-                                                    // Handle nested group object
-                                                    if (membership.group) {
-                                                        if (typeof membership.group === 'string') {
-                                                            firstMembership = membership.group;
-                                                        } else if (typeof membership.group === 'object' && membership.group !== null) {
-                                                            firstMembership = membership.group.name;
+                                            // Add all group memberships
+                                            if (Array.isArray(client.groupMemberships)) {
+                                                client.groupMemberships.forEach(membership => {
+                                                    if (membership?.group) {
+                                                        const groupName = typeof membership.group === 'object' ? membership.group.name : membership.group;
+                                                        if (groupName && !groupNames.includes(groupName)) {
+                                                            groupNames.push(groupName);
                                                         }
-                                                    } 
-                                                    // Handle direct group name in membership
-                                                    else if (membership.name) {
-                                                        firstMembership = membership.name;
+                                                    } else if (membership?.name && !groupNames.includes(membership.name)) {
+                                                        groupNames.push(membership.name);
                                                     }
-                                                    // Handle if membership itself is a group object
-                                                    else if (typeof membership === 'object' && membership.name) {
-                                                        firstMembership = membership.name;
-                                                    }
-                                                }
-                                            }
-                                            
-                                            const groupName = primaryGroup || firstMembership || 'None';
-                                            
-                                            // Debug logging for Exxaro clients
-                                            if (client.name && client.name.toLowerCase().includes('exxaro')) {
-                                                console.log('🔍 Exxaro client group debug:', {
-                                                    name: client.name,
-                                                    id: client.id,
-                                                    parentGroup: client.parentGroup,
-                                                    parentGroupId: client.parentGroupId,
-                                                    parentGroupName: client.parentGroupName,
-                                                    groupMemberships: client.groupMemberships,
-                                                    primaryGroup,
-                                                    firstMembership,
-                                                    finalGroupName: groupName,
-                                                    fullClient: client
                                                 });
                                             }
                                             
-                                            return (
-                                                <span className={groupName === 'None' ? (isDark ? 'text-gray-500' : 'text-gray-400') : ''}>
-                                                    {groupName}
-                                                </span>
-                                            );
+                                            // Display all groups or "None"
+                                            if (groupNames.length === 0) {
+                                                return <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>None</span>;
+                                            }
+                                            
+                                            return <span>{groupNames.join(', ')}</span>;
                                         })()}
                                     </td>
                                     <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{client.industry}</td>
