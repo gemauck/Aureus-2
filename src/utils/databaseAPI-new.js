@@ -4,6 +4,16 @@ const DatabaseAPI = {
     cache: new Map(),
     CACHE_DURATION: 5000, // 5 seconds - very short to prevent stale data across users
     
+    // Error aggregation for 502 errors to reduce console noise
+    _recent502Errors: [], // Track recent 502 errors
+    _last502ErrorLog: 0, // Track last time we logged 502 error summary
+    _502ErrorLogInterval: 10000, // Log 502 error summary every 10 seconds
+    
+    // Circuit breaker for endpoints with persistent 502 errors
+    _circuitBreaker: new Map(), // Track failing endpoints: endpoint -> { failures: number, lastFailure: timestamp, openUntil: timestamp }
+    _circuitBreakerThreshold: 3, // Open circuit after 3 consecutive failures
+    _circuitBreakerCooldown: 60000, // Keep circuit open for 60 seconds
+    
     // Base configuration - Use local API for localhost, production for deployed
     API_BASE: (() => {
         const hostname = window.location.hostname;
@@ -68,15 +78,30 @@ const DatabaseAPI = {
         
         log('📡 Database API request:', { url, endpoint, options, hasToken: !!token });
         
-        try {
-            const doFetch = async (hdrs) => fetch(url, { headers: hdrs, credentials: 'include', ...options });
-            let response = await doFetch(headers);
+        // Check circuit breaker before making request
+        const circuitStatus = this._circuitBreaker.get(cacheKey);
+        if (circuitStatus && circuitStatus.openUntil > Date.now()) {
+            const remainingSeconds = Math.ceil((circuitStatus.openUntil - Date.now()) / 1000);
+            const error = new Error(`502: Endpoint temporarily unavailable (circuit breaker open). Server is experiencing issues. Will retry in ${remainingSeconds}s.`);
+            error.status = 502;
+            throw error;
+        }
+        
+        // Retry logic for 502 errors
+        const maxRetries = 2; // Retry up to 2 times for 502 errors (3 total attempts)
+        const baseDelay = 500; // Start with 500ms delay
+        let lastError = null;
+        
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                const doFetch = async (hdrs) => fetch(url, { headers: hdrs, credentials: 'include', ...options });
+                let response = await doFetch(headers);
 
-            log('📡 Database API response:', { 
-                status: response.status, 
-                ok: response.ok, 
-                endpoint 
-            });
+                log('📡 Database API response:', { 
+                    status: response.status, 
+                    ok: response.ok, 
+                    endpoint 
+                });
 
             // If unauthorized, try a one-time refresh flow
             if (!response.ok && response.status === 401) {
@@ -131,11 +156,75 @@ const DatabaseAPI = {
                     throw new Error('Authentication expired or unauthorized.');
                 }
                 
-                // Extract error message from response
+                // Handle 502 Bad Gateway errors with aggregation and circuit breaker
+                if (response.status === 502) {
+                    // Track 502 errors for aggregation
+                    const now = Date.now();
+                    this._recent502Errors.push({
+                        endpoint: cacheKey,
+                        timestamp: now
+                    });
+                    
+                    // Keep only recent errors (last 30 seconds)
+                    this._recent502Errors = this._recent502Errors.filter(
+                        e => now - e.timestamp < 30000
+                    );
+                    
+                    // Update circuit breaker
+                    const currentStatus = this._circuitBreaker.get(cacheKey) || { failures: 0, lastFailure: 0, openUntil: 0 };
+                    currentStatus.failures += 1;
+                    currentStatus.lastFailure = now;
+                    
+                    if (currentStatus.failures >= this._circuitBreakerThreshold) {
+                        currentStatus.openUntil = now + this._circuitBreakerCooldown;
+                    }
+                    this._circuitBreaker.set(cacheKey, currentStatus);
+                    
+                    // Log aggregated 502 errors periodically to reduce console noise
+                    if (now - this._last502ErrorLog > this._502ErrorLogInterval) {
+                        const recentCount = this._recent502Errors.length;
+                        if (recentCount > 0) {
+                            const uniqueEndpoints = [...new Set(this._recent502Errors.map(e => e.endpoint))];
+                            const circuitBrokenEndpoints = Array.from(this._circuitBreaker.entries())
+                                .filter(([_, status]) => status.openUntil > now)
+                                .map(([endpoint, _]) => endpoint);
+                            
+                            if (circuitBrokenEndpoints.length > 0) {
+                                console.warn(`⚠️ Server unavailable (502): ${recentCount} error(s) across ${uniqueEndpoints.length} endpoint(s). Circuit breaker open for: ${circuitBrokenEndpoints.join(', ')}`);
+                            } else {
+                                console.warn(`⚠️ Server unavailable (502): ${recentCount} error(s) across ${uniqueEndpoints.length} endpoint(s) in the last 30s. The server may be temporarily down.`);
+                            }
+                            this._last502ErrorLog = now;
+                            this._recent502Errors = [];
+                        } else {
+                            this._last502ErrorLog = now;
+                        }
+                    }
+                    
+                    // Create error with 502 status (retry logic is handled in catch block)
+                    const serverErrorMessage = responseData?.error?.message || responseData?.message || 'Bad Gateway';
+                    const error = new Error(`502: ${serverErrorMessage}`);
+                    error.status = 502;
+                    throw error;
+                }
+                
+                // Extract error message from response for other errors
                 const errorMessage = responseData?.error?.message || responseData?.message || `HTTP ${response.status}: ${response.statusText}`;
-                console.error('❌ Error response:', responseData);
+                
+                // Reset circuit breaker on success (for other error types)
+                if (response.status !== 502) {
+                    this._circuitBreaker.delete(cacheKey);
+                }
+                
+                // Only log non-502 errors individually (502 errors are aggregated above)
+                if (response.status !== 502) {
+                    console.error('❌ Error response:', responseData);
+                }
                 throw new Error(errorMessage);
             }
+            
+            // Reset circuit breaker on success
+            this._circuitBreaker.delete(cacheKey);
 
             // Cache successful GET responses (even after force refresh, cache the fresh data)
             if (isGetRequest && responseData) {
@@ -150,10 +239,43 @@ const DatabaseAPI = {
             }
             
             return responseData;
-        } catch (error) {
-            console.error(`Database API request failed (${endpoint}):`, error);
-            throw error;
+            } catch (error) {
+                lastError = error;
+                
+                // Check if it's a 502 error and we should retry
+                const is502Error = error?.status === 502 || error?.message?.includes('502') || error?.message?.includes('Bad Gateway');
+                
+                if (is502Error && attempt < maxRetries) {
+                    // Retry 502 errors with exponential backoff
+                    const delay = baseDelay * Math.pow(2, attempt);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    continue; // Retry the request
+                }
+                
+                // If it's a network error (not a 502 from server), check if we should retry
+                const isNetworkError = error?.message?.includes('Failed to fetch') || 
+                                     error?.message?.includes('NetworkError') ||
+                                     error?.name === 'TypeError';
+                
+                if (isNetworkError && attempt < maxRetries) {
+                    const delay = baseDelay * Math.pow(2, attempt);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    continue; // Retry the request
+                }
+                
+                // Suppress individual error logs for 502 errors (already aggregated above)
+                if (!is502Error) {
+                    console.error(`Database API request failed (${endpoint}):`, error);
+                }
+                throw error;
+            }
         }
+        
+        // This should never be reached, but just in case
+        if (lastError) {
+            throw lastError;
+        }
+        throw new Error('Request failed after retries');
     },
     
     // Clear cache
