@@ -464,6 +464,7 @@ const ManagementMeetingNotes = () => {
     const [users, setUsers] = useState([]);
     const [isReady, setIsReady] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [saving, setSaving] = useState(false); // Separate state for save operations
     const [newMonthKey, setNewMonthKey] = useState('');
     const [newWeekStartInput, setNewWeekStartInput] = useState('');
     // Modal states
@@ -1873,7 +1874,7 @@ const ManagementMeetingNotes = () => {
         });
         
         try {
-            setLoading(true);
+            setSaving(true); // Use saving state instead of loading to prevent "Loading meeting notes..." from showing
             console.log('💾 Saving department notes to DB:', { departmentNotesId, fieldsToSave });
             
             // CRITICAL: Save any unsaved action items for this department before saving department notes
@@ -2000,7 +2001,7 @@ const ManagementMeetingNotes = () => {
             
             // Error logged silently - no popup messages
         } finally {
-            setLoading(false);
+            setSaving(false); // Use saving state instead of loading
         }
     };
 
@@ -2808,7 +2809,8 @@ const ManagementMeetingNotes = () => {
         );
     }
 
-    if (!isReady || loading) {
+    // Only show "Loading meeting notes..." during initial load, not during save operations
+    if (!isReady || (loading && !saving)) {
         return (
             <div className="p-4">
                 <div className="text-center py-12">
@@ -3627,7 +3629,7 @@ const ManagementMeetingNotes = () => {
                                                         {/* Save Button */}
                                                         <button
                                                             type="button"
-                                                            disabled={loading}
+                                                            disabled={saving || loading}
                                                             onClick={async (e) => {
                                                                 e.preventDefault();
                                                                 e.stopPropagation();
@@ -3652,10 +3654,10 @@ const ManagementMeetingNotes = () => {
                                                                     window.scrollTo({ top: currentScrollPosition, behavior: 'instant' });
                                                                 }, 0);
                                                             }}
-                                                            className={`w-full text-xs px-3 py-2 rounded font-medium transition ${loading ? 'opacity-50 cursor-not-allowed' : ''} ${isDark ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
+                                                            className={`w-full text-xs px-3 py-2 rounded font-medium transition ${saving || loading ? 'opacity-50 cursor-not-allowed' : ''} ${isDark ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
                                                         >
-                                                            <i className={`fas ${loading ? 'fa-spinner fa-spin' : 'fa-save'} mr-1`}></i>
-                                                            {loading ? 'Saving...' : 'Save'}
+                                                            <i className={`fas ${saving ? 'fa-spinner fa-spin' : 'fa-save'} mr-1`}></i>
+                                                            {saving ? 'Saving...' : 'Save'}
                                                         </button>
                                                     </div>
                                                 </>

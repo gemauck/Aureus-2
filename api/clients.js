@@ -101,7 +101,26 @@ async function handler(req, res) {
                       userId: true
                     }
                   }
-                } : {})
+                } : {}),
+                parentGroup: {
+                  select: {
+                    id: true,
+                    name: true,
+                    type: true
+                  }
+                },
+                groupMemberships: {
+                  include: {
+                    group: {
+                      select: {
+                        id: true,
+                        name: true,
+                        type: true,
+                        industry: true
+                      }
+                    }
+                  }
+                }
               },
               orderBy: {
                 createdAt: 'desc'
@@ -147,7 +166,26 @@ async function handler(req, res) {
                       userId: true
                     }
                   }
-                } : {})
+                } : {}),
+                parentGroup: {
+                  select: {
+                    id: true,
+                    name: true,
+                    type: true
+                  }
+                },
+                groupMemberships: {
+                  include: {
+                    group: {
+                      select: {
+                        id: true,
+                        name: true,
+                        type: true,
+                        industry: true
+                      }
+                    }
+                  }
+                }
               },
               orderBy: {
                 createdAt: 'desc'
@@ -160,6 +198,27 @@ async function handler(req, res) {
             // Last resort: query without any relations
             console.error('❌ Fallback query with relations failed, trying minimal query:', fallbackError.message)
             rawClients = await prisma.client.findMany({
+              include: {
+                parentGroup: {
+                  select: {
+                    id: true,
+                    name: true,
+                    type: true
+                  }
+                },
+                groupMemberships: {
+                  include: {
+                    group: {
+                      select: {
+                        id: true,
+                        name: true,
+                        type: true,
+                        industry: true
+                      }
+                    }
+                  }
+                }
+              },
               orderBy: {
                 createdAt: 'desc'
               }
