@@ -320,6 +320,25 @@ async function handler(req, res) {
             })
           }
           
+          // Debug logging for AccuFarm
+          if (parsed.name && parsed.name.toLowerCase().includes('accufarm')) {
+            console.log('🔍 API: AccuFarm client group data:', {
+              id: parsed.id,
+              name: parsed.name,
+              parentGroup: parsed.parentGroup,
+              parentGroupId: parsed.parentGroupId,
+              parentGroupName: parsed.parentGroupName,
+              groupMemberships: parsed.groupMemberships,
+              groupMembershipsType: typeof parsed.groupMemberships,
+              groupMembershipsLength: Array.isArray(parsed.groupMemberships) ? parsed.groupMemberships.length : 'not array',
+              firstMembership: Array.isArray(parsed.groupMemberships) && parsed.groupMemberships.length > 0 ? parsed.groupMemberships[0] : null,
+              rawParentGroup: client.parentGroup,
+              rawParentGroupId: client.parentGroupId,
+              rawGroupMemberships: client.groupMemberships,
+              rawClientKeys: Object.keys(client)
+            })
+          }
+          
           // CRITICAL: Ensure group data is always present (even if null/undefined, set to null for JSON serialization)
           // JSON.stringify drops undefined values, so we need to explicitly set them
           if (!parsed.parentGroup && !parsed.parentGroupId) {
