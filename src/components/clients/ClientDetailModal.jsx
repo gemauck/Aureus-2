@@ -1926,18 +1926,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
     // Company Groups: Handle adding client to group
     const handleAddToGroup = async () => {
-        if (createGroupMode) {
-            // Creating a new group
-            if (!client?.id || !newGroupName?.trim()) {
-                alert('Please enter a group name');
-                return;
-            }
-        } else {
-            // Adding to existing group
-            if (!client?.id || !selectedGroupId) {
-                console.warn('Cannot add group: missing client ID or selected group ID');
-                return;
-            }
+        // Adding to existing group only
+        if (!client?.id || !selectedGroupId) {
+            console.warn('Cannot add group: missing client ID or selected group ID');
+            return;
         }
 
         try {
@@ -1947,11 +1939,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 return;
             }
 
-            const requestBody = createGroupMode
-                ? { groupName: newGroupName.trim(), groupIndustry: newGroupIndustry || 'Other', role: 'member' }
-                : { groupId: selectedGroupId, role: 'member' };
+            const requestBody = { groupId: selectedGroupId, role: 'member' };
 
-            console.log(createGroupMode ? 'Creating new group and adding client:' : 'Adding client to group:', { 
+            console.log('Adding client to group:', { 
                 clientId: client.id, 
                 ...requestBody 
             });
@@ -1974,9 +1964,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 // Close modal first
                 setShowAddGroupModal(false);
                 setSelectedGroupId('');
-                setCreateGroupMode(false);
-                setNewGroupName('');
-                setNewGroupIndustry('Other');
                 
                 // Wait a moment for database to commit, then reload all groups data
                 await new Promise(resolve => setTimeout(resolve, 500));
@@ -4557,9 +4544,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             console.log('Modal backdrop clicked - closing modal');
                                             setShowAddGroupModal(false);
                                             setSelectedGroupId('');
-                                            setCreateGroupMode(false);
-                                            setNewGroupName('');
-                                            setNewGroupIndustry('Other');
                                         }}
                                         style={{ zIndex: 9999 }}
                                     >
@@ -4573,7 +4557,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         >
                                             <div className="flex justify-between items-center mb-4">
                                                 <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                                    {createGroupMode ? 'Create New Group' : 'Add to Group'}
+                                                    Add to Group
                                                 </h3>
                                                 <button
                                                     type="button"
@@ -4581,9 +4565,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         console.log('Close button clicked');
                                                         setShowAddGroupModal(false);
                                                         setSelectedGroupId('');
-                                                        setCreateGroupMode(false);
-                                                        setNewGroupName('');
-                                                        setNewGroupIndustry('Other');
                                                     }}
                                                     className={`${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'} transition-colors`}
                                                 >
@@ -4591,127 +4572,53 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 </button>
                                             </div>
                                             
-                                            {/* Mode Toggle */}
-                                            <div className="flex gap-2 mb-4 p-1 bg-gray-100 rounded-lg">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setCreateGroupMode(false)}
-                                                    className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                                                        !createGroupMode
-                                                            ? isDark
-                                                                ? 'bg-gray-700 text-white'
-                                                                : 'bg-white text-gray-900 shadow-sm'
-                                                            : isDark
-                                                                ? 'text-gray-300 hover:text-gray-100'
-                                                                : 'text-gray-600 hover:text-gray-900'
-                                                    }`}
-                                                >
-                                                    Select Existing
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setCreateGroupMode(true)}
-                                                    className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                                                        createGroupMode
-                                                            ? isDark
-                                                                ? 'bg-gray-700 text-white'
-                                                                : 'bg-white text-gray-900 shadow-sm'
-                                                            : isDark
-                                                                ? 'text-gray-300 hover:text-gray-100'
-                                                                : 'text-gray-600 hover:text-gray-900'
-                                                    }`}
-                                                >
-                                                    Create New
-                                                </button>
-                                            </div>
-                                            
                                             <div className="space-y-4">
-                                                {createGroupMode ? (
-                                                    // Create New Group Form
-                                                    <>
-                                                        <div>
-                                                            <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                                                Group Name <span className="text-red-500">*</span>
-                                                            </label>
-                                                            <input
-                                                                type="text"
-                                                                value={newGroupName}
-                                                                onChange={(e) => setNewGroupName(e.target.value)}
-                                                                placeholder="e.g., Exxaro Group"
-                                                                className={`w-full px-3 py-2 rounded-md border ${
-                                                                    isDark 
-                                                                        ? 'bg-gray-700 border-gray-600 text-gray-100' 
-                                                                        : 'bg-white border-gray-300 text-gray-900'
-                                                                } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                                                            />
-                                                            <p className={`mt-1 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                                Enter a name for the company group (e.g., "Exxaro Group")
-                                                            </p>
-                                                        </div>
-                                                        <div>
-                                                            <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                                                Industry (Optional)
-                                                            </label>
-                                                            <input
-                                                                type="text"
-                                                                value={newGroupIndustry}
-                                                                onChange={(e) => setNewGroupIndustry(e.target.value)}
-                                                                placeholder="e.g., Mining"
-                                                                className={`w-full px-3 py-2 rounded-md border ${
-                                                                    isDark 
-                                                                        ? 'bg-gray-700 border-gray-600 text-gray-100' 
-                                                                        : 'bg-white border-gray-300 text-gray-900'
-                                                                } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                                                            />
-                                                        </div>
-                                                    </>
-                                                ) : (
-                                                    // Select Existing Group
-                                                    <div>
-                                                        <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                                            Select Group
-                                                        </label>
-                                                        {(() => {
-                                                            const availableGroups = allGroups.filter(g => 
-                                                                g.id !== client?.id &&
-                                                                g.id !== primaryParent?.id && 
-                                                                !groupMemberships.some(gm => gm.group?.id === g.id)
-                                                            );
-                                                            
-                                                            if (availableGroups.length === 0) {
-                                                                return (
-                                                                    <div className={`p-4 rounded-md ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                                                                        <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
-                                                                            No groups available. Switch to "Create New" to add a new group.
-                                                                        </p>
-                                                                    </div>
-                                                                );
-                                                            }
-                                                            
+                                                <div>
+                                                    <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                        Select Group
+                                                    </label>
+                                                    {(() => {
+                                                        // Only show groups with type='group' (created groups), not regular clients
+                                                        const availableGroups = allGroups.filter(g => 
+                                                            g.type === 'group' &&
+                                                            g.id !== client?.id &&
+                                                            g.id !== primaryParent?.id && 
+                                                            !groupMemberships.some(gm => gm.group?.id === g.id)
+                                                        );
+                                                        
+                                                        if (availableGroups.length === 0) {
                                                             return (
-                                                                <select
-                                                                    value={selectedGroupId}
-                                                                    onChange={(e) => {
-                                                                        console.log('Group selected:', e.target.value);
-                                                                        setSelectedGroupId(e.target.value);
-                                                                    }}
-                                                                    className={`w-full px-3 py-2 rounded-md border ${
-                                                                        isDark 
-                                                                            ? 'bg-gray-700 border-gray-600 text-gray-100' 
-                                                                            : 'bg-white border-gray-300 text-gray-900'
-                                                                    } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                                                                >
-                                                                    <option value="">Select a group...</option>
-                                                                    {availableGroups.map((group) => (
-                                                                        <option key={group.id} value={group.id}>
-                                                                            {group.name} {group.type === 'group' ? '(Group)' : ''} {group.industry ? `(${group.industry})` : ''}
-                                                                        </option>
-                                                                    ))}
-                                                                </select>
+                                                                <div className={`p-4 rounded-md ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                                                                    <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                                                                        No groups available. Use the "Create Group" button to create a new group first.
+                                                                    </p>
+                                                                </div>
                                                             );
-                                                        })()}
-                                                    </div>
-                                                )}
+                                                        }
+                                                        
+                                                        return (
+                                                            <select
+                                                                value={selectedGroupId}
+                                                                onChange={(e) => {
+                                                                    console.log('Group selected:', e.target.value);
+                                                                    setSelectedGroupId(e.target.value);
+                                                                }}
+                                                                className={`w-full px-3 py-2 rounded-md border ${
+                                                                    isDark 
+                                                                        ? 'bg-gray-700 border-gray-600 text-gray-100' 
+                                                                        : 'bg-white border-gray-300 text-gray-900'
+                                                                } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                                                            >
+                                                                <option value="">Select a group...</option>
+                                                                {availableGroups.map((group) => (
+                                                                    <option key={group.id} value={group.id}>
+                                                                        {group.name} {group.industry ? `(${group.industry})` : ''}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        );
+                                                    })()}
+                                                </div>
                                                 
                                                 <div className="flex gap-3 justify-end">
                                                     <button
@@ -4719,9 +4626,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         onClick={() => {
                                                             setShowAddGroupModal(false);
                                                             setSelectedGroupId('');
-                                                            setCreateGroupMode(false);
-                                                            setNewGroupName('');
-                                                            setNewGroupIndustry('Other');
                                                         }}
                                                         className={`px-4 py-2 rounded-md transition-colors ${
                                                             isDark
@@ -4734,16 +4638,16 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     <button
                                                         type="button"
                                                         onClick={handleAddToGroup}
-                                                        disabled={createGroupMode ? !newGroupName?.trim() : !selectedGroupId}
+                                                        disabled={!selectedGroupId}
                                                         className={`px-4 py-2 rounded-md transition-colors ${
-                                                            (createGroupMode ? !newGroupName?.trim() : !selectedGroupId)
+                                                            !selectedGroupId
                                                                 ? 'bg-gray-400 cursor-not-allowed text-gray-200'
                                                                 : isDark
                                                                     ? 'bg-blue-600 hover:bg-blue-700 text-white'
                                                                     : 'bg-blue-500 hover:bg-blue-600 text-white'
                                                         }`}
                                                     >
-                                                        {createGroupMode ? 'Create & Add' : 'Add'}
+                                                        Add
                                                     </button>
                                                 </div>
                                             </div>
