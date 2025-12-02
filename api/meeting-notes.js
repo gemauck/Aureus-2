@@ -639,14 +639,36 @@ async function handler(req, res) {
         return badRequest(res, 'id is required')
       }
 
+      // First check if the action item exists
+      const existingActionItem = await prisma.meetingActionItem.findUnique({
+        where: { id }
+      })
+
+      if (!existingActionItem) {
+        return ok(res, { success: false, message: 'Action item not found' })
+      }
+
+      // Delete associated comments first (if any)
+      await prisma.meetingComment.deleteMany({
+        where: { actionItemId: id }
+      })
+
+      // Then delete the action item
       await prisma.meetingActionItem.delete({
         where: { id }
       })
 
       return ok(res, { success: true })
     } catch (error) {
+      if (error.code === 'P2025') {
+        return ok(res, { success: false, message: 'Action item not found' })
+      }
+      logDatabaseError(error, 'delete action item')
+      if (isConnectionError(error)) {
+        return serverError(res, 'Database connection failed', 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+      }
       console.error('Error deleting action item:', error)
-      return serverError(res, 'Failed to delete action item')
+      return serverError(res, 'Failed to delete action item', error.message)
     }
   }
 
