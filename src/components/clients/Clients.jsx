@@ -2862,34 +2862,53 @@ const Clients = React.memo(() => {
         // Fetch fresh data from API
         const fetchGroupData = async () => {
             try {
-                const apiMethod = window.DatabaseAPI?.getClients || window.api?.listClients;
-                if (!apiMethod) {
+                let res;
+                // Call with proper context binding
+                if (window.DatabaseAPI && typeof window.DatabaseAPI.getClients === 'function') {
+                    res = await window.DatabaseAPI.getClients();
+                } else if (window.api && typeof window.api.listClients === 'function') {
+                    res = await window.api.listClients();
+                } else {
                     console.warn('⚠️ No API method available');
                     return;
                 }
                 
-                const res = await apiMethod();
                 const apiClients = res?.data?.clients || res?.clients || [];
-                const accufarmFromApi = apiClients.find(c => c.name && c.name.toLowerCase().includes('accufarm'));
+                console.log('📦 Fetched', apiClients.length, 'clients from API for groupMemberships check');
                 
-                if (accufarmFromApi && accufarmFromApi.groupMemberships && Array.isArray(accufarmFromApi.groupMemberships) && accufarmFromApi.groupMemberships.length > 0) {
-                    console.log('✅ Found AccuFarm groupMemberships in API:', accufarmFromApi.groupMemberships);
-                    
-                    // Update the client in state
-                    setClients(prevClients => {
-                        return prevClients.map(client => {
-                            if (client.id === accufarm.id) {
-                                console.log('✅ Updating AccuFarm with groupMemberships:', accufarmFromApi.groupMemberships);
-                                return {
-                                    ...client,
-                                    groupMemberships: accufarmFromApi.groupMemberships
-                                };
-                            }
-                            return client;
-                        });
+                const accufarmFromApi = apiClients.find(c => c && c.name && c.name.toLowerCase().includes('accufarm'));
+                
+                if (accufarmFromApi) {
+                    console.log('🔍 AccuFarm found in API response:', {
+                        name: accufarmFromApi.name,
+                        id: accufarmFromApi.id,
+                        hasGroupMemberships: !!accufarmFromApi.groupMemberships,
+                        groupMemberships: accufarmFromApi.groupMemberships,
+                        isArray: Array.isArray(accufarmFromApi.groupMemberships),
+                        length: Array.isArray(accufarmFromApi.groupMemberships) ? accufarmFromApi.groupMemberships.length : 'not array'
                     });
+                    
+                    if (accufarmFromApi.groupMemberships && Array.isArray(accufarmFromApi.groupMemberships) && accufarmFromApi.groupMemberships.length > 0) {
+                        console.log('✅ Found AccuFarm groupMemberships in API:', accufarmFromApi.groupMemberships);
+                        
+                        // Update the client in state
+                        setClients(prevClients => {
+                            return prevClients.map(client => {
+                                if (client.id === accufarm.id) {
+                                    console.log('✅ Updating AccuFarm with groupMemberships:', accufarmFromApi.groupMemberships);
+                                    return {
+                                        ...client,
+                                        groupMemberships: accufarmFromApi.groupMemberships
+                                    };
+                                }
+                                return client;
+                            });
+                        });
+                    } else {
+                        console.warn('⚠️ AccuFarm found but has no groupMemberships or empty array');
+                    }
                 } else {
-                    console.warn('⚠️ AccuFarm not found in API response or has no groupMemberships');
+                    console.warn('⚠️ AccuFarm not found in API response');
                 }
             } catch (error) {
                 console.error('❌ Error fetching groupMemberships:', error);
