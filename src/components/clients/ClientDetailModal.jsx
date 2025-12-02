@@ -1890,7 +1890,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
     // Company Groups: Handle adding client to group
     const handleAddToGroup = async () => {
-        if (!client?.id || !selectedGroupId) return;
+        if (!client?.id || !selectedGroupId) {
+            console.warn('Cannot add group: missing client ID or selected group ID');
+            return;
+        }
 
         try {
             const token = window.storage?.getToken?.();
@@ -1899,6 +1902,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 return;
             }
 
+            console.log('Adding client to group:', { clientId: client.id, groupId: selectedGroupId });
+            
             const response = await fetch(`/api/clients/${client.id}/groups`, {
                 method: 'POST',
                 headers: {
@@ -1908,27 +1913,68 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 body: JSON.stringify({ groupId: selectedGroupId, role: 'member' })
             });
 
+            const responseData = await response.json().catch(() => ({}));
+            console.log('Add group response:', { status: response.status, statusText: response.statusText, data: responseData });
+
             if (response.ok) {
-                // Reload groups data
-                isLoadingGroupsRef.current = false;
-                const groupsResponse = await fetch(`/api/clients/${client.id}/groups`, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-
-                if (groupsResponse.ok) {
-                    const groupsData = await groupsResponse.json();
-                    const gData = groupsData?.data || groupsData;
-                    setGroupMemberships(gData.groupMemberships || []);
-                }
-
+                console.log('✅ Group added successfully:', responseData);
+                
+                // Close modal first
                 setShowAddGroupModal(false);
                 setSelectedGroupId('');
-                alert('✅ Successfully added to group');
+                
+                // Wait a moment for database to commit, then reload all groups data
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // Force reload by resetting loading flag
+                isLoadingGroupsRef.current = false;
+                
+                // Reload groups data - fetch full groups data including primary parent
+                try {
+                    setLoadingGroups(true);
+                    const groupsResponse = await fetch(`/api/clients/${client.id}/groups`, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+
+                    if (groupsResponse.ok) {
+                        const groupsData = await groupsResponse.json();
+                        const gData = groupsData?.data || groupsData;
+                        console.log('Reloaded groups data:', gData);
+                        setPrimaryParent(gData.primaryParent || null);
+                        setGroupMemberships(gData.groupMemberships || []);
+                    } else {
+                        console.error('Failed to reload groups:', groupsResponse.status, groupsResponse.statusText);
+                    }
+                    
+                    // Also reload available groups list to update the dropdown
+                    const clientsResponse = await fetch('/api/clients?limit=1000', {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    
+                    if (clientsResponse.ok) {
+                        const clientsData = await clientsResponse.json();
+                        const clients = clientsData?.data?.clients || clientsData?.clients || [];
+                        const potentialGroups = clients
+                            .filter(c => c.id !== client.id && c.type === 'client')
+                            .map(c => ({ id: c.id, name: c.name, type: c.type, industry: c.industry }));
+                        setAllGroups(potentialGroups);
+                    }
+                } catch (reloadError) {
+                    console.error('Error reloading groups:', reloadError);
+                } finally {
+                    setLoadingGroups(false);
+                    isLoadingGroupsRef.current = false;
+                }
+                
+                // Don't show alert if everything worked - the UI update is enough
             } else {
-                const errorData = await response.json().catch(() => ({}));
-                alert(errorData.message || 'Failed to add client to group. Please try again.');
+                const errorMessage = responseData.message || responseData.error || 'Failed to add client to group. Please try again.';
+                console.error('Failed to add group:', { status: response.status, message: errorMessage, data: responseData });
+                alert(`❌ ${errorMessage}`);
             }
         } catch (error) {
             console.error('Failed to add client to group:', error);

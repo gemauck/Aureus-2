@@ -98,8 +98,10 @@ async function handler(req, res) {
     }
     
     // GET /api/clients/:id/groups - Get groups for a specific client
+    // Use req.params.id if available (from explicit route) or parse from URL
     if (req.method === 'GET' && pathSegments.length === 3 && pathSegments[0] === 'clients' && pathSegments[2] === 'groups') {
-      const clientId = pathSegments[1]
+      const clientId = req.params?.id || pathSegments[1]
+      console.log('GET /api/clients/:id/groups - clientId:', clientId, 'from req.params:', req.params?.id, 'from pathSegments:', pathSegments[1])
       
       try {
         const client = await prisma.client.findUnique({
@@ -157,9 +159,11 @@ async function handler(req, res) {
     
     // POST /api/clients/:id/groups - Add client to group
     if (req.method === 'POST' && pathSegments.length === 3 && pathSegments[0] === 'clients' && pathSegments[2] === 'groups') {
-      const clientId = pathSegments[1]
+      const clientId = req.params?.id || pathSegments[1]
+      console.log('POST /api/clients/:id/groups - clientId:', clientId, 'from req.params:', req.params?.id, 'from pathSegments:', pathSegments[1])
       const body = await parseJsonBody(req)
       const { groupId, role } = body
+      console.log('POST body:', { groupId, role })
       
       if (!groupId) {
         return badRequest(res, 'groupId is required')
@@ -207,6 +211,7 @@ async function handler(req, res) {
         }
         
         // Add to group
+        console.log('Creating membership:', { clientId, groupId, role: role || 'member' })
         const membership = await prisma.clientCompanyGroup.create({
           data: {
             clientId,
@@ -223,6 +228,7 @@ async function handler(req, res) {
             }
           }
         })
+        console.log('✅ Membership created successfully:', membership)
         
         return created(res, { membership })
       } catch (error) {
@@ -239,8 +245,8 @@ async function handler(req, res) {
     
     // DELETE /api/clients/:id/groups/:groupId - Remove client from group
     if (req.method === 'DELETE' && pathSegments.length === 4 && pathSegments[0] === 'clients' && pathSegments[2] === 'groups') {
-      const clientId = pathSegments[1]
-      const groupId = pathSegments[3]
+      const clientId = req.params?.id || pathSegments[1]
+      const groupId = req.params?.groupId || pathSegments[3]
       
       try {
         const membership = await prisma.clientCompanyGroup.findUnique({
