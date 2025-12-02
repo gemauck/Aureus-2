@@ -1487,7 +1487,12 @@ const Clients = React.memo(() => {
             try {
                 const apiStartTime = performance.now();
                 // Prefer DatabaseAPI.getClients() for deduplication and caching
-                const apiMethod = window.DatabaseAPI?.getClients || window.api?.listClients;
+                // CRITICAL: Bind the method to preserve 'this' context, otherwise this.makeRequest will fail
+                const apiMethod = window.DatabaseAPI?.getClients 
+                    ? window.DatabaseAPI.getClients.bind(window.DatabaseAPI)
+                    : window.api?.listClients 
+                        ? window.api.listClients.bind(window.api)
+                        : null;
                 if (!apiMethod) {
                     console.warn('⚠️ No API method available for fetching clients');
                     return;
@@ -2862,9 +2867,21 @@ const Clients = React.memo(() => {
         // Fetch fresh data from API
         const fetchGroupData = async () => {
             try {
+                // Ensure DatabaseAPI is available and properly initialized
+                if (!window.DatabaseAPI) {
+                    console.warn('⚠️ DatabaseAPI not available yet');
+                    return;
+                }
+                
+                // Verify makeRequest exists (it should be a method on DatabaseAPI)
+                if (typeof window.DatabaseAPI.makeRequest !== 'function') {
+                    console.warn('⚠️ DatabaseAPI.makeRequest is not a function');
+                    return;
+                }
+                
                 let res;
-                // Call with proper context binding
-                if (window.DatabaseAPI && typeof window.DatabaseAPI.getClients === 'function') {
+                // Call with proper context - always use window.DatabaseAPI explicitly
+                if (typeof window.DatabaseAPI.getClients === 'function') {
                     res = await window.DatabaseAPI.getClients();
                 } else if (window.api && typeof window.api.listClients === 'function') {
                     res = await window.api.listClients();
