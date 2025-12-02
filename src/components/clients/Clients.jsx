@@ -1337,6 +1337,11 @@ const Clients = React.memo(() => {
             
             // Check if cached clients are missing group data - if so, force API call
             // CRITICAL: Always check cachedClients (not clients state) since that's what we're displaying
+            console.log('🔍 Starting group data check:', {
+                cachedClientsLength: cachedClients?.length || 0,
+                timeSinceLastCall: timeSinceLastCall,
+                forceRefresh: forceRefresh
+            });
             const clientsToCheck = cachedClients || [];
             const hasMissingGroupData = clientsToCheck.length > 0 && clientsToCheck.some(c => {
                 // Check if client has no group data at all
