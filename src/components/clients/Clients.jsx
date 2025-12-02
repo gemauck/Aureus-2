@@ -354,7 +354,11 @@ function processClientData(rawClients, cacheKey) {
         ownerId: c.ownerId || null,
         isStarred,
         createdAt: c.createdAt,
-        updatedAt: c.updatedAt
+        updatedAt: c.updatedAt,
+        // Preserve group data from API
+        parentGroup: c.parentGroup || null,
+        parentGroupName: c.parentGroup?.name || c.parentGroupName || null,
+        groupMemberships: c.groupMemberships || []
         };
     });
     
