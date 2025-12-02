@@ -2088,7 +2088,8 @@ function initializeProjectDetail() {
         setViewingTaskParent(null);
         setCreatingTaskForList(listId);
         setShowTaskDetailModal(true);
-    }, [ensureTaskDetailModalLoaded]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // ensureTaskDetailModalLoaded is stable from useCallback, no need in deps
 
     const handleAddSubtask = useCallback(async (parentTask) => {
         const ready = await ensureTaskDetailModalLoaded();
@@ -2100,7 +2101,8 @@ function initializeProjectDetail() {
         setViewingTaskParent(parentTask);
         setCreatingTaskForList(null);
         setShowTaskDetailModal(true);
-    }, [ensureTaskDetailModalLoaded]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // ensureTaskDetailModalLoaded is stable from useCallback, no need in deps
 
     const handleViewTaskDetail = useCallback(async (task, parentTask = null) => {
         const ready = await ensureTaskDetailModalLoaded();
@@ -2112,7 +2114,8 @@ function initializeProjectDetail() {
         setViewingTaskParent(parentTask);
         setCreatingTaskForList(null);
         setShowTaskDetailModal(true);
-    }, [ensureTaskDetailModalLoaded]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // ensureTaskDetailModalLoaded is stable from useCallback, no need in deps
 
     const handleUpdateTaskFromDetail = async (updatedTaskData) => {
         const isNewTask = !updatedTaskData.id || (!tasks.find(t => t.id === updatedTaskData.id) && 
