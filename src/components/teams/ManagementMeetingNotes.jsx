@@ -2926,3 +2926,1325 @@ const ManagementMeetingNotes = () => {
                             </button>
                         </div>
                         <button
+                            type="button"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleGenerateMonth();
+                            }}
+                            className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition shadow-sm hover:shadow-md font-medium"
+                            title="Generate new month from previous month"
+                        >
+                            <i className="fas fa-magic mr-1.5"></i>
+                            Generate Month
+                        </button>
+                        {currentMonthlyNotes && (
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setShowAllocationModal(true);
+                                }}
+                                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-sm hover:shadow-md font-medium"
+                            >
+                                <i className="fas fa-users mr-1.5"></i>
+                                Allocate Users
+                            </button>
+                        )}
+                        {currentMonthlyNotes && (
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleDeleteMonth();
+                                }}
+                                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition shadow-sm hover:shadow-md font-medium"
+                            >
+                                <i className="fas fa-trash mr-1.5"></i>
+                                Delete Month
+                            </button>
+                        )}
+                        {monthlyNotesList.length > 0 && (
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleDeleteAllMonths();
+                                }}
+                                className="px-4 py-2 text-sm bg-red-700 text-white rounded-lg hover:bg-red-800 transition shadow-sm hover:shadow-md font-medium"
+                            >
+                                <i className="fas fa-exclamation-triangle mr-1.5"></i>
+                                Delete All
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Month Selection Info */}
+            {selectedMonth && currentMonthlyNotes && (
+                <div className={`rounded-xl border p-4 ${isDark ? 'bg-gradient-to-r from-blue-900/40 to-blue-800/30 border-blue-700/50' : 'bg-gradient-to-r from-blue-50 to-blue-100/50 border-blue-200 shadow-sm'}`}>
+                    <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div>
+                            <h3 className={`text-base font-bold mb-1 ${isDark ? 'text-blue-100' : 'text-blue-900'}`}>
+                                <i className="fas fa-calendar-alt mr-2"></i>
+                                {formatMonth(selectedMonth)}
+                            </h3>
+                            <p className={`text-xs ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
+                                {weeks.length} {weeks.length === 1 ? 'week' : 'weeks'} available
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="date"
+                                value={newWeekStartInput}
+                                onChange={(e) => setNewWeekStartInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        handleCreateWeek(e.currentTarget.value);
+                                    }
+                                }}
+                                placeholder="YYYY-MM-DD"
+                                aria-label="Week start date"
+                                title="Pick a week start date to create notes ahead of time"
+                                className={`w-36 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition shadow-sm ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'}`}
+                            />
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleCreateWeek();
+                                }}
+                                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-sm hover:shadow-md font-medium"
+                            >
+                                <i className="fas fa-plus mr-1.5"></i>
+                                Add Week
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Action Items Summary */}
+            {false && selectedMonth && currentMonthlyNotes && allActionItems.length > 0 && (
+                <div className={`rounded-xl border p-5 ${isDark ? 'bg-slate-800 border-slate-700 shadow-lg' : 'bg-white border-gray-200 shadow-md'}`}>
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className={`text-base font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                            <i className="fas fa-tasks mr-2 text-primary-600"></i>
+                            Action Items Summary
+                        </h3>
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setEditingActionItem({ monthlyNotesId: currentMonthlyNotes.id });
+                                setShowActionItemModal(true);
+                            }}
+                            className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition shadow-sm hover:shadow-md font-medium"
+                        >
+                            <i className="fas fa-plus mr-1.5"></i>
+                            Add Action Item
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                        <div className={`rounded-lg p-4 border transition hover:scale-105 ${isDark ? 'bg-gradient-to-br from-orange-900/30 to-orange-800/20 border-orange-700/50' : 'bg-gradient-to-br from-orange-50 to-orange-100/50 border-orange-200'}`}>
+                            <p className={`text-xs mb-2 font-medium uppercase tracking-wide ${isDark ? 'text-orange-300' : 'text-orange-700'}`}>Open</p>
+                            <p className={`text-3xl font-bold ${isDark ? 'text-orange-200' : 'text-orange-900'}`}>{actionItemsByStatus.open.length}</p>
+                        </div>
+                        <div className={`rounded-lg p-4 border transition hover:scale-105 ${isDark ? 'bg-gradient-to-br from-blue-900/30 to-blue-800/20 border-blue-700/50' : 'bg-gradient-to-br from-blue-50 to-blue-100/50 border-blue-200'}`}>
+                            <p className={`text-xs mb-2 font-medium uppercase tracking-wide ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>In Progress</p>
+                            <p className={`text-3xl font-bold ${isDark ? 'text-blue-200' : 'text-blue-900'}`}>{actionItemsByStatus.in_progress.length}</p>
+                        </div>
+                        <div className={`rounded-lg p-4 border transition hover:scale-105 ${isDark ? 'bg-gradient-to-br from-green-900/30 to-green-800/20 border-green-700/50' : 'bg-gradient-to-br from-green-50 to-green-100/50 border-green-200'}`}>
+                            <p className={`text-xs mb-2 font-medium uppercase tracking-wide ${isDark ? 'text-green-300' : 'text-green-700'}`}>Completed</p>
+                            <p className={`text-3xl font-bold ${isDark ? 'text-green-200' : 'text-green-900'}`}>{actionItemsByStatus.completed.length}</p>
+                        </div>
+                        <div className={`rounded-lg p-4 border transition hover:scale-105 ${isDark ? 'bg-gradient-to-br from-slate-700 to-slate-800 border-slate-600' : 'bg-gradient-to-br from-gray-100 to-gray-50 border-gray-300'}`}>
+                            <p className={`text-xs mb-2 font-medium uppercase tracking-wide ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Total</p>
+                            <p className={`text-3xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{allActionItems.length}</p>
+                        </div>
+                    </div>
+                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                        {allActionItems.slice(0, 10).map((item) => (
+                            <div key={item.id} className={`flex items-center justify-between p-3 rounded-lg border transition hover:shadow-sm ${isDark ? 'bg-slate-700/50 border-slate-600 hover:bg-slate-700' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}`}>
+                                <div className="flex-1 min-w-0">
+                                    <p className={`text-sm font-medium mb-1 truncate ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{item.title}</p>
+                                    <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                                        {item.assignedUser ? getUserName(item.assignedUserId) : 'Unassigned'} • <span className="capitalize">{item.status}</span>
+                                    </p>
+                                </div>
+                                <div className="flex gap-2 ml-3">
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            setEditingActionItem(item);
+                                            setShowActionItemModal(true);
+                                        }}
+                                        className={`p-2 rounded-lg transition ${isDark ? 'text-slate-400 hover:text-primary-400 hover:bg-primary-900/30' : 'text-gray-400 hover:text-primary-600 hover:bg-primary-50'}`}
+                                        title="Edit"
+                                    >
+                                        <i className="fas fa-edit text-sm"></i>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            handleDeleteActionItem(item.id);
+                                        }}
+                                        className={`p-2 rounded-lg transition ${isDark ? 'text-slate-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`}
+                                        title="Delete"
+                                    >
+                                        <i className="fas fa-trash text-sm"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Weekly Notes Section */}
+            {selectedMonth && currentMonthlyNotes && weeks.length > 0 && (
+                <div className="space-y-5">
+                    <div className={`rounded-xl border p-4 ${isDark ? 'bg-slate-800/60 border-slate-700 shadow-md' : 'bg-gradient-to-br from-slate-50 to-slate-100/50 border-slate-200 shadow-sm'}`}>
+                        <div className="flex items-start justify-between gap-3 flex-wrap mb-4">
+                            <div>
+                                <p className={`text-sm font-bold uppercase tracking-wide mb-2 ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+                                    <i className="fas fa-calendar-week mr-2 text-primary-600"></i>
+                                    Week Navigation
+                                </p>
+                                <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                                    Focus on the current week alongside next week while keeping earlier updates a swipe away. Scroll horizontally to move between weeks in the month.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="overflow-x-auto -mx-1">
+                            <div className="flex gap-3 px-1 pb-2">
+                                {weeks.map((week, index) => {
+                                    const rawId = getWeekIdentifier(week);
+                                    const identifier = rawId || `week-${index}`;
+                                    const isActualCurrentWeek = identifier === currentWeekId;
+                                    const isActualNextWeek = identifier === nextWeekId;
+                                    const isSelected = identifier === selectedWeek;
+                                const label = 'Week Overview';
+                                    return (
+                                        <button
+                                            key={identifier}
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setSelectedWeek(identifier);
+                                                scrollToWeekId(identifier);
+                                                // Update URL with week parameter
+                                                const url = new URL(window.location);
+                                                url.searchParams.set('week', identifier);
+                                                window.history.pushState({ week: identifier, month: selectedMonth, tab: 'meeting-notes' }, '', url);
+                                            }}
+                                            className={`relative whitespace-nowrap px-4 py-3 rounded-xl border text-xs font-medium transition-all duration-200 shadow-sm hover:shadow-md hover:scale-105 ${
+                                                isActualCurrentWeek
+                                                    ? isDark
+                                                        ? 'bg-gradient-to-br from-primary-600/30 to-primary-700/20 border-primary-400 text-primary-100 shadow-primary-900/40'
+                                                        : 'bg-gradient-to-br from-primary-50 to-primary-100/50 border-primary-500 text-primary-800 shadow-primary-200/50'
+                                                    : isActualNextWeek
+                                                        ? isDark
+                                                            ? 'bg-gradient-to-br from-amber-500/30 to-amber-600/20 border-amber-400 text-amber-100 shadow-amber-900/30'
+                                                            : 'bg-gradient-to-br from-amber-50 to-amber-100/50 border-amber-400 text-amber-800 shadow-amber-200/50'
+                                                        : isSelected
+                                                            ? isDark
+                                                                ? 'bg-slate-700 border-slate-500 text-slate-200 shadow-slate-900/30'
+                                                                : 'bg-slate-100 border-slate-400 text-slate-800 shadow-slate-200/40'
+                                                            : isDark
+                                                                ? 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-500 hover:text-slate-200 hover:bg-slate-750'
+                                                                : 'bg-white border-slate-300 text-slate-700 hover:border-slate-400 hover:text-slate-800 hover:bg-slate-50'
+                                            }`}
+                                        >
+                                            <span className="block text-[10px] uppercase tracking-wider font-bold mb-1">
+                                                {label}
+                                            </span>
+                                            <span className="block text-sm font-bold">
+                                                {formatWeek(week.weekKey, week.weekStart)}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="overflow-x-auto pb-2">
+                        {/* Grid layout: Departments as rows, Weeks as columns for perfect alignment */}
+                        <div 
+                            className="inline-grid gap-4"
+                            style={{
+                                gridTemplateColumns: `repeat(${weeks.length}, minmax(520px, 560px))`,
+                                gridTemplateRows: `auto repeat(${DEPARTMENTS.length}, minmax(200px, max-content))`,
+                                alignItems: 'stretch', // Stretch items to fill row height - ensures Compliance aligns with Management
+                                gridAutoFlow: 'row' // Ensure items flow row by row
+                            }}
+                        >
+                            {/* Week headers row */}
+                            {weeks.map((week, index) => {
+                                const rawId = getWeekIdentifier(week);
+                                const identifier = rawId || `week-${index}`;
+                                const isActualCurrentWeek = identifier === currentWeekId;
+                                const isActualNextWeek = identifier === nextWeekId;
+                                const isSelected = identifier === selectedWeek;
+                                const summary = getWeekSummaryStats(week);
+
+                                return (
+                                    <div
+                                        key={`header-${identifier}`}
+                                        ref={(node) => {
+                                            if (!weekCardRefs.current) {
+                                                weekCardRefs.current = {};
+                                            }
+                                            if (node && index === 0) {
+                                                weekCardRefs.current[identifier] = node;
+                                            }
+                                        }}
+                                        style={{
+                                            gridRow: '1',
+                                            gridColumn: `${index + 1}`
+                                        }}
+                                        className={`rounded-xl border-2 p-5 transition-all duration-300 ${
+                                            isActualCurrentWeek
+                                                ? isDark
+                                                    ? 'border-primary-400 shadow-xl shadow-primary-900/50 bg-gradient-to-br from-slate-800 to-slate-900'
+                                                    : 'border-primary-500 shadow-xl shadow-primary-200/60 bg-gradient-to-br from-white to-primary-50/30'
+                                                : isActualNextWeek
+                                                    ? isDark
+                                                        ? 'border-amber-400 shadow-lg shadow-amber-900/40 bg-gradient-to-br from-slate-800 to-slate-900'
+                                                        : 'border-amber-400 shadow-lg shadow-amber-100/60 bg-gradient-to-br from-white to-amber-50/30'
+                                                    : isSelected
+                                                        ? isDark
+                                                            ? 'border-slate-500 shadow-lg shadow-slate-900/30 bg-gradient-to-br from-slate-800 to-slate-900'
+                                                            : 'border-slate-400 shadow-lg shadow-slate-200/50 bg-gradient-to-br from-white to-slate-50'
+                                                        : isDark
+                                                            ? 'border-slate-700 bg-slate-800 hover:border-slate-600 hover:shadow-md'
+                                                            : 'border-gray-300 bg-white hover:border-gray-400 hover:shadow-md'
+                                        }`}
+                                    >
+                                            <div className="flex items-start justify-between gap-3 mb-4">
+                                                <div className="flex-1">
+                                                    <p className={`text-xs uppercase tracking-wider font-bold mb-1 ${isActualCurrentWeek ? (isDark ? 'text-primary-300' : 'text-primary-600') : isActualNextWeek ? (isDark ? 'text-amber-300' : 'text-amber-600') : isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                                        Week Overview
+                                                    </p>
+                                                    <h3 className={`text-base font-bold flex items-center ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                                                        <i className={`fas fa-calendar-week mr-2 ${isActualCurrentWeek ? 'text-primary-500' : isActualNextWeek ? 'text-amber-500' : 'text-slate-500'}`}></i>
+                                                        {formatWeek(week.weekKey, week.weekStart)}
+                                                    </h3>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    {!isSelected && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                setSelectedWeek(identifier);
+                                                                scrollToWeekId(identifier);
+                                                                const url = new URL(window.location);
+                                                                url.searchParams.set('week', identifier);
+                                                                window.history.pushState({ week: identifier, month: selectedMonth, tab: 'meeting-notes' }, '', url);
+                                                            }}
+                                                            className={`text-xs px-3 py-1.5 rounded-lg font-medium transition shadow-sm hover:shadow-md ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                        >
+                                                            <i className="fas fa-crosshairs mr-1"></i>
+                                                            Focus
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            handleDeleteWeek(week);
+                                                        }}
+                                                        className={`text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition shadow-sm hover:shadow-md ${isDark ? 'bg-red-900/50 text-red-200 hover:bg-red-800/50 border border-red-700' : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'}`}
+                                                    >
+                                                        <i className="fas fa-trash"></i>
+                                                        Delete
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-3 gap-3">
+                                                <div className={`rounded-lg border p-3 transition hover:scale-105 ${isDark ? 'border-slate-600 bg-slate-900/40 text-slate-200' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
+                                                    <p className="text-[10px] uppercase tracking-wide font-medium mb-1">Departments</p>
+                                                    <p className="text-lg font-bold">{summary.departmentCount}</p>
+                                                </div>
+                                                <div className={`rounded-lg border p-3 transition hover:scale-105 ${isDark ? 'border-slate-600 bg-slate-900/40 text-slate-200' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
+                                                    <p className="text-[10px] uppercase tracking-wide font-medium mb-1">Action Items</p>
+                                                    <p className="text-lg font-bold">{summary.totalActionItems}</p>
+                                                </div>
+                                                <div className={`rounded-lg border p-3 transition hover:scale-105 ${isDark ? 'border-slate-600 bg-slate-900/40 text-slate-200' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
+                                                    <p className="text-[10px] uppercase tracking-wide font-medium mb-1">Comments</p>
+                                                    <p className="text-lg font-bold">{summary.totalComments}</p>
+                                                </div>
+                                            </div>
+                                    </div>
+                                );
+                            })}
+                            
+                            {/* Department rows - each department spans all weeks */}
+                            {DEPARTMENTS.map((dept, deptIndex) => {
+                                return weeks.map((week, weekIndex) => {
+                                    const rawId = getWeekIdentifier(week);
+                                    const identifier = rawId || `week-${weekIndex}`;
+                                    const deptNote = week.departmentNotes?.find(
+                                        (dn) => dn.departmentId === dept.id
+                                    );
+
+                                    return (
+                                        <div
+                                            key={`${dept.id}-${identifier}`}
+                                            className={`rounded-xl border-2 p-4 transition-all duration-200 h-full flex flex-col hover:shadow-md ${
+                                                !deptNote 
+                                                    ? `border-dashed opacity-60 ${isDark ? 'border-slate-600 bg-slate-800/50' : 'border-gray-300 bg-gray-50/50'}`
+                                                    : `${isDark ? 'border-slate-700 bg-slate-800 hover:border-slate-600' : 'border-gray-300 bg-white hover:border-gray-400'}`
+                                            }`}
+                                            style={{ 
+                                                minHeight: '200px',
+                                                gridRow: `${deptIndex + 2}`, // +2 because row 1 is headers
+                                                gridColumn: `${weekIndex + 1}` // +1 because columns start at 1
+                                            }}
+                                        >
+                                            {!deptNote ? (
+                                                <>
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <h4 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? `text-${dept.color}-300` : `text-${dept.color}-700`}`}>
+                                                            <i className={`fas ${dept.icon} ${isDark ? `text-${dept.color}-400` : `text-${dept.color}-600`}`}></i>
+                                                            {dept.name}
+                                                        </h4>
+                                                        <div className="flex gap-2">
+                                                            {currentMonthlyNotes.userAllocations?.filter((a) => a.departmentId === dept.id).length > 0 && (
+                                                                <div className="flex gap-1">
+                                                                    {currentMonthlyNotes.userAllocations
+                                                                        .filter((a) => a.departmentId === dept.id)
+                                                                        .map((allocation) => (
+                                                                            <span key={allocation.id} className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-gray-100 text-gray-700'}`}>
+                                                                                {getUserName(allocation.userId)}
+                                                                            </span>
+                                                                        ))}
+                                                                </div>
+                                                            )}
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                    setSelectedDepartment(dept.id);
+                                                                    setShowAllocationModal(true);
+                                                                }}
+                                                                className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                                title="Allocate users"
+                                                            >
+                                                                <i className="fas fa-user-plus"></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div className={`text-center py-4 ${isDark ? 'text-slate-400' : 'text-gray-400'}`}>
+                                                        <p className="text-xs">No notes for this department yet</p>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <h4 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? `text-${dept.color}-300` : `text-${dept.color}-700`}`}>
+                                                            <i className={`fas ${dept.icon} ${isDark ? `text-${dept.color}-400` : `text-${dept.color}-600`}`}></i>
+                                                            {dept.name}
+                                                        </h4>
+                                                        <div className="flex gap-2">
+                                                            {currentMonthlyNotes.userAllocations?.filter((a) => a.departmentId === dept.id).length > 0 && (
+                                                                <div className="flex gap-1">
+                                                                    {currentMonthlyNotes.userAllocations
+                                                                        .filter((a) => a.departmentId === dept.id)
+                                                                        .map((allocation) => (
+                                                                            <span key={allocation.id} className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-gray-100 text-gray-700'}`}>
+                                                                                {getUserName(allocation.userId)}
+                                                                            </span>
+                                                                        ))}
+                                                                </div>
+                                                            )}
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                    setSelectedDepartment(dept.id);
+                                                                    setShowAllocationModal(true);
+                                                                }}
+                                                                className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                                title="Allocate users"
+                                                            >
+                                                                <i className="fas fa-user-plus"></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <div className="space-y-3 flex-grow">
+                                                        {/* Successes */}
+                                                        <div>
+                                                            <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                                                    Last Week's Successes
+                                                                </label>
+                                                            {window.RichTextEditor ? (
+                                                                <window.RichTextEditor
+                                                                    value={deptNote.successes || ''}
+                                                                    onChange={(html) => handleFieldChange(deptNote.id, 'successes', html)}
+                                                                    onBlur={(html) => handleFieldBlur(deptNote.id, 'successes', html)}
+                                                                    onFocus={() => {
+                                                                        // Preserve scroll position when focusing RichTextEditor
+                                                                        const currentScroll = window.scrollY || window.pageYOffset;
+                                                                        requestAnimationFrame(() => {
+                                                                            window.scrollTo(0, currentScroll);
+                                                                            setTimeout(() => {
+                                                                                window.scrollTo(0, currentScroll);
+                                                                            }, 0);
+                                                                            setTimeout(() => {
+                                                                                window.scrollTo(0, currentScroll);
+                                                                            }, 50);
+                                                                        });
+                                                                    }}
+                                placeholder="What went well during the week? (Use formatting toolbar for bullets, bold, etc.)"
+                                                                    rows={4}
+                                                                    isDark={isDark}
+                                                                />
+                                                            ) : (
+                                                                <textarea
+                                                                    value={deptNote.successes || ''}
+                                                                    onChange={(e) => handleFieldChange(deptNote.id, 'successes', e.target.value)}
+                                                                    onBlur={(e) => handleFieldBlur(deptNote.id, 'successes', e.target.value)}
+                                                                    onFocus={(e) => {
+                                                                        // Preserve scroll position when focusing
+                                                                        e.preventDefault();
+                                                                        const currentScroll = window.scrollY || window.pageYOffset;
+                                                                        // Use multiple restoration attempts
+                                                                        requestAnimationFrame(() => {
+                                                                            window.scrollTo(0, currentScroll);
+                                                                            setTimeout(() => {
+                                                                                window.scrollTo(0, currentScroll);
+                                                                            }, 0);
+                                                                            setTimeout(() => {
+                                                                                window.scrollTo(0, currentScroll);
+                                                                            }, 50);
+                                                                        });
+                                                                    }}
+                                                                    onClick={(e) => {
+                                                                        // Preserve scroll position when clicking
+                                                                        const currentScroll = window.scrollY || window.pageYOffset;
+                                                                        requestAnimationFrame(() => {
+                                                                            window.scrollTo(0, currentScroll);
+                                                                        });
+                                                                    }}
+                                                                    placeholder="What went well during the week?"
+                                                                    className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                                                    rows={4}
+                                                                    data-dept-note-id={deptNote.id}
+                                                                    data-field="successes"
+                                                                />
+                                                            )}
+                                                        </div>
+
+                                                        {/* Week to Follow */}
+                                                        <div>
+                                                            <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                                                    Weekly Plan
+                                                                </label>
+                                                            {window.RichTextEditor ? (
+                                                                <window.RichTextEditor
+                                                                    value={deptNote.weekToFollow || ''}
+                                                                    onChange={(html) => handleFieldChange(deptNote.id, 'weekToFollow', html)}
+                                                                    onBlur={(html) => handleFieldBlur(deptNote.id, 'weekToFollow', html)}
+                                                                    placeholder="What's planned for the upcoming week? (Use formatting toolbar for bullets, bold, etc.)"
+                                                                    rows={4}
+                                                                    isDark={isDark}
+                                                                />
+                                                            ) : (
+                                                                <textarea
+                                                                    value={deptNote.weekToFollow || ''}
+                                                                    onChange={(e) => handleFieldChange(deptNote.id, 'weekToFollow', e.target.value)}
+                                                                    onBlur={(e) => handleFieldBlur(deptNote.id, 'weekToFollow', e.target.value)}
+                                                                    onFocus={(e) => {
+                                                                        // Preserve scroll position when focusing
+                                                                        e.preventDefault();
+                                                                        const currentScroll = window.scrollY || window.pageYOffset;
+                                                                        // Use multiple restoration attempts
+                                                                        requestAnimationFrame(() => {
+                                                                            window.scrollTo(0, currentScroll);
+                                                                            setTimeout(() => {
+                                                                                window.scrollTo(0, currentScroll);
+                                                                            }, 0);
+                                                                            setTimeout(() => {
+                                                                                window.scrollTo(0, currentScroll);
+                                                                            }, 50);
+                                                                        });
+                                                                    }}
+                                                                    onClick={(e) => {
+                                                                        // Preserve scroll position when clicking
+                                                                        const currentScroll = window.scrollY || window.pageYOffset;
+                                                                        requestAnimationFrame(() => {
+                                                                            window.scrollTo(0, currentScroll);
+                                                                        });
+                                                                    }}
+                                                                    placeholder="What's planned for the upcoming week?"
+                                                                    className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                                                    rows={4}
+                                                                    data-dept-note-id={deptNote.id}
+                                                                    data-field="weekToFollow"
+                                                                />
+                                                            )}
+                                                        </div>
+
+                                                        {/* Frustrations */}
+                                                        <div>
+                                                            <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                                                    Frustrations/Challenges
+                                                                </label>
+                                                            {window.RichTextEditor ? (
+                                                                <window.RichTextEditor
+                                                                    value={deptNote.frustrations || ''}
+                                                                    onChange={(html) => handleFieldChange(deptNote.id, 'frustrations', html)}
+                                                                    onBlur={(html) => handleFieldBlur(deptNote.id, 'frustrations', html)}
+                                                                    placeholder="What challenges or blockers are we facing? (Use formatting toolbar for bullets, bold, etc.)"
+                                                                    rows={4}
+                                                                    isDark={isDark}
+                                                                />
+                                                            ) : (
+                                                                <textarea
+                                                                    value={deptNote.frustrations || ''}
+                                                                    onChange={(e) => handleFieldChange(deptNote.id, 'frustrations', e.target.value)}
+                                                                    onBlur={(e) => handleFieldBlur(deptNote.id, 'frustrations', e.target.value)}
+                                                                    onFocus={(e) => {
+                                                                        // Preserve scroll position when focusing
+                                                                        e.preventDefault();
+                                                                        const currentScroll = window.scrollY || window.pageYOffset;
+                                                                        // Use multiple restoration attempts
+                                                                        requestAnimationFrame(() => {
+                                                                            window.scrollTo(0, currentScroll);
+                                                                            setTimeout(() => {
+                                                                                window.scrollTo(0, currentScroll);
+                                                                            }, 0);
+                                                                            setTimeout(() => {
+                                                                                window.scrollTo(0, currentScroll);
+                                                                            }, 50);
+                                                                        });
+                                                                    }}
+                                                                    onClick={(e) => {
+                                                                        // Preserve scroll position when clicking
+                                                                        const currentScroll = window.scrollY || window.pageYOffset;
+                                                                        requestAnimationFrame(() => {
+                                                                            window.scrollTo(0, currentScroll);
+                                                                        });
+                                                                    }}
+                                                                    placeholder="What challenges or blockers are we facing?"
+                                                                    className={`w-full min-h-[80px] p-2 text-xs border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                                                    rows={4}
+                                                                    data-dept-note-id={deptNote.id}
+                                                                    data-field="frustrations"
+                                                                />
+                                                            )}
+                                                        </div>
+
+                                                        {/* Action Items */}
+                                                        {deptNote.actionItems && deptNote.actionItems.length > 0 && (
+                                                            <div>
+                                                                <label className={`block text-xs font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                                                    Action Items
+                                                                </label>
+                                                                <div className="space-y-2">
+                                                                    {deptNote.actionItems.map((item) => (
+                                                                        <div key={item.id} className={`flex items-center justify-between p-2 rounded transition-all duration-200 ${isDark ? 'bg-slate-700' : 'bg-gray-50'}`}>
+                                                                            <div className="flex-1">
+                                                                                <p className={`text-xs font-medium ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{item.title}</p>
+                                                                                {item.description && (
+                                                                                    <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>{item.description}</p>
+                                                                                )}
+                                                                            </div>
+                                                                            <div className="flex gap-1">
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={(e) => {
+                                                                                        e.preventDefault();
+                                                                                        e.stopPropagation();
+                                                                                        setEditingActionItem(item);
+                                                                                        setShowActionItemModal(true);
+                                                                                    }}
+                                                                                    className={`p-1 rounded transition ${isDark ? 'text-slate-400 hover:text-primary-400 hover:bg-primary-900/30' : 'text-gray-400 hover:text-primary-600 hover:bg-primary-50'}`}
+                                                                                    title="Edit action item"
+                                                                                >
+                                                                                    <i className="fas fa-edit text-xs"></i>
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={(e) => {
+                                                                                        e.preventDefault();
+                                                                                        e.stopPropagation();
+                                                                                        handleDeleteActionItem(item.id);
+                                                                                    }}
+                                                                                    className={`p-1 rounded transition ${isDark ? 'text-slate-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`}
+                                                                                    title="Delete action item"
+                                                                                >
+                                                                                    <i className="fas fa-trash text-xs"></i>
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Comments */}
+                                                        {deptNote.comments && deptNote.comments.length > 0 && (
+                                                            <div>
+                                                                <label className={`block text-xs font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                                                    Comments
+                                                                </label>
+                                                                <div className="space-y-2">
+                                                                    {deptNote.comments.map((comment) => {
+                                                                        let displayContent = comment.content || '';
+                                                                        if (window.MentionHelper && displayContent) {
+                                                                            displayContent = window.MentionHelper.highlightMentions(displayContent, isDark);
+                                                                        }
+                                                                        
+                                                                        return (
+                                                                            <div key={comment.id} className={`p-3 rounded-lg border transition-all duration-200 hover:shadow-sm ${isDark ? 'bg-slate-700 border-slate-600' : 'bg-gray-50 border-gray-200'}`}>
+                                                                                <div className="flex items-start justify-between gap-2">
+                                                                                    <div className="flex-1 min-w-0">
+                                                                                        <p 
+                                                                                            className={`text-xs ${isDark ? 'text-slate-100' : 'text-gray-900'}`}
+                                                                                            dangerouslySetInnerHTML={{ __html: displayContent }}
+                                                                                        />
+                                                                                        <p className={`text-xs mt-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                                                                                            {comment.author ? (comment.author.name || comment.author.email) : 'Unknown'} • {new Date(comment.createdAt).toLocaleDateString()}
+                                                                                        </p>
+                                                                                    </div>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={(e) => {
+                                                                                            e.preventDefault();
+                                                                                            e.stopPropagation();
+                                                                                            handleDeleteComment(comment.id);
+                                                                                        }}
+                                                                                        className={`p-1.5 rounded-lg transition flex-shrink-0 ${isDark ? 'text-slate-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`}
+                                                                                        title="Delete comment"
+                                                                                    >
+                                                                                        <i className="fas fa-trash text-xs"></i>
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Add Comment Button */}
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                setCommentContext({ 
+                                                                    type: 'department', 
+                                                                    id: deptNote.id,
+                                                                    departmentId: deptNote.departmentId,
+                                                                    title: `${DEPARTMENTS.find(d => d.id === deptNote.departmentId)?.name || 'Department'} Weekly Notes`
+                                                                });
+                                                                setShowCommentModal(true);
+                                                            }}
+                                                            className={`w-full text-xs px-3 py-2 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                        >
+                                                            <i className="fas fa-comment mr-1"></i>
+                                                            Add Comment
+                                                        </button>
+
+                                                        {/* Add Action Item Button */}
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                setEditingActionItem({ 
+                                                                    monthlyNotesId: currentMonthlyNotes?.id,
+                                                                    weeklyNotesId: week.id, 
+                                                                    departmentNotesId: deptNote.id 
+                                                                });
+                                                                setShowActionItemModal(true);
+                                                            }}
+                                                            className={`w-full text-xs px-3 py-2 rounded ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                                        >
+                                                            <i className="fas fa-plus mr-1"></i>
+                                                            Add Action Item
+                                                        </button>
+
+                                                        {/* Save Button */}
+                                                        <button
+                                                            type="button"
+                                                            disabled={saving || loading}
+                                                            onClick={async (e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                console.log('💾 Save button clicked for department:', deptNote.id);
+                                                                
+                                                                // CRITICAL: Preserve button reference and scroll position before save
+                                                                const buttonElement = e.currentTarget;
+                                                                const currentScrollPosition = window.scrollY || window.pageYOffset;
+                                                                
+                                                                await handleSaveDepartment(deptNote.id, e);
+                                                                
+                                                                // CRITICAL: Restore focus and scroll position after save to prevent jump
+                                                                // This prevents the browser from scrolling to top when button loses focus
+                                                                requestAnimationFrame(() => {
+                                                                    if (buttonElement && document.body.contains(buttonElement)) {
+                                                                        buttonElement.focus({ preventScroll: true });
+                                                                    }
+                                                                    window.scrollTo({ top: currentScrollPosition, behavior: 'instant' });
+                                                                });
+                                                                
+                                                                setTimeout(() => {
+                                                                    window.scrollTo({ top: currentScrollPosition, behavior: 'instant' });
+                                                                }, 0);
+                                                            }}
+                                                            className={`w-full text-xs px-3 py-2 rounded font-medium transition ${saving || loading ? 'opacity-50 cursor-not-allowed' : ''} ${isDark ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
+                                                        >
+                                                            <i className={`fas ${saving ? 'fa-spinner fa-spin' : 'fa-save'} mr-1`}></i>
+                                                            {saving ? 'Saving...' : 'Save'}
+                                                        </button>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    );
+                                });
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Empty State */}
+            {selectedMonth && !currentMonthlyNotes && (
+                <div className={`rounded-lg border p-8 text-center ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                    <i className={`fas fa-clipboard-list text-4xl mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}></i>
+                    <p className={`text-sm mb-4 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                        No meeting notes for {formatMonth(selectedMonth)} yet.
+                    </p>
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleCreateMonth();
+                        }}
+                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-xs"
+                    >
+                        Create Month Notes
+                    </button>
+                </div>
+            )}
+
+            {!selectedMonth && (
+                <div className={`rounded-lg border p-8 text-center ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                    <i className={`fas fa-calendar text-4xl mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}></i>
+                    <p className={`text-sm mb-4 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                        Select a month to view or create meeting notes.
+                    </p>
+                </div>
+            )}
+
+            {/* User Allocation Modal */}
+            {showAllocationModal && currentMonthlyNotes && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className={`rounded-lg border p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className={`text-lg font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                                Allocate Users to Departments
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setShowAllocationModal(false);
+                                }}
+                                className={`p-1 ${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-gray-400 hover:text-gray-600'}`}
+                            >
+                                <i className="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div className="space-y-4">
+                            {DEPARTMENTS.map(dept => {
+                                                        const allocations = currentMonthlyNotes.userAllocations?.filter(
+                                    a => a.departmentId === dept.id
+                                                        ) || [];
+                                                        return (
+                                                            <div key={dept.id} className={`border rounded-lg p-3 ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
+                                        <h4 className={`text-sm font-semibold mb-2 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{dept.name}</h4>
+                                        <div className="space-y-2">
+                                            {allocations.map(allocation => (
+                                                <div key={allocation.id} className="flex items-center justify-between">
+                                                    <span className={`text-xs ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                                                        {getUserName(allocation.userId)} ({allocation.role})
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            handleDeleteAllocation(dept.id, allocation.userId);
+                                                        }}
+                                                        className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-red-900 text-red-200 hover:bg-red-800' : 'bg-red-100 text-red-700 hover:bg-red-200'}`}
+                                                    >
+                                                        Remove
+                                                    </button>
+                                                </div>
+                                            ))}
+                                            <select
+                                                onChange={(e) => {
+                                                    if (e.target.value) {
+                                                        handleUpdateAllocation(dept.id, e.target.value, 'contributor');
+                                                        e.target.value = '';
+                                                    }
+                                                }}
+                                                className={`w-full text-xs px-2 py-1 border rounded ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                                            >
+                                                <option value="">Add user...</option>
+                                                {users.filter(u => !allocations.find(a => a.userId === u.id)).map(user => (
+                                                    <option key={user.id} value={user.id}>{user.name || user.email}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Action Item Modal */}
+            {showActionItemModal && currentMonthlyNotes && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className={`rounded-lg border p-6 max-w-lg w-full ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className={`text-lg font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                                {editingActionItem ? 'Edit Action Item' : 'Add Action Item'}
+                            </h3>
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const currentScrollPosition = window.scrollY || window.pageYOffset;
+                                    setShowActionItemModal(false);
+                                    setEditingActionItem(null);
+                                    requestAnimationFrame(() => {
+                                        window.scrollTo(0, currentScrollPosition);
+                                    });
+                                }}
+                                className={`p-1 ${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-gray-400 hover:text-gray-600'}`}
+                            >
+                                <i className="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <ActionItemForm
+                            actionItem={editingActionItem}
+                            monthlyNotesId={currentMonthlyNotes.id}
+                            users={users}
+                            isDark={isDark}
+                            onSave={handleSaveActionItem}
+                            onCancel={() => {
+                                setShowActionItemModal(false);
+                                setEditingActionItem(null);
+                            }}
+                        />
+                    </div>
+                </div>
+            )}
+
+            {/* Comment Modal */}
+            {showCommentModal && commentContext && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className={`rounded-lg border p-6 max-w-lg w-full ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className={`text-lg font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Add Comment</h3>
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const currentScrollPosition = window.scrollY || window.pageYOffset;
+                                    setShowCommentModal(false);
+                                    setCommentContext(null);
+                                    requestAnimationFrame(() => {
+                                        window.scrollTo(0, currentScrollPosition);
+                                    });
+                                }}
+                                className={`p-1 ${isDark ? 'text-slate-400 hover:text-slate-200' : 'text-gray-400 hover:text-gray-600'}`}
+                            >
+                                <i className="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <CommentForm
+                            isDark={isDark}
+                            commentContext={commentContext}
+                            users={users}
+                            onSubmit={handleCreateComment}
+                            onCreateActionItem={(actionItemData) => {
+                                // Close comment modal and open action item modal
+                                setShowCommentModal(false);
+                                setCommentContext(null);
+                                
+                                // Merge action item data with comment context
+                                const newActionItem = {
+                                    ...actionItemData,
+                                    monthlyNotesId: currentMonthlyNotes?.id,
+                                    weeklyNotesId: commentContext.type === 'department' ? selectedWeek : null,
+                                    departmentNotesId: commentContext.type === 'department' ? commentContext.id : null
+                                };
+                                
+                                setEditingActionItem(newActionItem);
+                                setShowActionItemModal(true);
+                            }}
+                            onCancel={() => {
+                                setShowCommentModal(false);
+                                setCommentContext(null);
+                            }}
+                        />
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// Action Item Form Component with rich text support
+const ActionItemForm = ({ actionItem, monthlyNotesId, users, isDark, onSave, onCancel }) => {
+    const [title, setTitle] = useState(actionItem?.title || '');
+    const [description, setDescription] = useState(actionItem?.description || '');
+    const [status, setStatus] = useState(actionItem?.status || 'open');
+    const [priority, setPriority] = useState(actionItem?.priority || 'medium');
+    const [assignedUserId, setAssignedUserId] = useState(actionItem?.assignedUserId || '');
+    const [dueDate, setDueDate] = useState(actionItem?.dueDate ? new Date(actionItem.dueDate).toISOString().split('T')[0] : '');
+
+    // Handle initial values from comment
+    useEffect(() => {
+        if (actionItem?.fromComment && actionItem?.title && actionItem?.description) {
+            setTitle(actionItem.title);
+            setDescription(actionItem.description);
+        }
+    }, [actionItem]);
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // Preserve scroll position before save
+        const currentScrollPosition = window.scrollY || window.pageYOffset;
+        onSave({
+            monthlyNotesId: actionItem?.monthlyNotesId || monthlyNotesId,
+            weeklyNotesId: actionItem?.weeklyNotesId || null,
+            departmentNotesId: actionItem?.departmentNotesId || null,
+            title,
+            description,
+            status,
+            priority,
+            assignedUserId: assignedUserId || null,
+            dueDate: dueDate || null
+        });
+        // Immediately restore scroll position
+        requestAnimationFrame(() => {
+            window.scrollTo({ top: currentScrollPosition, behavior: 'instant' });
+        });
+        setTimeout(() => {
+            window.scrollTo({ top: currentScrollPosition, behavior: 'instant' });
+        }, 0);
+    };
+
+    const RichTextEditor = window.RichTextEditor || null;
+
+    return (
+        <form onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); handleSubmit(e); }} className="space-y-4">
+            <div>
+                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Title *</label>
+                <input
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    required
+                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                />
+            </div>
+            <div>
+                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                    Description <span className="text-xs opacity-70">(supports rich text formatting)</span>
+                </label>
+                {RichTextEditor ? (
+                    <RichTextEditor
+                        value={description}
+                        onChange={(html) => setDescription(html)}
+                        placeholder="Enter description with formatting (bold, bullets, etc.)"
+                        rows={4}
+                        isDark={isDark}
+                    />
+                ) : (
+                    <textarea
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                        rows="4"
+                        placeholder="Enter description..."
+                    />
+                )}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Status</label>
+                    <select
+                        value={status}
+                        onChange={(e) => setStatus(e.target.value)}
+                        className={`w-full px-3 py-2 text-sm border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                    >
+                        <option value="open">Open</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <div>
+                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Priority</label>
+                    <select
+                        value={priority}
+                        onChange={(e) => setPriority(e.target.value)}
+                        className={`w-full px-3 py-2 text-sm border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                    >
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                    </select>
+                </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Assigned To</label>
+                    <select
+                        value={assignedUserId}
+                        onChange={(e) => setAssignedUserId(e.target.value)}
+                        className={`w-full px-3 py-2 text-sm border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                    >
+                        <option value="">Unassigned</option>
+                        {users.map(user => (
+                            <option key={user.id} value={user.id}>{user.name || user.email}</option>
+                        ))}
+                    </select>
+                </div>
+                <div>
+                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Due Date</label>
+                    <input
+                        type="date"
+                        value={dueDate}
+                        onChange={(e) => setDueDate(e.target.value)}
+                        className={`w-full px-3 py-2 text-sm border rounded-lg ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                    />
+                </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const currentScrollPosition = window.scrollY || window.pageYOffset;
+                        onCancel();
+                        requestAnimationFrame(() => {
+                            window.scrollTo(0, currentScrollPosition);
+                        });
+                    }}
+                    className={`px-4 py-2 text-sm rounded-lg ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                >
+                    Cancel
+                </button>
+                <button
+                    type="submit"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleSubmit(e);
+                    }}
+                    className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                >
+                    Save
+                </button>
+            </div>
+        </form>
+    );
+};
+
+// Comment Form Component with mention support and action item creation
+const CommentForm = ({ isDark, onSubmit, onCancel, commentContext, onCreateActionItem, users = [] }) => {
+    const [content, setContent] = useState('');
+    const textareaRef = useRef(null);
+
+    const handleSubmit = (commentText) => {
+        if (commentText && commentText.trim()) {
+            // Preserve scroll position before submit
+            const currentScrollPosition = window.scrollY || window.pageYOffset;
+            onSubmit(commentText);
+            setContent('');
+            // Immediately restore scroll position
+            requestAnimationFrame(() => {
+                window.scrollTo({ top: currentScrollPosition, behavior: 'instant' });
+            });
+            setTimeout(() => {
+                window.scrollTo({ top: currentScrollPosition, behavior: 'instant' });
+            }, 0);
+            setTimeout(() => {
+                window.scrollTo({ top: currentScrollPosition, behavior: 'instant' });
+            }, 10);
+        }
+    };
+
+    const handleTextareaChange = (e) => {
+        setContent(e.target.value);
+    };
+
+    const handleCreateActionItemFromComment = () => {
+        const textContent = textareaRef.current?.value || content;
+        if (textContent.trim() && onCreateActionItem) {
+            // Extract first line as title, rest as description
+            const lines = textContent.split('\n').filter(l => l.trim());
+            const title = lines[0]?.trim() || 'Action Item from Comment';
+            const description = lines.slice(1).join('\n').trim() || textContent.trim();
+            
+            onCreateActionItem({
+                title,
+                description,
+                fromComment: true,
+                commentText: textContent
+            });
+            setContent('');
+        }
+    };
+
+    // Use CommentInputWithMentions if available, otherwise fallback to regular textarea
+    const CommentInput = window.CommentInputWithMentions || null;
+
+    if (CommentInput) {
+        // Use CommentInputWithMentions component
+        return (
+            <div className="space-y-4">
+                <div>
+                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                        Comment <span className="text-xs opacity-70">(@mention users to notify them)</span>
+                    </label>
+                    <CommentInput
+                        onSubmit={handleSubmit}
+                        placeholder="Add a comment... (@mention users, Shift+Enter for new line, Enter to send)"
+                        rows={4}
+                        taskTitle={commentContext?.title || 'Meeting Notes'}
+                        taskLink="/teams"
+                        showButton={true}
+                    />
+                </div>
+                
+                <div className="flex gap-2 justify-end">
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const currentScrollPosition = window.scrollY || window.pageYOffset;
+                            onCancel();
+                            requestAnimationFrame(() => {
+                                window.scrollTo(0, currentScrollPosition);
+                            });
+                        }}
+                        className={`px-4 py-2 text-sm rounded-lg ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                    >
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // Fallback to regular textarea with action item creation
+    return (
+        <form onSubmit={(e) => { e.preventDefault(); handleSubmit(content); }} className="space-y-4">
+            <div>
+                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>
+                    Comment <span className="text-xs opacity-70">(@mention users to notify them)</span>
+                </label>
+                <textarea
+                    ref={textareaRef}
+                    value={content}
+                    onChange={handleTextareaChange}
+                    required
+                    className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100' : 'bg-white border-gray-300'}`}
+                    rows="4"
+                    placeholder="Add a comment... (@mention users, Shift+Enter for new line, Enter to send)"
+                />
+            </div>
+            <div className="flex gap-2 justify-end">
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const currentScrollPosition = window.scrollY || window.pageYOffset;
+                        onCancel();
+                        requestAnimationFrame(() => {
+                            window.scrollTo(0, currentScrollPosition);
+                        });
+                    }}
+                    className={`px-4 py-2 text-sm rounded-lg ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                >
+                    Cancel
+                </button>
+                {onCreateActionItem && (
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const currentScrollPosition = window.scrollY || window.pageYOffset;
+                            handleCreateActionItemFromComment();
+                            requestAnimationFrame(() => {
+                                window.scrollTo(0, currentScrollPosition);
+                            });
+                        }}
+                        className={`px-4 py-2 text-sm rounded-lg ${isDark ? 'bg-purple-700 text-purple-200 hover:bg-purple-600' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'}`}
+                    >
+                        <i className="fas fa-tasks mr-1"></i>
+                        Create Action Item
+                    </button>
+                )}
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleSubmit(content);
+                    }}
+                    className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                >
+                    Post Comment
+                </button>
+            </div>
+        </form>
+    );
+};
+
+// Make available globally
+window.ManagementMeetingNotes = ManagementMeetingNotes;
+

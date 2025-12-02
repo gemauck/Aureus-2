@@ -1455,6 +1455,21 @@ const Clients = React.memo(() => {
                 // Use memoized data processor for better performance
                 const processStartTime = performance.now();
                 
+                // Debug: Check AccuFarm data from API before processing
+                const accufarmFromApi = apiClients.find(c => c.name && c.name.toLowerCase().includes('accufarm'));
+                if (accufarmFromApi) {
+                    console.log('🔍 API response - AccuFarm before processClientData:', {
+                        name: accufarmFromApi.name,
+                        id: accufarmFromApi.id,
+                        groupMemberships: accufarmFromApi.groupMemberships,
+                        groupMembershipsType: typeof accufarmFromApi.groupMemberships,
+                        isArray: Array.isArray(accufarmFromApi.groupMemberships),
+                        length: Array.isArray(accufarmFromApi.groupMemberships) ? accufarmFromApi.groupMemberships.length : 'not array',
+                        firstMembership: Array.isArray(accufarmFromApi.groupMemberships) && accufarmFromApi.groupMemberships.length > 0 ? accufarmFromApi.groupMemberships[0] : null,
+                        rawKeys: Object.keys(accufarmFromApi)
+                    });
+                }
+                
                 // Debug: Check if Exxaro clients have group data before processing
                 const exxaroBeforeProcess = apiClients.filter(c => c.name && c.name.toLowerCase().includes('exxaro'));
                 if (exxaroBeforeProcess.length > 0) {
