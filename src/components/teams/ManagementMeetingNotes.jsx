@@ -1950,6 +1950,7 @@ const ManagementMeetingNotes = () => {
             
             // CRITICAL: Use batched update to prevent multiple re-renders that cause scroll jumps
             // Update all three fields in a single state update instead of three separate updates
+            // This prevents the page from jumping to top after save
             updateDepartmentNotesLocalBatched(
                 departmentNotesId,
                 {
