@@ -208,9 +208,25 @@ async function handler(req, res) {
         stack: error.stack
       })
       logDatabaseError(error, 'fetch monthly meeting notes')
+      
       if (isConnectionError(error)) {
         return serverError(res, 'Database connection failed', 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
       }
+      
+      // Check if tables/columns are missing and return empty array instead of 500
+      const errorMessage = error.message || ''
+      const isMissingTableOrColumn =
+        error.code === 'P2021' || // table does not exist
+        error.code === 'P2022' || // column does not exist
+        /relation ".*monthly.*meeting.*notes"/i.test(errorMessage) ||
+        /no such table: .*monthly.*meeting.*notes/i.test(errorMessage) ||
+        /column .* does not exist/i.test(errorMessage)
+      
+      if (isMissingTableOrColumn) {
+        console.warn('⚠️ Meeting Notes API: Meeting notes tables/columns missing in database. Returning empty list fallback.')
+        return ok(res, { monthlyNotes: [] })
+      }
+      
       return serverError(res, 'Failed to fetch meeting notes', error.message || 'Unknown database error')
     }
   }
@@ -321,9 +337,25 @@ async function handler(req, res) {
         stack: error.stack
       })
       logDatabaseError(error, 'fetch monthly meeting notes by monthKey')
+      
       if (isConnectionError(error)) {
         return serverError(res, 'Database connection failed', 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
       }
+      
+      // Check if tables/columns are missing and return null instead of 500
+      const errorMessage = error.message || ''
+      const isMissingTableOrColumn =
+        error.code === 'P2021' || // table does not exist
+        error.code === 'P2022' || // column does not exist
+        /relation ".*monthly.*meeting.*notes"/i.test(errorMessage) ||
+        /no such table: .*monthly.*meeting.*notes/i.test(errorMessage) ||
+        /column .* does not exist/i.test(errorMessage)
+      
+      if (isMissingTableOrColumn) {
+        console.warn('⚠️ Meeting Notes API: Meeting notes tables/columns missing in database. Returning null fallback.')
+        return ok(res, { monthlyNotes: null })
+      }
+      
       return serverError(res, 'Failed to fetch meeting notes', error.message || 'Unknown database error')
     }
   }

@@ -2723,7 +2723,8 @@ const LeadDetailModal = ({
                 await loadGroupsData();
             } else {
                 const errorData = await response.json().catch(() => ({}));
-                alert(errorData.message || errorData.error || 'Failed to delete group. Please try again.');
+                const errorMessage = errorData?.error?.message || errorData?.error || errorData?.message || 'Failed to delete group. Please try again.';
+                alert(errorMessage);
             }
         } catch (error) {
             console.error('Failed to delete group:', error);

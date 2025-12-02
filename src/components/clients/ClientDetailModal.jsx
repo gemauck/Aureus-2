@@ -2185,7 +2185,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 // Reload all groups
                 await loadGroupsData();
             } else {
-                alert(data?.error || data?.message || 'Failed to delete group. Please try again.');
+                const errorMessage = data?.error?.message || data?.error || data?.message || 'Failed to delete group. Please try again.';
+                alert(errorMessage);
             }
         } catch (error) {
             console.error('Failed to delete group:', error);
