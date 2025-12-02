@@ -1919,16 +1919,22 @@ const ManagementMeetingNotes = () => {
             
             // No notifications - save happens silently
             
-            // Immediately attempt scroll restoration after state updates
+            // Aggressively restore scroll position after state updates
             if (preservedScrollPosition.current !== null) {
                 const scrollY = preservedScrollPosition.current;
-                // Immediate restoration attempts
+                // Multiple restoration attempts to ensure it works
                 requestAnimationFrame(() => {
-                    window.scrollTo(0, scrollY);
+                    window.scrollTo({ top: scrollY, behavior: 'instant' });
                 });
                 setTimeout(() => {
-                    window.scrollTo(0, scrollY);
+                    window.scrollTo({ top: scrollY, behavior: 'instant' });
                 }, 0);
+                setTimeout(() => {
+                    window.scrollTo({ top: scrollY, behavior: 'instant' });
+                }, 10);
+                setTimeout(() => {
+                    window.scrollTo({ top: scrollY, behavior: 'instant' });
+                }, 50);
             }
             
             // DO NOT RELOAD - Just update local state and continue
@@ -2176,6 +2182,24 @@ const ManagementMeetingNotes = () => {
                 // Update with server response (includes real ID and timestamps)
                 // Replace temp item with real item
                 updateActionItemLocal(savedActionItem, false, tempId);
+                
+                // Aggressively restore scroll position after state update
+                if (preservedScrollPosition.current !== null) {
+                    const scrollY = preservedScrollPosition.current;
+                    requestAnimationFrame(() => {
+                        window.scrollTo({ top: scrollY, behavior: 'instant' });
+                    });
+                    setTimeout(() => {
+                        window.scrollTo({ top: scrollY, behavior: 'instant' });
+                    }, 0);
+                    setTimeout(() => {
+                        window.scrollTo({ top: scrollY, behavior: 'instant' });
+                    }, 10);
+                    setTimeout(() => {
+                        window.scrollTo({ top: scrollY, behavior: 'instant' });
+                    }, 50);
+                }
+                
                 // Clean up temp ID mapping after a delay
                 if (tempId) {
                     setTimeout(() => {
@@ -2506,6 +2530,23 @@ const ManagementMeetingNotes = () => {
                     if (!Array.isArray(prev)) return prev;
                     return prev.map((note) => (note?.id === currentMonthlyNotes?.id ? applyReplace(note) : note));
                 });
+                
+                // Aggressively restore scroll position after state update
+                if (preservedScrollPosition.current !== null) {
+                    const scrollY = preservedScrollPosition.current;
+                    requestAnimationFrame(() => {
+                        window.scrollTo({ top: scrollY, behavior: 'instant' });
+                    });
+                    setTimeout(() => {
+                        window.scrollTo({ top: scrollY, behavior: 'instant' });
+                    }, 0);
+                    setTimeout(() => {
+                        window.scrollTo({ top: scrollY, behavior: 'instant' });
+                    }, 10);
+                    setTimeout(() => {
+                        window.scrollTo({ top: scrollY, behavior: 'instant' });
+                    }, 50);
+                }
             }
             
             // Process mentions and send notifications
@@ -2888,7 +2929,7 @@ const ManagementMeetingNotes = () => {
             )}
 
             {/* Action Items Summary */}
-            {selectedMonth && currentMonthlyNotes && allActionItems.length > 0 && (
+            {false && selectedMonth && currentMonthlyNotes && allActionItems.length > 0 && (
                 <div className={`rounded-xl border p-5 ${isDark ? 'bg-slate-800 border-slate-700 shadow-lg' : 'bg-white border-gray-200 shadow-md'}`}>
                     <div className="flex items-center justify-between mb-4">
                         <h3 className={`text-base font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
@@ -3773,6 +3814,9 @@ const ActionItemForm = ({ actionItem, monthlyNotesId, users, isDark, onSave, onC
 
     const handleSubmit = (e) => {
         e.preventDefault();
+        e.stopPropagation();
+        // Preserve scroll position before save
+        const currentScrollPosition = window.scrollY || window.pageYOffset;
         onSave({
             monthlyNotesId: actionItem?.monthlyNotesId || monthlyNotesId,
             weeklyNotesId: actionItem?.weeklyNotesId || null,
@@ -3784,12 +3828,19 @@ const ActionItemForm = ({ actionItem, monthlyNotesId, users, isDark, onSave, onC
             assignedUserId: assignedUserId || null,
             dueDate: dueDate || null
         });
+        // Immediately restore scroll position
+        requestAnimationFrame(() => {
+            window.scrollTo({ top: currentScrollPosition, behavior: 'instant' });
+        });
+        setTimeout(() => {
+            window.scrollTo({ top: currentScrollPosition, behavior: 'instant' });
+        }, 0);
     };
 
     const RichTextEditor = window.RichTextEditor || null;
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={(e) => { e.preventDefault(); e.stopPropagation(); handleSubmit(e); }} className="space-y-4">
             <div>
                 <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>Title *</label>
                 <input
@@ -3892,6 +3943,11 @@ const ActionItemForm = ({ actionItem, monthlyNotesId, users, isDark, onSave, onC
                 </button>
                 <button
                     type="submit"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleSubmit(e);
+                    }}
                     className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                 >
                     Save
@@ -3908,8 +3964,20 @@ const CommentForm = ({ isDark, onSubmit, onCancel, commentContext, onCreateActio
 
     const handleSubmit = (commentText) => {
         if (commentText && commentText.trim()) {
+            // Preserve scroll position before submit
+            const currentScrollPosition = window.scrollY || window.pageYOffset;
             onSubmit(commentText);
             setContent('');
+            // Immediately restore scroll position
+            requestAnimationFrame(() => {
+                window.scrollTo({ top: currentScrollPosition, behavior: 'instant' });
+            });
+            setTimeout(() => {
+                window.scrollTo({ top: currentScrollPosition, behavior: 'instant' });
+            }, 0);
+            setTimeout(() => {
+                window.scrollTo({ top: currentScrollPosition, behavior: 'instant' });
+            }, 10);
         }
     };
 
@@ -4029,7 +4097,12 @@ const CommentForm = ({ isDark, onSubmit, onCancel, commentContext, onCreateActio
                     </button>
                 )}
                 <button
-                    type="submit"
+                    type="button"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleSubmit(content);
+                    }}
                     className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                 >
                     Post Comment
