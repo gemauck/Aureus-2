@@ -493,9 +493,13 @@ function initializeProjectDetail() {
         return loadPromise;
     }, [taskDetailModalComponent]);
     
-    // Assign ref directly after useCallback is defined to avoid TDZ issues
-    // This runs synchronously after the useCallback is initialized
-    ensureTaskDetailModalLoadedRef.current = ensureTaskDetailModalLoaded;
+    // Assign ref after useCallback is fully initialized using setTimeout to avoid TDZ issues
+    // This defers the assignment until after the current execution context
+    if (typeof window !== 'undefined') {
+        setTimeout(() => {
+            ensureTaskDetailModalLoadedRef.current = ensureTaskDetailModalLoaded;
+        }, 0);
+    }
 
     const ensureCommentsPopupLoaded = useCallback(async () => {
         if (typeof window.CommentsPopup === 'function') {
