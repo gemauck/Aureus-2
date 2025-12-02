@@ -1165,8 +1165,10 @@ const Clients = React.memo(() => {
         
         const handleRouteChange = (route) => {
             // If we're on the clients page and there are no segments, reset to clients list view
+            // BUT don't reset if we're viewing a detail (client-detail, lead-detail, opportunity-detail)
             if (route?.page === 'clients' && (!route.segments || route.segments.length === 0)) {
-                if (viewMode !== 'clients' && viewMode !== 'leads' && viewMode !== 'pipeline') {
+                if (viewMode !== 'clients' && viewMode !== 'leads' && viewMode !== 'pipeline' 
+                    && viewMode !== 'client-detail' && viewMode !== 'lead-detail' && viewMode !== 'opportunity-detail') {
                     setViewMode('clients');
                     selectedClientRef.current = null;
                     selectedLeadRef.current = null;
