@@ -1390,7 +1390,32 @@ const Clients = React.memo(() => {
                 
                 // Use memoized data processor for better performance
                 const processStartTime = performance.now();
+                
+                // Debug: Check if Exxaro clients have group data before processing
+                const exxaroBeforeProcess = apiClients.filter(c => c.name && c.name.toLowerCase().includes('exxaro'));
+                if (exxaroBeforeProcess.length > 0) {
+                    console.log('🔍 Before processClientData - Exxaro clients:', exxaroBeforeProcess.map(c => ({
+                        name: c.name,
+                        parentGroup: c.parentGroup,
+                        parentGroupName: c.parentGroupName,
+                        parentGroupId: c.parentGroupId,
+                        groupMemberships: c.groupMemberships
+                    })));
+                }
+                
                 const processedClients = processClientData(apiClients);
+                
+                // Debug: Check if Exxaro clients have group data after processing
+                const exxaroAfterProcess = processedClients.filter(c => c.name && c.name.toLowerCase().includes('exxaro'));
+                if (exxaroAfterProcess.length > 0) {
+                    console.log('🔍 After processClientData - Exxaro clients:', exxaroAfterProcess.map(c => ({
+                        name: c.name,
+                        parentGroup: c.parentGroup,
+                        parentGroupName: c.parentGroupName,
+                        parentGroupId: c.parentGroupId,
+                        groupMemberships: c.groupMemberships
+                    })));
+                }
                 // Separate clients and leads based on type
                 // Include records with type='client' OR null/undefined (legacy clients without type field)
                 const clientsOnly = processedClients.filter(c => c.type === 'client' || c.type === null || c.type === undefined);
