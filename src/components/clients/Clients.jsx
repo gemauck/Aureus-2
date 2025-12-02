@@ -1335,10 +1335,22 @@ const Clients = React.memo(() => {
             const now = Date.now();
             const timeSinceLastCall = now - lastApiCallTimestamp;
             
+            // Check if cached clients are missing group data - if so, force API call
+            const clientsToCheck = clients.length > 0 ? clients : (cachedClients || []);
+            const hasMissingGroupData = clientsToCheck.some(c => {
+                // Check if client has no group data at all
+                const hasNoParentGroup = !c.parentGroup && !c.parentGroupId && !c.parentGroupName;
+                const hasNoGroupMemberships = !c.groupMemberships || (Array.isArray(c.groupMemberships) && c.groupMemberships.length === 0);
+                // If client has neither parentGroup nor groupMemberships, it might be missing data
+                // But only force refresh if we have NO group data at all (not just empty)
+                return hasNoParentGroup && hasNoGroupMemberships;
+            });
+            
             // If we have cached clients AND it's been less than 10 seconds since last call, skip API entirely
+            // UNLESS cached data is missing group data - then force refresh to get it
             // This prevents unnecessary network requests when data is fresh
             // Group data should come from the main API response, not individual enrichment calls
-            if (!forceRefresh && timeSinceLastCall < API_CALL_INTERVAL && (clients.length > 0 || (cachedClients && cachedClients.length > 0))) {
+            if (!forceRefresh && !hasMissingGroupData && timeSinceLastCall < API_CALL_INTERVAL && (clients.length > 0 || (cachedClients && cachedClients.length > 0))) {
                 
                 // But still trigger LiveDataSync in background to get updates
                 if (window.LiveDataSync?.forceSync) {
