@@ -480,11 +480,17 @@ const Teams = () => {
         
         const handleRouteChange = (route) => {
             // If we're on the teams page and there are no segments, reset selected team
+            // BUT only if we're actually navigating away (route change), not when team is selected
             if (route?.page === 'teams' && (!route.segments || route.segments.length === 0)) {
-                if (selectedTeam) {
-                    setSelectedTeam(null);
-                    setActiveTab('overview');
-                }
+                // Use functional update to get current selectedTeam value
+                setSelectedTeam((currentTeam) => {
+                    // Only reset if there's actually a team selected
+                    if (currentTeam) {
+                        setActiveTab('overview');
+                        return null;
+                    }
+                    return currentTeam;
+                });
             }
         };
         
@@ -500,7 +506,7 @@ const Teams = () => {
                 unsubscribe();
             }
         };
-    }, [selectedTeam, isTeamAccessible]);
+    }, [isTeamAccessible]); // Removed selectedTeam from dependencies to prevent reset on selection
 
     // Check modal components on mount only
     useEffect(() => {
