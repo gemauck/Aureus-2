@@ -1447,7 +1447,7 @@ const Clients = React.memo(() => {
                     return merged;
                 });
                 
-                // Show clients immediately with preserved opportunities
+                // Show clients immediately with preserved opportunities AND group data
                 setClients(clientsWithCachedOpps);
                 
                 // Only update leads if they're mixed with clients in the API response
@@ -1465,8 +1465,20 @@ const Clients = React.memo(() => {
                     // Don't overwrite leads here - let loadLeads() handle it
                 }
                 
-                // Save clients with preserved opportunities to localStorage (instant display)
+                // Save clients with preserved opportunities AND group data to localStorage
+                // This ensures group data is cached for future loads
                 safeStorage.setClients(clientsWithCachedOpps);
+                
+                // Debug: Verify group data is being saved
+                const exxaroInSaved = clientsWithCachedOpps.filter(c => c.name && c.name.toLowerCase().includes('exxaro'));
+                if (exxaroInSaved.length > 0) {
+                    console.log('🔍 Saving to cache - Exxaro clients with group data:', exxaroInSaved.map(c => ({
+                        name: c.name,
+                        parentGroup: c.parentGroup,
+                        parentGroupName: c.parentGroupName,
+                        parentGroupId: c.parentGroupId
+                    })));
+                }
                 
                 // Load fresh opportunities from API in background (only if Pipeline is active)
                 // Use bulk fetch instead of per-client calls for much better performance
