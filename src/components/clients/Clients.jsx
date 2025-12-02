@@ -4337,6 +4337,21 @@ const Clients = React.memo(() => {
                                             // Collect all group names from parentGroup and groupMemberships
                                             const groupNames = [];
                                             
+                                            // Debug logging for Exxaro clients
+                                            if (client.name && client.name.toLowerCase().includes('exxaro')) {
+                                                console.log('🔍 Table render - Exxaro client:', {
+                                                    name: client.name,
+                                                    id: client.id,
+                                                    parentGroup: client.parentGroup,
+                                                    parentGroupType: typeof client.parentGroup,
+                                                    parentGroupName: client.parentGroupName,
+                                                    parentGroupId: client.parentGroupId,
+                                                    groupMemberships: client.groupMemberships,
+                                                    groupMembershipsType: typeof client.groupMemberships,
+                                                    groupMembershipsLength: Array.isArray(client.groupMemberships) ? client.groupMemberships.length : 'not array'
+                                                });
+                                            }
+                                            
                                             // Add parent group name if exists
                                             if (client.parentGroup) {
                                                 if (typeof client.parentGroup === 'object' && client.parentGroup !== null && client.parentGroup.name) {
