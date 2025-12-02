@@ -493,16 +493,17 @@ function initializeProjectDetail() {
         return loadPromise;
     }, [taskDetailModalComponent]);
     
-    // Assign ref using setTimeout to avoid TDZ issues
-    // This defers the assignment until after all hooks are initialized
-    useEffect(() => {
-        // Use setTimeout to defer assignment until after component initialization
-        const timeoutId = setTimeout(() => {
-            ensureTaskDetailModalLoadedRef.current = ensureTaskDetailModalLoaded;
-        }, 0);
-        return () => clearTimeout(timeoutId);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    // Assign ref using useLayoutEffect with a getter function to avoid TDZ issues
+    // The getter function is created after ensureTaskDetailModalLoaded is defined
+    // This pattern avoids creating a closure that references the function during initialization
+    React.useLayoutEffect(() => {
+        // Create a getter function that will be called after initialization
+        const getFunction = () => ensureTaskDetailModalLoaded;
+        // Use requestAnimationFrame to defer until after render
+        requestAnimationFrame(() => {
+            ensureTaskDetailModalLoadedRef.current = getFunction();
+        });
+    });
 
     const ensureCommentsPopupLoaded = useCallback(async () => {
         if (typeof window.CommentsPopup === 'function') {
