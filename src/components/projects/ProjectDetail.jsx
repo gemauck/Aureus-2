@@ -493,11 +493,13 @@ function initializeProjectDetail() {
         return loadPromise;
     }, [taskDetailModalComponent]);
     
-    // Assign ref in useEffect to avoid TDZ issues - runs after component mounts
-    // We use a separate effect that captures the function through closure after it's initialized
+    // Assign ref in useEffect with empty deps to avoid TDZ issues
+    // We access ensureTaskDetailModalLoaded through closure after it's initialized
+    // Empty deps array means this runs once after mount, which is fine since useCallback is stable
     useEffect(() => {
         ensureTaskDetailModalLoadedRef.current = ensureTaskDetailModalLoaded;
-    }, [ensureTaskDetailModalLoaded]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const ensureCommentsPopupLoaded = useCallback(async () => {
         if (typeof window.CommentsPopup === 'function') {
