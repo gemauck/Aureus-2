@@ -492,18 +492,6 @@ function initializeProjectDetail() {
         taskDetailModalLoadPromiseRef.current = loadPromise;
         return loadPromise;
     }, [taskDetailModalComponent]);
-    
-    // Assign ref using useLayoutEffect with a getter function to avoid TDZ issues
-    // The getter function is created after ensureTaskDetailModalLoaded is defined
-    // This pattern avoids creating a closure that references the function during initialization
-    React.useLayoutEffect(() => {
-        // Create a getter function that will be called after initialization
-        const getFunction = () => ensureTaskDetailModalLoaded;
-        // Use requestAnimationFrame to defer until after render
-        requestAnimationFrame(() => {
-            ensureTaskDetailModalLoadedRef.current = getFunction();
-        });
-    });
 
     const ensureCommentsPopupLoaded = useCallback(async () => {
         if (typeof window.CommentsPopup === 'function') {
@@ -696,9 +684,7 @@ function initializeProjectDetail() {
                 
                 if (foundTask) {
                     // Ensure task detail modal is loaded
-                    if (ensureTaskDetailModalLoadedRef.current) {
-                        await ensureTaskDetailModalLoadedRef.current();
-                    }
+                    await ensureTaskDetailModalLoaded();
                     
                     setViewingTask(foundTask);
                     setViewingTaskParent(foundParent);
@@ -2088,8 +2074,7 @@ function initializeProjectDetail() {
 
     // Task Management - Unified for both creating and editing
     const handleAddTask = useCallback(async (listId, statusName = null) => {
-        if (!ensureTaskDetailModalLoadedRef.current) return;
-        const ready = await ensureTaskDetailModalLoadedRef.current();
+        const ready = await ensureTaskDetailModalLoaded();
         if (!ready) {
             alert('Task workspace is still loading. Please try again in a moment.');
             return;
@@ -2103,11 +2088,10 @@ function initializeProjectDetail() {
         setViewingTaskParent(null);
         setCreatingTaskForList(listId);
         setShowTaskDetailModal(true);
-    }, []); // Removed ensureTaskDetailModalLoaded from deps, using ref instead
+    }, [ensureTaskDetailModalLoaded]);
 
     const handleAddSubtask = useCallback(async (parentTask) => {
-        if (!ensureTaskDetailModalLoadedRef.current) return;
-        const ready = await ensureTaskDetailModalLoadedRef.current();
+        const ready = await ensureTaskDetailModalLoaded();
         if (!ready) {
             alert('Task workspace is still loading. Please try again in a moment.');
             return;
@@ -2116,11 +2100,10 @@ function initializeProjectDetail() {
         setViewingTaskParent(parentTask);
         setCreatingTaskForList(null);
         setShowTaskDetailModal(true);
-    }, []); // Removed ensureTaskDetailModalLoaded from deps, using ref instead
+    }, [ensureTaskDetailModalLoaded]);
 
     const handleViewTaskDetail = useCallback(async (task, parentTask = null) => {
-        if (!ensureTaskDetailModalLoadedRef.current) return;
-        const ready = await ensureTaskDetailModalLoadedRef.current();
+        const ready = await ensureTaskDetailModalLoaded();
         if (!ready) {
             alert('Task workspace is still loading. Please try again in a moment.');
             return;
@@ -2129,7 +2112,7 @@ function initializeProjectDetail() {
         setViewingTaskParent(parentTask);
         setCreatingTaskForList(null);
         setShowTaskDetailModal(true);
-    }, []); // Removed ensureTaskDetailModalLoaded from deps, using ref instead
+    }, [ensureTaskDetailModalLoaded]);
 
     const handleUpdateTaskFromDetail = async (updatedTaskData) => {
         const isNewTask = !updatedTaskData.id || (!tasks.find(t => t.id === updatedTaskData.id) && 
