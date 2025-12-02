@@ -1788,9 +1788,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         return updatedFormData;
     };
 
-    // Company Groups: Load groups data when groups tab is active
-    useEffect(() => {
-        if (activeTab !== 'groups' || !client?.id) {
+    // Company Groups: Load groups data function (moved outside useEffect so it can be called from other functions)
+    const loadGroupsData = useCallback(async () => {
+        if (!client?.id) {
             return;
         }
 
@@ -1798,73 +1798,83 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             return;
         }
 
-        const loadGroupsData = async () => {
-            try {
-                isLoadingGroupsRef.current = true;
-                setLoadingGroups(true);
+        try {
+            isLoadingGroupsRef.current = true;
+            setLoadingGroups(true);
 
-                const token = window.storage?.getToken?.();
-                if (!token) {
-                    setLoadingGroups(false);
-                    return;
-                }
-
-                // Fetch client's groups
-                const groupsResponse = await fetch(`/api/clients/${client.id}/groups`, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-
-                if (groupsResponse.ok) {
-                    const groupsData = await groupsResponse.json();
-                    const data = groupsData?.data || groupsData;
-                    setPrimaryParent(data.primaryParent || null);
-                    setGroupMemberships(data.groupMemberships || []);
-                }
-
-                // Fetch all available groups (including named groups with type='group' and regular clients)
-                const groupsListResponse = await fetch('/api/clients/groups', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-
-                if (groupsListResponse.ok) {
-                    const groupsListData = await groupsListResponse.json();
-                    const groups = groupsListData?.data?.groups || groupsListData?.groups || [];
-                    // Filter out current client and map to expected format
-                    const availableGroups = groups
-                        .filter(g => g.id !== client.id)
-                        .map(g => ({ id: g.id, name: g.name, type: g.type || 'client', industry: g.industry || 'Other' }));
-                    setAllGroups(availableGroups);
-                } else {
-                    // Fallback to clients endpoint if groups endpoint fails
-                    const clientsResponse = await fetch('/api/clients?limit=1000', {
-                        headers: {
-                            'Authorization': `Bearer ${token}`
-                        }
-                    });
-
-                    if (clientsResponse.ok) {
-                        const clientsData = await clientsResponse.json();
-                        const clients = clientsData?.data?.clients || clientsData?.clients || [];
-                        const potentialGroups = clients
-                            .filter(c => c.id !== client.id && (c.type === 'client' || c.type === 'group'))
-                            .map(c => ({ id: c.id, name: c.name, type: c.type || 'client', industry: c.industry || 'Other' }));
-                        setAllGroups(potentialGroups);
-                    }
-                }
-            } catch (error) {
-                console.error('Failed to load groups:', error);
-            } finally {
+            const token = window.storage?.getToken?.();
+            if (!token) {
                 setLoadingGroups(false);
-                isLoadingGroupsRef.current = false;
+                return;
             }
-        };
+
+            // Fetch client's groups
+            const groupsResponse = await fetch(`/api/clients/${client.id}/groups`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (groupsResponse.ok) {
+                const groupsData = await groupsResponse.json();
+                const data = groupsData?.data || groupsData;
+                setPrimaryParent(data.primaryParent || null);
+                setGroupMemberships(data.groupMemberships || []);
+            }
+
+            // Fetch all available groups (including named groups with type='group' and regular clients)
+            const groupsListResponse = await fetch('/api/clients/groups', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (groupsListResponse.ok) {
+                const groupsListData = await groupsListResponse.json();
+                const groups = groupsListData?.data?.groups || groupsListData?.groups || [];
+                // Filter out current client and map to expected format
+                const availableGroups = groups
+                    .filter(g => g.id !== client.id)
+                    .map(g => ({ id: g.id, name: g.name, type: g.type || 'client', industry: g.industry || 'Other' }));
+                setAllGroups(availableGroups);
+            } else {
+                // Fallback to clients endpoint if groups endpoint fails
+                const clientsResponse = await fetch('/api/clients?limit=1000', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (clientsResponse.ok) {
+                    const clientsData = await clientsResponse.json();
+                    const clients = clientsData?.data?.clients || clientsData?.clients || [];
+                    const potentialGroups = clients
+                        .filter(c => c.id !== client.id && (c.type === 'client' || c.type === 'group'))
+                        .map(c => ({ id: c.id, name: c.name, type: c.type || 'client', industry: c.industry || 'Other' }));
+                    setAllGroups(potentialGroups);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load groups:', error);
+        } finally {
+            setLoadingGroups(false);
+            isLoadingGroupsRef.current = false;
+        }
+    }, [client?.id]);
+
+    // Company Groups: Load groups data when groups tab is active
+    useEffect(() => {
+        if (activeTab !== 'groups' || !client?.id) {
+            return;
+        }
 
         loadGroupsData();
-    }, [activeTab, client?.id]);
+    }, [activeTab, client?.id, loadGroupsData]);
+
+    // Debug: Log when Create Group modal state changes
+    useEffect(() => {
+        console.log('Create Group Modal state changed:', showCreateGroupModal);
+    }, [showCreateGroupModal]);
 
     // Company Groups: Handle primary parent change
     const handleParentGroupChange = async (groupId) => {
@@ -4334,7 +4344,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 </label>
                                                 <button
                                                     type="button"
-                                                    onClick={() => setShowCreateGroupModal(true)}
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        console.log('Create Group button clicked, setting showCreateGroupModal to true');
+                                                        setShowCreateGroupModal(true);
+                                                    }}
                                                     className={`px-3 py-1 text-sm rounded-md transition-colors ${
                                                         isDark
                                                             ? 'bg-green-600 hover:bg-green-700 text-white'
@@ -4725,13 +4740,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 {/* Create Group Modal */}
                                 {showCreateGroupModal && (
                                     <div 
-                                        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]" 
+                                        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[99999]" 
                                         onClick={() => {
+                                            console.log('Modal backdrop clicked, closing modal');
                                             setShowCreateGroupModal(false);
                                             setStandaloneGroupName('');
                                             setStandaloneGroupIndustry('Other');
                                         }}
-                                        style={{ zIndex: 9999 }}
+                                        style={{ zIndex: 99999, position: 'fixed' }}
                                     >
                                         <div 
                                             className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg p-6 max-w-md w-full mx-4 shadow-xl`}
