@@ -1384,10 +1384,16 @@ const Clients = React.memo(() => {
                                     opportunitiesByClient[clientId].push(opp);
                                 }
                             });
-                            const clientsToUpdate = clients.length > 0 ? clients : (cachedClients || []);
+                            // CRITICAL: Use clientsWithCachedOpps (which has group data) instead of clients/cachedClients
+                            const clientsToUpdate = clientsWithCachedOpps.length > 0 ? clientsWithCachedOpps : (clients.length > 0 ? clients : (cachedClients || []));
                             const updated = clientsToUpdate.map(client => ({
                                 ...client,
-                                opportunities: opportunitiesByClient[client.id] || client.opportunities || []
+                                opportunities: opportunitiesByClient[client.id] || client.opportunities || [],
+                                // CRITICAL: Explicitly preserve group data when updating opportunities
+                                parentGroup: client.parentGroup || null,
+                                parentGroupId: client.parentGroupId || null,
+                                parentGroupName: client.parentGroupName || null,
+                                groupMemberships: client.groupMemberships || []
                             }));
                             setClients(updated);
                             safeStorage.setClients(updated);
@@ -1551,10 +1557,16 @@ const Clients = React.memo(() => {
                             });
                             
                             // Attach opportunities to their clients
-                            // CRITICAL: Preserve tags from API response (client object already has tags from processClientData)
-                            const updated = clientsOnly.map(client => ({
+                            // CRITICAL: Use clientsWithCachedOpps (which has group data) instead of clientsOnly
+                            // This ensures group data is preserved when updating opportunities
+                            const updated = clientsWithCachedOpps.map(client => ({
                                 ...client,
-                                opportunities: opportunitiesByClient[client.id] || []
+                                opportunities: opportunitiesByClient[client.id] || client.opportunities || [],
+                                // CRITICAL: Explicitly preserve group data when updating opportunities
+                                parentGroup: client.parentGroup || null,
+                                parentGroupId: client.parentGroupId || null,
+                                parentGroupName: client.parentGroupName || null,
+                                groupMemberships: client.groupMemberships || []
                             }));
                             
                             const totalOpps = updated.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
