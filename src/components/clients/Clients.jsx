@@ -4081,7 +4081,7 @@ const Clients = React.memo(() => {
     // PERFORMANCE FIX: Memoize sorted clients
     const sortedClients = useMemo(() => {
         return sortClients(filteredClients);
-    }, [filteredClients, sortField, sortDirection]);
+    }, [filteredClients, sortClients]);
 
     // PERFORMANCE FIX: Memoize filtered leads
     const filteredLeads = useMemo(() => {
