@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRM Test Suite</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .controls {
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        
+        .output {
+            padding: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+        
+        .output .log-info {
+            color: #569cd6;
+        }
+        
+        .output .log-success {
+            color: #4ec9b0;
+        }
+        
+        .output .log-error {
+            color: #f48771;
+        }
+        
+        .output .log-warn {
+            color: #dcdcaa;
+        }
+        
+        .summary {
+            padding: 20px;
+            background: #f8f9fa;
+            border-top: 1px solid #dee2e6;
+        }
+        
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .stat-card h3 {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #6c757d;
+            margin-bottom: 8px;
+        }
+        
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .stat-card.success .value {
+            color: #28a745;
+        }
+        
+        .stat-card.error .value {
+            color: #dc3545;
+        }
+        
+        .stat-card.warning .value {
+            color: #ffc107;
+        }
+        
+        .status {
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: 600;
+            text-align: center;
+        }
+        
+        .status.running {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status.complete {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #667eea;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .scroll-indicator {
+            position: sticky;
+            bottom: 0;
+            background: linear-gradient(to top, #1e1e1e, transparent);
+            height: 40px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧪 CRM Test Suite</h1>
+            <p>Comprehensive CRM/Lead Functionality & UI Testing</p>
+        </div>
+        
+        <div class="controls">
+            <button class="btn-primary" onclick="runTests()">
+                <span id="run-icon">▶</span>
+                Run All Tests
+            </button>
+            <button class="btn-secondary" onclick="clearOutput()">
+                🗑️ Clear Output
+            </button>
+            <button class="btn-secondary" onclick="openCRM()">
+                🔗 Open CRM Section
+            </button>
+        </div>
+        
+        <div id="summary" class="summary" style="display: none;">
+            <div class="summary-stats" id="summary-stats"></div>
+            <div id="status" class="status">Ready</div>
+        </div>
+        
+        <div class="output" id="output">
+            <div class="log-info">CRM Test Suite loaded. Click "Run All Tests" to begin.</div>
+            <div class="log-info">The test suite will test:</div>
+            <div class="log-info">  • Component availability (LeadDetailModal, Clients, etc.)</div>
+            <div class="log-info">  • API wrapper and storage functionality</div>
+            <div class="log-info">  • Lead fetching and data persistence</div>
+            <div class="log-info">  • UI rendering and form validation</div>
+            <div class="log-info">  • Accessibility and responsive design</div>
+            <div class="log-info">  • Performance and error handling</div>
+            <div class="log-warn">⚠️ Note: Some tests require the main application to be loaded.</div>
+            <div class="log-warn">⚠️ For best results, open this page from within the application.</div>
+        </div>
+    </div>
+    
+    <script src="tests/crm/crm-ui-tests.js"></script>
+    <script>
+        const output = document.getElementById('output');
+        const summary = document.getElementById('summary');
+        const summaryStats = document.getElementById('summary-stats');
+        const status = document.getElementById('status');
+        const runIcon = document.getElementById('run-icon');
+        
+        let originalConsoleLog = console.log;
+        let originalConsoleError = console.error;
+        let originalConsoleWarn = console.warn;
+        
+        // Override console methods to capture output
+        function captureLog(message, type = 'info') {
+            const div = document.createElement('div');
+            
+            // Format message with emoji detection
+            if (typeof message === 'string') {
+                if (message.startsWith('✅')) {
+                    div.className = 'log-success';
+                } else if (message.startsWith('❌')) {
+                    div.className = 'log-error';
+                } else if (message.startsWith('⚠️')) {
+                    div.className = 'log-warn';
+                } else {
+                    div.className = 'log-info';
+                }
+            } else {
+                div.className = `log-${type}`;
+            }
+            
+            div.textContent = typeof message === 'string' ? message : JSON.stringify(message);
+            output.appendChild(div);
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        // Override console.log to capture all output
+        function setupConsoleCapture() {
+            console.log = function(...args) {
+                const message = args.map(arg => 
+                    typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+                ).join(' ');
+                captureLog(message, 'info');
+                originalConsoleLog.apply(console, args);
+            };
+            
+            console.error = function(...args) {
+                const message = args.map(arg => 
+                    typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+                ).join(' ');
+                captureLog(message, 'error');
+                originalConsoleError.apply(console, args);
+            };
+            
+            console.warn = function(...args) {
+                const message = args.map(arg => 
+                    typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+                ).join(' ');
+                captureLog(message, 'warn');
+                originalConsoleWarn.apply(console, args);
+            };
+        }
+        
+        // Restore original console methods
+        function restoreConsole() {
+            console.log = originalConsoleLog;
+            console.error = originalConsoleError;
+            console.warn = originalConsoleWarn;
+        }
+        
+        function clearOutput() {
+            output.innerHTML = '<div class="log-info">Output cleared.</div>';
+            summary.style.display = 'none';
+        }
+        
+        function openCRM() {
+            // Try to open CRM section in the main app
+            const baseUrl = window.location.origin;
+            const crmUrl = `${baseUrl}/#/clients`;
+            window.open(crmUrl, '_blank');
+            captureLog(`🔗 Opening CRM section: ${crmUrl}`, 'info');
+        }
+        
+        async function runTests() {
+            // Clear previous output
+            output.innerHTML = '';
+            summary.style.display = 'none';
+            runIcon.innerHTML = '<span class="loading"></span>';
+            status.textContent = 'Running Tests...';
+            status.className = 'status running';
+            
+            // Show status
+            summary.style.display = 'block';
+            
+            try {
+                // Setup console capture before running tests
+                setupConsoleCapture();
+                
+                // Check if test function is available
+                if (typeof window.runCRMUITests !== 'function') {
+                    throw new Error('CRM UI Tests not loaded. Make sure tests/crm/crm-ui-tests.js is accessible.');
+                }
+                
+                // Run tests
+                const result = await window.runCRMUITests();
+                
+                // Restore console after tests
+                restoreConsole();
+                
+                // Display summary
+                displaySummary(result);
+                
+                runIcon.innerHTML = '▶';
+                if (result && result.failed && result.failed.length === 0) {
+                    status.textContent = 'All Tests Passed!';
+                    status.className = 'status complete';
+                } else if (result && result.failed && result.failed.length > 0) {
+                    status.textContent = 'Some Tests Failed';
+                    status.className = 'status error';
+                } else {
+                    status.textContent = 'Tests Completed';
+                    status.className = 'status complete';
+                }
+                
+            } catch (error) {
+                restoreConsole();
+                captureLog(`❌ Test execution error: ${error.message}`, 'error');
+                originalConsoleError(error);
+                
+                runIcon.innerHTML = '▶';
+                status.textContent = 'Test Execution Failed';
+                status.className = 'status error';
+            }
+        }
+        
+        function displaySummary(result) {
+            if (!result) return;
+            
+            const total = result.totalTests || 0;
+            const passed = result.passed ? result.passed.length : 0;
+            const failed = result.failed ? result.failed.length : 0;
+            const warnings = result.warnings ? result.warnings.length : 0;
+            const duration = result.startTime ? ((Date.now() - result.startTime) / 1000).toFixed(2) : '0.00';
+            const passRate = total > 0 ? ((passed / total) * 100).toFixed(1) + '%' : '0.0%';
+            
+            summaryStats.innerHTML = `
+                <div class="stat-card">
+                    <h3>Total Tests</h3>
+                    <div class="value">${total}</div>
+                </div>
+                <div class="stat-card success">
+                    <h3>Passed</h3>
+                    <div class="value">${passed}</div>
+                </div>
+                <div class="stat-card error">
+                    <h3>Failed</h3>
+                    <div class="value">${failed}</div>
+                </div>
+                <div class="stat-card warning">
+                    <h3>Warnings</h3>
+                    <div class="value">${warnings}</div>
+                </div>
+                <div class="stat-card ${passRate === '100.0%' ? 'success' : 'warning'}">
+                    <h3>Pass Rate</h3>
+                    <div class="value">${passRate}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Duration</h3>
+                    <div class="value">${duration}s</div>
+                </div>
+            `;
+        }
+        
+        // Initialize
+        console.log('CRM Test Suite interface ready');
+        
+        // Check if test script loaded
+        setTimeout(() => {
+            if (typeof window.runCRMUITests !== 'function') {
+                captureLog('⚠️ Warning: CRM UI Tests script may not have loaded. Check browser console for errors.', 'warn');
+            } else {
+                captureLog('✅ CRM UI Tests script loaded successfully', 'success');
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
+

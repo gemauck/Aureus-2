@@ -348,7 +348,7 @@ async function handler(req, res) {
         contracts: JSON.stringify(Array.isArray(body.contracts) ? body.contracts : []),
         activityLog: JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : []),
         services: JSON.stringify(Array.isArray(body.services) ? body.services : []),
-        billingTerms: JSON.stringify(typeof body.billingTerms === 'object' ? body.billingTerms : {
+            billingTerms: JSON.stringify(typeof body.billingTerms === 'object' ? body.billingTerms : {
           paymentTerms: 'Net 30',
           billingFrequency: 'Monthly',
           currency: 'ZAR',
@@ -356,7 +356,8 @@ async function handler(req, res) {
           taxExempt: false,
           notes: ''
         }),
-        ...(ownerId ? { ownerId } : {})
+        ...(ownerId ? { ownerId } : {}),
+        ...(body.parentGroupId ? { parentGroupId: body.parentGroupId } : {})
       }
 
       
@@ -420,7 +421,8 @@ async function handler(req, res) {
             activityLog: Array.isArray(clientData.activityLog) ? JSON.stringify(clientData.activityLog) : (typeof clientData.activityLog === 'string' ? clientData.activityLog : '[]'),
             services: Array.isArray(clientData.services) ? JSON.stringify(clientData.services) : (typeof clientData.services === 'string' ? clientData.services : '[]'),
             billingTerms: typeof clientData.billingTerms === 'object' ? JSON.stringify(clientData.billingTerms) : (typeof clientData.billingTerms === 'string' ? clientData.billingTerms : '{}'),
-            ...(ownerId ? { ownerId } : {})
+            ...(ownerId ? { ownerId } : {}),
+            ...(clientData.parentGroupId ? { parentGroupId: clientData.parentGroupId } : {})
           }
         })
         
@@ -559,13 +561,44 @@ async function handler(req, res) {
           contracts: typeof body.contracts === 'string' ? body.contracts : JSON.stringify(Array.isArray(body.contracts) ? body.contracts : []),
           activityLog: typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : []),
           services: servicesValue, // Always include services
-          billingTerms: typeof body.billingTerms === 'string' ? body.billingTerms : JSON.stringify(typeof body.billingTerms === 'object' && body.billingTerms !== null ? body.billingTerms : {})
+          billingTerms: typeof body.billingTerms === 'string' ? body.billingTerms : JSON.stringify(typeof body.billingTerms === 'object' && body.billingTerms !== null ? body.billingTerms : {}),
+          ...(body.parentGroupId !== undefined ? { parentGroupId: body.parentGroupId || null } : {})
         }
         Object.keys(updateData).forEach(key => {
           if (updateData[key] === undefined) {
             delete updateData[key]
           }
         })
+        
+        // Validate parentGroupId doesn't create circular reference
+        if (updateData.parentGroupId) {
+          try {
+            // Check if parentGroupId is a descendant of this client
+            let currentId = updateData.parentGroupId
+            const visited = new Set()
+            
+            while (currentId) {
+              if (currentId === id) {
+                return badRequest(res, 'Cannot set parent group to a descendant of this client (circular reference)')
+              }
+              if (visited.has(currentId)) {
+                return badRequest(res, 'Circular reference detected in parent group hierarchy')
+              }
+              visited.add(currentId)
+              
+              const parent = await prisma.client.findUnique({
+                where: { id: currentId },
+                select: { parentGroupId: true }
+              })
+              
+              if (!parent || !parent.parentGroupId) break
+              currentId = parent.parentGroupId
+            }
+          } catch (validationError) {
+            console.error('Error validating parentGroupId:', validationError)
+            // Continue with update if validation fails (non-blocking)
+          }
+        }
         
         try {
           const client = await prisma.client.update({ where: { id }, data: updateData })

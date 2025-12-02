@@ -3792,7 +3792,7 @@ const LeadDetailModal = ({
                                             </div>
                                             
                                             {/* GPS Coordinates Section */}
-                                            <div className="col-span-2">
+                                            <div className="col-span-2" style={{border: '2px solid red'}}>
                                                 <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>GPS Coordinates</label>
                                                 <div className="flex gap-2">
                                                     <input
@@ -3862,19 +3862,21 @@ const LeadDetailModal = ({
                                             </div>
                                             
                                             {/* Map Selection */}
-                                            <div className="col-span-2">
-                                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Location Map</label>
-                                                <window.MapComponent
-                                                    latitude={newSite.latitude}
-                                                    longitude={newSite.longitude}
-                                                    siteName={newSite.name || 'Site Location'}
-                                                    allowSelection={true}
-                                                    onLocationSelect={handleSiteMapLocationSelect}
-                                                />
-                                                <div className={`mt-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                    💡 <strong>Tip:</strong> Click anywhere on the map to drop a pin and automatically fill in the GPS fields, or use the buttons above to pull your current location or open OpenStreetMap.
+                                            {window.MapComponent && (
+                                                <div className="col-span-2">
+                                                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Location Map</label>
+                                                    <window.MapComponent
+                                                        latitude={newSite.latitude}
+                                                        longitude={newSite.longitude}
+                                                        siteName={newSite.name || 'Site Location'}
+                                                        allowSelection={true}
+                                                        onLocationSelect={handleSiteMapLocationSelect}
+                                                    />
+                                                    <div className={`mt-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                        💡 <strong>Tip:</strong> Click anywhere on the map to drop a pin and automatically fill in the GPS fields, or use the buttons above to pull your current location or open OpenStreetMap.
+                                                    </div>
                                                 </div>
-                                            </div>
+                                            )}
                                             <div>
                                                 <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Phone</label>
                                                 <input

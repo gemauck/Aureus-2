@@ -130,12 +130,36 @@ model Client {
   projects      Project[]
   salesOrders   SalesOrder[]
   starredBy     StarredClient[]
+  
+  // Company Group fields (Hybrid: Primary parent + multiple group memberships)
+  parentGroupId       String?
+  parentGroup         Client?                @relation("PrimaryParent", fields: [parentGroupId], references: [id])
+  childCompanies      Client[]               @relation("PrimaryParent")
+  groupMemberships    ClientCompanyGroup[]   @relation("ClientGroups")
+  groupChildren       ClientCompanyGroup[]   @relation("GroupMembers")
 
   @@index([createdAt])
   @@index([type])
   @@index([status])
   @@index([ownerId])
   @@index([externalAgentId])
+  @@index([parentGroupId])
+}
+
+model ClientCompanyGroup {
+  id        String   @id @default(cuid())
+  clientId  String
+  groupId   String
+  role      String?  @default("member")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  client    Client   @relation("ClientGroups", fields: [clientId], references: [id], onDelete: Cascade)
+  group     Client   @relation("GroupMembers", fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, groupId])
+  @@index([clientId])
+  @@index([groupId])
 }
 
 model Industry {
