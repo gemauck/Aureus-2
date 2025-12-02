@@ -346,6 +346,17 @@ async function handler(req, res) {
         res.setHeader('Pragma', 'no-cache')
         res.setHeader('Expires', '0')
         
+        // Debug: Check if Exxaro clients have group data in final response
+        const exxaroInResponse = parsedClients.filter(c => c.name && c.name.toLowerCase().includes('exxaro'))
+        if (exxaroInResponse.length > 0) {
+          console.log('🔍 Final API response - Exxaro clients:', exxaroInResponse.map(c => ({
+            name: c.name,
+            parentGroup: c.parentGroup,
+            parentGroupName: c.parentGroupName,
+            parentGroupId: c.parentGroupId,
+            groupMemberships: c.groupMemberships
+          })))
+        }
         
         return ok(res, { clients: parsedClients })
       } catch (dbError) {
