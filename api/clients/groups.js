@@ -112,10 +112,12 @@ async function handler(req, res) {
     if (req.method === 'POST' && pathSegments.length === 2 && pathSegments[0] === 'clients' && pathSegments[1] === 'groups') {
       try {
         const body = await parseJsonBody(req)
+        console.log('POST /api/clients/groups - Received body:', body)
         const { name, industry, notes } = body
         
-        if (!name || !name.trim()) {
-          return badRequest(res, 'Group name is required')
+        if (!name || typeof name !== 'string' || !name.trim()) {
+          console.error('❌ Invalid name provided:', { name, type: typeof name })
+          return badRequest(res, 'Group name is required and must be a non-empty string')
         }
         
         // Check if group with this name already exists

@@ -2111,20 +2111,26 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 return;
             }
 
+            const requestBody = {
+                name: standaloneGroupName.trim(),
+                industry: standaloneGroupIndustry || 'Other'
+            };
+            
+            console.log('Creating group with data:', requestBody);
+            
             const response = await fetch('/api/clients/groups', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({
-                    name: standaloneGroupName.trim(),
-                    industry: standaloneGroupIndustry || 'Other'
-                })
+                body: JSON.stringify(requestBody)
             });
 
-            const responseData = await response.json();
+            const responseData = await response.json().catch(() => ({}));
             const data = responseData?.data || responseData;
+
+            console.log('Create group response:', { status: response.status, statusText: response.statusText, responseData, data });
 
             if (response.ok) {
                 alert('✅ Group created successfully');
@@ -2134,7 +2140,15 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 // Reload all groups
                 await loadGroupsData();
             } else {
-                alert(data?.error || data?.message || 'Failed to create group. Please try again.');
+                // Handle error response structure: { error: { code, message, details } }
+                const errorMessage = responseData?.error?.message || 
+                                   responseData?.error || 
+                                   data?.error?.message || 
+                                   data?.error || 
+                                   data?.message || 
+                                   `Failed to create group (${response.status}). Please try again.`;
+                console.error('Failed to create group:', { status: response.status, error: errorMessage, responseData });
+                alert(errorMessage);
             }
         } catch (error) {
             console.error('Failed to create group:', error);
