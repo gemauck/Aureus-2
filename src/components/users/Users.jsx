@@ -62,6 +62,39 @@ const Users = () => {
         loadUsers();
         loadInvitations();
     }, []);
+    
+    // Listen for route changes to reset selected user when navigating to base users page
+    useEffect(() => {
+        if (!window.RouteState) return;
+        
+        const handleRouteChange = (route) => {
+            // If we're on the users page and there are no segments, reset selected user and close modals
+            if (route?.page === 'users' && (!route.segments || route.segments.length === 0)) {
+                if (selectedUser) {
+                    setSelectedUser(null);
+                }
+                if (showUserModal) {
+                    setShowUserModal(false);
+                }
+                if (showInviteModal) {
+                    setShowInviteModal(false);
+                }
+            }
+        };
+        
+        // Check initial route
+        const currentRoute = window.RouteState.getRoute();
+        handleRouteChange(currentRoute);
+        
+        // Subscribe to route changes
+        const unsubscribe = window.RouteState.subscribe(handleRouteChange);
+        
+        return () => {
+            if (unsubscribe && typeof unsubscribe === 'function') {
+                unsubscribe();
+            }
+        };
+    }, [selectedUser, showUserModal, showInviteModal]);
 
     // Debug: Verify delete buttons are rendered
     useEffect(() => {

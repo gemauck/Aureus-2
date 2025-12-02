@@ -474,6 +474,33 @@ const Teams = () => {
         return () => window.removeEventListener('popstate', handlePopState);
     }, [isTeamAccessible]);
     
+    // Listen for route changes to reset selected team when navigating to base teams page
+    useEffect(() => {
+        if (!window.RouteState) return;
+        
+        const handleRouteChange = (route) => {
+            // If we're on the teams page and there are no segments, reset selected team
+            if (route?.page === 'teams' && (!route.segments || route.segments.length === 0)) {
+                if (selectedTeam) {
+                    setSelectedTeam(null);
+                    setActiveTab('overview');
+                }
+            }
+        };
+        
+        // Check initial route
+        const currentRoute = window.RouteState.getRoute();
+        handleRouteChange(currentRoute);
+        
+        // Subscribe to route changes
+        const unsubscribe = window.RouteState.subscribe(handleRouteChange);
+        
+        return () => {
+            if (unsubscribe && typeof unsubscribe === 'function') {
+                unsubscribe();
+            }
+        };
+    }, [selectedTeam, isTeamAccessible]);
 
     // Check modal components on mount only
     useEffect(() => {

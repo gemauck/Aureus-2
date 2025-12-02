@@ -999,7 +999,10 @@ const MainLayout = () => {
         <button
             key={item.id}
             onClick={() => {
-                navigateToPage(item.id);
+                // Always navigate to base page (no subpath) when clicking a menu item
+                // This ensures clicking "Projects" while viewing a project detail navigates back to projects list
+                // Even if already on the same page, navigate to clear any segments/subpaths
+                navigateToPage(item.id, { subpath: [] });
                 if (isMobile) {
                     setSidebarOpen(false);
                 }

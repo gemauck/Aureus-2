@@ -293,6 +293,34 @@ const Projects = () => {
         return () => window.removeEventListener('openEntityDetail', handleEntityNavigation);
     }, [projects]);
     
+    // Listen for route changes to reset selected project when navigating to base projects page
+    useEffect(() => {
+        if (!window.RouteState) return;
+        
+        const handleRouteChange = (route) => {
+            // If we're on the projects page and there are no segments, reset selected project
+            if (route?.page === 'projects' && (!route.segments || route.segments.length === 0)) {
+                if (selectedProject) {
+                    setSelectedProject(null);
+                    setViewingProject(null);
+                }
+            }
+        };
+        
+        // Check initial route
+        const currentRoute = window.RouteState.getRoute();
+        handleRouteChange(currentRoute);
+        
+        // Subscribe to route changes
+        const unsubscribe = window.RouteState.subscribe(handleRouteChange);
+        
+        return () => {
+            if (unsubscribe && typeof unsubscribe === 'function') {
+                unsubscribe();
+            }
+        };
+    }, [selectedProject]);
+    
     // Ensure storage is available
     useEffect(() => {
         if (!window.storage) {

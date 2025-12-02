@@ -1158,6 +1158,35 @@ const Clients = React.memo(() => {
         window.addEventListener('openEntityDetail', handleEntityNavigation);
         return () => window.removeEventListener('openEntityDetail', handleEntityNavigation);
     }, [clients, leads, handleOpenClient, handleOpenLead]);
+    
+    // Listen for route changes to reset view mode when navigating to base clients page
+    useEffect(() => {
+        if (!window.RouteState) return;
+        
+        const handleRouteChange = (route) => {
+            // If we're on the clients page and there are no segments, reset to clients list view
+            if (route?.page === 'clients' && (!route.segments || route.segments.length === 0)) {
+                if (viewMode !== 'clients' && viewMode !== 'leads' && viewMode !== 'pipeline') {
+                    setViewMode('clients');
+                    selectedClientRef.current = null;
+                    selectedLeadRef.current = null;
+                }
+            }
+        };
+        
+        // Check initial route
+        const currentRoute = window.RouteState.getRoute();
+        handleRouteChange(currentRoute);
+        
+        // Subscribe to route changes
+        const unsubscribe = window.RouteState.subscribe(handleRouteChange);
+        
+        return () => {
+            if (unsubscribe && typeof unsubscribe === 'function') {
+                unsubscribe();
+            }
+        };
+    }, [viewMode]);
 
     // Modal callbacks no longer needed - modals own their state
     

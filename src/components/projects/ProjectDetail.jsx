@@ -492,9 +492,6 @@ function initializeProjectDetail() {
         taskDetailModalLoadPromiseRef.current = loadPromise;
         return loadPromise;
     }, [taskDetailModalComponent]);
-    
-    // Store function in ref to avoid TDZ issues when used in dependency arrays
-    ensureTaskDetailModalLoadedRef.current = ensureTaskDetailModalLoaded;
 
     const ensureCommentsPopupLoaded = useCallback(async () => {
         if (typeof window.CommentsPopup === 'function') {
@@ -587,6 +584,12 @@ function initializeProjectDetail() {
         projectModalLoadPromiseRef.current = loadPromise;
         return loadPromise;
     }, [projectModalComponent]);
+    
+    // Store function in ref via useEffect to avoid TDZ issues
+    // This ensures the callback is fully initialized before assignment
+    useEffect(() => {
+        ensureTaskDetailModalLoadedRef.current = ensureTaskDetailModalLoaded;
+    }, [ensureTaskDetailModalLoaded]);
     
     // Check if required components are loaded
     const requiredComponents = {
