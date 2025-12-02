@@ -585,13 +585,12 @@ function initializeProjectDetail() {
         return loadPromise;
     }, [projectModalComponent]);
     
-    // Store function in ref via useEffect to avoid TDZ issues
+    // Store function in ref - assign directly after useCallback is defined to avoid TDZ issues
+    // We use useLayoutEffect to assign synchronously after render but before paint
     // This ensures the callback is fully initialized before assignment
-    // We use a separate effect that runs after mount to avoid TDZ issues
-    useEffect(() => {
-        // Assign after component has fully initialized
+    React.useLayoutEffect(() => {
         ensureTaskDetailModalLoadedRef.current = ensureTaskDetailModalLoaded;
-    }); // Intentionally no dependency array - updates ref on every render (useCallback ensures stable reference)
+    });
     
     // Check if required components are loaded
     const requiredComponents = {
