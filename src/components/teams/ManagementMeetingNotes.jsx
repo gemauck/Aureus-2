@@ -399,6 +399,7 @@ const ManagementMeetingNotes = () => {
 
     const [monthlyNotesList, setMonthlyNotesList] = useState([]);
     const [currentMonthlyNotes, setCurrentMonthlyNotes] = useState(null);
+    const [scrollRestoreTrigger, setScrollRestoreTrigger] = useState(0);
     
     // Initialize selectedMonth and selectedWeek from URL or default
     const getMonthFromURL = () => {
@@ -540,13 +541,24 @@ const ManagementMeetingNotes = () => {
                 if (checkAndClear()) return;
             }, 100);
             
+            // Additional restoration attempts for stubborn cases
+            setTimeout(() => {
+                window.scrollTo(0, scrollY);
+                if (checkAndClear()) return;
+            }, 200);
+            
+            setTimeout(() => {
+                window.scrollTo(0, scrollY);
+                if (checkAndClear()) return;
+            }, 300);
+            
             // Final restoration attempt - clear after this regardless
             setTimeout(() => {
                 window.scrollTo(0, scrollY);
                 preservedScrollPosition.current = null;
-            }, 300);
+            }, 500);
         }
-    }, [currentMonthlyNotes, monthlyNotesList, loading]);
+    }, [currentMonthlyNotes, monthlyNotesList, loading, scrollRestoreTrigger]);
     
     const reloadMonthlyNotes = useCallback(async (preferredMonthKey = null, preserveScroll = false) => {
         // Preserve scroll position if requested
@@ -1641,6 +1653,8 @@ const ManagementMeetingNotes = () => {
         const currentScrollPosition = window.scrollY || window.pageYOffset;
         preservedScrollPosition.current = currentScrollPosition;
         console.log('💾 Preserving scroll position before save:', currentScrollPosition);
+        // Trigger scroll restoration effect
+        setScrollRestoreTrigger(prev => prev + 1);
         
         // Find the department note
         const week = currentMonthlyNotes?.weeklyNotes?.find(w => 
@@ -2106,6 +2120,8 @@ const ManagementMeetingNotes = () => {
             const currentScrollPosition = window.scrollY || window.pageYOffset;
             preservedScrollPosition.current = currentScrollPosition;
             console.log('💾 Preserving scroll position before action item save:', currentScrollPosition);
+            // Trigger scroll restoration effect
+            setScrollRestoreTrigger(prev => prev + 1);
             
             // Validate required fields
             if (!actionItemData.title || !actionItemData.title.trim()) {
@@ -2396,6 +2412,8 @@ const ManagementMeetingNotes = () => {
         const currentScrollPosition = window.scrollY || window.pageYOffset;
         preservedScrollPosition.current = currentScrollPosition;
         console.log('💾 Preserving scroll position before comment save:', currentScrollPosition);
+        // Trigger scroll restoration effect
+        setScrollRestoreTrigger(prev => prev + 1);
         
         const currentUser = window.storage?.getUserInfo() || {};
         const tempComment = {
