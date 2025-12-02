@@ -105,6 +105,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [createGroupMode, setCreateGroupMode] = useState(false);
     const [newGroupName, setNewGroupName] = useState('');
     const [newGroupIndustry, setNewGroupIndustry] = useState('Other');
+    // Group management state
+    const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+    const [showDeleteGroupModal, setShowDeleteGroupModal] = useState(false);
+    const [groupToDelete, setGroupToDelete] = useState(null);
+    const [standaloneGroupName, setStandaloneGroupName] = useState('');
+    const [standaloneGroupIndustry, setStandaloneGroupIndustry] = useState('Other');
     
     // Track if user has edited the form to prevent unwanted resets
     const hasUserEditedForm = useRef(false);
@@ -2078,6 +2084,101 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         } catch (error) {
             console.error('Failed to remove client from group:', error);
             alert('Failed to remove client from group. Please try again.');
+        }
+    };
+
+    // Create a standalone group
+    const handleCreateStandaloneGroup = async () => {
+        if (!standaloneGroupName?.trim()) {
+            alert('Please enter a group name');
+            return;
+        }
+
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                alert('Please log in to create groups');
+                return;
+            }
+
+            const response = await fetch('/api/clients/groups', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    name: standaloneGroupName.trim(),
+                    industry: standaloneGroupIndustry || 'Other'
+                })
+            });
+
+            const responseData = await response.json();
+            const data = responseData?.data || responseData;
+
+            if (response.ok) {
+                alert('✅ Group created successfully');
+                setShowCreateGroupModal(false);
+                setStandaloneGroupName('');
+                setStandaloneGroupIndustry('Other');
+                // Reload all groups
+                await loadGroupsData();
+            } else {
+                alert(data?.error || data?.message || 'Failed to create group. Please try again.');
+            }
+        } catch (error) {
+            console.error('Failed to create group:', error);
+            alert('Failed to create group. Please try again.');
+        }
+    };
+
+    // Delete a group
+    const handleDeleteGroup = async () => {
+        if (!groupToDelete) return;
+
+        const memberCount = (groupToDelete._count?.childCompanies || 0) + (groupToDelete._count?.groupChildren || 0);
+        if (memberCount > 0) {
+            alert(`Cannot delete group "${groupToDelete.name}" because it has ${memberCount} member(s). Please remove all members first.`);
+            setShowDeleteGroupModal(false);
+            setGroupToDelete(null);
+            return;
+        }
+
+        if (!confirm(`Are you sure you want to delete the group "${groupToDelete.name}"? This action cannot be undone.`)) {
+            setShowDeleteGroupModal(false);
+            setGroupToDelete(null);
+            return;
+        }
+
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                alert('Please log in to delete groups');
+                return;
+            }
+
+            const response = await fetch(`/api/clients/groups/${groupToDelete.id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            const responseData = await response.json();
+            const data = responseData?.data || responseData;
+
+            if (response.ok) {
+                alert('✅ Group deleted successfully');
+                setShowDeleteGroupModal(false);
+                setGroupToDelete(null);
+                // Reload all groups
+                await loadGroupsData();
+            } else {
+                alert(data?.error || data?.message || 'Failed to delete group. Please try again.');
+            }
+        } catch (error) {
+            console.error('Failed to delete group:', error);
+            alert('Failed to delete group. Please try again.');
         }
     };
 
@@ -4223,13 +4324,89 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         <i className="fas fa-spinner fa-spin text-2xl mb-2"></i>
                                         <p>Loading groups...</p>
                                     </div>
-                                ) : !client?.id ? (
-                                    <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                        <p>Please save the client first before managing groups.</p>
-                                    </div>
                                 ) : (
                                     <>
-                                        {/* Primary Parent Group */}
+                                        {/* Manage Groups Section */}
+                                        <div>
+                                            <div className="flex justify-between items-center mb-3">
+                                                <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                    Manage Groups
+                                                </label>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowCreateGroupModal(true)}
+                                                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                                                        isDark
+                                                            ? 'bg-green-600 hover:bg-green-700 text-white'
+                                                            : 'bg-green-500 hover:bg-green-600 text-white'
+                                                    }`}
+                                                >
+                                                    <i className="fas fa-plus mr-1"></i>
+                                                    Create Group
+                                                </button>
+                                            </div>
+                                            {allGroups.length > 0 ? (
+                                                <div className={`space-y-2 max-h-64 overflow-y-auto ${isDark ? 'bg-gray-800' : 'bg-gray-50'} rounded-md p-3 border ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                                                    {allGroups
+                                                        .filter(g => g.type === 'group')
+                                                        .map((group) => {
+                                                            const memberCount = (group._count?.childCompanies || 0) + (group._count?.groupChildren || 0);
+                                                            return (
+                                                                <div
+                                                                    key={group.id}
+                                                                    className={`flex items-center justify-between p-2 rounded-md ${isDark ? 'bg-gray-700' : 'bg-white'} border ${isDark ? 'border-gray-600' : 'border-gray-200'}`}
+                                                                >
+                                                                    <div className="flex-1">
+                                                                        <span className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                                            {group.name}
+                                                                        </span>
+                                                                        {group.industry && (
+                                                                            <span className={`ml-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                                                ({group.industry})
+                                                                            </span>
+                                                                        )}
+                                                                        <span className={`ml-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                                            • {memberCount} member{memberCount !== 1 ? 's' : ''}
+                                                                        </span>
+                                                                    </div>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setGroupToDelete(group);
+                                                                            setShowDeleteGroupModal(true);
+                                                                        }}
+                                                                        className={`px-2 py-1 text-xs rounded transition-colors ${
+                                                                            isDark
+                                                                                ? 'bg-red-600 hover:bg-red-700 text-white'
+                                                                                : 'bg-red-500 hover:bg-red-600 text-white'
+                                                                        }`}
+                                                                    >
+                                                                        <i className="fas fa-trash mr-1"></i>
+                                                                        Delete
+                                                                    </button>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    {allGroups.filter(g => g.type === 'group').length === 0 && (
+                                                        <p className={`text-sm py-4 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                            No groups created yet. Click "Create Group" to add one.
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <p className={`text-sm py-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                    No groups available. Click "Create Group" to add one.
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        {!client?.id ? (
+                                            <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                <p>Please save the client first before managing group memberships.</p>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                {/* Primary Parent Group */}
                                         <div>
                                             <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                                                 Primary Parent Company
@@ -4344,6 +4521,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 Assign this client to multiple groups for flexible categorization
                                             </p>
                                         </div>
+                                            </>
+                                        )}
                                     </>
                                 )}
 
@@ -4542,6 +4721,180 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         }`}
                                                     >
                                                         {createGroupMode ? 'Create & Add' : 'Add'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Create Group Modal */}
+                                {showCreateGroupModal && (
+                                    <div 
+                                        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]" 
+                                        onClick={() => {
+                                            setShowCreateGroupModal(false);
+                                            setStandaloneGroupName('');
+                                            setStandaloneGroupIndustry('Other');
+                                        }}
+                                        style={{ zIndex: 9999 }}
+                                    >
+                                        <div 
+                                            className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg p-6 max-w-md w-full mx-4 shadow-xl`}
+                                            onClick={(e) => e.stopPropagation()}
+                                            style={{ zIndex: 10000 }}
+                                        >
+                                            <div className="flex justify-between items-center mb-4">
+                                                <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                    Create New Group
+                                                </h3>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setShowCreateGroupModal(false);
+                                                        setStandaloneGroupName('');
+                                                        setStandaloneGroupIndustry('Other');
+                                                    }}
+                                                    className={`${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'} transition-colors`}
+                                                >
+                                                    <i className="fas fa-times text-xl"></i>
+                                                </button>
+                                            </div>
+                                            
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                        Group Name <span className="text-red-500">*</span>
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={standaloneGroupName}
+                                                        onChange={(e) => setStandaloneGroupName(e.target.value)}
+                                                        placeholder="e.g., Exxaro Group"
+                                                        className={`w-full px-3 py-2 rounded-md border ${
+                                                            isDark 
+                                                                ? 'bg-gray-700 border-gray-600 text-gray-100' 
+                                                                : 'bg-white border-gray-300 text-gray-900'
+                                                        } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                        Industry (Optional)
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={standaloneGroupIndustry}
+                                                        onChange={(e) => setStandaloneGroupIndustry(e.target.value)}
+                                                        placeholder="e.g., Mining"
+                                                        className={`w-full px-3 py-2 rounded-md border ${
+                                                            isDark 
+                                                                ? 'bg-gray-700 border-gray-600 text-gray-100' 
+                                                                : 'bg-white border-gray-300 text-gray-900'
+                                                        } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                                                    />
+                                                </div>
+                                                
+                                                <div className="flex gap-3 justify-end">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setShowCreateGroupModal(false);
+                                                            setStandaloneGroupName('');
+                                                            setStandaloneGroupIndustry('Other');
+                                                        }}
+                                                        className={`px-4 py-2 rounded-md transition-colors ${
+                                                            isDark
+                                                                ? 'bg-gray-700 hover:bg-gray-600 text-gray-100'
+                                                                : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
+                                                        }`}
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleCreateStandaloneGroup}
+                                                        disabled={!standaloneGroupName?.trim()}
+                                                        className={`px-4 py-2 rounded-md transition-colors ${
+                                                            !standaloneGroupName?.trim()
+                                                                ? 'bg-gray-400 cursor-not-allowed text-gray-200'
+                                                                : isDark
+                                                                    ? 'bg-green-600 hover:bg-green-700 text-white'
+                                                                    : 'bg-green-500 hover:bg-green-600 text-white'
+                                                        }`}
+                                                    >
+                                                        Create Group
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Delete Group Modal */}
+                                {showDeleteGroupModal && groupToDelete && (
+                                    <div 
+                                        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]" 
+                                        onClick={() => {
+                                            setShowDeleteGroupModal(false);
+                                            setGroupToDelete(null);
+                                        }}
+                                        style={{ zIndex: 9999 }}
+                                    >
+                                        <div 
+                                            className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg p-6 max-w-md w-full mx-4 shadow-xl`}
+                                            onClick={(e) => e.stopPropagation()}
+                                            style={{ zIndex: 10000 }}
+                                        >
+                                            <div className="flex justify-between items-center mb-4">
+                                                <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                    Delete Group
+                                                </h3>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setShowDeleteGroupModal(false);
+                                                        setGroupToDelete(null);
+                                                    }}
+                                                    className={`${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'} transition-colors`}
+                                                >
+                                                    <i className="fas fa-times text-xl"></i>
+                                                </button>
+                                            </div>
+                                            
+                                            <div className="space-y-4">
+                                                <p className={`${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                    Are you sure you want to delete the group <strong>"{groupToDelete.name}"</strong>?
+                                                </p>
+                                                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                    This action cannot be undone. The group will be permanently deleted.
+                                                </p>
+                                                
+                                                <div className="flex gap-3 justify-end">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setShowDeleteGroupModal(false);
+                                                            setGroupToDelete(null);
+                                                        }}
+                                                        className={`px-4 py-2 rounded-md transition-colors ${
+                                                            isDark
+                                                                ? 'bg-gray-700 hover:bg-gray-600 text-gray-100'
+                                                                : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
+                                                        }`}
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleDeleteGroup}
+                                                        className={`px-4 py-2 rounded-md transition-colors ${
+                                                            isDark
+                                                                ? 'bg-red-600 hover:bg-red-700 text-white'
+                                                                : 'bg-red-500 hover:bg-red-600 text-white'
+                                                        }`}
+                                                    >
+                                                        Delete Group
                                                     </button>
                                                 </div>
                                             </div>

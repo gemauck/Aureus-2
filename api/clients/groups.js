@@ -88,6 +88,7 @@ async function handler(req, res) {
             type: true,
             industry: true,
             status: true,
+            createdAt: true,
             _count: {
               select: {
                 childCompanies: true,
@@ -104,6 +105,165 @@ async function handler(req, res) {
       } catch (error) {
         console.error('Error fetching groups:', error)
         return serverError(res, 'Failed to fetch groups')
+      }
+    }
+    
+    // POST /api/clients/groups - Create a standalone group
+    if (req.method === 'POST' && pathSegments.length === 2 && pathSegments[0] === 'clients' && pathSegments[1] === 'groups') {
+      try {
+        const body = await parseJsonBody(req)
+        const { name, industry, notes } = body
+        
+        if (!name || !name.trim()) {
+          return badRequest(res, 'Group name is required')
+        }
+        
+        // Check if group with this name already exists
+        const existingGroup = await prisma.client.findFirst({
+          where: {
+            name: name.trim()
+          }
+        })
+        
+        if (existingGroup) {
+          return badRequest(res, 'A group with this name already exists')
+        }
+        
+        // Get current user for ownerId
+        const userId = req.user?.sub
+        let ownerId = null
+        
+        if (userId) {
+          try {
+            const user = await prisma.user.findUnique({ where: { id: userId } })
+            if (user) {
+              ownerId = userId
+            }
+          } catch (userError) {
+            // Skip ownerId if error
+          }
+        }
+        
+        // Create new group entity
+        const newGroup = await prisma.client.create({
+          data: {
+            name: name.trim(),
+            type: 'group',
+            industry: industry || 'Other',
+            status: 'active',
+            stage: 'Awareness',
+            revenue: 0,
+            value: 0,
+            probability: 0,
+            lastContact: new Date(),
+            address: '',
+            website: '',
+            notes: notes || `Company group for organizing associated companies`,
+            contacts: '[]',
+            followUps: '[]',
+            projectIds: '[]',
+            comments: '[]',
+            sites: '[]',
+            contracts: '[]',
+            activityLog: '[]',
+            services: '[]',
+            billingTerms: JSON.stringify({
+              paymentTerms: 'Net 30',
+              billingFrequency: 'Monthly',
+              currency: 'ZAR',
+              retainerAmount: 0,
+              taxExempt: false,
+              notes: ''
+            }),
+            ...(ownerId ? { ownerId } : {})
+          },
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            industry: true,
+            status: true,
+            createdAt: true,
+            _count: {
+              select: {
+                childCompanies: true,
+                groupChildren: true
+              }
+            }
+          }
+        })
+        
+        console.log('✅ Standalone group created:', newGroup)
+        return created(res, { group: newGroup })
+      } catch (error) {
+        console.error('Error creating standalone group:', error)
+        
+        if (error.code === 'P2002') {
+          return badRequest(res, 'A group with this name already exists')
+        }
+        
+        return serverError(res, 'Failed to create group')
+      }
+    }
+    
+    // DELETE /api/clients/groups/:groupId - Delete a group
+    if (req.method === 'DELETE' && pathSegments.length === 3 && pathSegments[0] === 'clients' && pathSegments[1] === 'groups') {
+      const groupId = req.params?.groupId || pathSegments[2]
+      
+      try {
+        // Check if group exists
+        const group = await prisma.client.findUnique({
+          where: { id: groupId },
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            _count: {
+              select: {
+                childCompanies: true,
+                groupChildren: true
+              }
+            }
+          }
+        })
+        
+        if (!group) {
+          return notFound(res, 'Group not found')
+        }
+        
+        // Check if group has any members (child companies or group memberships)
+        const hasMembers = group._count.childCompanies > 0 || group._count.groupChildren > 0
+        
+        if (hasMembers) {
+          return badRequest(res, 'Cannot delete group that has members. Please remove all members first.')
+        }
+        
+        // Check if any clients have this as their parentGroupId
+        const clientsWithParent = await prisma.client.count({
+          where: {
+            parentGroupId: groupId
+          }
+        })
+        
+        if (clientsWithParent > 0) {
+          return badRequest(res, 'Cannot delete group that is set as primary parent for one or more clients. Please change their primary parent first.')
+        }
+        
+        // Delete the group
+        await prisma.client.delete({
+          where: { id: groupId }
+        })
+        
+        console.log('✅ Group deleted:', groupId)
+        return ok(res, { message: 'Group deleted successfully', deletedGroupId: groupId })
+      } catch (error) {
+        console.error('Error deleting group:', error)
+        
+        if (error.code === 'P2003') {
+          return badRequest(res, 'Cannot delete group due to existing relationships. Please remove all members and parent associations first.')
+        }
+        
+        return serverError(res, 'Failed to delete group')
       }
     }
     

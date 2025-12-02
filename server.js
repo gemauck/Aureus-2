@@ -742,6 +742,31 @@ app.all('/api/clients/groups', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for delete group endpoint (DELETE /api/clients/groups/:groupId)
+// MUST come BEFORE /api/clients/:id/groups so Express matches it first
+app.all('/api/clients/groups/:groupId', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'clients', 'groups.js'))
+    if (!handler) {
+      console.error('❌ Groups handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    // Attach groupId to req.params for the handler
+    req.params = req.params || {}
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Groups API error:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
 // Explicit mapping for client groups endpoints (GET, POST, DELETE /api/clients/:id/groups)
 app.all('/api/clients/:id/groups/:groupId?', async (req, res, next) => {
   try {
