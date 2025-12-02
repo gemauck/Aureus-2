@@ -192,15 +192,10 @@ async function handler(req, res) {
         if (groupName && !groupId) {
           console.log('Creating new group with name:', groupName)
           
-          // Check if group with this name already exists
+          // Check if group with this name already exists (any type)
           const existingGroup = await prisma.client.findFirst({
             where: {
-              name: groupName.trim(),
-              OR: [
-                { type: 'client' },
-                { type: 'group' },
-                { type: null }
-              ]
+              name: groupName.trim()
             }
           })
           
@@ -231,7 +226,30 @@ async function handler(req, res) {
                 type: 'group', // Mark as a group entity
                 industry: body.groupIndustry || 'Other',
                 status: 'active',
+                stage: 'Awareness', // Required field with default
+                revenue: 0, // Required field with default
+                value: 0, // Required field with default
+                probability: 0, // Required field with default
+                lastContact: new Date(), // Required field with default
+                address: '',
+                website: '',
                 notes: body.groupNotes || `Company group for organizing associated companies`,
+                contacts: '[]',
+                followUps: '[]',
+                projectIds: '[]',
+                comments: '[]',
+                sites: '[]',
+                contracts: '[]',
+                activityLog: '[]',
+                services: '[]',
+                billingTerms: JSON.stringify({
+                  paymentTerms: 'Net 30',
+                  billingFrequency: 'Monthly',
+                  currency: 'ZAR',
+                  retainerAmount: 0,
+                  taxExempt: false,
+                  notes: ''
+                }),
                 ...(ownerId ? { ownerId } : {})
               },
               select: {
