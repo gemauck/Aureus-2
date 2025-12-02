@@ -588,7 +588,9 @@ function initializeProjectDetail() {
     // Store function in ref via useEffect to avoid TDZ issues
     // This ensures the callback is fully initialized before assignment
     useEffect(() => {
-        ensureTaskDetailModalLoadedRef.current = ensureTaskDetailModalLoaded;
+        // Access the function through closure to avoid TDZ issues during dependency evaluation
+        const fn = ensureTaskDetailModalLoaded;
+        ensureTaskDetailModalLoadedRef.current = fn;
     }, [ensureTaskDetailModalLoaded]);
     
     // Check if required components are loaded
