@@ -95,6 +95,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Industries state
     const [industries, setIndustries] = useState([]);
     
+    // Company Groups state
+    const [allGroups, setAllGroups] = useState([]);
+    const [loadingGroups, setLoadingGroups] = useState(false);
+    const [groupMemberships, setGroupMemberships] = useState([]);
+    const [showAddGroupModal, setShowAddGroupModal] = useState(false);
+    const [selectedGroupId, setSelectedGroupId] = useState('');
+    
     // Track if user has edited the form to prevent unwanted resets
     const hasUserEditedForm = useRef(false);
     const lastSavedClientId = useRef(client?.id);
@@ -1874,7 +1881,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 {/* Tabs */}
                 <div className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} px-3 sm:px-6`}>
                     <div className={`flex ${isFullPage ? 'gap-4 sm:gap-8' : 'gap-2 sm:gap-6'} overflow-x-auto scrollbar-hide`} style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                        {['overview', 'contacts', 'sites', 'opportunities', 'calendar', 'projects', 'service-maintenance', ...(isAdmin ? ['contracts'] : []), 'activity', 'notes'].map(tab => (
+                        {['overview', 'groups', 'contacts', 'sites', 'opportunities', 'calendar', 'projects', 'service-maintenance', ...(isAdmin ? ['contracts'] : []), 'activity', 'notes'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => handleTabChange(tab)}
@@ -1889,6 +1896,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             >
                                 <i className={`fas fa-${
                                     tab === 'overview' ? 'info-circle' :
+                                    tab === 'groups' ? 'sitemap' :
                                     tab === 'contacts' ? 'users' :
                                     tab === 'sites' ? 'map-marker-alt' :
                                     tab === 'opportunities' ? 'bullseye' :
@@ -3898,6 +3906,365 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 </div>
                             </div>
                         )}
+
+                        {/* Company Groups Tab */}
+                        {activeTab === 'groups' && (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                        Company Groups
+                                    </h3>
+                                </div>
+                                <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    <p>Company Groups feature is coming soon. Backend API is ready.</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Notes/Comments Tab */}
+                                    if (!client?.id) {
+                                        setLoadingGroups(false);
+                                        return;
+                                    }
+                                    
+                                    try {
+                                        setLoadingGroups(true);
+                                        
+                                        // Fetch client's groups
+                                        const groupsResponse = await fetch(`/api/clients/${client.id}/groups`, {
+                                            headers: {
+                                                'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+                                            }
+                                        });
+                                        
+                                        if (groupsResponse.ok) {
+                                            const groupsData = await groupsResponse.json();
+                                            const data = groupsData?.data || groupsData;
+                                            setPrimaryParent(data.primaryParent || null);
+                                            setGroupMemberships(data.groupMemberships || []);
+                                        }
+                                        
+                                        // Fetch all available clients that can be groups
+                                        const clientsResponse = await fetch('/api/clients', {
+                                            headers: {
+                                                'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+                                            }
+                                        });
+                                        
+                                        if (clientsResponse.ok) {
+                                            const clientsData = await clientsResponse.json();
+                                            const clients = clientsData?.data?.clients || clientsData?.clients || [];
+                                            const potentialGroups = clients
+                                                .filter(c => c.id !== client.id && c.type === 'client')
+                                                .map(c => ({ id: c.id, name: c.name, type: c.type, industry: c.industry }));
+                                            setAllGroups(potentialGroups);
+                                        }
+                                    } catch (error) {
+                                        console.error('Failed to load groups:', error);
+                                    } finally {
+                                        setLoadingGroups(false);
+                                    }
+                                };
+                                
+                                loadGroupsData();
+                            }, [client?.id, activeTab]);
+                            
+                            const handleParentGroupChange = async (groupId) => {
+                                if (!client?.id) return;
+                                
+                                const newParentId = groupId === '' ? null : groupId;
+                                
+                                try {
+                                    const response = await fetch(`/api/clients/${client.id}`, {
+                                        method: 'PATCH',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+                                        },
+                                        body: JSON.stringify({ parentGroupId: newParentId })
+                                    });
+                                    
+                                    if (response.ok) {
+                                        const data = await response.json();
+                                        const updatedClient = data?.data?.client || data?.client;
+                                        setPrimaryParent(updatedClient?.parentGroup || null);
+                                        
+                                        if (onUpdate) {
+                                            onUpdate({ ...client, parentGroupId: newParentId, parentGroup: updatedClient?.parentGroup || null });
+                                        }
+                                    } else {
+                                        alert('Failed to update parent group. Please try again.');
+                                    }
+                                } catch (error) {
+                                    console.error('Failed to update parent group:', error);
+                                    alert('Failed to update parent group. Please try again.');
+                                }
+                            };
+                            
+                            const handleAddToGroup = async () => {
+                                if (!client?.id || !selectedGroupId) return;
+                                
+                                try {
+                                    const response = await fetch(`/api/clients/${client.id}/groups`, {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+                                        },
+                                        body: JSON.stringify({ groupId: selectedGroupId, role: 'member' })
+                                    });
+                                    
+                                    if (response.ok) {
+                                        const data = await response.json();
+                                        const membership = data?.data?.membership || data?.membership;
+                                        
+                                        // Reload groups data
+                                        const groupsResponse = await fetch(`/api/clients/${client.id}/groups`, {
+                                            headers: {
+                                                'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+                                            }
+                                        });
+                                        
+                                        if (groupsResponse.ok) {
+                                            const groupsData = await groupsResponse.json();
+                                            const gData = groupsData?.data || groupsData;
+                                            setGroupMemberships(gData.groupMemberships || []);
+                                        }
+                                        
+                                        setShowAddGroupModal(false);
+                                        setSelectedGroupId('');
+                                    } else {
+                                        const errorData = await response.json().catch(() => ({}));
+                                        alert(errorData.message || 'Failed to add client to group. Please try again.');
+                                    }
+                                } catch (error) {
+                                    console.error('Failed to add client to group:', error);
+                                    alert('Failed to add client to group. Please try again.');
+                                }
+                            };
+                            
+                            const handleRemoveFromGroup = async (groupId) => {
+                                if (!client?.id || !groupId) return;
+                                
+                                if (!confirm('Remove this client from the group?')) return;
+                                
+                                try {
+                                    const response = await fetch(`/api/clients/${client.id}/groups/${groupId}`, {
+                                        method: 'DELETE',
+                                        headers: {
+                                            'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+                                        }
+                                    });
+                                    
+                                    if (response.ok) {
+                                        // Reload groups data
+                                        const groupsResponse = await fetch(`/api/clients/${client.id}/groups`, {
+                                            headers: {
+                                                'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+                                            }
+                                        });
+                                        
+                                        if (groupsResponse.ok) {
+                                            const groupsData = await groupsResponse.json();
+                                            const gData = groupsData?.data || groupsData;
+                                            setGroupMemberships(gData.groupMemberships || []);
+                                        }
+                                    } else {
+                                        alert('Failed to remove client from group. Please try again.');
+                                    }
+                                } catch (error) {
+                                    console.error('Failed to remove client from group:', error);
+                                    alert('Failed to remove client from group. Please try again.');
+                                }
+                            };
+                            
+                            if (loadingGroups) {
+                                return (
+                                    <div className="space-y-4">
+                                        <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                            Loading groups...
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            
+                            if (!client?.id) {
+                                return (
+                                    <div className="space-y-4">
+                                        <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                            <p>Please save the client first before managing groups.</p>
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            
+                            const availableGroups = allGroups.filter(g => 
+                                g.id !== primaryParent?.id && 
+                                !groupMemberships.some(gm => gm.group?.id === g.id)
+                            );
+                            
+                            return (
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center">
+                                        <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                            Company Groups
+                                        </h3>
+                                    </div>
+                                    
+                                    {/* Primary Parent Group */}
+                                    <div>
+                                        <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                            Primary Parent Company
+                                        </label>
+                                        <select
+                                            value={primaryParent?.id || ''}
+                                            onChange={(e) => handleParentGroupChange(e.target.value)}
+                                            className={`w-full px-3 py-2 rounded-md border ${
+                                                isDark 
+                                                    ? 'bg-gray-700 border-gray-600 text-gray-100' 
+                                                    : 'bg-white border-gray-300 text-gray-900'
+                                            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                                        >
+                                            <option value="">None (Standalone Company)</option>
+                                            {allGroups.map((group) => (
+                                                <option key={group.id} value={group.id}>
+                                                    {group.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <p className={`mt-1 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                            Select the primary parent company for this client (ownership hierarchy)
+                                        </p>
+                                    </div>
+
+                                    {/* Additional Group Memberships */}
+                                    <div>
+                                        <div className="flex justify-between items-center mb-2">
+                                            <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                Additional Group Memberships
+                                            </label>
+                                            <button
+                                                onClick={() => setShowAddGroupModal(true)}
+                                                disabled={availableGroups.length === 0}
+                                                className={`px-3 py-1 text-sm rounded-md ${
+                                                    availableGroups.length === 0
+                                                        ? 'bg-gray-400 cursor-not-allowed text-gray-200'
+                                                        : isDark
+                                                            ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                                                            : 'bg-blue-500 hover:bg-blue-600 text-white'
+                                                } transition-colors`}
+                                            >
+                                                + Add Group
+                                            </button>
+                                        </div>
+                                        
+                                        {groupMemberships.length > 0 ? (
+                                            <div className="space-y-2">
+                                                {groupMemberships.map((membership) => (
+                                                    <div
+                                                        key={membership.id || membership.group?.id}
+                                                        className={`flex items-center justify-between p-2 rounded-md ${
+                                                            isDark ? 'bg-gray-700' : 'bg-gray-50'
+                                                        }`}
+                                                    >
+                                                        <div>
+                                                            <span className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                                {membership.group?.name || 'Unknown Group'}
+                                                            </span>
+                                                            {membership.role && membership.role !== 'member' && (
+                                                                <span className={`ml-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                                    ({membership.role})
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleRemoveFromGroup(membership.group?.id)}
+                                                            className={`px-2 py-1 text-xs rounded ${
+                                                                isDark
+                                                                    ? 'bg-red-600 hover:bg-red-700 text-white'
+                                                                    : 'bg-red-500 hover:bg-red-600 text-white'
+                                                            } transition-colors`}
+                                                        >
+                                                            Remove
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                No additional group memberships. Click "Add Group" to assign this client to additional groups.
+                                            </p>
+                                        )}
+                                        
+                                        <p className={`mt-1 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                            Assign this client to multiple groups for flexible categorization
+                                        </p>
+                                    </div>
+
+                                    {/* Add Group Modal */}
+                                    {showAddGroupModal && (
+                                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                                            <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg p-6 max-w-md w-full mx-4`}>
+                                                <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                    Add to Group
+                                                </h3>
+                                                <div className="space-y-4">
+                                                    <div>
+                                                        <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                            Select Group
+                                                        </label>
+                                                        <select
+                                                            value={selectedGroupId}
+                                                            onChange={(e) => setSelectedGroupId(e.target.value)}
+                                                            className={`w-full px-3 py-2 rounded-md border ${
+                                                                isDark 
+                                                                    ? 'bg-gray-700 border-gray-600 text-gray-100' 
+                                                                    : 'bg-white border-gray-300 text-gray-900'
+                                                            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                                                        >
+                                                            <option value="">Select a group...</option>
+                                                            {availableGroups.map((group) => (
+                                                                <option key={group.id} value={group.id}>
+                                                                    {group.name}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    <div className="flex gap-3 justify-end">
+                                                        <button
+                                                            onClick={() => {
+                                                                setShowAddGroupModal(false);
+                                                                setSelectedGroupId('');
+                                                            }}
+                                                            className={`px-4 py-2 rounded-md ${
+                                                                isDark
+                                                                    ? 'bg-gray-700 hover:bg-gray-600 text-gray-100'
+                                                                    : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
+                                                            } transition-colors`}
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                        <button
+                                                            onClick={handleAddToGroup}
+                                                            disabled={!selectedGroupId}
+                                                            className={`px-4 py-2 rounded-md ${
+                                                                !selectedGroupId
+                                                                    ? 'bg-gray-400 cursor-not-allowed text-gray-200'
+                                                                    : isDark
+                                                                        ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                                                                        : 'bg-blue-500 hover:bg-blue-600 text-white'
+                                                            } transition-colors`}
+                                                        >
+                                                            Add
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
 
                         {/* Notes/Comments Tab */}
                         {activeTab === 'notes' && (
