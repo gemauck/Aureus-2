@@ -677,6 +677,43 @@ const ManagementMeetingNotes = () => {
         []
     );
 
+    // Batched version to update multiple fields at once (prevents multiple re-renders)
+    const updateDepartmentNotesLocalBatched = useCallback(
+        (departmentNotesId, updates, monthlyId) => {
+            const applyUpdates = (note) => {
+                if (!note) {
+                    return note;
+                }
+
+                const weeklyNotes = Array.isArray(note.weeklyNotes)
+                    ? note.weeklyNotes.map((week) => ({
+                          ...week,
+                          departmentNotes: Array.isArray(week.departmentNotes)
+                              ? week.departmentNotes.map((deptNote) =>
+                                    deptNote?.id === departmentNotesId 
+                                        ? { ...deptNote, ...updates } 
+                                        : deptNote
+                                )
+                              : week.departmentNotes
+                      }))
+                    : note.weeklyNotes;
+                return { ...note, weeklyNotes };
+            };
+
+            setCurrentMonthlyNotes((prev) => (prev ? applyUpdates(prev) : prev));
+
+            if (monthlyId) {
+                setMonthlyNotesList((prev) => {
+                    if (!Array.isArray(prev)) {
+                        return prev;
+                    }
+                    return prev.map((note) => (note?.id === monthlyId ? applyUpdates(note) : note));
+                });
+            }
+        },
+        []
+    );
+
     // Initialize selected month:
     // - Respect an explicit month in the URL (for shared links / navigation)
     // - Otherwise, default to the current calendar month
@@ -1911,27 +1948,41 @@ const ManagementMeetingNotes = () => {
             // This ensures the saved data appears on screen right away without any reload
             const monthlyId = currentMonthlyNotes?.id || null;
             
-            // Update local state immediately with saved values (NO PAGE REFRESH)
-            // This ensures the saved data appears on screen right away
-            updateDepartmentNotesLocal(departmentNotesId, 'successes', fieldsToSave.successes, monthlyId);
-            updateDepartmentNotesLocal(departmentNotesId, 'weekToFollow', fieldsToSave.weekToFollow, monthlyId);
-            updateDepartmentNotesLocal(departmentNotesId, 'frustrations', fieldsToSave.frustrations, monthlyId);
+            // CRITICAL: Use batched update to prevent multiple re-renders that cause scroll jumps
+            // Update all three fields in a single state update instead of three separate updates
+            updateDepartmentNotesLocalBatched(
+                departmentNotesId,
+                {
+                    successes: fieldsToSave.successes,
+                    weekToFollow: fieldsToSave.weekToFollow,
+                    frustrations: fieldsToSave.frustrations
+                },
+                monthlyId
+            );
             
             // No notifications - save happens silently
             
-            // Aggressively restore scroll position after state updates
+            // CRITICAL: Restore scroll position IMMEDIATELY after batched state update
+            // Use synchronous scroll restoration to prevent any jump
             if (preservedScrollPosition.current !== null) {
                 const scrollY = preservedScrollPosition.current;
-                // Multiple restoration attempts to ensure it works
+                
+                // Immediate synchronous restoration (before React re-renders)
+                window.scrollTo({ top: scrollY, behavior: 'instant' });
+                
+                // Additional restoration attempts to handle any async DOM updates
                 requestAnimationFrame(() => {
                     window.scrollTo({ top: scrollY, behavior: 'instant' });
                 });
+                
                 setTimeout(() => {
                     window.scrollTo({ top: scrollY, behavior: 'instant' });
                 }, 0);
+                
                 setTimeout(() => {
                     window.scrollTo({ top: scrollY, behavior: 'instant' });
                 }, 10);
+                
                 setTimeout(() => {
                     window.scrollTo({ top: scrollY, behavior: 'instant' });
                 }, 50);
@@ -3580,7 +3631,25 @@ const ManagementMeetingNotes = () => {
                                                                 e.preventDefault();
                                                                 e.stopPropagation();
                                                                 console.log('💾 Save button clicked for department:', deptNote.id);
+                                                                
+                                                                // CRITICAL: Preserve button reference and scroll position before save
+                                                                const buttonElement = e.currentTarget;
+                                                                const currentScrollPosition = window.scrollY || window.pageYOffset;
+                                                                
                                                                 await handleSaveDepartment(deptNote.id, e);
+                                                                
+                                                                // CRITICAL: Restore focus and scroll position after save to prevent jump
+                                                                // This prevents the browser from scrolling to top when button loses focus
+                                                                requestAnimationFrame(() => {
+                                                                    if (buttonElement && document.body.contains(buttonElement)) {
+                                                                        buttonElement.focus({ preventScroll: true });
+                                                                    }
+                                                                    window.scrollTo({ top: currentScrollPosition, behavior: 'instant' });
+                                                                });
+                                                                
+                                                                setTimeout(() => {
+                                                                    window.scrollTo({ top: currentScrollPosition, behavior: 'instant' });
+                                                                }, 0);
                                                             }}
                                                             className={`w-full text-xs px-3 py-2 rounded font-medium transition ${loading ? 'opacity-50 cursor-not-allowed' : ''} ${isDark ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
                                                         >

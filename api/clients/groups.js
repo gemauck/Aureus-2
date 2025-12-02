@@ -196,7 +196,11 @@ async function handler(req, res) {
           const existingGroup = await prisma.client.findFirst({
             where: {
               name: groupName.trim(),
-              type: { in: ['client', 'group', null] } // Can be any type or null
+              OR: [
+                { type: 'client' },
+                { type: 'group' },
+                { type: null }
+              ]
             }
           })
           
