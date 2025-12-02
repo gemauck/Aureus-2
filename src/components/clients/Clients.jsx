@@ -1542,10 +1542,14 @@ const Clients = React.memo(() => {
                 if (exxaroAfterProcess.length > 0) {
                     console.log('🔍 After processClientData - Exxaro clients:', exxaroAfterProcess.map(c => ({
                         name: c.name,
+                        id: c.id,
                         parentGroup: c.parentGroup,
                         parentGroupName: c.parentGroupName,
                         parentGroupId: c.parentGroupId,
-                        groupMemberships: c.groupMemberships
+                        groupMemberships: c.groupMemberships,
+                        // Verify data structure
+                        parentGroupType: typeof c.parentGroup,
+                        hasParentGroupName: !!c.parentGroupName
                     })));
                 }
                 // Separate clients and leads based on type
