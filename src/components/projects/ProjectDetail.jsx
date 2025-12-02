@@ -493,11 +493,14 @@ function initializeProjectDetail() {
         return loadPromise;
     }, [taskDetailModalComponent]);
     
-    // Assign ref in useEffect with empty deps to avoid TDZ issues
-    // We access ensureTaskDetailModalLoaded through closure after it's initialized
-    // Empty deps array means this runs once after mount, which is fine since useCallback is stable
+    // Assign ref using setTimeout to avoid TDZ issues
+    // This defers the assignment until after all hooks are initialized
     useEffect(() => {
-        ensureTaskDetailModalLoadedRef.current = ensureTaskDetailModalLoaded;
+        // Use setTimeout to defer assignment until after component initialization
+        const timeoutId = setTimeout(() => {
+            ensureTaskDetailModalLoadedRef.current = ensureTaskDetailModalLoaded;
+        }, 0);
+        return () => clearTimeout(timeoutId);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
