@@ -959,39 +959,23 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const sectionToDelete = JSON.parse(JSON.stringify(section)); // Deep clone for restoration
         
         try {
-            // Update state and ref atomically using functional update
-            // Use a Promise to ensure state update completes before proceeding
-            await new Promise((resolve) => {
-                setSectionsByYear(prev => {
-                    const yearSections = prev[selectedYear] || [];
-                    const filtered = yearSections.filter(s => String(s.id) !== normalizedSectionId);
-                    
-                    const updatedSectionsByYear = {
-                        ...prev,
-                        [selectedYear]: filtered
-                    };
-                    
-                    // Immediately update the ref synchronously
-                    sectionsRef.current = updatedSectionsByYear;
-                    
-                    // Use requestAnimationFrame to ensure React has processed the state update
-                    requestAnimationFrame(() => {
-                        setTimeout(resolve, 0);
-                    });
-                    
-                    return updatedSectionsByYear;
-                });
+            // Update state and ref atomically - no need for Promise wrapper, update synchronously
+            setSectionsByYear(prev => {
+                const yearSections = prev[selectedYear] || [];
+                const filtered = yearSections.filter(s => String(s.id) !== normalizedSectionId);
+                
+                const updatedSectionsByYear = {
+                    ...prev,
+                    [selectedYear]: filtered
+                };
+                
+                // Immediately update the ref synchronously
+                sectionsRef.current = updatedSectionsByYear;
+                
+                return updatedSectionsByYear;
             });
             
-            // Double-check the ref was updated correctly
-            const currentSectionsAfterUpdate = sectionsRef.current[selectedYear] || [];
-            const sectionStillExists = currentSectionsAfterUpdate.find(s => String(s.id) === normalizedSectionId);
-            if (sectionStillExists) {
-                throw new Error('State update failed: section still exists after deletion');
-            }
-            
             // Force immediate save (bypass debounce) to ensure deletion is persisted
-            // Use a custom save function that doesn't trigger refresh from database
             const deletedSectionSnapshot = serializeSections(sectionsRef.current);
             
             // Save with explicit skip of post-save refresh
@@ -1026,15 +1010,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 
                 console.log('✅ Section deletion saved successfully');
                 
-                // Clear the deleting flag after sufficient delay to ensure save is fully persisted
-                // Use 15 seconds (3 polling cycles) to ensure the save is fully propagated
-                // Don't trigger refresh immediately - let the next natural polling cycle pick it up
+                // Clear the deleting flag immediately after successful save
+                // The save is complete, so we can safely allow polling to resume
+                // Use a short delay (500ms) just to ensure any pending operations complete
                 setTimeout(() => {
                     isDeletingRef.current = false;
                     console.log('✅ Deletion flag cleared, polling can resume');
                     // Trigger a single refresh after flag is cleared to sync state
                     refreshFromDatabase(false);
-                }, 15000);
+                }, 500);
                 
             } catch (saveError) {
                 console.error('❌ Error saving section deletion:', saveError);
