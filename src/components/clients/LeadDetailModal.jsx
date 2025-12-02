@@ -20,6 +20,7 @@ const LeadDetailModal = ({
     // Check if current user is admin (must be before useState that uses it)
     const user = window.storage?.getUser?.() || {};
     const isAdmin = user?.role?.toLowerCase() === 'admin';
+    const { isDark } = window.useTheme?.() || { isDark: false };
     
     // Modal owns its state - start with any provided lead data for instant rendering
     const [lead, setLead] = useState(() => initialLead || null);
@@ -2023,6 +2024,76 @@ const LeadDetailModal = ({
         return Array.from(map.values());
     };
 
+    // GPS coordinate parsing function
+    const parseGPSCoordinates = (gpsString) => {
+        if (!gpsString || !gpsString.trim()) return { latitude: '', longitude: '' };
+        
+        // Handle various GPS coordinate formats
+        const formats = [
+            // Format: "lat, lng" or "lat,lng"
+            /^(-?\d+\.?\d*),\s*(-?\d+\.?\d*)$/,
+            // Format: "lat lng" (space separated)
+            /^(-?\d+\.?\d*)\s+(-?\d+\.?\d*)$/,
+            // Format: "lat° lng°" (with degree symbols)
+            /^(-?\d+\.?\d*)°\s*(-?\d+\.?\d*)°$/
+        ];
+        
+        for (const format of formats) {
+            const match = gpsString.trim().match(format);
+            if (match) {
+                const lat = parseFloat(match[1]);
+                const lng = parseFloat(match[2]);
+                
+                // Validate coordinate ranges
+                if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+                    return { latitude: lat.toString(), longitude: lng.toString() };
+                }
+            }
+        }
+        
+        return { latitude: '', longitude: '' };
+    };
+    
+    // Function to get current location
+    const getCurrentLocation = () => {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude.toFixed(6);
+                    const lng = position.coords.longitude.toFixed(6);
+                    setNewSite(prev => ({
+                        ...prev,
+                        latitude: lat,
+                        longitude: lng,
+                        gpsCoordinates: `${lat}, ${lng}`
+                    }));
+                },
+                (error) => {
+                    console.error('Error getting location:', error);
+                    alert('Unable to get current location. Please enter coordinates manually.');
+                }
+            );
+        } else {
+            alert('Geolocation is not supported by this browser.');
+        }
+    };
+
+    const handleSiteMapLocationSelect = (coords) => {
+        if (!coords || typeof coords.latitude !== 'number' || typeof coords.longitude !== 'number') {
+            return;
+        }
+
+        const lat = coords.latitude.toFixed(6);
+        const lng = coords.longitude.toFixed(6);
+
+        setNewSite(prev => ({
+            ...prev,
+            latitude: lat,
+            longitude: lng,
+            gpsCoordinates: `${lat}, ${lng}`
+        }));
+    };
+
     // Load sites from database
     const loadSitesFromDatabase = async (leadId) => {
         try {
@@ -3668,7 +3739,7 @@ const LeadDetailModal = ({
                         {activeTab === 'sites' && (
                             <div className="space-y-4">
                                 <div className="flex justify-between items-center">
-                                    <h3 className="text-lg font-semibold text-gray-900">Sites & Locations</h3>
+                                    <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Sites & Locations</h3>
                                     {!showSiteForm && (
                                         <button
                                             type="button"
@@ -3682,71 +3753,156 @@ const LeadDetailModal = ({
                                 </div>
 
                                 {showSiteForm && (
-                                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                                        <h4 className="font-medium text-gray-900 mb-3 text-sm">
+                                    <div className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'} rounded-lg p-4 border`}>
+                                        <h4 className={`font-medium mb-3 text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                             {editingSite ? 'Edit Site' : 'New Site'}
                                         </h4>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                             <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Site Name *</label>
+                                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Site Name *</label>
                                                 <input
                                                     type="text"
                                                     value={newSite.name}
                                                     onChange={(e) => setNewSite({...newSite, name: e.target.value})}
                                                     onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
-                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                    className={`w-full px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
                                                     placeholder="e.g., Main Mine, North Farm"
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Site Contact</label>
+                                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Site Contact</label>
                                                 <input
                                                     type="text"
                                                     value={newSite.contactPerson}
                                                     onChange={(e) => setNewSite({...newSite, contactPerson: e.target.value})}
                                                     onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
                                                     placeholder="Contact person name"
-                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                    className={`w-full px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
                                                 />
                                             </div>
                                             <div className="col-span-2">
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Address</label>
+                                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Address</label>
                                                 <textarea
                                                     value={newSite.address}
                                                     onChange={(e) => setNewSite({...newSite, address: e.target.value})}
-                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                    className={`w-full px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
                                                     rows="2"
                                                     placeholder="Full site address"
                                                 ></textarea>
                                             </div>
+                                            
+                                            {/* GPS Coordinates Section */}
+                                            <div className="col-span-2">
+                                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>GPS Coordinates</label>
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="text"
+                                                        value={newSite.gpsCoordinates}
+                                                        onChange={(e) => {
+                                                            const coords = parseGPSCoordinates(e.target.value);
+                                                            setNewSite({
+                                                                ...newSite, 
+                                                                gpsCoordinates: e.target.value,
+                                                                latitude: coords.latitude,
+                                                                longitude: coords.longitude
+                                                            });
+                                                        }}
+                                                        className={`flex-1 px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
+                                                        placeholder="e.g., -26.2041, 28.0473 or -26.2041, 28.0473"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={getCurrentLocation}
+                                                        className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                                        title="Get current location"
+                                                    >
+                                                        <i className="fas fa-location-arrow"></i>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            if (newSite.latitude && newSite.longitude) {
+                                                                window.open(`https://www.openstreetmap.org/?mlat=${newSite.latitude}&mlon=${newSite.longitude}&zoom=15`, '_blank');
+                                                            } else {
+                                                                alert('Please enter GPS coordinates first');
+                                                            }
+                                                        }}
+                                                        className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                                                        title="Open in OpenStreetMap"
+                                                    >
+                                                        <i className="fas fa-map"></i>
+                                                    </button>
+                                                </div>
+                                                <div className="flex gap-2 mt-2">
+                                                    <input
+                                                        type="number"
+                                                        step="any"
+                                                        value={newSite.latitude}
+                                                        onChange={(e) => setNewSite({
+                                                            ...newSite, 
+                                                            latitude: e.target.value,
+                                                            gpsCoordinates: e.target.value && newSite.longitude ? `${e.target.value}, ${newSite.longitude}` : ''
+                                                        })}
+                                                        className={`flex-1 px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
+                                                        placeholder="Latitude (-90 to 90)"
+                                                    />
+                                                    <input
+                                                        type="number"
+                                                        step="any"
+                                                        value={newSite.longitude}
+                                                        onChange={(e) => setNewSite({
+                                                            ...newSite, 
+                                                            longitude: e.target.value,
+                                                            gpsCoordinates: newSite.latitude && e.target.value ? `${newSite.latitude}, ${e.target.value}` : ''
+                                                        })}
+                                                        className={`flex-1 px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
+                                                        placeholder="Longitude (-180 to 180)"
+                                                    />
+                                                </div>
+                                            </div>
+                                            
+                                            {/* Map Selection */}
+                                            <div className="col-span-2">
+                                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Location Map</label>
+                                                <window.MapComponent
+                                                    latitude={newSite.latitude}
+                                                    longitude={newSite.longitude}
+                                                    siteName={newSite.name || 'Site Location'}
+                                                    allowSelection={true}
+                                                    onLocationSelect={handleSiteMapLocationSelect}
+                                                />
+                                                <div className={`mt-2 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                    💡 <strong>Tip:</strong> Click anywhere on the map to drop a pin and automatically fill in the GPS fields, or use the buttons above to pull your current location or open OpenStreetMap.
+                                                </div>
+                                            </div>
                                             <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Phone</label>
+                                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Phone</label>
                                                 <input
                                                     type="tel"
                                                     value={newSite.phone}
                                                     onChange={(e) => setNewSite({...newSite, phone: e.target.value})}
                                                     onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
                                                     placeholder="+27 11 123 4567"
-                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                    className={`w-full px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
+                                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Email</label>
                                                 <input
                                                     type="email"
                                                     value={newSite.email}
                                                     onChange={(e) => setNewSite({...newSite, email: e.target.value})}
                                                     onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
                                                     placeholder="site@company.com"
-                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                    className={`w-full px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
                                                 />
                                             </div>
                                             <div className="col-span-2">
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
+                                                <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Notes</label>
                                                 <textarea
                                                     value={newSite.notes}
                                                     onChange={(e) => setNewSite({...newSite, notes: e.target.value})}
-                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                    className={`w-full px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'bg-gray-600 border-gray-500 text-gray-100' : 'border-gray-300'}`}
                                                     rows="2"
                                                     placeholder="Equipment deployed, special instructions, etc."
                                                 ></textarea>
@@ -3770,7 +3926,7 @@ const LeadDetailModal = ({
                                                         gpsCoordinates: ''
                                                     });
                                                 }}
-                                                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+                                                className={`px-3 py-1.5 text-sm border rounded-lg ${isDark ? 'border-gray-500 hover:bg-gray-600 text-gray-100' : 'border-gray-300 hover:bg-gray-50'}`}
                                             >
                                                 Cancel
                                             </button>
@@ -3807,17 +3963,17 @@ const LeadDetailModal = ({
                                         const allSites = Array.from(siteMap.values());
                                         
                                         return allSites.length === 0 ? (
-                                            <div className="text-center py-8 text-gray-500 text-sm">
+                                            <div className={`text-center py-8 text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                                 <i className="fas fa-map-marker-alt text-3xl mb-2"></i>
                                                 <p>No sites added yet</p>
                                             </div>
                                         ) : (
                                             allSites.map(site => (
-                                                <div key={site.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:border-primary-300 transition-all duration-200 hover:shadow-md">
+                                                <div key={site.id} className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} border rounded-lg p-4 hover:border-primary-300 transition-all duration-200 hover:shadow-md`}>
                                                     <div className="flex justify-between items-start mb-3">
                                                         <div className="flex items-center gap-2">
                                                             <i className="fas fa-map-marker-alt text-primary-600 text-lg"></i>
-                                                            <h4 className="font-semibold text-gray-900 text-base">{site.name}</h4>
+                                                            <h4 className={`font-semibold text-base ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{site.name}</h4>
                                                         </div>
                                                         <div className="flex gap-2">
                                                             <button
@@ -3839,10 +3995,12 @@ const LeadDetailModal = ({
                                                         </div>
                                                     </div>
 
+                                                    {/* Enhanced Site Information Grid */}
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        {/* Left Column - Contact & Location Info */}
                                                         <div className="space-y-3">
                                                             {site.address && (
-                                                                <div className="flex items-start gap-2 text-gray-700">
+                                                                <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                                                                     <i className="fas fa-map-marker-alt text-primary-600 mt-0.5 w-4"></i>
                                                                     <div>
                                                                         <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Address</div>
@@ -3852,7 +4010,7 @@ const LeadDetailModal = ({
                                                             )}
                                                             
                                                             {site.contactPerson && (
-                                                                <div className="flex items-start gap-2 text-gray-700">
+                                                                <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                                                                     <i className="fas fa-user text-blue-600 mt-0.5 w-4"></i>
                                                                     <div>
                                                                         <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Contact Person</div>
@@ -3860,11 +4018,32 @@ const LeadDetailModal = ({
                                                                     </div>
                                                                 </div>
                                                             )}
+
+                                                            {(site.latitude && site.longitude) && (
+                                                                <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                                    <i className="fas fa-crosshairs text-green-600 mt-0.5 w-4"></i>
+                                                                    <div>
+                                                                        <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">GPS Coordinates</div>
+                                                                        <div className="text-sm font-mono">{site.latitude}, {site.longitude}</div>
+                                                                        <a 
+                                                                            href={`https://www.openstreetmap.org/?mlat=${site.latitude}&mlon=${site.longitude}&zoom=15`}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 hover:underline mt-1"
+                                                                            title="Open in OpenStreetMap"
+                                                                        >
+                                                                            <i className="fas fa-external-link-alt"></i>
+                                                                            View on Map
+                                                                        </a>
+                                                                    </div>
+                                                                </div>
+                                                            )}
                                                         </div>
 
+                                                        {/* Right Column - Contact Details */}
                                                         <div className="space-y-3">
                                                             {site.phone && (
-                                                                <div className="flex items-start gap-2 text-gray-700">
+                                                                <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                                                                     <i className="fas fa-phone text-green-600 mt-0.5 w-4"></i>
                                                                     <div>
                                                                         <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Phone</div>
@@ -3876,7 +4055,7 @@ const LeadDetailModal = ({
                                                             )}
                                                             
                                                             {site.email && (
-                                                                <div className="flex items-start gap-2 text-gray-700">
+                                                                <div className={`flex items-start gap-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                                                                     <i className="fas fa-envelope text-purple-600 mt-0.5 w-4"></i>
                                                                     <div>
                                                                         <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Email</div>
@@ -3889,16 +4068,36 @@ const LeadDetailModal = ({
                                                         </div>
                                                     </div>
 
+                                                    {/* Notes Section */}
                                                     {site.notes && (
-                                                        <div className="mt-4 pt-3 border-t border-gray-200">
+                                                        <div className={`mt-4 pt-3 border-t ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
                                                             <div className="flex items-start gap-2">
                                                                 <i className="fas fa-sticky-note text-yellow-600 mt-0.5 w-4"></i>
                                                                 <div className="flex-1">
                                                                     <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Notes</div>
-                                                                    <div className="text-sm text-gray-700 bg-gray-50 p-3 rounded-lg">
+                                                                    <div className={`text-sm ${isDark ? 'text-gray-300 bg-gray-600' : 'text-gray-700 bg-gray-50'} p-3 rounded-lg`}>
                                                                         {site.notes}
                                                                     </div>
                                                                 </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Mini Map Preview */}
+                                                    {(site.latitude && site.longitude) && (
+                                                        <div className={`mt-4 pt-3 border-t ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
+                                                            <div className="flex items-center gap-2 mb-2">
+                                                                <i className="fas fa-map text-primary-600 w-4"></i>
+                                                                <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Location Preview</div>
+                                                            </div>
+                                                            <div className="h-32 rounded-lg overflow-hidden border border-gray-200">
+                                                                <iframe
+                                                                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${site.longitude-0.01},${site.latitude-0.01},${site.longitude+0.01},${site.latitude+0.01}&layer=mapnik&marker=${site.latitude},${site.longitude}`}
+                                                                    width="100%"
+                                                                    height="100%"
+                                                                    style={{ border: 0 }}
+                                                                    title={`Map of ${site.name}`}
+                                                                ></iframe>
                                                             </div>
                                                         </div>
                                                     )}
