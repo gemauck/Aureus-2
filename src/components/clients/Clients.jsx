@@ -1276,9 +1276,31 @@ const Clients = React.memo(() => {
             
             if (cachedClients && cachedClients.length > 0 && !forceRefresh) {
                 // Separate clients and leads from cache
-                const filteredCachedClients = cachedClients.filter(client => 
-                    client.type === 'client'
-                );
+                // CRITICAL: Ensure groupMemberships is always present (even if empty array)
+                const filteredCachedClients = cachedClients
+                    .filter(client => client.type === 'client')
+                    .map(client => ({
+                        ...client,
+                        // Ensure groupMemberships is always an array - parse if it's a string from localStorage
+                        groupMemberships: (() => {
+                            if (client.groupMemberships === undefined || client.groupMemberships === null) {
+                                return [];
+                            }
+                            if (Array.isArray(client.groupMemberships)) {
+                                return client.groupMemberships;
+                            }
+                            // If it's a string (from localStorage serialization), try to parse it
+                            if (typeof client.groupMemberships === 'string') {
+                                try {
+                                    const parsed = JSON.parse(client.groupMemberships);
+                                    return Array.isArray(parsed) ? parsed : [];
+                                } catch {
+                                    return [];
+                                }
+                            }
+                            return [];
+                        })()
+                    }));
                 const cachedLeads = cachedClients.filter(client => 
                     client.type === 'lead'
                 );
@@ -4460,51 +4482,35 @@ const Clients = React.memo(() => {
                                     </td>
                                     <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
                                         {(() => {
-                                            // Collect group names from Additional Group Memberships only
+                                            // SIMPLE: Just show the group names from groupMemberships - always check the actual data
                                             const groupNames = [];
                                             
-                                            // Debug logging for AccuFarm
-                                            if (client.name && client.name.toLowerCase().includes('accufarm')) {
-                                                console.log('🔍 AccuFarm groupMemberships debug:', {
-                                                    name: client.name,
-                                                    id: client.id,
-                                                    groupMemberships: client.groupMemberships,
-                                                    groupMembershipsType: typeof client.groupMemberships,
-                                                    isArray: Array.isArray(client.groupMemberships),
-                                                    length: Array.isArray(client.groupMemberships) ? client.groupMemberships.length : 'not array',
-                                                    firstMembership: Array.isArray(client.groupMemberships) && client.groupMemberships.length > 0 ? client.groupMemberships[0] : null
-                                                });
-                                            }
+                                            // Ensure we have groupMemberships (should always be an array, but be defensive)
+                                            const memberships = Array.isArray(client.groupMemberships) ? client.groupMemberships : [];
                                             
-                                            // Add all group memberships (Additional Group Memberships)
-                                            // CRITICAL: Handle undefined/null and ensure we check the actual data structure
-                                            const memberships = client.groupMemberships;
-                                            if (memberships !== undefined && memberships !== null && Array.isArray(memberships) && memberships.length > 0) {
-                                                memberships.forEach(membership => {
-                                                    if (membership && typeof membership === 'object') {
-                                                        // Check for nested group object
-                                                        if (membership.group) {
-                                                            const groupName = typeof membership.group === 'object' && membership.group !== null
-                                                                ? membership.group.name
-                                                                : (typeof membership.group === 'string' ? membership.group : null);
-                                                            if (groupName && !groupNames.includes(groupName)) {
-                                                                groupNames.push(groupName);
-                                                            }
-                                                        }
-                                                        // Fallback: check if membership itself has a name
-                                                        if (!groupNames.length && membership.name && !groupNames.includes(membership.name)) {
-                                                            groupNames.push(membership.name);
+                                            // Extract group names from memberships
+                                            memberships.forEach(membership => {
+                                                if (membership && typeof membership === 'object') {
+                                                    // Check for nested group object (from API)
+                                                    if (membership.group) {
+                                                        const groupName = typeof membership.group === 'object' && membership.group !== null
+                                                            ? membership.group.name
+                                                            : (typeof membership.group === 'string' ? membership.group : null);
+                                                        if (groupName && !groupNames.includes(groupName)) {
+                                                            groupNames.push(groupName);
                                                         }
                                                     }
-                                                });
-                                            }
+                                                    // Fallback: check if membership itself has a name
+                                                    if (!groupNames.length && membership.name && !groupNames.includes(membership.name)) {
+                                                        groupNames.push(membership.name);
+                                                    }
+                                                }
+                                            });
                                             
-                                            // Display group memberships or "None"
-                                            if (groupNames.length === 0) {
-                                                return <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>None</span>;
-                                            }
-                                            
-                                            return <span>{groupNames.join(', ')}</span>;
+                                            // Display group names or "None"
+                                            return groupNames.length > 0 
+                                                ? <span>{groupNames.join(', ')}</span>
+                                                : <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>None</span>;
                                         })()}
                                     </td>
                                     <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{client.industry}</td>
