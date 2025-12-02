@@ -493,13 +493,11 @@ function initializeProjectDetail() {
         return loadPromise;
     }, [taskDetailModalComponent]);
     
-    // Assign ref after useCallback is fully initialized using setTimeout to avoid TDZ issues
-    // This defers the assignment until after the current execution context
-    if (typeof window !== 'undefined') {
-        setTimeout(() => {
-            ensureTaskDetailModalLoadedRef.current = ensureTaskDetailModalLoaded;
-        }, 0);
-    }
+    // Assign ref in useEffect to avoid TDZ issues - runs after component mounts
+    // We use a separate effect that captures the function through closure after it's initialized
+    useEffect(() => {
+        ensureTaskDetailModalLoadedRef.current = ensureTaskDetailModalLoaded;
+    }, [ensureTaskDetailModalLoaded]);
 
     const ensureCommentsPopupLoaded = useCallback(async () => {
         if (typeof window.CommentsPopup === 'function') {
