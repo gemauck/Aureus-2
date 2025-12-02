@@ -324,12 +324,12 @@ const AuthProvider = ({ children }) => {
         // Send initial heartbeat
         window.api.heartbeat();
 
-        // Set up interval to send heartbeats every 2 minutes (120000ms)
+        // Set up interval to send heartbeats every 3 minutes (180000ms) - increased to reduce API load
         const heartbeatInterval = setInterval(() => {
             if (user && window.storage?.getToken?.()) {
                 window.api.heartbeat();
             }
-        }, 120000); // 2 minutes
+        }, 180000); // 3 minutes (increased from 2 minutes)
 
         // Cleanup
         return () => {

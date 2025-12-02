@@ -11,7 +11,7 @@ const NotificationCenter = () => {
     const consecutiveFailuresRef = useRef(0);
     const pollingIntervalRef = useRef(null);
     const isPollingPausedRef = useRef(false);
-    const pollingDelayRef = useRef(30000); // Start with 30 seconds, will increase on rate limits
+    const pollingDelayRef = useRef(60000); // Start with 60 seconds, will increase on rate limits
     
     // Helper function to restart polling - will be defined after loadNotifications
     const restartPollingRef = useRef(null);
@@ -111,14 +111,14 @@ const NotificationCenter = () => {
                 // Reset failure counter on success
                 if (consecutiveFailuresRef.current > 0) {
                     consecutiveFailuresRef.current = 0;
-                    // Reset polling delay to normal (30 seconds)
-                    pollingDelayRef.current = 30000;
+                    // Reset polling delay to normal (60 seconds)
+                    pollingDelayRef.current = 60000;
                     // Resume polling if it was paused
                     if (isPollingPausedRef.current) {
                         isPollingPausedRef.current = false;
                         // Restart polling with normal delay
                         if (restartPollingRef.current) restartPollingRef.current();
-                    } else if (pollingDelayRef.current !== 30000) {
+                    } else if (pollingDelayRef.current !== 60000) {
                         // If delay was increased due to rate limiting, restart with normal delay
                         if (restartPollingRef.current) restartPollingRef.current();
                     }
@@ -130,10 +130,10 @@ const NotificationCenter = () => {
                 
                 if (isRateLimit) {
                     consecutiveFailuresRef.current++;
-                    // Exponential backoff for rate limits: 30s -> 60s -> 120s -> 240s (max 4 minutes)
-                    const backoffDelays = [60000, 120000, 240000];
+                    // Exponential backoff for rate limits: 60s -> 120s -> 240s -> 480s (max 8 minutes)
+                    const backoffDelays = [120000, 240000, 480000];
                     const backoffIndex = Math.min(consecutiveFailuresRef.current - 1, backoffDelays.length - 1);
-                    pollingDelayRef.current = backoffDelays[backoffIndex] || 240000;
+                    pollingDelayRef.current = backoffDelays[backoffIndex] || 480000;
                     
                     console.warn(`⚠️ NotificationCenter: Rate limit hit. Increasing polling delay to ${pollingDelayRef.current / 1000}s`);
                     

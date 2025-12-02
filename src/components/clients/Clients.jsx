@@ -1335,12 +1335,20 @@ const Clients = React.memo(() => {
                                     opportunitiesByClient[clientId].push(opp);
                                 }
                             });
-                            const updated = filteredCachedClients.map(client => ({
-                                ...client,
-                                opportunities: opportunitiesByClient[client.id] || client.opportunities || []
-                            }));
-                            setClients(updated);
-                            safeStorage.setClients(updated);
+                            // CRITICAL: Use current state (which has groupMemberships from API) not cached data
+                            setClients(prevClients => {
+                                const updated = prevClients.map(client => {
+                                    const opps = opportunitiesByClient[client.id] || client.opportunities || [];
+                                    return {
+                                        ...client,
+                                        opportunities: opps,
+                                        // CRITICAL: Preserve groupMemberships from current state (from API)
+                                        groupMemberships: client.groupMemberships || []
+                                    };
+                                });
+                                safeStorage.setClients(updated);
+                                return updated;
+                            });
                         })
                         .catch(error => {
                             // Handle error gracefully - don't log for server errors (500s)
@@ -1432,26 +1440,23 @@ const Clients = React.memo(() => {
                                     opportunitiesByClient[clientId].push(opp);
                                 }
                             });
-                            // CRITICAL: Use clientsWithCachedOpps (which has group data) instead of clients/cachedClients
-                            const clientsToUpdate = clientsWithCachedOpps.length > 0 ? clientsWithCachedOpps : (clients.length > 0 ? clients : (cachedClients || []));
-                            const updated = clientsToUpdate.map(client => {
-                                // CRITICAL: Preserve ALL group data, including groupMemberships
-                                const preservedGroupMemberships = client.groupMemberships !== undefined && client.groupMemberships !== null 
-                                    ? (Array.isArray(client.groupMemberships) ? client.groupMemberships : [])
-                                    : [];
-                                
-                                return {
-                                    ...client,
-                                    opportunities: opportunitiesByClient[client.id] || client.opportunities || [],
-                                    // CRITICAL: Explicitly preserve group data when updating opportunities
-                                    parentGroup: client.parentGroup || null,
-                                    parentGroupId: client.parentGroupId || null,
-                                    parentGroupName: client.parentGroupName || null,
-                                    groupMemberships: preservedGroupMemberships
-                                };
+                            // CRITICAL: Use current state (which has groupMemberships from API) and preserve it
+                            setClients(prevClients => {
+                                const updated = prevClients.map(client => {
+                                    const opps = opportunitiesByClient[client.id] || client.opportunities || [];
+                                    return {
+                                        ...client,
+                                        opportunities: opps,
+                                        // CRITICAL: Preserve ALL group data from current state (from API)
+                                        parentGroup: client.parentGroup || null,
+                                        parentGroupId: client.parentGroupId || null,
+                                        parentGroupName: client.parentGroupName || null,
+                                        groupMemberships: Array.isArray(client.groupMemberships) ? client.groupMemberships : []
+                                    };
+                                });
+                                safeStorage.setClients(updated);
+                                return updated;
                             });
-                            setClients(updated);
-                            safeStorage.setClients(updated);
                         })
                         .catch(error => {
                             // Handle error gracefully - don't log for server errors (500s)

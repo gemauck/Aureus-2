@@ -829,15 +829,9 @@ const ManagementMeetingNotes = () => {
                 
                 setMonthlyNotesList(notes);
                 
-                // Load current month's notes if selected
-                if (selectedMonth) {
-                    const currentNotes = notes.find(n => n?.monthKey === selectedMonth);
-                    if (currentNotes) {
-                        setCurrentMonthlyNotes(currentNotes);
-                    } else {
-                        setCurrentMonthlyNotes(null);
-                    }
-                }
+                // Don't set currentMonthlyNotes here - let the selectedMonth effect handle it
+                // This prevents race conditions where incomplete data overwrites complete data
+                // The selectedMonth useEffect will load the full month data with all weekly notes
                 
                 setIsReady(true);
             } catch (error) {
@@ -874,7 +868,17 @@ const ManagementMeetingNotes = () => {
                     console.log(`✅ Loaded notes for ${selectedMonth}:`, {
                         monthKey: notes.monthKey,
                         hasWeeklyNotes: !!notes.weeklyNotes,
-                        weeklyNotesCount: notes.weeklyNotes?.length || 0
+                        weeklyNotesType: typeof notes.weeklyNotes,
+                        weeklyNotesIsArray: Array.isArray(notes.weeklyNotes),
+                        weeklyNotesCount: Array.isArray(notes.weeklyNotes) ? notes.weeklyNotes.length : 0,
+                        weeklyNotesKeys: Array.isArray(notes.weeklyNotes) 
+                            ? notes.weeklyNotes.map(w => ({ 
+                                id: w?.id, 
+                                weekKey: w?.weekKey, 
+                                weekStart: w?.weekStart 
+                            }))
+                            : 'Not an array',
+                        fullWeeklyNotes: notes.weeklyNotes
                     });
                 } else {
                     console.log(`ℹ️ No notes found for ${selectedMonth}`);
@@ -903,10 +907,35 @@ const ManagementMeetingNotes = () => {
 
     // Get weeks for selected month
     const weeks = useMemo(() => {
-        if (!currentMonthlyNotes || !currentMonthlyNotes.weeklyNotes) return [];
-        return [...currentMonthlyNotes.weeklyNotes].sort((a, b) => {
-            return new Date(b.weekStart) - new Date(a.weekStart);
+        if (!currentMonthlyNotes || !currentMonthlyNotes.weeklyNotes) {
+            console.log('⚠️ No weekly notes found:', {
+                hasCurrentMonthlyNotes: !!currentMonthlyNotes,
+                hasWeeklyNotes: !!currentMonthlyNotes?.weeklyNotes,
+                weeklyNotesType: typeof currentMonthlyNotes?.weeklyNotes,
+                weeklyNotesIsArray: Array.isArray(currentMonthlyNotes?.weeklyNotes),
+                weeklyNotesValue: currentMonthlyNotes?.weeklyNotes
+            });
+            return [];
+        }
+        
+        const weeklyNotesArray = Array.isArray(currentMonthlyNotes.weeklyNotes) 
+            ? currentMonthlyNotes.weeklyNotes 
+            : [];
+        
+        console.log('📅 Processing weekly notes:', {
+            count: weeklyNotesArray.length,
+            weekKeys: weeklyNotesArray.map(w => w?.weekKey || w?.id),
+            weekStarts: weeklyNotesArray.map(w => w?.weekStart),
+            rawWeeklyNotes: currentMonthlyNotes.weeklyNotes
         });
+        
+        const sorted = [...weeklyNotesArray].sort((a, b) => {
+            const dateA = a.weekStart ? new Date(a.weekStart) : new Date(0);
+            const dateB = b.weekStart ? new Date(b.weekStart) : new Date(0);
+            return dateB - dateA;
+        });
+        
+        return sorted;
     }, [currentMonthlyNotes]);
 
     const getWeekIdentifier = (week) => {

@@ -306,8 +306,9 @@ const DatabaseAPI = {
     // Internal method to execute the actual request
     async _executeRequest(endpoint, options = {}) {
         // Reduce retries for 502 errors - they often indicate server is down
-        const maxRetries = options.maxRetries !== undefined ? options.maxRetries : 5;
-        const baseDelay = 1000; // Start with 1 second
+        // Reduced default maxRetries from 5 to 2 to fail faster and reduce load
+        const maxRetries = options.maxRetries !== undefined ? options.maxRetries : 2;
+        const baseDelay = 2000; // Start with 2 seconds - longer delay to reduce load
 
         // Check RateLimitManager before acquiring slot (if available)
         if (window.RateLimitManager && window.RateLimitManager.isRateLimited()) {
@@ -702,10 +703,11 @@ const DatabaseAPI = {
                     // 500 errors are often temporary server issues and should be retried
                     const isRetryableServerError = response.status === 500 || response.status === 502 || response.status === 503 || response.status === 504;
                     
-                    // For 502 errors, use fewer retries (1 instead of 5) to fail faster
+                    // For 502 errors, use fewer retries (0 instead of 2) to fail faster
                     // 502 errors often indicate server is down, so quick failure is better
+                    // Circuit breaker will handle retries after cooldown period
                     const is502Error = response.status === 502;
-                    const effectiveMaxRetries = is502Error ? 1 : maxRetries;
+                    const effectiveMaxRetries = is502Error ? 0 : maxRetries; // No retries for 502 - circuit breaker handles it
                     
                     if (isRetryableServerError && attempt < effectiveMaxRetries) {
                         // Check circuit breaker before retrying - if open, fail fast
@@ -720,10 +722,10 @@ const DatabaseAPI = {
                             throw error;
                         }
                         
-                        // Use shorter delays for 502 errors (Bad Gateway - often transient)
-                        // 502 errors typically resolve quickly, so retry faster
-                        const retryBaseDelay = is502Error ? 300 : baseDelay; // 300ms for 502, 1000ms for others
-                        const delay = retryBaseDelay * Math.pow(2, attempt);
+                        // Use longer delays for server errors to reduce load
+                        // Server errors need time to recover, so wait longer
+                        const retryBaseDelay = is502Error ? 5000 : baseDelay; // 5s for 502, 2s for others
+                        const delay = Math.min(retryBaseDelay * Math.pow(2, attempt), 30000); // Cap at 30 seconds
                         
                         // Suppress all retry warnings for 502 errors - they're already aggregated
                         // Only log warnings for 500/503/504 errors (and only on first attempt)

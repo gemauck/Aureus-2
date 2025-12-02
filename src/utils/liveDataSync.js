@@ -2,7 +2,7 @@
 class LiveDataSync {
     constructor() {
         this.subscribers = new Map();
-        this.refreshInterval = 15000; // 15 seconds - reduced frequency to prevent rate limiting
+        this.refreshInterval = 30000; // 30 seconds - increased to reduce API load and prevent rate limiting
         this.isRunning = false;
         this.lastSync = null;
         this.syncInProgress = false;
@@ -198,7 +198,7 @@ class LiveDataSync {
         // Additional check to prevent rapid sync calls (skip if force sync)
         if (!this._forceSyncInProgress) {
             const now = Date.now();
-            const minInterval = 3000 + this.rateLimitBackoff; // 3 seconds minimum + backoff
+            const minInterval = 10000 + this.rateLimitBackoff; // 10 seconds minimum + backoff (increased from 3s)
             if (this.lastSync && (now - this.lastSync.getTime()) < minInterval) {
                 log(`⏳ Sync too recent (${Math.round((now - this.lastSync.getTime()) / 1000)}s ago), skipping...`);
                 return;
@@ -257,7 +257,7 @@ class LiveDataSync {
             // Execute calls with delays between them
             for (let i = 0; i < syncCalls.length; i++) {
                 const call = syncCalls[i];
-                const delay = i * 200; // 200ms delay between each call
+                const delay = i * 500; // 500ms delay between each call (increased from 200ms to reduce load)
                 const promise = new Promise(resolve => {
                     setTimeout(async () => {
                         // Check if stopped or paused before making API call
@@ -287,7 +287,7 @@ class LiveDataSync {
                 const role = window.storage?.getUser?.()?.role?.toLowerCase?.();
                 if (role === 'admin') {
                     // Add users sync with delay after other calls
-                    const usersDelay = syncCalls.length * 200; // After all other calls
+                    const usersDelay = syncCalls.length * 500; // After all other calls (increased from 200ms)
                     const usersPromise = new Promise(resolve => {
                         setTimeout(async () => {
                             // Check if stopped or paused before making API call
@@ -355,12 +355,13 @@ class LiveDataSync {
             
             // If we hit rate limits, increase backoff exponentially
             if (rateLimitErrors.length > 0) {
-                this.rateLimitBackoff = Math.min(this.rateLimitBackoff * 2 || 10000, 60000); // Max 60 seconds
+                // More aggressive backoff for rate limits
+                this.rateLimitBackoff = Math.min(this.rateLimitBackoff * 2 || 30000, 300000); // Start at 30s, max 5 minutes
                 this._rateLimitBackoffEnd = Date.now() + this.rateLimitBackoff;
                 log(`🚫 Rate limit detected, backing off for ${Math.round(this.rateLimitBackoff / 1000)}s`);
-                // Increase refresh interval temporarily
+                // Increase refresh interval temporarily - more aggressive
                 const originalInterval = this.refreshInterval;
-                this.refreshInterval = Math.min(originalInterval * 2, 60000); // Max 60 seconds
+                this.refreshInterval = Math.min(originalInterval * 3, 300000); // Max 5 minutes
                 // Reset interval after backoff period
                 setTimeout(() => {
                     this.refreshInterval = originalInterval;
@@ -460,7 +461,7 @@ class LiveDataSync {
             // Check if we recently synced this data type (unless bypassing cache)
             if (!bypassCache) {
                 const cacheEntry = this.dataCache.get(dataType);
-                const CACHE_DURATION = 15000; // 15 seconds per data type - longer cache to reduce API calls
+                const CACHE_DURATION = 30000; // 30 seconds per data type - longer cache to reduce API calls
                 
                 if (cacheEntry && (now - cacheEntry.timestamp) < CACHE_DURATION) {
                     const getLog = () => window.debug?.log || (() => {});
