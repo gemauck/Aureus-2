@@ -640,6 +640,94 @@ const Clients = React.memo(() => {
         leadsRef.current = leads;
         viewModeRef.current = viewMode;
     }, [clients, leads, viewMode]);
+    
+    // Fetch group data and enrich clients with group information
+    useEffect(() => {
+        const enrichClientsWithGroups = async () => {
+            try {
+                const token = window.storage?.getToken?.();
+                if (!token || clients.length === 0) return;
+                
+                // Fetch group memberships for all clients that don't have group data
+                const clientsNeedingGroups = clients.filter(c => 
+                    !c.parentGroupName && !c.parentGroup && !c.groupMemberships?.length
+                );
+                
+                if (clientsNeedingGroups.length === 0) return;
+                
+                // Fetch group data for each client that needs it
+                const enrichmentPromises = clientsNeedingGroups.map(async (client) => {
+                    try {
+                        const groupsResponse = await fetch(`/api/clients/${client.id}/groups`, {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        if (!groupsResponse.ok) return null;
+                        
+                        const groupsData = await groupsResponse.json();
+                        const clientGroups = groupsData?.data?.groups || groupsData?.groups || [];
+                        
+                        // Find parent group (group where this client is a child)
+                        const parentGroup = clientGroups.find(g => g.type === 'parent' || g.isParent);
+                        
+                        // Get all group memberships
+                        const groupMemberships = clientGroups
+                            .filter(g => g.group && g.group.name)
+                            .map(g => ({ group: { name: g.group.name, id: g.group.id } }));
+                        
+                        if (parentGroup || groupMemberships.length > 0) {
+                            return {
+                                id: client.id,
+                                parentGroup: parentGroup ? { id: parentGroup.id, name: parentGroup.name } : null,
+                                parentGroupName: parentGroup?.name || null,
+                                parentGroupId: parentGroup?.id || null,
+                                groupMemberships: groupMemberships
+                            };
+                        }
+                        return null;
+                    } catch (error) {
+                        console.warn(`Failed to fetch groups for client ${client.id}:`, error);
+                        return null;
+                    }
+                });
+                
+                const enrichments = await Promise.all(enrichmentPromises);
+                const enrichmentMap = new Map();
+                enrichments.forEach(e => {
+                    if (e) enrichmentMap.set(e.id, e);
+                });
+                
+                // Enrich clients with group data
+                const enrichedClients = clients.map(client => {
+                    const enrichment = enrichmentMap.get(client.id);
+                    if (!enrichment) return client;
+                    
+                    return {
+                        ...client,
+                        parentGroup: enrichment.parentGroup || client.parentGroup,
+                        parentGroupName: enrichment.parentGroupName || client.parentGroupName,
+                        parentGroupId: enrichment.parentGroupId || client.parentGroupId,
+                        groupMemberships: enrichment.groupMemberships || client.groupMemberships || []
+                    };
+                });
+                
+                // Only update if we actually enriched any clients
+                const hasChanges = enrichedClients.some((c, i) => 
+                    c.parentGroupName !== clients[i]?.parentGroupName ||
+                    JSON.stringify(c.groupMemberships) !== JSON.stringify(clients[i]?.groupMemberships)
+                );
+                
+                if (hasChanges) {
+                    setClients(enrichedClients);
+                    // Update cache
+                    safeStorage.setClients(enrichedClients);
+                }
+            } catch (error) {
+                console.warn('Failed to enrich clients with group data:', error);
+            }
+        };
+        
+        enrichClientsWithGroups();
+    }, [clients.length]); // Only run when client count changes
 
 
     // Utility function to calculate time since first contact
