@@ -829,9 +829,15 @@ const ManagementMeetingNotes = () => {
                 
                 setMonthlyNotesList(notes);
                 
-                // Don't set currentMonthlyNotes here - let the selectedMonth effect handle it
-                // This prevents race conditions where incomplete data overwrites complete data
-                // The selectedMonth useEffect will load the full month data with all weekly notes
+                // Load current month's notes if selected
+                if (selectedMonth) {
+                    const currentNotes = notes.find(n => n?.monthKey === selectedMonth);
+                    if (currentNotes) {
+                        setCurrentMonthlyNotes(currentNotes);
+                    } else {
+                        setCurrentMonthlyNotes(null);
+                    }
+                }
                 
                 setIsReady(true);
             } catch (error) {
