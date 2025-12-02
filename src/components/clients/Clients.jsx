@@ -3915,9 +3915,63 @@ const Clients = React.memo(() => {
                 bValue = new Date(bValue || 0);
             }
             
+            // Handle Company Group sorting
+            if (sortField === 'companyGroup') {
+                // Extract group names from groupMemberships
+                const getGroupNames = (client) => {
+                    let memberships = client.groupMemberships;
+                    if (typeof memberships === 'string') {
+                        try {
+                            memberships = JSON.parse(memberships);
+                        } catch {
+                            memberships = [];
+                        }
+                    }
+                    if (!Array.isArray(memberships)) {
+                        memberships = [];
+                    }
+                    const groupNames = [];
+                    memberships.forEach(membership => {
+                        if (membership && typeof membership === 'object') {
+                            if (membership.group) {
+                                const groupName = typeof membership.group === 'object' && membership.group !== null
+                                    ? membership.group.name
+                                    : (typeof membership.group === 'string' ? membership.group : null);
+                                if (groupName && !groupNames.includes(groupName)) {
+                                    groupNames.push(groupName);
+                                }
+                            }
+                            if (!groupNames.length && membership.name && !groupNames.includes(membership.name)) {
+                                groupNames.push(membership.name);
+                            }
+                        }
+                    });
+                    return groupNames.length > 0 ? groupNames.join(', ') : 'None';
+                };
+                aValue = getGroupNames(a);
+                bValue = getGroupNames(b);
+            }
+            
+            // Handle Services sorting (sort by first service name or count)
+            if (sortField === 'services') {
+                const getServicesValue = (client) => {
+                    const services = Array.isArray(client.services)
+                        ? client.services
+                        : (typeof client.services === 'string' ? (()=>{ try { return JSON.parse(client.services||'[]'); } catch { return []; } })() : []);
+                    if (services.length === 0) return 'None';
+                    return services[0] || 'None'; // Sort by first service name
+                };
+                aValue = getServicesValue(a);
+                bValue = getServicesValue(b);
+            }
+            
             // Convert to strings for comparison
             if (typeof aValue === 'string') aValue = aValue.toLowerCase();
             if (typeof bValue === 'string') bValue = bValue.toLowerCase();
+            
+            // Handle null/undefined values
+            if (aValue == null) aValue = '';
+            if (bValue == null) bValue = '';
             
             if (sortDirection === 'asc') {
                 return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
@@ -4674,8 +4728,16 @@ const Clients = React.memo(() => {
                                     )}
                                 </div>
                             </th>
-                            <th className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
+                            <th 
+                                className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                onClick={() => handleSort('companyGroup')}
+                            >
+                                <div className="flex items-center">
                                 Company Group
+                                    {sortField === 'companyGroup' && (
+                                        <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
+                                    )}
+                                </div>
                             </th>
                             <th 
                                 className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
@@ -4688,8 +4750,16 @@ const Clients = React.memo(() => {
                                     )}
                                 </div>
                             </th>
-                            <th className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
+                            <th 
+                                className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                onClick={() => handleSort('services')}
+                            >
+                                <div className="flex items-center">
                                 Services
+                                    {sortField === 'services' && (
+                                        <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
+                                    )}
+                                </div>
                             </th>
                             <th 
                                 className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
