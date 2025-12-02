@@ -1473,6 +1473,20 @@ const Clients = React.memo(() => {
                 
                 const processedClients = processClientData(apiClients);
                 
+                // Debug: Check AccuFarm data after processClientData
+                const accufarmAfterProcess = processedClients.find(c => c.name && c.name.toLowerCase().includes('accufarm'));
+                if (accufarmAfterProcess) {
+                    console.log('🔍 After processClientData - AccuFarm:', {
+                        name: accufarmAfterProcess.name,
+                        id: accufarmAfterProcess.id,
+                        groupMemberships: accufarmAfterProcess.groupMemberships,
+                        groupMembershipsType: typeof accufarmAfterProcess.groupMemberships,
+                        isArray: Array.isArray(accufarmAfterProcess.groupMemberships),
+                        length: Array.isArray(accufarmAfterProcess.groupMemberships) ? accufarmAfterProcess.groupMemberships.length : 'not array',
+                        firstMembership: Array.isArray(accufarmAfterProcess.groupMemberships) && accufarmAfterProcess.groupMemberships.length > 0 ? accufarmAfterProcess.groupMemberships[0] : null
+                    });
+                }
+                
                 // Debug: Check if Exxaro clients have group data after processing
                 const exxaroAfterProcess = processedClients.filter(c => c.name && c.name.toLowerCase().includes('exxaro'));
                 if (exxaroAfterProcess.length > 0) {

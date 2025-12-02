@@ -2354,6 +2354,13 @@ const ManagementMeetingNotes = () => {
     const handleDeleteActionItem = async (id) => {
         if (!confirm('Are you sure you want to delete this action item?')) return;
         
+        // Preserve scroll position to prevent navigation to top
+        const currentScrollPosition = window.scrollY || window.pageYOffset;
+        preservedScrollPosition.current = currentScrollPosition;
+        console.log('💾 Preserving scroll position before action item delete:', currentScrollPosition);
+        // Trigger scroll restoration effect
+        setScrollRestoreTrigger(prev => prev + 1);
+        
         // Store previous state for rollback
         const previousNotes = currentMonthlyNotes;
         
@@ -2361,7 +2368,7 @@ const ManagementMeetingNotes = () => {
         deleteActionItemLocal(id);
         
         try {
-            setLoading(true);
+            setSaving(true); // Use saving state instead of loading to prevent "Loading meeting notes..." from showing
             await window.DatabaseAPI.deleteActionItem(id);
             // Success - state already updated
         } catch (error) {
@@ -2378,7 +2385,24 @@ const ManagementMeetingNotes = () => {
             }
             console.error('Failed to delete action item');
         } finally {
-            setLoading(false);
+            setSaving(false); // Use saving state instead of loading
+            
+            // Restore scroll position after delete
+            if (preservedScrollPosition.current !== null) {
+                const scrollY = preservedScrollPosition.current;
+                requestAnimationFrame(() => {
+                    window.scrollTo({ top: scrollY, behavior: 'instant' });
+                });
+                setTimeout(() => {
+                    window.scrollTo({ top: scrollY, behavior: 'instant' });
+                }, 0);
+                setTimeout(() => {
+                    window.scrollTo({ top: scrollY, behavior: 'instant' });
+                }, 10);
+                setTimeout(() => {
+                    window.scrollTo({ top: scrollY, behavior: 'instant' });
+                }, 50);
+            }
         }
     };
 
@@ -2657,6 +2681,13 @@ const ManagementMeetingNotes = () => {
         if (!commentId) return;
         if (!confirm('Are you sure you want to delete this comment?')) return;
 
+        // Preserve scroll position to prevent navigation to top
+        const currentScrollPosition = window.scrollY || window.pageYOffset;
+        preservedScrollPosition.current = currentScrollPosition;
+        console.log('💾 Preserving scroll position before comment delete:', currentScrollPosition);
+        // Trigger scroll restoration effect
+        setScrollRestoreTrigger(prev => prev + 1);
+
         // Store previous state for rollback
         const previousNotes = currentMonthlyNotes;
         
@@ -2664,7 +2695,7 @@ const ManagementMeetingNotes = () => {
         deleteCommentLocal(commentId);
         
         try {
-            setLoading(true);
+            setSaving(true); // Use saving state instead of loading to prevent "Loading meeting notes..." from showing
             // Check if DatabaseAPI has deleteComment method, otherwise use makeRequest
             if (window.DatabaseAPI && typeof window.DatabaseAPI.deleteComment === 'function') {
                 await window.DatabaseAPI.deleteComment(commentId);
@@ -2694,7 +2725,24 @@ const ManagementMeetingNotes = () => {
             }
             console.error('Failed to delete comment:', error.message || 'Unknown error');
         } finally {
-            setLoading(false);
+            setSaving(false); // Use saving state instead of loading
+            
+            // Restore scroll position after delete
+            if (preservedScrollPosition.current !== null) {
+                const scrollY = preservedScrollPosition.current;
+                requestAnimationFrame(() => {
+                    window.scrollTo({ top: scrollY, behavior: 'instant' });
+                });
+                setTimeout(() => {
+                    window.scrollTo({ top: scrollY, behavior: 'instant' });
+                }, 0);
+                setTimeout(() => {
+                    window.scrollTo({ top: scrollY, behavior: 'instant' });
+                }, 10);
+                setTimeout(() => {
+                    window.scrollTo({ top: scrollY, behavior: 'instant' });
+                }, 50);
+            }
         }
     };
 
