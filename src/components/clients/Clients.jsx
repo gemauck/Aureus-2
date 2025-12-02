@@ -4457,15 +4457,24 @@ const Clients = React.memo(() => {
                                             }
                                             
                                             // Add all group memberships (Additional Group Memberships)
-                                            if (Array.isArray(client.groupMemberships)) {
-                                                client.groupMemberships.forEach(membership => {
-                                                    if (membership?.group) {
-                                                        const groupName = typeof membership.group === 'object' ? membership.group.name : membership.group;
-                                                        if (groupName && !groupNames.includes(groupName)) {
-                                                            groupNames.push(groupName);
+                                            // CRITICAL: Handle undefined/null and ensure we check the actual data structure
+                                            const memberships = client.groupMemberships;
+                                            if (memberships !== undefined && memberships !== null && Array.isArray(memberships) && memberships.length > 0) {
+                                                memberships.forEach(membership => {
+                                                    if (membership && typeof membership === 'object') {
+                                                        // Check for nested group object
+                                                        if (membership.group) {
+                                                            const groupName = typeof membership.group === 'object' && membership.group !== null
+                                                                ? membership.group.name
+                                                                : (typeof membership.group === 'string' ? membership.group : null);
+                                                            if (groupName && !groupNames.includes(groupName)) {
+                                                                groupNames.push(groupName);
+                                                            }
                                                         }
-                                                    } else if (membership?.name && !groupNames.includes(membership.name)) {
-                                                        groupNames.push(membership.name);
+                                                        // Fallback: check if membership itself has a name
+                                                        if (!groupNames.length && membership.name && !groupNames.includes(membership.name)) {
+                                                            groupNames.push(membership.name);
+                                                        }
                                                     }
                                                 });
                                             }

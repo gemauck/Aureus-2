@@ -1105,6 +1105,7 @@ model DepartmentNotes {
   weekToFollow   String              @default("")
   frustrations   String              @default("")
   agendaPoints   String              @default("[]")
+  attachments    String              @default("[]")  // JSON array of attachment objects
   assignedUserId String?
   ownerId        String?
   createdAt      DateTime            @default(now())
