@@ -4177,6 +4177,9 @@ const Clients = React.memo(() => {
                                     )}
                                 </div>
                             </th>
+                            <th className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
+                                Company Group
+                            </th>
                             <th 
                                 className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
                                 onClick={() => handleSort('industry')}
@@ -4207,7 +4210,7 @@ const Clients = React.memo(() => {
                     <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
                         {paginatedClients.length === 0 ? (
                             <tr>
-                                    <td colSpan="5" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    <td colSpan="6" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                         <i className={`fas fa-inbox text-3xl ${isDark ? 'text-gray-600' : 'text-gray-300'} mb-2`}></i>
                                     <p>No clients found</p>
                                 </td>
@@ -4240,6 +4243,21 @@ const Clients = React.memo(() => {
                                             )}
                                             <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{client.name}</div>
                                         </div>
+                                    </td>
+                                    <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
+                                        {(() => {
+                                            // Show primary parent group if available, otherwise show first group membership
+                                            const primaryGroup = client.parentGroup?.name || client.parentGroupName;
+                                            const firstMembership = Array.isArray(client.groupMemberships) && client.groupMemberships.length > 0
+                                                ? client.groupMemberships[0]?.group?.name
+                                                : null;
+                                            const groupName = primaryGroup || firstMembership || 'None';
+                                            return (
+                                                <span className={groupName === 'None' ? (isDark ? 'text-gray-500' : 'text-gray-400') : ''}>
+                                                    {groupName}
+                                                </span>
+                                            );
+                                        })()}
                                     </td>
                                     <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{client.industry}</td>
                                     <td className="px-6 py-2 whitespace-nowrap">
