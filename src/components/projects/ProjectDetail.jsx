@@ -492,6 +492,10 @@ function initializeProjectDetail() {
         taskDetailModalLoadPromiseRef.current = loadPromise;
         return loadPromise;
     }, [taskDetailModalComponent]);
+    
+    // Assign ref directly after useCallback is defined to avoid TDZ issues
+    // This runs synchronously after the useCallback is initialized
+    ensureTaskDetailModalLoadedRef.current = ensureTaskDetailModalLoaded;
 
     const ensureCommentsPopupLoaded = useCallback(async () => {
         if (typeof window.CommentsPopup === 'function') {
@@ -584,14 +588,6 @@ function initializeProjectDetail() {
         projectModalLoadPromiseRef.current = loadPromise;
         return loadPromise;
     }, [projectModalComponent]);
-    
-    // Store function in ref - use a wrapper function to avoid TDZ issues
-    // We capture the function value at runtime, not at definition time
-    React.useLayoutEffect(() => {
-        // Access ensureTaskDetailModalLoaded through closure at runtime, not during initialization
-        const fn = ensureTaskDetailModalLoaded;
-        ensureTaskDetailModalLoadedRef.current = fn;
-    });
     
     // Check if required components are loaded
     const requiredComponents = {
