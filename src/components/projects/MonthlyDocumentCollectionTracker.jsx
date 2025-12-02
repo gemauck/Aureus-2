@@ -47,6 +47,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const lastSavedSnapshotRef = useRef('{}');
     const apiRef = useRef(window.DocumentCollectionAPI || null);
     const isDeletingRef = useRef(false);
+    const deletionTimestampRef = useRef(null); // Track when deletion started
+    const deletionSectionIdsRef = useRef(new Set()); // Track which section IDs are being deleted
     
     const getSnapshotKey = (projectId) => projectId ? `documentCollectionSnapshot_${projectId}` : null;
 
@@ -329,8 +331,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         // Don't refresh if a delete operation just happened (give it time to save)
         // This is critical to prevent the deletion from being overwritten by stale data
         if (isDeletingRef.current && !forceUpdate) {
-            console.log('⏸️ Refresh skipped: deletion in progress');
-            return;
+            const timeSinceDeletion = deletionTimestampRef.current ? Date.now() - deletionTimestampRef.current : 0;
+            // Block refreshes for at least 5 seconds after deletion starts
+            if (timeSinceDeletion < 5000) {
+                console.log(`⏸️ Refresh skipped: deletion in progress (${timeSinceDeletion}ms ago)`);
+                return;
+            }
         }
         
         try {
@@ -343,6 +349,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             const freshSnapshot = serializeSections(normalized);
             
             // If DB has no data but we have a local snapshot, treat snapshot as source of truth
+            // BUT: Don't use snapshot if it has more sections than current state (indicates deletion happened)
             if ((!normalizedFromDb || yearKeys.length === 0) && snapshotKey && window.localStorage) {
                 try {
                     const snapshotString = window.localStorage.getItem(snapshotKey);
@@ -351,7 +358,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         const snapshotMap = normalizeSectionsByYear(snapshotParsed);
                         const snapshotYears = Object.keys(snapshotMap || {});
                         if (snapshotYears.length > 0) {
-                            normalized = snapshotMap;
+                            // Check if snapshot would restore deleted sections
+                            const currentYearSections = sectionsRef.current[selectedYear] || [];
+                            const snapshotYearSections = snapshotMap[selectedYear] || [];
+                            
+                            // Only use snapshot if it doesn't have more sections than current state
+                            // This prevents restoring sections that were just deleted
+                            if (snapshotYearSections.length <= currentYearSections.length || currentYearSections.length === 0) {
+                                normalized = snapshotMap;
+                            } else {
+                                console.log('⏸️ Snapshot ignored: would restore deleted sections', {
+                                    current: currentYearSections.length,
+                                    snapshot: snapshotYearSections.length
+                                });
+                            }
                         }
                     }
                 } catch (snapshotError) {
@@ -372,6 +392,42 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             }
             
             if (freshSnapshot !== currentSnapshot) {
+            // CRITICAL: Don't restore deleted sections
+            // If current state has fewer sections than database, a deletion likely just happened
+            const currentYearSections = sectionsRef.current[selectedYear] || [];
+            const freshYearSections = normalized[selectedYear] || [];
+            
+            // Check if any sections in the database are ones we're currently deleting
+            const currentSectionIds = new Set(currentYearSections.map(s => String(s.id)));
+            const freshSectionIds = new Set(freshYearSections.map(s => String(s.id)));
+            const sectionsToRestore = freshYearSections.filter(s => 
+                !currentSectionIds.has(String(s.id)) && 
+                deletionSectionIdsRef.current.has(String(s.id))
+            );
+            
+            // If database has sections we're deleting, don't update (deletion in progress)
+            if (sectionsToRestore.length > 0) {
+                console.log('⏸️ Refresh skipped: database contains sections being deleted', {
+                    sectionsToRestore: sectionsToRestore.map(s => ({ id: s.id, name: s.name })),
+                    deletionIds: Array.from(deletionSectionIdsRef.current)
+                });
+                return;
+            }
+            
+            // If database has more sections than current state, don't update (deletion likely in progress)
+            if (freshYearSections.length > currentYearSections.length && currentYearSections.length > 0) {
+                const timeSinceDeletion = deletionTimestampRef.current ? Date.now() - deletionTimestampRef.current : Infinity;
+                // Only block if deletion happened recently (within last 10 seconds)
+                if (timeSinceDeletion < 10000) {
+                    console.log('⏸️ Refresh skipped: database has more sections than current state (deletion likely in progress)', {
+                        current: currentYearSections.length,
+                        database: freshYearSections.length,
+                        timeSinceDeletion: `${timeSinceDeletion}ms`
+                    });
+                    return;
+                }
+            }
+                
                 // Update if:
                 // 1. No unsaved local changes (safe to update), OR
                 // 2. Database matches what we last saved (database hasn't changed, safe to update), OR
@@ -946,7 +1002,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         // CRITICAL: Set deletion flag IMMEDIATELY before any async operations
         // This prevents polling from interfering with the deletion process
         isDeletingRef.current = true;
-        console.log('🗑️ Starting section deletion, polling disabled');
+        deletionTimestampRef.current = Date.now();
+        deletionSectionIdsRef.current.add(normalizedSectionId);
+        console.log('🗑️ Starting section deletion, polling disabled', {
+            sectionId: normalizedSectionId,
+            timestamp: deletionTimestampRef.current
+        });
         
         // Clear any pending debounced saves to prevent race conditions
         if (saveTimeoutRef.current) {
@@ -974,6 +1035,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 // Immediately update the ref synchronously
                 sectionsRef.current = updatedSectionsByYear;
                 
+                // CRITICAL: Update localStorage snapshot IMMEDIATELY after state update
+                // This prevents refreshFromDatabase from restoring the deleted section
+                const deletedSectionSnapshot = serializeSections(updatedSectionsByYear);
+                lastSavedSnapshotRef.current = deletedSectionSnapshot;
+                
+                // Persist snapshot to localStorage immediately (before database save)
+                const snapshotKey = getSnapshotKey(project.id);
+                if (snapshotKey && window.localStorage) {
+                    try {
+                        window.localStorage.setItem(snapshotKey, deletedSectionSnapshot);
+                        console.log('💾 Deletion snapshot saved to localStorage immediately');
+                    } catch (storageError) {
+                        console.warn('⚠️ Failed to save document collection snapshot to localStorage:', storageError);
+                    }
+                }
+                
                 return updatedSectionsByYear;
             });
             
@@ -997,28 +1074,28 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     throw new Error('No available API for saving document sections');
                 }
                 
-                // Update snapshot reference after successful save
+                // Snapshot already updated above, just confirm it matches
                 lastSavedSnapshotRef.current = deletedSectionSnapshot;
-                
-                // Persist a snapshot locally
-                const snapshotKey = getSnapshotKey(project.id);
-                if (snapshotKey && window.localStorage) {
-                    try {
-                        window.localStorage.setItem(snapshotKey, deletedSectionSnapshot);
-                    } catch (storageError) {
-                        console.warn('⚠️ Failed to save document collection snapshot to localStorage:', storageError);
-                    }
-                }
                 
                 console.log('✅ Section deletion saved successfully');
                 
-                // Clear the deleting flag after successful save
+                // Remove from deletion tracking
+                deletionSectionIdsRef.current.delete(normalizedSectionId);
+                
+                // Clear the deleting flag after successful save - wait longer to ensure DB save completes
+                // Increased from 500ms to 3000ms to give database more time to persist
+                // Only clear flag if no other deletions are in progress
                 setTimeout(() => {
-                    isDeletingRef.current = false;
-                    console.log('✅ Deletion flag cleared, polling can resume');
+                    if (deletionSectionIdsRef.current.size === 0) {
+                        isDeletingRef.current = false;
+                        deletionTimestampRef.current = null;
+                        console.log('✅ Deletion flag cleared, polling can resume');
+                    } else {
+                        console.log(`⏸️ Deletion flag kept active: ${deletionSectionIdsRef.current.size} deletion(s) still in progress`);
+                    }
                     // Trigger a single refresh after flag is cleared to sync state
                     refreshFromDatabase(false);
-                }, 500);
+                }, 3000);
                 
             } catch (saveError) {
                 console.error('❌ Error saving section deletion:', saveError);
@@ -1047,7 +1124,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
             } finally {
                 isSavingRef.current = false;
-                isDeletingRef.current = false;
+                // Only clear deletion flag if this was the last deletion
+                deletionSectionIdsRef.current.delete(normalizedSectionId);
+                if (deletionSectionIdsRef.current.size === 0) {
+                    isDeletingRef.current = false;
+                    deletionTimestampRef.current = null;
+                }
             }
             })();
         });

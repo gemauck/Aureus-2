@@ -56,10 +56,17 @@ async function handler(req, res) {
     // GET /api/clients/groups - List all company groups
     if (req.method === 'GET' && pathSegments.length === 2 && pathSegments[0] === 'clients' && pathSegments[1] === 'groups') {
       try {
-        // Get all clients that are groups (have child companies or are used as groups)
+        // Get all clients that can be used as groups:
+        // 1. Clients with type='group' (named groups like "Exxaro Group")
+        // 2. Clients that have child companies (parent companies)
+        // 3. Clients that are used as groups (have groupChildren)
+        // 4. All regular clients (can be assigned to groups)
         const groups = await prisma.client.findMany({
           where: {
             OR: [
+              {
+                type: 'group' // Named groups
+              },
               {
                 childCompanies: {
                   some: {}
@@ -69,6 +76,9 @@ async function handler(req, res) {
                 groupChildren: {
                   some: {}
                 }
+              },
+              {
+                type: 'client' // Regular clients can also be groups
               }
             ]
           },
@@ -157,17 +167,13 @@ async function handler(req, res) {
       }
     }
     
-    // POST /api/clients/:id/groups - Add client to group
+    // POST /api/clients/:id/groups - Add client to group OR create new group
     if (req.method === 'POST' && pathSegments.length === 3 && pathSegments[0] === 'clients' && pathSegments[2] === 'groups') {
       const clientId = req.params?.id || pathSegments[1]
       console.log('POST /api/clients/:id/groups - clientId:', clientId, 'from req.params:', req.params?.id, 'from pathSegments:', pathSegments[1])
       const body = await parseJsonBody(req)
-      const { groupId, role } = body
-      console.log('POST body:', { groupId, role })
-      
-      if (!groupId) {
-        return badRequest(res, 'groupId is required')
-      }
+      const { groupId, groupName, role } = body
+      console.log('POST body:', { groupId, groupName, role })
       
       try {
         // Verify client exists
@@ -180,10 +186,69 @@ async function handler(req, res) {
           return notFound(res, 'Client not found')
         }
         
+        let finalGroupId = groupId
+        
+        // If groupName is provided but no groupId, create a new group
+        if (groupName && !groupId) {
+          console.log('Creating new group with name:', groupName)
+          
+          // Check if group with this name already exists
+          const existingGroup = await prisma.client.findFirst({
+            where: {
+              name: groupName.trim(),
+              type: { in: ['client', 'group', null] } // Can be any type or null
+            }
+          })
+          
+          if (existingGroup) {
+            // Use existing group instead of creating duplicate
+            finalGroupId = existingGroup.id
+            console.log('Using existing group:', existingGroup.id, existingGroup.name)
+          } else {
+            // Create new group entity (as a Client with type='group')
+            const userEmail = req.user?.email || 'unknown'
+            const userId = req.user?.sub
+            let ownerId = null
+            
+            if (userId) {
+              try {
+                const user = await prisma.user.findUnique({ where: { id: userId } })
+                if (user) {
+                  ownerId = userId
+                }
+              } catch (userError) {
+                // Skip ownerId if error
+              }
+            }
+            
+            const newGroup = await prisma.client.create({
+              data: {
+                name: groupName.trim(),
+                type: 'group', // Mark as a group entity
+                industry: body.groupIndustry || 'Other',
+                status: 'active',
+                notes: body.groupNotes || `Company group for organizing associated companies`,
+                ...(ownerId ? { ownerId } : {})
+              },
+              select: {
+                id: true,
+                name: true,
+                type: true,
+                industry: true
+              }
+            })
+            
+            finalGroupId = newGroup.id
+            console.log('✅ New group created:', newGroup)
+          }
+        } else if (!finalGroupId) {
+          return badRequest(res, 'Either groupId or groupName is required')
+        }
+        
         // Verify group exists
         const group = await prisma.client.findUnique({
-          where: { id: groupId },
-          select: { id: true }
+          where: { id: finalGroupId },
+          select: { id: true, name: true, type: true }
         })
         
         if (!group) {
@@ -195,7 +260,7 @@ async function handler(req, res) {
           where: {
             clientId_groupId: {
               clientId,
-              groupId
+              groupId: finalGroupId
             }
           }
         })
@@ -205,17 +270,17 @@ async function handler(req, res) {
         }
         
         // Validate no circular reference
-        const validation = await validateNoCircularReference(clientId, groupId)
+        const validation = await validateNoCircularReference(clientId, finalGroupId)
         if (!validation.valid) {
           return badRequest(res, validation.reason)
         }
         
         // Add to group
-        console.log('Creating membership:', { clientId, groupId, role: role || 'member' })
+        console.log('Creating membership:', { clientId, groupId: finalGroupId, role: role || 'member' })
         const membership = await prisma.clientCompanyGroup.create({
           data: {
             clientId,
-            groupId,
+            groupId: finalGroupId,
             role: role || 'member'
           },
           include: {
@@ -223,14 +288,15 @@ async function handler(req, res) {
               select: {
                 id: true,
                 name: true,
-                type: true
+                type: true,
+                industry: true
               }
             }
           }
         })
         console.log('✅ Membership created successfully:', membership)
         
-        return created(res, { membership })
+        return created(res, { membership, groupCreated: !groupId })
       } catch (error) {
         console.error('Error adding client to group:', error)
         
