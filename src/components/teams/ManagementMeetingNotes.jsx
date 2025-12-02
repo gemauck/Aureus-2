@@ -491,12 +491,14 @@ const ManagementMeetingNotes = () => {
     useEffect(() => {
         if (preservedScrollPosition.current !== null) {
             const scrollY = preservedScrollPosition.current;
+            console.log('🔄 Restoring scroll position:', scrollY);
             
             // Helper to check if scroll is restored and clear if so
             const checkAndClear = () => {
                 const currentScroll = window.scrollY || window.pageYOffset;
                 // If scroll is within 5px of target, consider it restored
                 if (Math.abs(currentScroll - scrollY) < 5) {
+                    console.log('✅ Scroll position restored successfully:', currentScroll);
                     preservedScrollPosition.current = null;
                     return true;
                 }
@@ -1638,6 +1640,7 @@ const ManagementMeetingNotes = () => {
         // Preserve scroll position to prevent navigation to top
         const currentScrollPosition = window.scrollY || window.pageYOffset;
         preservedScrollPosition.current = currentScrollPosition;
+        console.log('💾 Preserving scroll position before save:', currentScrollPosition);
         
         // Find the department note
         const week = currentMonthlyNotes?.weeklyNotes?.find(w => 
@@ -1902,8 +1905,17 @@ const ManagementMeetingNotes = () => {
             
             // No notifications - save happens silently
             
-            // Scroll position is preserved via preservedScrollPosition ref and useEffect
-            // No need for manual restoration here - useEffect will handle it
+            // Immediately attempt scroll restoration after state updates
+            if (preservedScrollPosition.current !== null) {
+                const scrollY = preservedScrollPosition.current;
+                // Immediate restoration attempts
+                requestAnimationFrame(() => {
+                    window.scrollTo(0, scrollY);
+                });
+                setTimeout(() => {
+                    window.scrollTo(0, scrollY);
+                }, 0);
+            }
             
             // DO NOT RELOAD - Just update local state and continue
             // No reloadMonthlyNotes call - data is already updated locally
@@ -2093,6 +2105,7 @@ const ManagementMeetingNotes = () => {
             // Prevent any default behavior and preserve scroll position
             const currentScrollPosition = window.scrollY || window.pageYOffset;
             preservedScrollPosition.current = currentScrollPosition;
+            console.log('💾 Preserving scroll position before action item save:', currentScrollPosition);
             
             // Validate required fields
             if (!actionItemData.title || !actionItemData.title.trim()) {
@@ -2382,6 +2395,7 @@ const ManagementMeetingNotes = () => {
         // Prevent any default behavior
         const currentScrollPosition = window.scrollY || window.pageYOffset;
         preservedScrollPosition.current = currentScrollPosition;
+        console.log('💾 Preserving scroll position before comment save:', currentScrollPosition);
         
         const currentUser = window.storage?.getUserInfo() || {};
         const tempComment = {
