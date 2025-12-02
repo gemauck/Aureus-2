@@ -2849,8 +2849,6 @@ const Clients = React.memo(() => {
     
     // CRITICAL FIX: If any clients are missing groupMemberships, fetch them directly from API
     // This ensures ALL clients with groups show their groups, not just those that were cached correctly
-    const processedClientIdsRef = useRef(new Set()); // Track which client IDs have been processed to prevent re-fetching
-    
     useEffect(() => {
         if (!clients || clients.length === 0) return;
         
