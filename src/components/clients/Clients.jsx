@@ -2741,6 +2741,24 @@ const Clients = React.memo(() => {
         }
     }, [clients]);
     
+    // CRITICAL FIX: If any clients are missing groupMemberships, fetch fresh data immediately
+    useEffect(() => {
+        if (!clients || clients.length === 0) return;
+        
+        // Check if any clients are missing groupMemberships
+        const clientsMissingGroups = clients.filter(c => 
+            c.groupMemberships === undefined || 
+            c.groupMemberships === null ||
+            (typeof c.groupMemberships === 'string' && c.groupMemberships.trim() === '')
+        );
+        
+        if (clientsMissingGroups.length > 0) {
+            // Force a fresh API call to get groupMemberships
+            console.log(`🔄 ${clientsMissingGroups.length} clients missing groupMemberships, fetching fresh data...`);
+            loadClients(true); // Force refresh
+        }
+    }, [clients.length]); // Only check when client count changes, not on every render
+    
     // Leads are now database-only, no localStorage sync needed
 
     const handleClientModalClose = async () => {
