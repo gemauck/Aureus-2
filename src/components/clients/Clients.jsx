@@ -361,19 +361,28 @@ function processClientData(rawClients, cacheKey) {
         parentGroupId: c.parentGroupId || (c.parentGroup?.id || null),
         parentGroupName: c.parentGroup?.name || c.parentGroupName || null,
         // Preserve groupMemberships array - handle both array of objects and nested structures
+        // CRITICAL: Always preserve groupMemberships, even if it's undefined/null from API
         groupMemberships: (() => {
-            if (Array.isArray(c.groupMemberships)) {
-                return c.groupMemberships.map(m => {
-                    // If membership has a group object, preserve it
-                    if (m && typeof m === 'object') {
-                        return {
-                            ...m,
-                            group: m.group || null
-                        };
-                    }
-                    return m;
-                });
+            // Check if groupMemberships exists (could be array, undefined, or null)
+            if (c.groupMemberships !== undefined && c.groupMemberships !== null) {
+                if (Array.isArray(c.groupMemberships)) {
+                    return c.groupMemberships.map(m => {
+                        // If membership has a group object, preserve it with name
+                        if (m && typeof m === 'object') {
+                            return {
+                                ...m,
+                                group: m.group ? {
+                                    id: m.group.id || null,
+                                    name: m.group.name || null,
+                                    type: m.group.type || null
+                                } : null
+                            };
+                        }
+                        return m;
+                    });
+                }
             }
+            // Return empty array if undefined/null/not array
             return [];
         })()
         };
@@ -1401,15 +1410,22 @@ const Clients = React.memo(() => {
                             });
                             // CRITICAL: Use clientsWithCachedOpps (which has group data) instead of clients/cachedClients
                             const clientsToUpdate = clientsWithCachedOpps.length > 0 ? clientsWithCachedOpps : (clients.length > 0 ? clients : (cachedClients || []));
-                            const updated = clientsToUpdate.map(client => ({
-                                ...client,
-                                opportunities: opportunitiesByClient[client.id] || client.opportunities || [],
-                                // CRITICAL: Explicitly preserve group data when updating opportunities
-                                parentGroup: client.parentGroup || null,
-                                parentGroupId: client.parentGroupId || null,
-                                parentGroupName: client.parentGroupName || null,
-                                groupMemberships: client.groupMemberships || []
-                            }));
+                            const updated = clientsToUpdate.map(client => {
+                                // CRITICAL: Preserve ALL group data, including groupMemberships
+                                const preservedGroupMemberships = client.groupMemberships !== undefined && client.groupMemberships !== null 
+                                    ? (Array.isArray(client.groupMemberships) ? client.groupMemberships : [])
+                                    : [];
+                                
+                                return {
+                                    ...client,
+                                    opportunities: opportunitiesByClient[client.id] || client.opportunities || [],
+                                    // CRITICAL: Explicitly preserve group data when updating opportunities
+                                    parentGroup: client.parentGroup || null,
+                                    parentGroupId: client.parentGroupId || null,
+                                    parentGroupName: client.parentGroupName || null,
+                                    groupMemberships: preservedGroupMemberships
+                                };
+                            });
                             setClients(updated);
                             safeStorage.setClients(updated);
                         })
@@ -1531,6 +1547,10 @@ const Clients = React.memo(() => {
                 // CRITICAL: Always use tags from API response (client object) - never use cached tags
                 const cachedClientsForOpps = safeStorage.getClients() || [];
                 const clientsWithCachedOpps = clientsOnly.map(client => {
+                    // CRITICAL: Preserve groupMemberships from processed client (from API)
+                    const preservedGroupMemberships = client.groupMemberships !== undefined && client.groupMemberships !== null 
+                        ? (Array.isArray(client.groupMemberships) ? client.groupMemberships : [])
+                        : [];
                     const cachedClient = cachedClientsForOpps.find(c => c.id === client.id);
                     // Start with API client data (which has tags and group data from processClientData)
                     const merged = { ...client };
@@ -1539,11 +1559,14 @@ const Clients = React.memo(() => {
                         merged.opportunities = cachedClient.opportunities;
                     }
                     // Ensure group data is preserved (should already be in client from processClientData)
-                    // But explicitly preserve it to be safe
-                    if (client.parentGroup) merged.parentGroup = client.parentGroup;
-                    if (client.parentGroupId) merged.parentGroupId = client.parentGroupId;
-                    if (client.parentGroupName) merged.parentGroupName = client.parentGroupName;
-                    if (client.groupMemberships) merged.groupMemberships = client.groupMemberships;
+                    // But explicitly preserve it to be safe - ALWAYS preserve groupMemberships (even if empty array)
+                    merged.parentGroup = client.parentGroup || null;
+                    merged.parentGroupId = client.parentGroupId || null;
+                    merged.parentGroupName = client.parentGroupName || null;
+                    // CRITICAL: Always preserve groupMemberships - use empty array if undefined/null
+                    merged.groupMemberships = (client.groupMemberships !== undefined && client.groupMemberships !== null && Array.isArray(client.groupMemberships))
+                        ? client.groupMemberships
+                        : [];
                     // This ensures tags and group data always come from the API, not stale cache
                     return merged;
                 });
