@@ -4431,11 +4431,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 } focus:outline-none focus:ring-2 focus:ring-blue-500`}
                                             >
                                                 <option value="">None (Standalone Company)</option>
-                                                {allGroups.map((group) => (
-                                                    <option key={group.id} value={group.id}>
-                                                        {group.name} {group.industry ? `(${group.industry})` : ''}
-                                                    </option>
-                                                ))}
+                                                {allGroups
+                                                    .filter(g => g.type !== 'group' && g.id !== client?.id)
+                                                    .map((group) => (
+                                                        <option key={group.id} value={group.id}>
+                                                            {group.name} {group.industry ? `(${group.industry})` : ''}
+                                                        </option>
+                                                    ))}
                                             </select>
                                             <p className={`mt-1 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                                 Select the primary parent company for this client (ownership hierarchy)
