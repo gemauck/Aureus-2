@@ -1653,28 +1653,39 @@ const Clients = React.memo(() => {
                 // Double-check that finalClients have groupMemberships before setting state
                 // Use raw API response from ref as the source of truth
                 const verifiedClients = finalClients.map(client => {
-                    // If groupMemberships is still undefined, try to get it from the raw API response
-                    if (!client.groupMemberships || !Array.isArray(client.groupMemberships) || client.groupMemberships.length === 0) {
-                        // First try processedClients (from API after processing)
-                        let apiClient = processedClients.find(c => c.id === client.id);
-                        // If not found or no groupMemberships, try raw API response from ref
-                        if ((!apiClient || !apiClient.groupMemberships || !Array.isArray(apiClient.groupMemberships)) && latestApiClientsRef.current) {
-                            apiClient = latestApiClientsRef.current.find(c => c.id === client.id);
-                        }
+                    // ALWAYS check raw API response first - it's the source of truth
+                    let apiClient = null;
+                    if (latestApiClientsRef.current) {
+                        apiClient = latestApiClientsRef.current.find(c => c.id === client.id);
                         if (apiClient && apiClient.groupMemberships && Array.isArray(apiClient.groupMemberships) && apiClient.groupMemberships.length > 0) {
-                            console.log('🔧 Restoring groupMemberships from API for:', client.name, apiClient.groupMemberships);
+                            console.log('🔧 Restoring groupMemberships from raw API for:', client.name, apiClient.groupMemberships);
                             return {
                                 ...client,
                                 groupMemberships: apiClient.groupMemberships
                             };
                         }
-                        // If still no groupMemberships, ensure it's at least an empty array
-                        if (!client.groupMemberships || !Array.isArray(client.groupMemberships)) {
+                    }
+                    // If not in raw API, try processedClients (from API after processing)
+                    if (!apiClient || !apiClient.groupMemberships || !Array.isArray(apiClient.groupMemberships)) {
+                        apiClient = processedClients.find(c => c.id === client.id);
+                        if (apiClient && apiClient.groupMemberships && Array.isArray(apiClient.groupMemberships) && apiClient.groupMemberships.length > 0) {
+                            console.log('🔧 Restoring groupMemberships from processedClients for:', client.name, apiClient.groupMemberships);
                             return {
                                 ...client,
-                                groupMemberships: []
+                                groupMemberships: apiClient.groupMemberships
                             };
                         }
+                    }
+                    // If still no groupMemberships, ensure it's at least an empty array
+                    if (!client.groupMemberships || !Array.isArray(client.groupMemberships)) {
+                        // Only log for AccuFarm to reduce noise
+                        if (client.name && client.name.toLowerCase().includes('accufarm')) {
+                            console.warn('⚠️ AccuFarm still missing groupMemberships after all checks. Raw API ref:', latestApiClientsRef.current ? 'exists' : 'null', 'ProcessedClients length:', processedClients.length);
+                        }
+                        return {
+                            ...client,
+                            groupMemberships: []
+                        };
                     }
                     return client;
                 });
