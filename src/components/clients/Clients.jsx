@@ -1645,7 +1645,28 @@ const Clients = React.memo(() => {
                         groupMemberships: groupMemberships
                     };
                 });
-                setClients(finalClients);
+                // CRITICAL: Ensure groupMemberships is preserved in state
+                // Double-check that finalClients have groupMemberships before setting state
+                const verifiedClients = finalClients.map(client => {
+                    // If groupMemberships is still undefined, try to get it from the API response
+                    if (!client.groupMemberships || !Array.isArray(client.groupMemberships)) {
+                        // Find the client in the processedClients (from API) to get fresh groupMemberships
+                        const apiClient = processedClients.find(c => c.id === client.id);
+                        if (apiClient && apiClient.groupMemberships && Array.isArray(apiClient.groupMemberships)) {
+                            return {
+                                ...client,
+                                groupMemberships: apiClient.groupMemberships
+                            };
+                        }
+                        return {
+                            ...client,
+                            groupMemberships: []
+                        };
+                    }
+                    return client;
+                });
+                
+                setClients(verifiedClients);
                 
                 // Only update leads if they're mixed with clients in the API response
                 // (Leads typically come from a separate getLeads() endpoint via loadLeads())
