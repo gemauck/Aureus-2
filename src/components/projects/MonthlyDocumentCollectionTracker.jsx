@@ -958,29 +958,28 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const snapshotBeforeDeletion = serializeSections(sectionsRef.current);
         const sectionToDelete = JSON.parse(JSON.stringify(section)); // Deep clone for restoration
         
-        try {
-            // Update state and ref atomically - no need for Promise wrapper, update synchronously
-            setSectionsByYear(prev => {
-                const yearSections = prev[selectedYear] || [];
-                const filtered = yearSections.filter(s => String(s.id) !== normalizedSectionId);
-                
-                const updatedSectionsByYear = {
-                    ...prev,
-                    [selectedYear]: filtered
-                };
-                
-                // Immediately update the ref synchronously
-                sectionsRef.current = updatedSectionsByYear;
-                
-                return updatedSectionsByYear;
-            });
+        // Update state and ref atomically - OPTIMISTIC UPDATE (UI updates immediately)
+        setSectionsByYear(prev => {
+            const yearSections = prev[selectedYear] || [];
+            const filtered = yearSections.filter(s => String(s.id) !== normalizedSectionId);
             
-            // Force immediate save (bypass debounce) to ensure deletion is persisted
-            const deletedSectionSnapshot = serializeSections(sectionsRef.current);
+            const updatedSectionsByYear = {
+                ...prev,
+                [selectedYear]: filtered
+            };
             
-            // Save with explicit skip of post-save refresh
-            isSavingRef.current = true;
+            // Immediately update the ref synchronously
+            sectionsRef.current = updatedSectionsByYear;
             
+            return updatedSectionsByYear;
+        });
+        
+        // Save in background (non-blocking) - UI already updated optimistically
+        const deletedSectionSnapshot = serializeSections(sectionsRef.current);
+        isSavingRef.current = true;
+        
+        // Perform save asynchronously without blocking the click handler
+        (async () => {
             try {
                 const payload = sectionsRef.current || {};
                 
@@ -1010,9 +1009,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 
                 console.log('✅ Section deletion saved successfully');
                 
-                // Clear the deleting flag immediately after successful save
-                // The save is complete, so we can safely allow polling to resume
-                // Use a short delay (500ms) just to ensure any pending operations complete
+                // Clear the deleting flag after successful save
                 setTimeout(() => {
                     isDeletingRef.current = false;
                     console.log('✅ Deletion flag cleared, polling can resume');
@@ -1022,39 +1019,34 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 
             } catch (saveError) {
                 console.error('❌ Error saving section deletion:', saveError);
-                isSavingRef.current = false;
-                throw saveError; // Re-throw to trigger rollback
+                
+                // Rollback: Restore the section if save failed
+                try {
+                    setSectionsByYear(prev => {
+                        const yearSections = prev[selectedYear] || [];
+                        // Only restore if section doesn't already exist
+                        if (!yearSections.find(s => String(s.id) === normalizedSectionId)) {
+                            return {
+                                ...prev,
+                                [selectedYear]: [...yearSections, sectionToDelete]
+                            };
+                        }
+                        return prev;
+                    });
+                    
+                    // Also restore the ref
+                    sectionsRef.current = JSON.parse(snapshotBeforeDeletion);
+                    
+                    alert('Failed to save deletion. The section has been restored. Please try again.');
+                } catch (rollbackError) {
+                    console.error('❌ Error during rollback:', rollbackError);
+                    alert('An error occurred while deleting the section. Please refresh the page.');
+                }
             } finally {
                 isSavingRef.current = false;
+                isDeletingRef.current = false;
             }
-            
-        } catch (error) {
-            console.error('❌ Error during section deletion:', error);
-            isDeletingRef.current = false;
-            
-            // Rollback: Restore the section if save failed
-            try {
-                setSectionsByYear(prev => {
-                    const yearSections = prev[selectedYear] || [];
-                    // Only restore if section doesn't already exist
-                    if (!yearSections.find(s => String(s.id) === normalizedSectionId)) {
-                        return {
-                            ...prev,
-                            [selectedYear]: [...yearSections, sectionToDelete]
-                        };
-                    }
-                    return prev;
-                });
-                
-                // Also restore the ref
-                sectionsRef.current = JSON.parse(snapshotBeforeDeletion);
-                
-                alert('Failed to delete section. Please try again. If the problem persists, refresh the page.');
-            } catch (rollbackError) {
-                console.error('❌ Error during rollback:', rollbackError);
-                alert('An error occurred while deleting the section. Please refresh the page and try again.');
-            }
-        }
+        })();
     };
     
     // ============================================================
