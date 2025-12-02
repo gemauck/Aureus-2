@@ -1328,11 +1328,16 @@ const Clients = React.memo(() => {
                     // Check if this is a client that might have a group (e.g., Exxaro)
                     const name = (c.name || '').toLowerCase();
                     if (name.includes('exxaro')) {
+                        console.log('🔍 Detected Exxaro client with missing group data, forcing API call:', c.name);
                         return true; // Exxaro clients should have groups
                     }
                 }
                 return false;
             });
+            
+            if (hasMissingGroupData) {
+                console.log('🔄 Forcing API call due to missing group data for Exxaro clients');
+            }
             
             // If we have cached clients AND it's been less than 10 seconds since last call, skip API entirely
             // UNLESS group data is missing (force refresh in that case)
