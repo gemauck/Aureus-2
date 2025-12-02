@@ -285,16 +285,21 @@ async function handler(req, res) {
           
           // Preserve group data (parentGroup and groupMemberships are objects, not JSON strings)
           // These come from Prisma relations and should be preserved as-is
-          if (client.parentGroup) {
-            parsed.parentGroup = client.parentGroup
-            parsed.parentGroupId = client.parentGroupId || client.parentGroup.id
-            parsed.parentGroupName = client.parentGroup.name
-          } else if (client.parentGroupId) {
-            parsed.parentGroupId = client.parentGroupId
+          // IMPORTANT: Check both client (raw) and parsed, as parseClientJsonFields might preserve it
+          const rawParentGroup = client.parentGroup || parsed.parentGroup
+          const rawParentGroupId = client.parentGroupId || parsed.parentGroupId
+          
+          if (rawParentGroup) {
+            parsed.parentGroup = rawParentGroup
+            parsed.parentGroupId = rawParentGroupId || rawParentGroup.id
+            parsed.parentGroupName = rawParentGroup.name
+          } else if (rawParentGroupId) {
+            parsed.parentGroupId = rawParentGroupId
           }
           
-          if (client.groupMemberships && Array.isArray(client.groupMemberships)) {
-            parsed.groupMemberships = client.groupMemberships
+          const rawGroupMemberships = client.groupMemberships || parsed.groupMemberships
+          if (rawGroupMemberships && Array.isArray(rawGroupMemberships)) {
+            parsed.groupMemberships = rawGroupMemberships
           } else {
             parsed.groupMemberships = []
           }
