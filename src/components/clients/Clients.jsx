@@ -1316,9 +1316,28 @@ const Clients = React.memo(() => {
             const now = Date.now();
             const timeSinceLastCall = now - lastApiCallTimestamp;
             
+            // Check if cached clients are missing group data - if so, force API call
+            const clientsToCheck = clients.length > 0 ? clients : (cachedClients || []);
+            const hasMissingGroupData = clientsToCheck.some(c => {
+                // Check if client has no group data at all
+                const hasNoParentGroup = !c.parentGroup && !c.parentGroupId && !c.parentGroupName;
+                const hasNoGroupMemberships = !c.groupMemberships || (Array.isArray(c.groupMemberships) && c.groupMemberships.length === 0);
+                // If client has neither parentGroup nor groupMemberships, it might be missing data
+                // But only force refresh if we have clients that should have groups (like Exxaro)
+                if (hasNoParentGroup && hasNoGroupMemberships) {
+                    // Check if this is a client that might have a group (e.g., Exxaro)
+                    const name = (c.name || '').toLowerCase();
+                    if (name.includes('exxaro')) {
+                        return true; // Exxaro clients should have groups
+                    }
+                }
+                return false;
+            });
+            
             // If we have cached clients AND it's been less than 10 seconds since last call, skip API entirely
+            // UNLESS group data is missing (force refresh in that case)
             // This prevents unnecessary network requests when data is fresh
-            if (!forceRefresh && timeSinceLastCall < API_CALL_INTERVAL && (clients.length > 0 || (cachedClients && cachedClients.length > 0))) {
+            if (!forceRefresh && !hasMissingGroupData && timeSinceLastCall < API_CALL_INTERVAL && (clients.length > 0 || (cachedClients && cachedClients.length > 0))) {
                 
                 // But still trigger LiveDataSync in background to get updates
                 if (window.LiveDataSync?.forceSync) {
