@@ -4207,7 +4207,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     Additional Group Memberships
                                                 </label>
                                                 <button
-                                                    onClick={() => {
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
                                                         console.log('Add Group button clicked', { 
                                                             allGroupsCount: allGroups.length,
                                                             primaryParentId: primaryParent?.id,
@@ -4258,7 +4261,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                 )}
                                                             </div>
                                                             <button
-                                                                onClick={() => handleRemoveFromGroup(membership.group?.id)}
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                    handleRemoveFromGroup(membership.group?.id);
+                                                                }}
                                                                 className={`px-3 py-1 text-xs rounded transition-colors ${
                                                                     isDark
                                                                         ? 'bg-red-600 hover:bg-red-700 text-white'
