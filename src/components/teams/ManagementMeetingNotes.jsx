@@ -105,6 +105,32 @@ const decodeHtmlContent = (html) => {
     return html;
 };
 
+// Helper function to convert URLs in text to clickable links
+const linkifyText = (text) => {
+    if (!text || typeof text !== 'string') return text || '';
+    
+    // URL regex pattern - matches http://, https://, www., and email addresses
+    const urlPattern = /(https?:\/\/[^\s<>"{}|\\^`[\]]+|www\.[^\s<>"{}|\\^`[\]]+|[\w.-]+@[\w.-]+\.\w+)/gi;
+    
+    // Check if text already contains HTML links (to avoid double-processing)
+    if (text.includes('<a ') || text.includes('<A ')) {
+        return text; // Already has links, return as-is
+    }
+    
+    return text.replace(urlPattern, (match) => {
+        let url = match;
+        
+        // Add protocol if missing
+        if (match.startsWith('www.')) {
+            url = 'https://' + match;
+        } else if (match.includes('@') && !match.startsWith('mailto:')) {
+            url = 'mailto:' + match;
+        }
+        
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-primary-600 hover:text-primary-700 underline">${match}</a>`;
+    });
+};
+
 const normalizeMonthKeyInput = (value) => {
     if (!value && value !== 0) return null;
     if (value instanceof Date) {
@@ -473,6 +499,10 @@ const ManagementMeetingNotes = () => {
     const [showCommentModal, setShowCommentModal] = useState(false);
     const [editingActionItem, setEditingActionItem] = useState(null);
     const [commentContext, setCommentContext] = useState(null); // {type: 'monthly'|'department'|'action', id: string}
+    
+    // Attachment states
+    const [uploadingAttachments, setUploadingAttachments] = useState({}); // { [departmentNotesId]: true/false }
+    const [attachmentInputs, setAttachmentInputs] = useState({}); // { [departmentNotesId]: FileList }
     
     // State for tracking editing status and temporary values for each field
     const [editingFields, setEditingFields] = useState({}); // { [departmentNotesId-field]: true/false }
@@ -1676,6 +1706,124 @@ const ManagementMeetingNotes = () => {
         const monthlyId = currentMonthlyNotes?.id || null;
         updateDepartmentNotesLocal(departmentNotesId, field, value, monthlyId);
         // No tracking, no auto-save - only saved when Save button is clicked
+    };
+    
+    // Handle file upload for attachments
+    const handleAttachmentUpload = async (departmentNotesId, files) => {
+        if (!files || files.length === 0) return;
+        
+        setUploadingAttachments(prev => ({ ...prev, [departmentNotesId]: true }));
+        
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                throw new Error('Not authenticated');
+            }
+            
+            const uploadedAttachments = [];
+            
+            // Upload each file
+            for (const file of Array.from(files)) {
+                // Convert file to base64
+                const reader = new FileReader();
+                const base64Promise = new Promise((resolve, reject) => {
+                    reader.onload = () => {
+                        const dataUrl = reader.result;
+                        resolve(dataUrl);
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+                
+                const dataUrl = await base64Promise;
+                
+                // Upload to server
+                const response = await fetch('/api/files', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        name: file.name,
+                        dataUrl: dataUrl,
+                        folder: 'meeting-notes'
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to upload ${file.name}`);
+                }
+                
+                const result = await response.json();
+                uploadedAttachments.push({
+                    name: file.name,
+                    url: result.data?.url || result.url,
+                    size: file.size,
+                    mimeType: file.type,
+                    uploadedAt: new Date().toISOString()
+                });
+            }
+            
+            // Get current attachments
+            const week = currentMonthlyNotes?.weeklyNotes?.find(w => 
+                w.departmentNotes?.some(dn => dn.id === departmentNotesId)
+            );
+            const deptNote = week?.departmentNotes?.find(dn => dn.id === departmentNotesId);
+            
+            let currentAttachments = [];
+            try {
+                if (deptNote?.attachments) {
+                    currentAttachments = typeof deptNote.attachments === 'string' 
+                        ? JSON.parse(deptNote.attachments) 
+                        : deptNote.attachments;
+                }
+            } catch (e) {
+                console.warn('Error parsing attachments:', e);
+            }
+            
+            // Add new attachments
+            const updatedAttachments = [...currentAttachments, ...uploadedAttachments];
+            
+            // Update local state
+            const monthlyId = currentMonthlyNotes?.id || null;
+            updateDepartmentNotesLocal(departmentNotesId, 'attachments', JSON.stringify(updatedAttachments), monthlyId);
+            
+        } catch (error) {
+            console.error('Error uploading attachments:', error);
+            alert(`Failed to upload files: ${error.message}`);
+        } finally {
+            setUploadingAttachments(prev => ({ ...prev, [departmentNotesId]: false }));
+            setAttachmentInputs(prev => ({ ...prev, [departmentNotesId]: null }));
+        }
+    };
+    
+    // Handle attachment deletion
+    const handleDeleteAttachment = (departmentNotesId, attachmentIndex) => {
+        const week = currentMonthlyNotes?.weeklyNotes?.find(w => 
+            w.departmentNotes?.some(dn => dn.id === departmentNotesId)
+        );
+        const deptNote = week?.departmentNotes?.find(dn => dn.id === departmentNotesId);
+        
+        if (!deptNote) return;
+        
+        let currentAttachments = [];
+        try {
+            if (deptNote.attachments) {
+                currentAttachments = typeof deptNote.attachments === 'string' 
+                    ? JSON.parse(deptNote.attachments) 
+                    : deptNote.attachments;
+            }
+        } catch (e) {
+            console.warn('Error parsing attachments:', e);
+        }
+        
+        // Remove attachment at index
+        const updatedAttachments = currentAttachments.filter((_, index) => index !== attachmentIndex);
+        
+        // Update local state
+        const monthlyId = currentMonthlyNotes?.id || null;
+        updateDepartmentNotesLocal(departmentNotesId, 'attachments', JSON.stringify(updatedAttachments), monthlyId);
     };
 
     // Save all fields for a department at once
