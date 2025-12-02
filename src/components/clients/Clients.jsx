@@ -653,6 +653,7 @@ const Clients = React.memo(() => {
     const selectedLeadRef = useRef(null); // Ref to track selected lead
     const pipelineOpportunitiesLoadedRef = useRef(new Map());
     const latestApiClientsRef = useRef(null); // Ref to store latest API response for groupMemberships preservation
+    const groupMembershipsFetchRef = useRef(false); // Prevent multiple simultaneous groupMemberships fetches
     
     // Industry management state - declared early to avoid temporal dead zone issues
     const [industries, setIndustries] = useState([]);
@@ -2846,6 +2847,9 @@ const Clients = React.memo(() => {
     }, [clients]);
     
     // CRITICAL FIX: If any clients are missing groupMemberships, fetch them directly from API
+    // This ensures ALL clients with groups show their groups, not just those that were cached correctly
+    const groupMembershipsFetchRef = useRef(false); // Prevent multiple simultaneous fetches
+    
     useEffect(() => {
         if (!clients || clients.length === 0) return;
         
@@ -2858,24 +2862,29 @@ const Clients = React.memo(() => {
         
         if (clientsMissingGroups.length === 0) return;
         
-        // Only check AccuFarm for now to avoid too many API calls
-        const accufarm = clientsMissingGroups.find(c => c.name && c.name.toLowerCase().includes('accufarm'));
-        if (!accufarm) return;
+        // Prevent multiple simultaneous fetches
+        if (groupMembershipsFetchRef.current) {
+            return;
+        }
         
-        console.log('🔄 AccuFarm missing groupMemberships, fetching directly from API...');
+        console.log(`🔄 ${clientsMissingGroups.length} clients missing groupMemberships, fetching fresh data from API...`);
         
-        // Fetch fresh data from API
+        // Fetch fresh data from API for ALL clients missing groups
         const fetchGroupData = async () => {
             try {
+                groupMembershipsFetchRef.current = true;
+                
                 // Ensure DatabaseAPI is available and properly initialized
                 if (!window.DatabaseAPI) {
                     console.warn('⚠️ DatabaseAPI not available yet');
+                    groupMembershipsFetchRef.current = false;
                     return;
                 }
                 
                 // Verify makeRequest exists (it should be a method on DatabaseAPI)
                 if (typeof window.DatabaseAPI.makeRequest !== 'function') {
                     console.warn('⚠️ DatabaseAPI.makeRequest is not a function');
+                    groupMembershipsFetchRef.current = false;
                     return;
                 }
                 
@@ -2887,54 +2896,71 @@ const Clients = React.memo(() => {
                     res = await window.api.listClients();
                 } else {
                     console.warn('⚠️ No API method available');
+                    groupMembershipsFetchRef.current = false;
                     return;
                 }
                 
                 const apiClients = res?.data?.clients || res?.clients || [];
-                console.log('📦 Fetched', apiClients.length, 'clients from API for groupMemberships check');
+                console.log('📦 Fetched', apiClients.length, 'clients from API for groupMemberships restoration');
                 
-                const accufarmFromApi = apiClients.find(c => c && c.name && c.name.toLowerCase().includes('accufarm'));
+                // Create a map of API clients by ID for fast lookup
+                const apiClientsMap = new Map();
+                apiClients.forEach(client => {
+                    if (client && client.id) {
+                        apiClientsMap.set(client.id, client);
+                    }
+                });
                 
-                if (accufarmFromApi) {
-                    console.log('🔍 AccuFarm found in API response:', {
-                        name: accufarmFromApi.name,
-                        id: accufarmFromApi.id,
-                        hasGroupMemberships: !!accufarmFromApi.groupMemberships,
-                        groupMemberships: accufarmFromApi.groupMemberships,
-                        isArray: Array.isArray(accufarmFromApi.groupMemberships),
-                        length: Array.isArray(accufarmFromApi.groupMemberships) ? accufarmFromApi.groupMemberships.length : 'not array'
-                    });
+                // Find all clients that need groupMemberships updated
+                const clientsToUpdate = clientsMissingGroups.filter(client => {
+                    const apiClient = apiClientsMap.get(client.id);
+                    return apiClient && 
+                           apiClient.groupMemberships && 
+                           Array.isArray(apiClient.groupMemberships) && 
+                           apiClient.groupMemberships.length > 0;
+                });
+                
+                if (clientsToUpdate.length > 0) {
+                    console.log(`✅ Found groupMemberships for ${clientsToUpdate.length} clients, updating state...`);
                     
-                    if (accufarmFromApi.groupMemberships && Array.isArray(accufarmFromApi.groupMemberships) && accufarmFromApi.groupMemberships.length > 0) {
-                        console.log('✅ Found AccuFarm groupMemberships in API:', accufarmFromApi.groupMemberships);
-                        
-                        // Update the client in state
-                        setClients(prevClients => {
-                            return prevClients.map(client => {
-                                if (client.id === accufarm.id) {
-                                    console.log('✅ Updating AccuFarm with groupMemberships:', accufarmFromApi.groupMemberships);
+                    // Update all clients with their groupMemberships
+                    setClients(prevClients => {
+                        return prevClients.map(client => {
+                            const apiClient = apiClientsMap.get(client.id);
+                            if (apiClient && 
+                                apiClient.groupMemberships && 
+                                Array.isArray(apiClient.groupMemberships) && 
+                                apiClient.groupMemberships.length > 0) {
+                                // Only update if client was missing groupMemberships
+                                if (!client.groupMemberships || 
+                                    !Array.isArray(client.groupMemberships) || 
+                                    client.groupMemberships.length === 0) {
+                                    console.log(`✅ Restoring groupMemberships for ${client.name}:`, apiClient.groupMemberships.length, 'groups');
                                     return {
                                         ...client,
-                                        groupMemberships: accufarmFromApi.groupMemberships
+                                        groupMemberships: apiClient.groupMemberships
                                     };
                                 }
-                                return client;
-                            });
+                            }
+                            return client;
                         });
-                    } else {
-                        console.warn('⚠️ AccuFarm found but has no groupMemberships or empty array');
-                    }
+                    });
                 } else {
-                    console.warn('⚠️ AccuFarm not found in API response');
+                    console.log('ℹ️ No clients found with groupMemberships in API response');
                 }
             } catch (error) {
                 console.error('❌ Error fetching groupMemberships:', error);
+            } finally {
+                groupMembershipsFetchRef.current = false;
             }
         };
         
-        // Debounce to avoid multiple calls
+        // Debounce to avoid multiple calls (wait 1 second after clients change)
         const timeoutId = setTimeout(fetchGroupData, 1000);
-        return () => clearTimeout(timeoutId);
+        return () => {
+            clearTimeout(timeoutId);
+            groupMembershipsFetchRef.current = false;
+        };
     }, [clients]);
     
     // CRITICAL FIX: If any clients are missing groupMemberships, fetch fresh data immediately
