@@ -393,6 +393,7 @@ function initializeProjectDetail() {
         const taskDetailModalLoadPromiseRef = useRef(null);
         const commentsPopupLoadPromiseRef = useRef(null);
         const projectModalLoadPromiseRef = useRef(null);
+        const ensureTaskDetailModalLoadedRef = useRef(null);
     
     // Ensure functions for lazy loading components - defined early to avoid TDZ issues
     // These must be defined before any useEffect hooks that reference them
@@ -491,6 +492,9 @@ function initializeProjectDetail() {
         taskDetailModalLoadPromiseRef.current = loadPromise;
         return loadPromise;
     }, [taskDetailModalComponent]);
+    
+    // Store function in ref to avoid TDZ issues when used in dependency arrays
+    ensureTaskDetailModalLoadedRef.current = ensureTaskDetailModalLoaded;
 
     const ensureCommentsPopupLoaded = useCallback(async () => {
         if (typeof window.CommentsPopup === 'function') {
@@ -683,7 +687,9 @@ function initializeProjectDetail() {
                 
                 if (foundTask) {
                     // Ensure task detail modal is loaded
-                    await ensureTaskDetailModalLoaded();
+                    if (ensureTaskDetailModalLoadedRef.current) {
+                        await ensureTaskDetailModalLoadedRef.current();
+                    }
                     
                     setViewingTask(foundTask);
                     setViewingTaskParent(foundParent);
@@ -696,7 +702,7 @@ function initializeProjectDetail() {
         
         window.addEventListener('openTask', handleOpenTask);
         return () => window.removeEventListener('openTask', handleOpenTask);
-    }, [project?.id, tasks, ensureTaskDetailModalLoaded]);
+    }, [project?.id, tasks]); // Removed ensureTaskDetailModalLoaded from deps, using ref instead
     
     // Memoize the back callback to prevent DocumentCollectionProcessSection from re-rendering
     const handleBackToOverview = useCallback(() => {
@@ -2073,7 +2079,8 @@ function initializeProjectDetail() {
 
     // Task Management - Unified for both creating and editing
     const handleAddTask = useCallback(async (listId, statusName = null) => {
-        const ready = await ensureTaskDetailModalLoaded();
+        if (!ensureTaskDetailModalLoadedRef.current) return;
+        const ready = await ensureTaskDetailModalLoadedRef.current();
         if (!ready) {
             alert('Task workspace is still loading. Please try again in a moment.');
             return;
@@ -2087,10 +2094,11 @@ function initializeProjectDetail() {
         setViewingTaskParent(null);
         setCreatingTaskForList(listId);
         setShowTaskDetailModal(true);
-    }, [ensureTaskDetailModalLoaded]);
+    }, []); // Removed ensureTaskDetailModalLoaded from deps, using ref instead
 
     const handleAddSubtask = useCallback(async (parentTask) => {
-        const ready = await ensureTaskDetailModalLoaded();
+        if (!ensureTaskDetailModalLoadedRef.current) return;
+        const ready = await ensureTaskDetailModalLoadedRef.current();
         if (!ready) {
             alert('Task workspace is still loading. Please try again in a moment.');
             return;
@@ -2099,10 +2107,11 @@ function initializeProjectDetail() {
         setViewingTaskParent(parentTask);
         setCreatingTaskForList(null);
         setShowTaskDetailModal(true);
-    }, [ensureTaskDetailModalLoaded]);
+    }, []); // Removed ensureTaskDetailModalLoaded from deps, using ref instead
 
     const handleViewTaskDetail = useCallback(async (task, parentTask = null) => {
-        const ready = await ensureTaskDetailModalLoaded();
+        if (!ensureTaskDetailModalLoadedRef.current) return;
+        const ready = await ensureTaskDetailModalLoadedRef.current();
         if (!ready) {
             alert('Task workspace is still loading. Please try again in a moment.');
             return;
@@ -2111,7 +2120,7 @@ function initializeProjectDetail() {
         setViewingTaskParent(parentTask);
         setCreatingTaskForList(null);
         setShowTaskDetailModal(true);
-    }, [ensureTaskDetailModalLoaded]);
+    }, []); // Removed ensureTaskDetailModalLoaded from deps, using ref instead
 
     const handleUpdateTaskFromDetail = async (updatedTaskData) => {
         const isNewTask = !updatedTaskData.id || (!tasks.find(t => t.id === updatedTaskData.id) && 
