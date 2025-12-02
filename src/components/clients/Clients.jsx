@@ -3896,7 +3896,8 @@ const Clients = React.memo(() => {
 
     // PERFORMANCE FIX: Memoize sort functions to prevent recreation on every render
     const sortClients = useCallback((clients) => {
-        return [...clients].sort((a, b) => {
+        // CRITICAL: Create deep copies to preserve all properties including groupMemberships
+        const sorted = clients.map(client => ({ ...client })).sort((a, b) => {
             // Prioritize starred items at the top
             const aStarred = resolveStarredState(a);
             const bStarred = resolveStarredState(b);
@@ -3976,6 +3977,20 @@ const Clients = React.memo(() => {
             } else {
                 return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
             }
+        });
+        
+        // CRITICAL: Ensure groupMemberships is preserved for all clients after sorting
+        return sorted.map(client => {
+            // Find original client to preserve groupMemberships
+            const original = clients.find(c => c.id === client.id);
+            if (original && original.groupMemberships) {
+                // Preserve groupMemberships from original
+                return {
+                    ...client,
+                    groupMemberships: original.groupMemberships
+                };
+            }
+            return client;
         });
     }, [sortField, sortDirection]);
 
