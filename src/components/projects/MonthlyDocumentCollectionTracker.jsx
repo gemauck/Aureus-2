@@ -970,24 +970,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         setEditingSection(null);
     };
     
-    // Process deletion queue sequentially
-    const processDeletionQueue = async () => {
-        if (isProcessingDeletionQueueRef.current || deletionQueueRef.current.length === 0) {
-            return;
-        }
-        
-        isProcessingDeletionQueueRef.current = true;
-        
-        while (deletionQueueRef.current.length > 0) {
-            const { sectionId, event } = deletionQueueRef.current.shift();
-            await performDeletion(sectionId, event);
-            // Wait a bit between deletions to ensure state is stable
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-        
-        isProcessingDeletionQueueRef.current = false;
-    };
-    
     // Actual deletion logic extracted to separate function
     const performDeletion = async (sectionId, event) => {
         // Prevent event propagation to avoid interfering with other handlers
@@ -999,13 +981,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         // Normalize IDs to strings for comparison
         const normalizedSectionId = String(sectionId);
         
-        // Use sectionsByYear directly to get the most up-to-date state
-        const currentSections = sectionsByYear[selectedYear] || [];
+        // Get current state from ref to ensure we have the latest
+        const currentState = sectionsRef.current || {};
+        const currentSections = currentState[selectedYear] || [];
         const section = currentSections.find(s => String(s.id) === normalizedSectionId);
         
         if (!section) {
-            console.error('❌ Section not found for deletion. ID:', sectionId, 'Available sections:', currentSections.map(s => ({ id: s.id, name: s.name })));
-            alert(`Error: Section not found. Cannot delete.`);
+            console.warn('⚠️ Section not found for deletion (may have been already deleted). ID:', sectionId);
+            // Don't show alert for queued deletions that are already gone
             return;
         }
         
@@ -1141,10 +1124,28 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 if (deletionSectionIdsRef.current.size === 0) {
                     isDeletingRef.current = false;
                     deletionTimestampRef.current = null;
-                    }
                 }
+            }
             })();
         });
+    };
+    
+    // Process deletion queue sequentially
+    const processDeletionQueue = async () => {
+        if (isProcessingDeletionQueueRef.current || deletionQueueRef.current.length === 0) {
+            return;
+        }
+        
+        isProcessingDeletionQueueRef.current = true;
+        
+        while (deletionQueueRef.current.length > 0) {
+            const { sectionId, event } = deletionQueueRef.current.shift();
+            await performDeletion(sectionId, event);
+            // Wait a bit between deletions to ensure state is stable
+            await new Promise(resolve => setTimeout(resolve, 200));
+        }
+        
+        isProcessingDeletionQueueRef.current = false;
     };
     
     // Public handler that queues deletions
@@ -1178,9 +1179,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             console.log('📋 Queuing deletion request:', normalizedSectionId);
             deletionQueueRef.current.push({ sectionId, event });
             // Start processing queue if not already processing
-            if (!isProcessingDeletionQueueRef.current) {
-                processDeletionQueue();
-            }
+            setTimeout(() => {
+                if (!isProcessingDeletionQueueRef.current) {
+                    processDeletionQueue();
+                }
+            }, 0);
             return;
         }
         
