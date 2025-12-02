@@ -2840,6 +2840,67 @@ const Clients = React.memo(() => {
         }
     }, [clients]);
     
+    // CRITICAL FIX: If any clients are missing groupMemberships, fetch them directly from API
+    useEffect(() => {
+        if (!clients || clients.length === 0) return;
+        
+        // Check if any clients are missing groupMemberships
+        const clientsMissingGroups = clients.filter(c => 
+            !c.groupMemberships || 
+            !Array.isArray(c.groupMemberships) || 
+            c.groupMemberships.length === 0
+        );
+        
+        if (clientsMissingGroups.length === 0) return;
+        
+        // Only check AccuFarm for now to avoid too many API calls
+        const accufarm = clientsMissingGroups.find(c => c.name && c.name.toLowerCase().includes('accufarm'));
+        if (!accufarm) return;
+        
+        console.log('🔄 AccuFarm missing groupMemberships, fetching directly from API...');
+        
+        // Fetch fresh data from API
+        const fetchGroupData = async () => {
+            try {
+                const apiMethod = window.DatabaseAPI?.getClients || window.api?.listClients;
+                if (!apiMethod) {
+                    console.warn('⚠️ No API method available');
+                    return;
+                }
+                
+                const res = await apiMethod();
+                const apiClients = res?.data?.clients || res?.clients || [];
+                const accufarmFromApi = apiClients.find(c => c.name && c.name.toLowerCase().includes('accufarm'));
+                
+                if (accufarmFromApi && accufarmFromApi.groupMemberships && Array.isArray(accufarmFromApi.groupMemberships) && accufarmFromApi.groupMemberships.length > 0) {
+                    console.log('✅ Found AccuFarm groupMemberships in API:', accufarmFromApi.groupMemberships);
+                    
+                    // Update the client in state
+                    setClients(prevClients => {
+                        return prevClients.map(client => {
+                            if (client.id === accufarm.id) {
+                                console.log('✅ Updating AccuFarm with groupMemberships:', accufarmFromApi.groupMemberships);
+                                return {
+                                    ...client,
+                                    groupMemberships: accufarmFromApi.groupMemberships
+                                };
+                            }
+                            return client;
+                        });
+                    });
+                } else {
+                    console.warn('⚠️ AccuFarm not found in API response or has no groupMemberships');
+                }
+            } catch (error) {
+                console.error('❌ Error fetching groupMemberships:', error);
+            }
+        };
+        
+        // Debounce to avoid multiple calls
+        const timeoutId = setTimeout(fetchGroupData, 1000);
+        return () => clearTimeout(timeoutId);
+    }, [clients]);
+    
     // CRITICAL FIX: If any clients are missing groupMemberships, fetch fresh data immediately
     useEffect(() => {
         if (!clients || clients.length === 0) return;
