@@ -472,6 +472,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         if (isSavingRef.current) {
             return;
         }
+        // Don't trigger auto-save during deletion - deletion handles its own save
+        if (isDeletingRef.current && !options.allowDuringDeletion) {
+            console.log('⏸️ Auto-save skipped: deletion in progress');
+            return;
+        }
         if (!project?.id) {
             console.warn('⚠️ Cannot save: No project ID');
             return;
@@ -914,6 +919,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             event.stopPropagation();
         }
         
+        // Prevent multiple simultaneous deletions
+        if (isDeletingRef.current) {
+            console.warn('⏸️ Deletion already in progress, ignoring request');
+            return;
+        }
+        
         // Normalize IDs to strings for comparison
         const normalizedSectionId = String(sectionId);
         
@@ -927,87 +938,138 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return;
         }
         
+        // Show confirmation dialog
         if (!confirm(`Delete section "${section.name}" and all its documents?`)) {
             return;
         }
         
-        // Set deleting flag to prevent refresh from overwriting
-        // Use a longer timeout (10 seconds) to ensure polling doesn't interfere
-        // Polling happens every 5 seconds, so 10 seconds gives us 2 polling cycles
+        // CRITICAL: Set deletion flag IMMEDIATELY before any async operations
+        // This prevents polling from interfering with the deletion process
         isDeletingRef.current = true;
+        console.log('🗑️ Starting section deletion, polling disabled');
         
-        // Capture the current snapshot before deletion for comparison
-        const snapshotBeforeDeletion = serializeSections(sectionsRef.current);
-        
-        // Use functional update with sectionsByYear to ensure we have the latest state
-        // Also update sectionsRef immediately to prevent race conditions with auto-save
-        let updatedSectionsByYear;
-        setSectionsByYear(prev => {
-            const yearSections = prev[selectedYear] || [];
-            const filtered = yearSections.filter(s => String(s.id) !== normalizedSectionId);
-            
-            updatedSectionsByYear = {
-                ...prev,
-                [selectedYear]: filtered
-            };
-            
-            // Immediately update the ref to prevent race conditions with auto-save
-            sectionsRef.current = updatedSectionsByYear;
-            
-            return updatedSectionsByYear;
-        });
-        
-        // Force immediate save (bypass debounce) to ensure deletion is persisted
-        // Clear any pending debounced saves first
+        // Clear any pending debounced saves to prevent race conditions
         if (saveTimeoutRef.current) {
             clearTimeout(saveTimeoutRef.current);
             saveTimeoutRef.current = null;
         }
         
-        // Save immediately with the updated sections
+        // Capture the current snapshot before deletion for rollback if needed
+        const snapshotBeforeDeletion = serializeSections(sectionsRef.current);
+        const sectionToDelete = JSON.parse(JSON.stringify(section)); // Deep clone for restoration
+        
         try {
-            // Wait for save to complete and verify it succeeded
-            await saveToDatabase({ skipParentUpdate: false });
+            // Update state and ref atomically using functional update
+            // Use a Promise to ensure state update completes before proceeding
+            await new Promise((resolve) => {
+                setSectionsByYear(prev => {
+                    const yearSections = prev[selectedYear] || [];
+                    const filtered = yearSections.filter(s => String(s.id) !== normalizedSectionId);
+                    
+                    const updatedSectionsByYear = {
+                        ...prev,
+                        [selectedYear]: filtered
+                    };
+                    
+                    // Immediately update the ref synchronously
+                    sectionsRef.current = updatedSectionsByYear;
+                    
+                    // Use requestAnimationFrame to ensure React has processed the state update
+                    requestAnimationFrame(() => {
+                        setTimeout(resolve, 0);
+                    });
+                    
+                    return updatedSectionsByYear;
+                });
+            });
             
-            // Verify the save by checking if lastSavedSnapshotRef was updated
-            const snapshotAfterSave = serializeSections(sectionsRef.current);
-            const savedSnapshot = lastSavedSnapshotRef.current;
-            
-            if (savedSnapshot !== snapshotAfterSave) {
-                // Save might not have completed properly, wait a bit and retry
-                console.warn('⚠️ Save snapshot mismatch, waiting and retrying...');
-                await new Promise(resolve => setTimeout(resolve, 500));
-                await saveToDatabase({ skipParentUpdate: false });
+            // Double-check the ref was updated correctly
+            const currentSectionsAfterUpdate = sectionsRef.current[selectedYear] || [];
+            const sectionStillExists = currentSectionsAfterUpdate.find(s => String(s.id) === normalizedSectionId);
+            if (sectionStillExists) {
+                throw new Error('State update failed: section still exists after deletion');
             }
             
-            console.log('✅ Section deletion saved successfully');
+            // Force immediate save (bypass debounce) to ensure deletion is persisted
+            // Use a custom save function that doesn't trigger refresh from database
+            const deletedSectionSnapshot = serializeSections(sectionsRef.current);
             
-            // Clear the deleting flag after a longer delay to ensure polling doesn't interfere
-            // Use 10 seconds (2 polling cycles) to ensure the save is fully persisted and propagated
-            setTimeout(() => {
-                isDeletingRef.current = false;
-                console.log('✅ Deletion flag cleared, polling can resume');
-            }, 10000);
+            // Save with explicit skip of post-save refresh
+            isSavingRef.current = true;
+            
+            try {
+                const payload = sectionsRef.current || {};
+                
+                if (apiRef.current && typeof apiRef.current.saveDocumentSections === 'function') {
+                    await apiRef.current.saveDocumentSections(project.id, payload, false);
+                } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
+                    const updatePayload = {
+                        documentSections: serializeSections(payload)
+                    };
+                    await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                } else {
+                    throw new Error('No available API for saving document sections');
+                }
+                
+                // Update snapshot reference after successful save
+                lastSavedSnapshotRef.current = deletedSectionSnapshot;
+                
+                // Persist a snapshot locally
+                const snapshotKey = getSnapshotKey(project.id);
+                if (snapshotKey && window.localStorage) {
+                    try {
+                        window.localStorage.setItem(snapshotKey, deletedSectionSnapshot);
+                    } catch (storageError) {
+                        console.warn('⚠️ Failed to save document collection snapshot to localStorage:', storageError);
+                    }
+                }
+                
+                console.log('✅ Section deletion saved successfully');
+                
+                // Clear the deleting flag after sufficient delay to ensure save is fully persisted
+                // Use 15 seconds (3 polling cycles) to ensure the save is fully propagated
+                // Don't trigger refresh immediately - let the next natural polling cycle pick it up
+                setTimeout(() => {
+                    isDeletingRef.current = false;
+                    console.log('✅ Deletion flag cleared, polling can resume');
+                    // Trigger a single refresh after flag is cleared to sync state
+                    refreshFromDatabase(false);
+                }, 15000);
+                
+            } catch (saveError) {
+                console.error('❌ Error saving section deletion:', saveError);
+                isSavingRef.current = false;
+                throw saveError; // Re-throw to trigger rollback
+            } finally {
+                isSavingRef.current = false;
+            }
             
         } catch (error) {
-            console.error('❌ Error saving section deletion:', error);
-            // Revert the deletion if save failed
-            setSectionsByYear(prev => {
-                const yearSections = prev[selectedYear] || [];
-                // Restore the section if it was in the original state
-                if (!yearSections.find(s => String(s.id) === normalizedSectionId)) {
-                    return {
-                        ...prev,
-                        [selectedYear]: [...yearSections, section]
-                    };
-                }
-                return prev;
-            });
-            // Also revert the ref
-            sectionsRef.current = JSON.parse(snapshotBeforeDeletion);
-            alert('Failed to delete section. Please try again.');
+            console.error('❌ Error during section deletion:', error);
             isDeletingRef.current = false;
-            return;
+            
+            // Rollback: Restore the section if save failed
+            try {
+                setSectionsByYear(prev => {
+                    const yearSections = prev[selectedYear] || [];
+                    // Only restore if section doesn't already exist
+                    if (!yearSections.find(s => String(s.id) === normalizedSectionId)) {
+                        return {
+                            ...prev,
+                            [selectedYear]: [...yearSections, sectionToDelete]
+                        };
+                    }
+                    return prev;
+                });
+                
+                // Also restore the ref
+                sectionsRef.current = JSON.parse(snapshotBeforeDeletion);
+                
+                alert('Failed to delete section. Please try again. If the problem persists, refresh the page.');
+            } catch (rollbackError) {
+                console.error('❌ Error during rollback:', rollbackError);
+                alert('An error occurred while deleting the section. Please refresh the page and try again.');
+            }
         }
     };
     
