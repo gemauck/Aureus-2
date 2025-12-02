@@ -2724,7 +2724,26 @@ const LeadDetailModal = ({
             } else {
                 const errorData = await response.json().catch(() => ({}));
                 const errorMessage = errorData?.error?.message || errorData?.error || errorData?.message || 'Failed to delete group. Please try again.';
-                alert(errorMessage);
+                const errorDetails = errorData?.error?.details;
+                
+                // If we have linked clients, display them in a formatted message
+                if (errorDetails?.linkedClients) {
+                    const { primaryParent = [], groupMembers = [] } = errorDetails.linkedClients;
+                    const allLinked = [...primaryParent, ...groupMembers];
+                    
+                    if (allLinked.length > 0) {
+                        const clientList = allLinked.map(client => 
+                            `  • ${client.name} (${client.relationship})`
+                        ).join('\n');
+                        
+                        const fullMessage = `${errorMessage}\n\nLinked Clients:\n${clientList}\n\nPlease remove or reassign these clients before deleting the group.`;
+                        alert(fullMessage);
+                    } else {
+                        alert(errorMessage);
+                    }
+                } else {
+                    alert(errorMessage);
+                }
             }
         } catch (error) {
             console.error('Failed to delete group:', error);

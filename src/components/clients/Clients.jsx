@@ -1612,16 +1612,29 @@ const Clients = React.memo(() => {
                 }
                 
                 // Show clients immediately with preserved opportunities AND group data
-                // CRITICAL: Double-check that groupMemberships is preserved before setting state
+                // CRITICAL: Ensure groupMemberships is ALWAYS present and properly structured
                 const finalClients = clientsWithCachedOpps.map(client => {
-                    // Ensure groupMemberships is always an array (never undefined)
-                    if (!client.groupMemberships || !Array.isArray(client.groupMemberships)) {
-                        return {
-                            ...client,
-                            groupMemberships: []
-                        };
+                    // Ensure groupMemberships is always an array (never undefined/null)
+                    let groupMemberships = client.groupMemberships;
+                    
+                    // If it's a string (from localStorage), parse it
+                    if (typeof groupMemberships === 'string') {
+                        try {
+                            groupMemberships = JSON.parse(groupMemberships);
+                        } catch {
+                            groupMemberships = [];
+                        }
                     }
-                    return client;
+                    
+                    // Ensure it's always an array
+                    if (!Array.isArray(groupMemberships)) {
+                        groupMemberships = [];
+                    }
+                    
+                    return {
+                        ...client,
+                        groupMemberships: groupMemberships
+                    };
                 });
                 setClients(finalClients);
                 
@@ -4482,16 +4495,30 @@ const Clients = React.memo(() => {
                                     </td>
                                     <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
                                         {(() => {
-                                            // SIMPLE: Just show the group names from groupMemberships - always check the actual data
+                                            // SIMPLE: Does this client have a group? If yes, show it. If no, show "None"
                                             const groupNames = [];
                                             
-                                            // Ensure we have groupMemberships (should always be an array, but be defensive)
-                                            const memberships = Array.isArray(client.groupMemberships) ? client.groupMemberships : [];
+                                            // Check groupMemberships - handle all possible data structures
+                                            let memberships = client.groupMemberships;
                                             
-                                            // Extract group names from memberships
+                                            // If it's a string (from localStorage), parse it
+                                            if (typeof memberships === 'string') {
+                                                try {
+                                                    memberships = JSON.parse(memberships);
+                                                } catch {
+                                                    memberships = [];
+                                                }
+                                            }
+                                            
+                                            // Ensure it's an array
+                                            if (!Array.isArray(memberships)) {
+                                                memberships = [];
+                                            }
+                                            
+                                            // Extract group names
                                             memberships.forEach(membership => {
                                                 if (membership && typeof membership === 'object') {
-                                                    // Check for nested group object (from API)
+                                                    // Check for nested group object (from API: { group: { name: "Exxaro" } })
                                                     if (membership.group) {
                                                         const groupName = typeof membership.group === 'object' && membership.group !== null
                                                             ? membership.group.name
@@ -4500,14 +4527,14 @@ const Clients = React.memo(() => {
                                                             groupNames.push(groupName);
                                                         }
                                                     }
-                                                    // Fallback: check if membership itself has a name
+                                                    // Fallback: check if membership itself has a name property
                                                     if (!groupNames.length && membership.name && !groupNames.includes(membership.name)) {
                                                         groupNames.push(membership.name);
                                                     }
                                                 }
                                             });
                                             
-                                            // Display group names or "None"
+                                            // SIMPLE: Show group name or "None"
                                             return groupNames.length > 0 
                                                 ? <span>{groupNames.join(', ')}</span>
                                                 : <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>None</span>;

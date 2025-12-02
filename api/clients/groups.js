@@ -233,22 +233,55 @@ async function handler(req, res) {
           return notFound(res, 'Group not found')
         }
         
-        // Check if group has any members (child companies or group memberships)
-        const hasMembers = group._count.childCompanies > 0 || group._count.groupChildren > 0
-        
-        if (hasMembers) {
-          return badRequest(res, 'Cannot delete group that has members. Please remove all members first.')
-        }
-        
-        // Check if any clients have this as their parentGroupId
-        const clientsWithParent = await prisma.client.count({
+        // Get all linked clients for detailed error message
+        const childCompanies = await prisma.client.findMany({
           where: {
             parentGroupId: groupId
+          },
+          select: {
+            id: true,
+            name: true,
+            type: true
+          },
+          orderBy: {
+            name: 'asc'
           }
         })
         
-        if (clientsWithParent > 0) {
-          return badRequest(res, 'Cannot delete group that is set as primary parent for one or more clients. Please change their primary parent first.')
+        const groupMembers = await prisma.clientCompanyGroup.findMany({
+          where: {
+            groupId: groupId
+          },
+          include: {
+            client: {
+              select: {
+                id: true,
+                name: true,
+                type: true
+              }
+            }
+          }
+        })
+        
+        // Sort group members by client name
+        groupMembers.sort((a, b) => a.client.name.localeCompare(b.client.name))
+        
+        const linkedClients = {
+          primaryParent: childCompanies.map(c => ({ id: c.id, name: c.name, type: c.type, relationship: 'Primary Parent' })),
+          groupMembers: groupMembers.map(m => ({ id: m.client.id, name: m.client.name, type: m.client.type, relationship: 'Group Member' }))
+        }
+        
+        const totalLinked = childCompanies.length + groupMembers.length
+        
+        // Check if group has any members (child companies or group memberships)
+        const hasMembers = group._count.childCompanies > 0 || group._count.groupChildren > 0
+        
+        if (hasMembers || totalLinked > 0) {
+          return badRequest(
+            res, 
+            `Cannot delete group that has ${totalLinked} linked client(s). Please remove all linked clients first.`,
+            { linkedClients }
+          )
         }
         
         // Delete the group

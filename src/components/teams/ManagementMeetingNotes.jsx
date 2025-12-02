@@ -814,12 +814,24 @@ const ManagementMeetingNotes = () => {
                 }
                 
                 const response = await window.DatabaseAPI.getMeetingNotes();
-                const notes = response.data?.monthlyNotes || [];
+                // Handle both response structures: { data: { monthlyNotes: [...] } } and { monthlyNotes: [...] }
+                const notes = response?.data?.monthlyNotes || response?.monthlyNotes || [];
+                
+                console.log('📋 Loaded meeting notes:', {
+                    totalMonths: notes.length,
+                    monthKeys: notes.map(n => n?.monthKey).filter(Boolean),
+                    responseStructure: {
+                        hasData: !!response?.data,
+                        hasMonthlyNotes: !!response?.data?.monthlyNotes,
+                        hasDirectMonthlyNotes: !!response?.monthlyNotes
+                    }
+                });
+                
                 setMonthlyNotesList(notes);
                 
                 // Load current month's notes if selected
                 if (selectedMonth) {
-                    const currentNotes = notes.find(n => n.monthKey === selectedMonth);
+                    const currentNotes = notes.find(n => n?.monthKey === selectedMonth);
                     if (currentNotes) {
                         setCurrentMonthlyNotes(currentNotes);
                     } else {
@@ -829,7 +841,12 @@ const ManagementMeetingNotes = () => {
                 
                 setIsReady(true);
             } catch (error) {
-                console.error('Error loading meeting notes:', error);
+                console.error('❌ Error loading meeting notes:', error);
+                console.error('Error details:', {
+                    message: error.message,
+                    stack: error.stack,
+                    response: error.response
+                });
                 setIsReady(true);
             } finally {
                 setLoading(false);
@@ -850,10 +867,26 @@ const ManagementMeetingNotes = () => {
             try {
                 setLoading(true);
                 const response = await window.DatabaseAPI.getMeetingNotes(selectedMonth);
-                const notes = response.data?.monthlyNotes;
+                // Handle both response structures: { data: { monthlyNotes: {...} } } and { monthlyNotes: {...} }
+                const notes = response?.data?.monthlyNotes || response?.monthlyNotes;
+                
+                if (notes) {
+                    console.log(`✅ Loaded notes for ${selectedMonth}:`, {
+                        monthKey: notes.monthKey,
+                        hasWeeklyNotes: !!notes.weeklyNotes,
+                        weeklyNotesCount: notes.weeklyNotes?.length || 0
+                    });
+                } else {
+                    console.log(`ℹ️ No notes found for ${selectedMonth}`);
+                }
+                
                 setCurrentMonthlyNotes(notes || null);
             } catch (error) {
-                console.error('Error loading current month notes:', error);
+                console.error(`❌ Error loading current month notes for ${selectedMonth}:`, error);
+                console.error('Error details:', {
+                    message: error.message,
+                    stack: error.stack
+                });
                 setCurrentMonthlyNotes(null);
             } finally {
                 setLoading(false);
