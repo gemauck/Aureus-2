@@ -1481,6 +1481,21 @@ const Clients = React.memo(() => {
                     return merged;
                 });
                 
+                // Debug: Check Exxaro clients before setting state
+                const exxaroBeforeSetState = clientsWithCachedOpps.filter(c => c.name && c.name.toLowerCase().includes('exxaro'));
+                if (exxaroBeforeSetState.length > 0) {
+                    console.log('🔍 Before setClients - Exxaro clients:', exxaroBeforeSetState.map(c => ({
+                        name: c.name,
+                        id: c.id,
+                        parentGroup: c.parentGroup,
+                        parentGroupName: c.parentGroupName,
+                        parentGroupId: c.parentGroupId,
+                        groupMemberships: c.groupMemberships,
+                        hasParentGroup: !!c.parentGroup,
+                        parentGroupType: typeof c.parentGroup
+                    })));
+                }
+                
                 // Show clients immediately with preserved opportunities AND group data
                 setClients(clientsWithCachedOpps);
                 
@@ -1510,7 +1525,8 @@ const Clients = React.memo(() => {
                         name: c.name,
                         parentGroup: c.parentGroup,
                         parentGroupName: c.parentGroupName,
-                        parentGroupId: c.parentGroupId
+                        parentGroupId: c.parentGroupId,
+                        groupMemberships: c.groupMemberships
                     })));
                 }
                 
