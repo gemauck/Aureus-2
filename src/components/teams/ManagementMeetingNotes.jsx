@@ -2212,7 +2212,7 @@ const ManagementMeetingNotes = () => {
             // Scroll position is preserved via preservedScrollPosition ref and useEffect
             // No need for manual restoration here - useEffect will handle it
 
-            setLoading(true);
+            setSaving(true); // Use saving state instead of loading to prevent "Loading meeting notes..." from showing
 
             let response;
             // Check if we're updating (has id) or creating (no id)
@@ -2295,7 +2295,7 @@ const ManagementMeetingNotes = () => {
             }
             console.error('Failed to save action item:', error.message || 'Unknown error');
         } finally {
-            setLoading(false);
+            setSaving(false); // Use saving state instead of loading
         }
     };
 
@@ -2512,7 +2512,7 @@ const ManagementMeetingNotes = () => {
         // No need for manual restoration here - useEffect will handle it
         
         try {
-            setLoading(true);
+            setSaving(true); // Use saving state instead of loading to prevent "Loading meeting notes..." from showing
             const commentData = {
                 content,
                 [commentContext.type === 'monthly' ? 'monthlyNotesId' : 
@@ -2648,7 +2648,7 @@ const ManagementMeetingNotes = () => {
             }
             console.error('Failed to create comment');
         } finally {
-            setLoading(false);
+            setSaving(false); // Use saving state instead of loading
         }
     };
 
