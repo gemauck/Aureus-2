@@ -1346,6 +1346,27 @@ const Clients = React.memo(() => {
                 return hasNoParentGroup && hasNoGroupMemberships;
             });
             
+            // Debug: Log the check result
+            if (clientsToCheck.length > 0) {
+                const exxaroCheck = clientsToCheck.filter(c => c.name && c.name.toLowerCase().includes('exxaro'));
+                if (exxaroCheck.length > 0) {
+                    console.log('🔍 Group data check - Exxaro clients:', {
+                        totalClientsToCheck: clientsToCheck.length,
+                        exxaroCount: exxaroCheck.length,
+                        hasMissingGroupData: hasMissingGroupData,
+                        timeSinceLastCall: timeSinceLastCall,
+                        willSkipApi: !forceRefresh && !hasMissingGroupData && timeSinceLastCall < API_CALL_INTERVAL,
+                        exxaroSample: exxaroCheck[0] ? {
+                            name: exxaroCheck[0].name,
+                            hasParentGroup: !!exxaroCheck[0].parentGroup,
+                            hasParentGroupId: !!exxaroCheck[0].parentGroupId,
+                            hasParentGroupName: !!exxaroCheck[0].parentGroupName,
+                            hasGroupMemberships: !!exxaroCheck[0].groupMemberships && Array.isArray(exxaroCheck[0].groupMemberships) && exxaroCheck[0].groupMemberships.length > 0
+                        } : null
+                    });
+                }
+            }
+            
             // If we have cached clients AND it's been less than 10 seconds since last call, skip API entirely
             // UNLESS cached data is missing group data - then force refresh to get it
             // This prevents unnecessary network requests when data is fresh

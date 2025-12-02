@@ -3531,9 +3531,22 @@ const ManagementMeetingNotes = () => {
                                                                                         setEditingActionItem(item);
                                                                                         setShowActionItemModal(true);
                                                                                     }}
-                                                                                    className={`p-1 ${isDark ? 'text-slate-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
+                                                                                    className={`p-1 rounded transition ${isDark ? 'text-slate-400 hover:text-primary-400 hover:bg-primary-900/30' : 'text-gray-400 hover:text-primary-600 hover:bg-primary-50'}`}
+                                                                                    title="Edit action item"
                                                                                 >
                                                                                     <i className="fas fa-edit text-xs"></i>
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={(e) => {
+                                                                                        e.preventDefault();
+                                                                                        e.stopPropagation();
+                                                                                        handleDeleteActionItem(item.id);
+                                                                                    }}
+                                                                                    className={`p-1 rounded transition ${isDark ? 'text-slate-400 hover:text-red-400 hover:bg-red-900/30' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'}`}
+                                                                                    title="Delete action item"
+                                                                                >
+                                                                                    <i className="fas fa-trash text-xs"></i>
                                                                                 </button>
                                                                             </div>
                                                                         </div>
