@@ -654,6 +654,7 @@ const Clients = React.memo(() => {
     const pipelineOpportunitiesLoadedRef = useRef(new Map());
     const latestApiClientsRef = useRef(null); // Ref to store latest API response for groupMemberships preservation
     const groupMembershipsFetchRef = useRef(false); // Prevent multiple simultaneous groupMemberships fetches
+    const processedClientIdsRef = useRef(new Set()); // Track which client IDs have been processed to prevent re-fetching
     
     // Industry management state - declared early to avoid temporal dead zone issues
     const [industries, setIndustries] = useState([]);
@@ -2848,14 +2849,18 @@ const Clients = React.memo(() => {
     
     // CRITICAL FIX: If any clients are missing groupMemberships, fetch them directly from API
     // This ensures ALL clients with groups show their groups, not just those that were cached correctly
+    const processedClientIdsRef = useRef(new Set()); // Track which client IDs have been processed to prevent re-fetching
+    
     useEffect(() => {
         if (!clients || clients.length === 0) return;
         
         // Check if any clients are missing groupMemberships
         const clientsMissingGroups = clients.filter(c => 
-            !c.groupMemberships || 
+            c && c.id && 
+            (!c.groupMemberships || 
             !Array.isArray(c.groupMemberships) || 
-            c.groupMemberships.length === 0
+            c.groupMemberships.length === 0) &&
+            !processedClientIdsRef.current.has(c.id) // Only process if not already processed
         );
         
         if (clientsMissingGroups.length === 0) return;
@@ -2865,7 +2870,14 @@ const Clients = React.memo(() => {
             return;
         }
         
-        console.log(`🔄 ${clientsMissingGroups.length} clients missing groupMemberships, fetching fresh data from API...`);
+        // Only fetch if we have clients that haven't been processed yet
+        const unprocessedClients = clientsMissingGroups.filter(c => !processedClientIdsRef.current.has(c.id));
+        if (unprocessedClients.length === 0) return;
+        
+        console.log(`🔄 ${unprocessedClients.length} clients missing groupMemberships, fetching fresh data from API...`);
+        
+        // Mark these clients as being processed
+        unprocessedClients.forEach(c => processedClientIdsRef.current.add(c.id));
         
         // Fetch fresh data from API for ALL clients missing groups
         const fetchGroupData = async () => {
@@ -2876,6 +2888,8 @@ const Clients = React.memo(() => {
                 if (!window.DatabaseAPI) {
                     console.warn('⚠️ DatabaseAPI not available yet');
                     groupMembershipsFetchRef.current = false;
+                    // Remove from processed set so we can retry
+                    unprocessedClients.forEach(c => processedClientIdsRef.current.delete(c.id));
                     return;
                 }
                 
@@ -2883,6 +2897,7 @@ const Clients = React.memo(() => {
                 if (typeof window.DatabaseAPI.makeRequest !== 'function') {
                     console.warn('⚠️ DatabaseAPI.makeRequest is not a function');
                     groupMembershipsFetchRef.current = false;
+                    unprocessedClients.forEach(c => processedClientIdsRef.current.delete(c.id));
                     return;
                 }
                 
@@ -2895,6 +2910,7 @@ const Clients = React.memo(() => {
                 } else {
                     console.warn('⚠️ No API method available');
                     groupMembershipsFetchRef.current = false;
+                    unprocessedClients.forEach(c => processedClientIdsRef.current.delete(c.id));
                     return;
                 }
                 
@@ -2910,7 +2926,7 @@ const Clients = React.memo(() => {
                 });
                 
                 // Find all clients that need groupMemberships updated
-                const clientsToUpdate = clientsMissingGroups.filter(client => {
+                const clientsToUpdate = unprocessedClients.filter(client => {
                     const apiClient = apiClientsMap.get(client.id);
                     return apiClient && 
                            apiClient.groupMemberships && 
@@ -2921,9 +2937,9 @@ const Clients = React.memo(() => {
                 if (clientsToUpdate.length > 0) {
                     console.log(`✅ Found groupMemberships for ${clientsToUpdate.length} clients, updating state...`);
                     
-                    // Update all clients with their groupMemberships
+                    // Update all clients with their groupMemberships in a single state update
                     setClients(prevClients => {
-                        return prevClients.map(client => {
+                        const updated = prevClients.map(client => {
                             const apiClient = apiClientsMap.get(client.id);
                             if (apiClient && 
                                 apiClient.groupMemberships && 
@@ -2942,24 +2958,27 @@ const Clients = React.memo(() => {
                             }
                             return client;
                         });
+                        return updated;
                     });
                 } else {
                     console.log('ℹ️ No clients found with groupMemberships in API response');
                 }
             } catch (error) {
                 console.error('❌ Error fetching groupMemberships:', error);
+                // Remove from processed set on error so we can retry
+                unprocessedClients.forEach(c => processedClientIdsRef.current.delete(c.id));
             } finally {
                 groupMembershipsFetchRef.current = false;
             }
         };
         
-        // Debounce to avoid multiple calls (wait 1 second after clients change)
-        const timeoutId = setTimeout(fetchGroupData, 1000);
+        // Debounce to avoid multiple calls (wait 2 seconds after clients change to allow main API call to complete)
+        const timeoutId = setTimeout(fetchGroupData, 2000);
         return () => {
             clearTimeout(timeoutId);
             groupMembershipsFetchRef.current = false;
         };
-    }, [clients]);
+    }, [clients.length]); // Only depend on clients.length to prevent infinite loops
     
     // CRITICAL FIX: If any clients are missing groupMemberships, fetch fresh data immediately
     useEffect(() => {
