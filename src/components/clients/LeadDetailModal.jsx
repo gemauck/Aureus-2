@@ -3792,7 +3792,7 @@ const LeadDetailModal = ({
                                             </div>
                                             
                                             {/* GPS Coordinates Section */}
-                                            <div className="col-span-2" style={{border: '2px solid red'}}>
+                                            <div className="col-span-2">
                                                 <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>GPS Coordinates</label>
                                                 <div className="flex gap-2">
                                                     <input
