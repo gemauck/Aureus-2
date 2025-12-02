@@ -355,10 +355,11 @@ function processClientData(rawClients, cacheKey) {
         isStarred,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
-        // Preserve group data from API
+        // Preserve group data from API - handle both direct fields and nested structures
         parentGroup: c.parentGroup || null,
-        parentGroupName: c.parentGroup?.name || c.parentGroupName || null,
-        groupMemberships: c.groupMemberships || []
+        parentGroupId: c.parentGroupId || null,
+        parentGroupName: c.parentGroup?.name || c.parentGroupName || (c.parentGroup && typeof c.parentGroup === 'object' ? c.parentGroup.name : null) || null,
+        groupMemberships: Array.isArray(c.groupMemberships) ? c.groupMemberships : (c.groupMemberships || [])
         };
     });
     
@@ -1405,13 +1406,19 @@ const Clients = React.memo(() => {
                 const cachedClientsForOpps = safeStorage.getClients() || [];
                 const clientsWithCachedOpps = clientsOnly.map(client => {
                     const cachedClient = cachedClientsForOpps.find(c => c.id === client.id);
-                    // Start with API client data (which has tags from processClientData)
+                    // Start with API client data (which has tags and group data from processClientData)
                     const merged = { ...client };
                     // Preserve opportunities from cache if available (for instant display)
                     if (cachedClient?.opportunities && Array.isArray(cachedClient.opportunities) && cachedClient.opportunities.length > 0) {
                         merged.opportunities = cachedClient.opportunities;
                     }
-                    // This ensures tags always come from the API, not stale cache
+                    // Ensure group data is preserved (should already be in client from processClientData)
+                    // But explicitly preserve it to be safe
+                    if (client.parentGroup) merged.parentGroup = client.parentGroup;
+                    if (client.parentGroupId) merged.parentGroupId = client.parentGroupId;
+                    if (client.parentGroupName) merged.parentGroupName = client.parentGroupName;
+                    if (client.groupMemberships) merged.groupMemberships = client.groupMemberships;
+                    // This ensures tags and group data always come from the API, not stale cache
                     return merged;
                 });
                 
@@ -4253,11 +4260,18 @@ const Clients = React.memo(() => {
                                             // Show primary parent group if available, otherwise show first group membership
                                             // Handle different data structures: parentGroup object, parentGroupName string, or nested structure
                                             let primaryGroup = null;
+                                            
+                                            // Try parentGroup object first
                                             if (client.parentGroup) {
-                                                primaryGroup = typeof client.parentGroup === 'string' 
-                                                    ? client.parentGroup 
-                                                    : client.parentGroup.name || client.parentGroupName;
-                                            } else if (client.parentGroupName) {
+                                                if (typeof client.parentGroup === 'string') {
+                                                    primaryGroup = client.parentGroup;
+                                                } else if (typeof client.parentGroup === 'object' && client.parentGroup !== null) {
+                                                    primaryGroup = client.parentGroup.name || client.parentGroupName;
+                                                }
+                                            }
+                                            
+                                            // Fallback to parentGroupName string
+                                            if (!primaryGroup && client.parentGroupName) {
                                                 primaryGroup = client.parentGroupName;
                                             }
                                             
@@ -4265,27 +4279,41 @@ const Clients = React.memo(() => {
                                             let firstMembership = null;
                                             if (Array.isArray(client.groupMemberships) && client.groupMemberships.length > 0) {
                                                 const membership = client.groupMemberships[0];
-                                                if (membership?.group) {
-                                                    firstMembership = typeof membership.group === 'string'
-                                                        ? membership.group
-                                                        : membership.group.name;
-                                                } else if (membership?.name) {
-                                                    // Direct group name in membership
-                                                    firstMembership = membership.name;
+                                                if (membership) {
+                                                    // Handle nested group object
+                                                    if (membership.group) {
+                                                        if (typeof membership.group === 'string') {
+                                                            firstMembership = membership.group;
+                                                        } else if (typeof membership.group === 'object' && membership.group !== null) {
+                                                            firstMembership = membership.group.name;
+                                                        }
+                                                    } 
+                                                    // Handle direct group name in membership
+                                                    else if (membership.name) {
+                                                        firstMembership = membership.name;
+                                                    }
+                                                    // Handle if membership itself is a group object
+                                                    else if (typeof membership === 'object' && membership.name) {
+                                                        firstMembership = membership.name;
+                                                    }
                                                 }
                                             }
                                             
                                             const groupName = primaryGroup || firstMembership || 'None';
                                             
                                             // Debug logging for Exxaro clients
-                                            if (client.name && client.name.toLowerCase().includes('exxaro') && groupName === 'None') {
+                                            if (client.name && client.name.toLowerCase().includes('exxaro')) {
                                                 console.log('🔍 Exxaro client group debug:', {
                                                     name: client.name,
+                                                    id: client.id,
                                                     parentGroup: client.parentGroup,
+                                                    parentGroupId: client.parentGroupId,
                                                     parentGroupName: client.parentGroupName,
                                                     groupMemberships: client.groupMemberships,
                                                     primaryGroup,
-                                                    firstMembership
+                                                    firstMembership,
+                                                    finalGroupName: groupName,
+                                                    fullClient: client
                                                 });
                                             }
                                             

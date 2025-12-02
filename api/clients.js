@@ -287,9 +287,16 @@ async function handler(req, res) {
           // These come from Prisma relations and should be preserved as-is
           if (client.parentGroup) {
             parsed.parentGroup = client.parentGroup
+            parsed.parentGroupId = client.parentGroupId || client.parentGroup.id
+            parsed.parentGroupName = client.parentGroup.name
+          } else if (client.parentGroupId) {
+            parsed.parentGroupId = client.parentGroupId
           }
-          if (client.groupMemberships) {
+          
+          if (client.groupMemberships && Array.isArray(client.groupMemberships)) {
             parsed.groupMemberships = client.groupMemberships
+          } else {
+            parsed.groupMemberships = []
           }
           
           // Debug logging for Exxaro clients
@@ -298,9 +305,13 @@ async function handler(req, res) {
               id: parsed.id,
               name: parsed.name,
               parentGroup: parsed.parentGroup,
+              parentGroupId: parsed.parentGroupId,
+              parentGroupName: parsed.parentGroupName,
               groupMemberships: parsed.groupMemberships,
               rawParentGroup: client.parentGroup,
-              rawGroupMemberships: client.groupMemberships
+              rawParentGroupId: client.parentGroupId,
+              rawGroupMemberships: client.groupMemberships,
+              rawClientKeys: Object.keys(client)
             })
           }
           
