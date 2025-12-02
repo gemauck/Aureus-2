@@ -1284,6 +1284,8 @@ const Clients = React.memo(() => {
                 );
                 
                 // Show cached clients IMMEDIATELY
+                // NOTE: These may not have groupMemberships if cached before groups were added
+                // The API call below will update them with fresh data including groupMemberships
                 if (filteredCachedClients.length > 0) {
                     setClients(filteredCachedClients);
                 }
@@ -1514,7 +1516,8 @@ const Clients = React.memo(() => {
                         groupMembershipsType: typeof accufarmAfterProcess.groupMemberships,
                         isArray: Array.isArray(accufarmAfterProcess.groupMemberships),
                         length: Array.isArray(accufarmAfterProcess.groupMemberships) ? accufarmAfterProcess.groupMemberships.length : 'not array',
-                        firstMembership: Array.isArray(accufarmAfterProcess.groupMemberships) && accufarmAfterProcess.groupMemberships.length > 0 ? accufarmAfterProcess.groupMemberships[0] : null
+                        firstMembership: Array.isArray(accufarmAfterProcess.groupMemberships) && accufarmAfterProcess.groupMemberships.length > 0 ? accufarmAfterProcess.groupMemberships[0] : null,
+                        firstMembershipGroup: Array.isArray(accufarmAfterProcess.groupMemberships) && accufarmAfterProcess.groupMemberships.length > 0 && accufarmAfterProcess.groupMemberships[0]?.group ? accufarmAfterProcess.groupMemberships[0].group : null
                     });
                 }
                 
@@ -1587,7 +1590,18 @@ const Clients = React.memo(() => {
                 }
                 
                 // Show clients immediately with preserved opportunities AND group data
-                setClients(clientsWithCachedOpps);
+                // CRITICAL: Double-check that groupMemberships is preserved before setting state
+                const finalClients = clientsWithCachedOpps.map(client => {
+                    // Ensure groupMemberships is always an array (never undefined)
+                    if (!client.groupMemberships || !Array.isArray(client.groupMemberships)) {
+                        return {
+                            ...client,
+                            groupMemberships: []
+                        };
+                    }
+                    return client;
+                });
+                setClients(finalClients);
                 
                 // Only update leads if they're mixed with clients in the API response
                 // (Leads typically come from a separate getLeads() endpoint via loadLeads())
@@ -1606,7 +1620,13 @@ const Clients = React.memo(() => {
                 
                 // Save clients with preserved opportunities AND group data to localStorage
                 // This ensures group data is cached for future loads
-                safeStorage.setClients(clientsWithCachedOpps);
+                // CRITICAL: Ensure groupMemberships is properly serialized and saved
+                const clientsToSave = clientsWithCachedOpps.map(client => ({
+                    ...client,
+                    // Explicitly ensure groupMemberships is an array (not undefined)
+                    groupMemberships: Array.isArray(client.groupMemberships) ? client.groupMemberships : []
+                }));
+                safeStorage.setClients(clientsToSave);
                 
                 // Debug: Verify group data is being saved
                 const exxaroInSaved = clientsWithCachedOpps.filter(c => c.name && c.name.toLowerCase().includes('exxaro'));
