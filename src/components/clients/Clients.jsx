@@ -1499,9 +1499,11 @@ const Clients = React.memo(() => {
                 
                 // CRITICAL: Store raw API response in ref for groupMemberships preservation
                 latestApiClientsRef.current = apiClients;
+                console.log('📦 Stored API response in ref. Total clients:', apiClients.length);
                 
                 // If API returns no clients, use cached data
                 if (apiClients.length === 0 && cachedClients && cachedClients.length > 0) {
+                    console.warn('⚠️ API returned no clients, using cached data');
                     return; // Keep showing cached data
                 }
                 
@@ -1652,35 +1654,87 @@ const Clients = React.memo(() => {
                 // CRITICAL: Ensure groupMemberships is preserved in state
                 // Double-check that finalClients have groupMemberships before setting state
                 // Use raw API response from ref as the source of truth
+                console.log('🔍 Verifying clients before setting state. Raw API ref exists:', !!latestApiClientsRef.current, 'Raw API clients count:', latestApiClientsRef.current?.length || 0);
+                
                 const verifiedClients = finalClients.map(client => {
                     // ALWAYS check raw API response first - it's the source of truth
                     let apiClient = null;
-                    if (latestApiClientsRef.current) {
-                        apiClient = latestApiClientsRef.current.find(c => c.id === client.id);
-                        if (apiClient && apiClient.groupMemberships && Array.isArray(apiClient.groupMemberships) && apiClient.groupMemberships.length > 0) {
-                            console.log('🔧 Restoring groupMemberships from raw API for:', client.name, apiClient.groupMemberships);
-                            return {
-                                ...client,
-                                groupMemberships: apiClient.groupMemberships
-                            };
+                    let foundInRawApi = false;
+                    
+                    if (latestApiClientsRef.current && Array.isArray(latestApiClientsRef.current)) {
+                        apiClient = latestApiClientsRef.current.find(c => c && c.id === client.id);
+                        foundInRawApi = !!apiClient;
+                        
+                        if (apiClient) {
+                            // Check for groupMemberships in various possible structures
+                            let groupMemberships = apiClient.groupMemberships;
+                            
+                            // If it's a string (from JSON serialization), parse it
+                            if (typeof groupMemberships === 'string') {
+                                try {
+                                    groupMemberships = JSON.parse(groupMemberships);
+                                } catch (e) {
+                                    console.warn('⚠️ Failed to parse groupMemberships string for', client.name, e);
+                                }
+                            }
+                            
+                            if (groupMemberships && Array.isArray(groupMemberships) && groupMemberships.length > 0) {
+                                console.log('✅ Restoring groupMemberships from raw API for:', client.name, 'Count:', groupMemberships.length, 'First group:', groupMemberships[0]?.group?.name || groupMemberships[0]);
+                                return {
+                                    ...client,
+                                    groupMemberships: groupMemberships
+                                };
+                            }
                         }
                     }
+                    
                     // If not in raw API, try processedClients (from API after processing)
-                    if (!apiClient || !apiClient.groupMemberships || !Array.isArray(apiClient.groupMemberships)) {
-                        apiClient = processedClients.find(c => c.id === client.id);
-                        if (apiClient && apiClient.groupMemberships && Array.isArray(apiClient.groupMemberships) && apiClient.groupMemberships.length > 0) {
-                            console.log('🔧 Restoring groupMemberships from processedClients for:', client.name, apiClient.groupMemberships);
-                            return {
-                                ...client,
-                                groupMemberships: apiClient.groupMemberships
-                            };
+                    if (!apiClient || !apiClient.groupMemberships || !Array.isArray(apiClient.groupMemberships) || apiClient.groupMemberships.length === 0) {
+                        apiClient = processedClients.find(c => c && c.id === client.id);
+                        if (apiClient) {
+                            let groupMemberships = apiClient.groupMemberships;
+                            
+                            // If it's a string, parse it
+                            if (typeof groupMemberships === 'string') {
+                                try {
+                                    groupMemberships = JSON.parse(groupMemberships);
+                                } catch (e) {
+                                    // Ignore parse errors
+                                }
+                            }
+                            
+                            if (groupMemberships && Array.isArray(groupMemberships) && groupMemberships.length > 0) {
+                                console.log('✅ Restoring groupMemberships from processedClients for:', client.name, 'Count:', groupMemberships.length);
+                                return {
+                                    ...client,
+                                    groupMemberships: groupMemberships
+                                };
+                            }
                         }
                     }
+                    
                     // If still no groupMemberships, ensure it's at least an empty array
-                    if (!client.groupMemberships || !Array.isArray(client.groupMemberships)) {
+                    if (!client.groupMemberships || !Array.isArray(client.groupMemberships) || client.groupMemberships.length === 0) {
                         // Only log for AccuFarm to reduce noise
                         if (client.name && client.name.toLowerCase().includes('accufarm')) {
-                            console.warn('⚠️ AccuFarm still missing groupMemberships after all checks. Raw API ref:', latestApiClientsRef.current ? 'exists' : 'null', 'ProcessedClients length:', processedClients.length);
+                            console.error('❌ AccuFarm MISSING groupMemberships!', {
+                                foundInRawApi,
+                                rawApiRefExists: !!latestApiClientsRef.current,
+                                rawApiClient: apiClient ? {
+                                    id: apiClient.id,
+                                    name: apiClient.name,
+                                    hasGroupMemberships: !!apiClient.groupMemberships,
+                                    groupMembershipsType: typeof apiClient.groupMemberships,
+                                    groupMembershipsValue: apiClient.groupMemberships
+                                } : null,
+                                processedClient: processedClients.find(c => c.id === client.id) ? {
+                                    hasGroupMemberships: !!processedClients.find(c => c.id === client.id).groupMemberships
+                                } : null,
+                                currentClient: {
+                                    hasGroupMemberships: !!client.groupMemberships,
+                                    groupMembershipsValue: client.groupMemberships
+                                }
+                            });
                         }
                         return {
                             ...client,
