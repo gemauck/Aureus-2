@@ -6347,7 +6347,10 @@ const Clients = React.memo(() => {
             <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border p-1.5 sm:p-1 flex sm:inline-flex shadow-sm overflow-x-auto sm:overflow-x-visible mb-2 gap-1`}>
                 <button
                     type="button"
-                    onClick={() => setViewMode('groups')}
+                    onClick={() => {
+                        console.log('Groups tab clicked, setting viewMode to groups');
+                        setViewMode('groups');
+                    }}
                     className={`px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
                         viewMode === 'groups' 
                             ? 'bg-blue-600 text-white shadow-sm' 
@@ -6574,7 +6577,10 @@ const Clients = React.memo(() => {
 
             {/* Content based on view mode */}
             <div className="flex-1 overflow-hidden pr-2 sm:pr-4 pb-5 sm:pb-6 pt-2 min-h-0">
-            {viewMode === 'groups' && <GroupsListView />}
+            {viewMode === 'groups' && (() => {
+                console.log('Rendering GroupsListView, viewMode:', viewMode);
+                return <GroupsListView />;
+            })()}
             {viewMode === 'clients' && <ClientsListView />}
             {viewMode === 'leads' && <LeadsListView />}
             {viewMode === 'pipeline' && (
