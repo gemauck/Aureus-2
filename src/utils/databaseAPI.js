@@ -2064,7 +2064,36 @@ const DatabaseAPI = {
                         }
                     }
                     
-                    // If monthlyNotes is null, that means it doesn't exist - handle that case
+                    // If monthlyNotes is null, try fetching all notes and filtering by monthKey
+                    // This handles cases where the direct query might fail due to format issues
+                    if (monthlyNotes === null) {
+                        console.log('ℹ️ monthlyNotes is null from direct query. Trying to fetch all notes and filter by monthKey:', monthKey);
+                        try {
+                            const allNotesResponse = await this.getMeetingNotes(); // Get all notes
+                            const allMonthlyNotes = allNotesResponse?.data?.monthlyNotes || 
+                                                   allNotesResponse?.monthlyNotes || 
+                                                   (Array.isArray(allNotesResponse?.data) ? allNotesResponse.data : []);
+                            
+                            if (Array.isArray(allMonthlyNotes) && allMonthlyNotes.length > 0) {
+                                // Find the note with matching monthKey
+                                const foundNote = allMonthlyNotes.find(note => 
+                                    note && (note.monthKey === monthKey || note.monthKey?.toString() === monthKey?.toString())
+                                );
+                                
+                                if (foundNote && (foundNote.id || foundNote.monthKey)) {
+                                    console.log('✅ Found monthlyNotes by filtering all notes:', foundNote.id, foundNote.monthKey);
+                                    monthlyNotes = foundNote;
+                                } else {
+                                    console.log('ℹ️ No matching monthKey found in all notes. Available monthKeys:', 
+                                        allMonthlyNotes.map(n => n?.monthKey).filter(Boolean));
+                                }
+                            }
+                        } catch (allNotesError) {
+                            console.error('❌ Failed to fetch all notes as fallback:', allNotesError);
+                        }
+                    }
+                    
+                    // If still null after trying all notes, return notFound
                     if (monthlyNotes === null) {
                         console.log('ℹ️ monthlyNotes is null - notes do not exist for:', monthKey);
                         return {
@@ -2144,8 +2173,35 @@ const DatabaseAPI = {
                         
                         // Check if monthlyNotes is null (which means it doesn't exist)
                         if (existing?.data?.monthlyNotes === null) {
-                            console.log('ℹ️ monthlyNotes is null in response - notes do not exist for:', monthKey);
-                            // Return a consistent structure indicating notes don't exist
+                            console.log('ℹ️ monthlyNotes is null in response. Trying to fetch all notes as fallback for:', monthKey);
+                            // Try fetching all notes and filtering by monthKey as fallback
+                            try {
+                                const allNotesResponse = await this.getMeetingNotes(); // Get all notes
+                                const allMonthlyNotes = allNotesResponse?.data?.monthlyNotes || 
+                                                       allNotesResponse?.monthlyNotes || 
+                                                       (Array.isArray(allNotesResponse?.data) ? allNotesResponse.data : []);
+                                
+                                if (Array.isArray(allMonthlyNotes) && allMonthlyNotes.length > 0) {
+                                    const foundNote = allMonthlyNotes.find(note => 
+                                        note && (note.monthKey === monthKey || note.monthKey?.toString() === monthKey?.toString())
+                                    );
+                                    
+                                    if (foundNote && (foundNote.id || foundNote.monthKey)) {
+                                        console.log('✅ Found monthlyNotes by filtering all notes (fallback):', foundNote.id, foundNote.monthKey);
+                                        return {
+                                            data: {
+                                                monthlyNotes: foundNote,
+                                                duplicate: true
+                                            },
+                                            monthlyNotes: foundNote
+                                        };
+                                    }
+                                }
+                            } catch (allNotesError) {
+                                console.error('❌ Failed to fetch all notes as fallback:', allNotesError);
+                            }
+                            
+                            console.log('ℹ️ monthlyNotes is null - notes do not exist for:', monthKey);
                             return {
                                 data: {
                                     monthlyNotes: null,
