@@ -6,47 +6,6 @@ import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 
-/**
- * Validates that assigning client to group won't create circular references
- */
-async function validateNoCircularReference(clientId, groupId) {
-  // Check if groupId is a descendant of clientId (would create cycle)
-  const visited = new Set()
-  let currentId = groupId
-  
-  while (currentId) {
-    if (visited.has(currentId)) {
-      // Circular path detected
-      return { valid: false, reason: 'Circular reference detected' }
-    }
-    
-    if (currentId === clientId) {
-      // Group is a descendant of client - would create cycle
-      return { valid: false, reason: 'Cannot assign client to its own descendant' }
-    }
-    
-    visited.add(currentId)
-    
-    // Check if currentId has a parentGroupId
-    try {
-      const client = await prisma.client.findUnique({
-        where: { id: currentId },
-        select: { parentGroupId: true }
-      })
-      
-      if (!client || !client.parentGroupId) {
-        break // No more parents to check
-      }
-      
-      currentId = client.parentGroupId
-    } catch (error) {
-      console.error('Error checking for circular reference:', error)
-      break
-    }
-  }
-  
-  return { valid: true }
-}
 
 async function handler(req, res) {
   try {
@@ -58,18 +17,12 @@ async function handler(req, res) {
       try {
         // Get only actual groups:
         // 1. Clients with type='group' (named groups like "Exxaro Group")
-        // 2. Clients that have child companies (parent companies acting as groups)
-        // 3. Clients that are used as groups (have groupChildren - other clients assigned to them)
+        // 2. Clients that are used as groups (have groupChildren - other clients assigned to them)
         const groups = await prisma.client.findMany({
           where: {
             OR: [
               {
                 type: 'group' // Named groups
-              },
-              {
-                childCompanies: {
-                  some: {}
-                }
               },
               {
                 groupChildren: {
@@ -87,7 +40,6 @@ async function handler(req, res) {
             createdAt: true,
             _count: {
               select: {
-                childCompanies: true,
                 groupChildren: true
               }
             }
@@ -185,7 +137,6 @@ async function handler(req, res) {
             createdAt: true,
             _count: {
               select: {
-                childCompanies: true,
                 groupChildren: true
               }
             }
@@ -219,7 +170,6 @@ async function handler(req, res) {
             type: true,
             _count: {
               select: {
-                childCompanies: true,
                 groupChildren: true
               }
             }
@@ -231,20 +181,6 @@ async function handler(req, res) {
         }
         
         // Get all linked clients for detailed error message
-        const childCompanies = await prisma.client.findMany({
-          where: {
-            parentGroupId: groupId
-          },
-          select: {
-            id: true,
-            name: true,
-            type: true
-          },
-          orderBy: {
-            name: 'asc'
-          }
-        })
-        
         const groupMembers = await prisma.clientCompanyGroup.findMany({
           where: {
             groupId: groupId
@@ -264,14 +200,13 @@ async function handler(req, res) {
         groupMembers.sort((a, b) => a.client.name.localeCompare(b.client.name))
         
         const linkedClients = {
-          primaryParent: childCompanies.map(c => ({ id: c.id, name: c.name, type: c.type, relationship: 'Primary Parent' })),
           groupMembers: groupMembers.map(m => ({ id: m.client.id, name: m.client.name, type: m.client.type, relationship: 'Group Member' }))
         }
         
-        const totalLinked = childCompanies.length + groupMembers.length
+        const totalLinked = groupMembers.length
         
-        // Check if group has any members (child companies or group memberships)
-        const hasMembers = group._count.childCompanies > 0 || group._count.groupChildren > 0
+        // Check if group has any members (group memberships)
+        const hasMembers = group._count.groupChildren > 0
         
         if (hasMembers || totalLinked > 0) {
           return badRequest(
@@ -309,13 +244,6 @@ async function handler(req, res) {
         const client = await prisma.client.findUnique({
           where: { id: clientId },
           include: {
-            parentGroup: {
-              select: {
-                id: true,
-                name: true,
-                type: true
-              }
-            },
             groupMemberships: {
               include: {
                 group: {
@@ -327,13 +255,6 @@ async function handler(req, res) {
                   }
                 }
               }
-            },
-            childCompanies: {
-              select: {
-                id: true,
-                name: true,
-                type: true
-              }
             }
           }
         })
@@ -344,14 +265,12 @@ async function handler(req, res) {
         
         return ok(res, {
           clientId: client.id,
-          primaryParent: client.parentGroup,
           groupMemberships: client.groupMemberships.map(m => ({
             id: m.id,
             group: m.group,
             role: m.role,
             createdAt: m.createdAt
-          })),
-          childCompanies: client.childCompanies
+          }))
         })
       } catch (error) {
         console.error('Error fetching client groups:', error)
@@ -483,12 +402,6 @@ async function handler(req, res) {
           return badRequest(res, 'Client is already a member of this group')
         }
         
-        // Validate no circular reference
-        const validation = await validateNoCircularReference(clientId, finalGroupId)
-        if (!validation.valid) {
-          return badRequest(res, validation.reason)
-        }
-        
         // Add to group
         console.log('Creating membership:', { clientId, groupId: finalGroupId, role: role || 'member' })
         const membership = await prisma.clientCompanyGroup.create({
@@ -555,6 +468,119 @@ async function handler(req, res) {
       } catch (error) {
         console.error('Error removing client from group:', error)
         return serverError(res, 'Failed to remove client from group')
+      }
+    }
+    
+    // GET /api/clients/groups/:groupId/members - Get all clients and leads in a group
+    if (req.method === 'GET' && pathSegments.length === 4 && pathSegments[0] === 'clients' && pathSegments[1] === 'groups' && pathSegments[3] === 'members') {
+      const groupId = pathSegments[2]
+      
+      try {
+        // Verify group exists
+        const group = await prisma.client.findUnique({
+          where: { id: groupId },
+          select: { id: true, name: true, type: true }
+        })
+        
+        if (!group) {
+          return notFound(res, 'Group not found')
+        }
+        
+        // Get all clients and leads that are members of this group
+        // This includes both direct groupChildren (via ClientCompanyGroup) and childCompanies (via parentGroupId)
+        const groupMembers = await prisma.clientCompanyGroup.findMany({
+          where: { groupId },
+          include: {
+            client: {
+              select: {
+                id: true,
+                name: true,
+                type: true,
+                industry: true,
+                status: true,
+                revenue: true,
+                value: true,
+                website: true,
+                createdAt: true
+              }
+            }
+          },
+          orderBy: {
+            client: {
+              name: 'asc'
+            }
+          }
+        })
+        
+        // Also get child companies (via parentGroupId relationship)
+        const childCompanies = await prisma.client.findMany({
+          where: { parentGroupId: groupId },
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            industry: true,
+            status: true,
+            revenue: true,
+            value: true,
+            website: true,
+            createdAt: true
+          },
+          orderBy: {
+            name: 'asc'
+          }
+        })
+        
+        // Combine and deduplicate (a client might be in both)
+        const allMembers = []
+        const memberIds = new Set()
+        
+        // Add group members
+        groupMembers.forEach(m => {
+          if (!memberIds.has(m.client.id)) {
+            memberIds.add(m.client.id)
+            allMembers.push({
+              ...m.client,
+              relationship: 'Group Member',
+              membershipId: m.id,
+              role: m.role
+            })
+          }
+        })
+        
+        // Add child companies
+        childCompanies.forEach(c => {
+          if (!memberIds.has(c.id)) {
+            memberIds.add(c.id)
+            allMembers.push({
+              ...c,
+              relationship: 'Child Company',
+              membershipId: null,
+              role: null
+            })
+          }
+        })
+        
+        // Separate clients and leads
+        const clients = allMembers.filter(m => m.type === 'client' || !m.type)
+        const leads = allMembers.filter(m => m.type === 'lead')
+        
+        console.log(`✅ Fetched ${allMembers.length} members for group ${groupId} (${clients.length} clients, ${leads.length} leads)`)
+        
+        return ok(res, {
+          group: {
+            id: group.id,
+            name: group.name,
+            type: group.type
+          },
+          members: allMembers,
+          clients,
+          leads,
+          total: allMembers.length
+        })
+      } catch (error) {
+        console.error('❌ Error fetching group members:', error)
+        return serverError(res, 'Failed to fetch group members')
       }
     }
     

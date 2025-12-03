@@ -356,10 +356,6 @@ function processClientData(rawClients, cacheKey) {
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
         // Preserve group data from API - handle both direct fields and nested structures
-        // CRITICAL: Preserve the entire parentGroup object if it exists
-        parentGroup: c.parentGroup || null,
-        parentGroupId: c.parentGroupId || (c.parentGroup?.id || null),
-        parentGroupName: c.parentGroup?.name || c.parentGroupName || null,
         // Preserve groupMemberships array - handle both array of objects and nested structures
         // CRITICAL: Always preserve groupMemberships, even if it's undefined/null from API
         groupMemberships: (() => {
@@ -645,6 +641,9 @@ const Clients = React.memo(() => {
     const [leads, setLeads] = useState([]);
     const [groups, setGroups] = useState([]);
     const [isLoadingGroups, setIsLoadingGroups] = useState(false);
+    const [selectedGroup, setSelectedGroup] = useState(null);
+    const [groupMembers, setGroupMembers] = useState([]);
+    const [isLoadingGroupMembers, setIsLoadingGroupMembers] = useState(false);
     const clientsRef = useRef(clients); // Ref to track current clients for LiveDataSync
     const leadsRef = useRef(leads);
     const viewModeRef = useRef(viewMode); // Ref to track current viewMode for LiveDataSync
@@ -1014,9 +1013,6 @@ const Clients = React.memo(() => {
                         ...client,
                             opportunities: apiOpps,
                             // CRITICAL: Preserve group data from current state (which may have been restored)
-                            parentGroup: client.parentGroup || null,
-                            parentGroupId: client.parentGroupId || null,
-                            parentGroupName: client.parentGroupName || null,
                             groupMemberships: Array.isArray(client.groupMemberships) ? [...client.groupMemberships] : []
                     };
                 });
@@ -1447,9 +1443,6 @@ const Clients = React.memo(() => {
                         willSkipApi: !forceRefresh && !hasMissingGroupData && timeSinceLastCall < API_CALL_INTERVAL,
                         exxaroSample: exxaroCheck[0] ? {
                             name: exxaroCheck[0].name,
-                            hasParentGroup: !!exxaroCheck[0].parentGroup,
-                            hasParentGroupId: !!exxaroCheck[0].parentGroupId,
-                            hasParentGroupName: !!exxaroCheck[0].parentGroupName,
                             hasGroupMemberships: !!exxaroCheck[0].groupMemberships && Array.isArray(exxaroCheck[0].groupMemberships) && exxaroCheck[0].groupMemberships.length > 0
                         } : null
                     });
@@ -1576,13 +1569,7 @@ const Clients = React.memo(() => {
                     console.log('🔍 Before processClientData - Exxaro clients:', exxaroBeforeProcess.map(c => ({
                         name: c.name,
                         id: c.id,
-                        parentGroup: c.parentGroup,
-                        parentGroupName: c.parentGroupName,
-                        parentGroupId: c.parentGroupId,
-                        groupMemberships: c.groupMemberships,
-                        // Check raw structure
-                        hasParentGroupObject: !!c.parentGroup && typeof c.parentGroup === 'object',
-                        parentGroupKeys: c.parentGroup && typeof c.parentGroup === 'object' ? Object.keys(c.parentGroup) : []
+                        groupMemberships: c.groupMemberships
                     })));
                 }
                 
@@ -1609,13 +1596,7 @@ const Clients = React.memo(() => {
                     console.log('🔍 After processClientData - Exxaro clients:', exxaroAfterProcess.map(c => ({
                         name: c.name,
                         id: c.id,
-                        parentGroup: c.parentGroup,
-                        parentGroupName: c.parentGroupName,
-                        parentGroupId: c.parentGroupId,
-                        groupMemberships: c.groupMemberships,
-                        // Verify data structure
-                        parentGroupType: typeof c.parentGroup,
-                        hasParentGroupName: !!c.parentGroupName
+                        groupMemberships: c.groupMemberships
                     })));
                 }
                 // Separate clients and leads based on type
@@ -1645,9 +1626,6 @@ const Clients = React.memo(() => {
                     }
                     // Ensure group data is preserved (should already be in client from processClientData)
                     // But explicitly preserve it to be safe - ALWAYS preserve groupMemberships (even if empty array)
-                    merged.parentGroup = client.parentGroup || null;
-                    merged.parentGroupId = client.parentGroupId || null;
-                    merged.parentGroupName = client.parentGroupName || null;
                     // CRITICAL: Always preserve groupMemberships - use empty array if undefined/null
                     merged.groupMemberships = (client.groupMemberships !== undefined && client.groupMemberships !== null && Array.isArray(client.groupMemberships))
                         ? client.groupMemberships
@@ -1662,12 +1640,7 @@ const Clients = React.memo(() => {
                     console.log('🔍 Before setClients - Exxaro clients:', exxaroBeforeSetState.map(c => ({
                         name: c.name,
                         id: c.id,
-                        parentGroup: c.parentGroup,
-                        parentGroupName: c.parentGroupName,
-                        parentGroupId: c.parentGroupId,
-                        groupMemberships: c.groupMemberships,
-                        hasParentGroup: !!c.parentGroup,
-                        parentGroupType: typeof c.parentGroup
+                        groupMemberships: c.groupMemberships
                     })));
                 }
                 
@@ -1885,9 +1858,6 @@ const Clients = React.memo(() => {
                 if (exxaroInSaved.length > 0) {
                     console.log('🔍 Saving to cache - Exxaro clients with group data:', exxaroInSaved.map(c => ({
                         name: c.name,
-                        parentGroup: c.parentGroup,
-                        parentGroupName: c.parentGroupName,
-                        parentGroupId: c.parentGroupId,
                         groupMemberships: c.groupMemberships
                     })));
                 }
@@ -4523,6 +4493,56 @@ const Clients = React.memo(() => {
         }
     }, []); // Empty deps - function is stable and uses refs for state
 
+    // Load group members for a specific group
+    const isLoadingGroupMembersRef = useRef(false);
+    const loadGroupMembers = useCallback(async (groupId) => {
+        if (isLoadingGroupMembersRef.current) {
+            console.log('⏸️ loadGroupMembers already in progress, skipping...');
+            return;
+        }
+        
+        try {
+            isLoadingGroupMembersRef.current = true;
+            setIsLoadingGroupMembers(true);
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                console.warn('⚠️ No token available for fetching group members');
+                isLoadingGroupMembersRef.current = false;
+                setIsLoadingGroupMembers(false);
+                return;
+            }
+            
+            console.log('🔄 Fetching members for group:', groupId);
+            const response = await fetch(`/api/clients/groups/${groupId}/members`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
+            });
+            
+            console.log('📡 Group members API response status:', response.status);
+            
+            if (response.ok) {
+                const data = await response.json();
+                const members = data?.data?.members || data?.members || [];
+                console.log(`✅ Loaded ${members.length} members for group`);
+                setGroupMembers(members);
+            } else {
+                const errorText = await response.text().catch(() => 'Unknown error');
+                console.error('❌ Failed to load group members:', response.status, response.statusText, errorText);
+                setGroupMembers([]);
+            }
+        } catch (error) {
+            console.error('❌ Error loading group members:', error);
+            setGroupMembers([]);
+        } finally {
+            isLoadingGroupMembersRef.current = false;
+            setIsLoadingGroupMembers(false);
+        }
+    }, []); // Empty deps - function is stable and uses refs for state
+
     // Load groups when Groups tab is active OR on initial mount to show count
     // Use ref to track last loaded viewMode to prevent infinite loops
     const lastLoadedViewModeRef = useRef(null);
@@ -5747,7 +5767,11 @@ const Clients = React.memo(() => {
                                         return (
                                             <tr 
                                                 key={group.id}
-                                                className={`${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'} transition`}
+                                                onClick={() => {
+                                                    setSelectedGroup(group);
+                                                    loadGroupMembers(group.id);
+                                                }}
+                                                className={`${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'} transition cursor-pointer`}
                                             >
                                                 <td className="px-6 py-2 whitespace-nowrap">
                                                     <div className="flex items-center gap-3">
@@ -5838,6 +5862,154 @@ const Clients = React.memo(() => {
                         </div>
                     </div>
                 )}
+            </div>
+        );
+    };
+
+    // Group Detail View - Shows all clients and leads in a group
+    const GroupDetailView = ({ group, members, isLoading, onBack, onClientClick, onLeadClick }) => {
+        const groupClients = members.filter(m => m.type === 'client' || !m.type);
+        const groupLeads = members.filter(m => m.type === 'lead');
+        
+        return (
+            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border flex flex-col h-full w-full`}>
+                {/* Header with Back button */}
+                <div className={`${isDark ? 'bg-gray-750 border-gray-700' : 'bg-gray-50 border-gray-200'} border-b px-6 py-4 flex items-center justify-between`}>
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={onBack}
+                            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                isDark 
+                                    ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' 
+                                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                            }`}
+                        >
+                            <i className="fas fa-arrow-left mr-2"></i>
+                            Back to Groups
+                        </button>
+                        <div>
+                            <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                {group.name}
+                            </h3>
+                            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                {members.length} {members.length === 1 ? 'member' : 'members'} 
+                                {groupClients.length > 0 && ` • ${groupClients.length} client${groupClients.length === 1 ? '' : 's'}`}
+                                {groupLeads.length > 0 && ` • ${groupLeads.length} lead${groupLeads.length === 1 ? '' : 's'}`}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-auto -mx-3 sm:mx-0 px-3 sm:px-0 w-full" style={{ WebkitOverflowScrolling: 'touch' }}>
+                    {isLoading ? (
+                        <div className="flex items-center justify-center py-12">
+                            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <i className="fas fa-spinner fa-spin mr-2"></i>
+                                Loading group members...
+                            </div>
+                        </div>
+                    ) : members.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-12">
+                            <i className={`fas fa-inbox text-4xl ${isDark ? 'text-gray-600' : 'text-gray-300'} mb-4`}></i>
+                            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                No members in this group
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="space-y-6 py-4">
+                            {/* Clients Section */}
+                            {groupClients.length > 0 && (
+                                <div>
+                                    <h4 className={`text-md font-semibold mb-3 px-6 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                                        <i className="fas fa-building mr-2"></i>
+                                        Clients ({groupClients.length})
+                                    </h4>
+                                    <div className="space-y-2">
+                                        {groupClients.map(client => (
+                                            <div
+                                                key={client.id}
+                                                onClick={() => onClientClick(client)}
+                                                className={`${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-gray-100'} rounded-lg p-4 cursor-pointer transition`}
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold ${
+                                                            isDark ? 'bg-blue-700 text-blue-200' : 'bg-blue-100 text-blue-700'
+                                                        }`}>
+                                                            {client.name.charAt(0).toUpperCase()}
+                                                        </div>
+                                                        <div>
+                                                            <div className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                                {client.name}
+                                                            </div>
+                                                            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                                {client.industry || 'Other'} • {client.status || 'Active'}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-4">
+                                                        {client.revenue && (
+                                                            <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                                R{client.revenue.toLocaleString()}
+                                                            </span>
+                                                        )}
+                                                        <i className={`fas fa-chevron-right ${isDark ? 'text-gray-400' : 'text-gray-500'}`}></i>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Leads Section */}
+                            {groupLeads.length > 0 && (
+                                <div>
+                                    <h4 className={`text-md font-semibold mb-3 px-6 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                                        <i className="fas fa-user-tie mr-2"></i>
+                                        Leads ({groupLeads.length})
+                                    </h4>
+                                    <div className="space-y-2">
+                                        {groupLeads.map(lead => (
+                                            <div
+                                                key={lead.id}
+                                                onClick={() => onLeadClick(lead)}
+                                                className={`${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-gray-100'} rounded-lg p-4 cursor-pointer transition`}
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold ${
+                                                            isDark ? 'bg-yellow-700 text-yellow-200' : 'bg-yellow-100 text-yellow-700'
+                                                        }`}>
+                                                            {lead.name.charAt(0).toUpperCase()}
+                                                        </div>
+                                                        <div>
+                                                            <div className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                                {lead.name}
+                                                            </div>
+                                                            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                                {lead.industry || 'Other'} • {lead.status || 'New'}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-4">
+                                                        {lead.value && (
+                                                            <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                                                R{lead.value.toLocaleString()}
+                                                            </span>
+                                                        )}
+                                                        <i className={`fas fa-chevron-right ${isDark ? 'text-gray-400' : 'text-gray-500'}`}></i>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
         );
     };
@@ -6888,7 +7060,27 @@ const Clients = React.memo(() => {
 
             {/* Content based on view mode */}
             <div className="flex-1 overflow-hidden pr-2 sm:pr-4 pb-5 sm:pb-6 pt-2 min-h-0">
-            {viewMode === 'groups' && <GroupsListView />}
+            {viewMode === 'groups' && (
+                selectedGroup ? (
+                    <GroupDetailView 
+                        group={selectedGroup}
+                        members={groupMembers}
+                        isLoading={isLoadingGroupMembers}
+                        onBack={() => {
+                            setSelectedGroup(null);
+                            setGroupMembers([]);
+                        }}
+                        onClientClick={(client) => {
+                            handleOpenClient(client);
+                        }}
+                        onLeadClick={(lead) => {
+                            handleOpenLead(lead);
+                        }}
+                    />
+                ) : (
+                    <GroupsListView />
+                )
+            )}
             {viewMode === 'clients' && <ClientsListView />}
             {viewMode === 'leads' && <LeadsListView />}
             {viewMode === 'pipeline' && (
