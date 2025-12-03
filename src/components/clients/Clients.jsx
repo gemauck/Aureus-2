@@ -727,6 +727,7 @@ const Clients = React.memo(() => {
     const [leadSortDirection, setLeadSortDirection] = useState('asc');
     const [clientsPage, setClientsPage] = useState(1);
     const [leadsPage, setLeadsPage] = useState(1);
+    const [groupsPage, setGroupsPage] = useState(1);
     const ITEMS_PER_PAGE = 25;
     
     // Get current user and check if admin
@@ -1243,7 +1244,7 @@ const Clients = React.memo(() => {
         if (!window.LiveDataSync) return;
         
         // Stop sync when viewing list views (clients or leads)
-        const isListView = viewMode === 'clients' || viewMode === 'leads' || viewMode === 'pipeline';
+        const isListView = viewMode === 'clients' || viewMode === 'leads' || viewMode === 'pipeline' || viewMode === 'groups';
         
         if (isListView) {
             // Only stop if not already stopped (avoid duplicate stops)
@@ -4422,6 +4423,104 @@ const Clients = React.memo(() => {
         return sortLeads(filteredLeads);
     }, [filteredLeads, leadSortField, leadSortDirection]);
 
+    // Helper function to check if a client has groups
+    const clientHasGroups = useCallback((client) => {
+        // Check ref first (restored groups)
+        if (restoredGroupMembershipsRef.current.has(client.id)) {
+            const restoredGroups = restoredGroupMembershipsRef.current.get(client.id);
+            if (restoredGroups && Array.isArray(restoredGroups) && restoredGroups.length > 0) {
+                return true;
+            }
+        }
+        
+        // Check state groupMemberships
+        if (Array.isArray(client.groupMemberships) && client.groupMemberships.length > 0) {
+            return true;
+        }
+        
+        // Check companyGroup field (legacy support)
+        if (client.companyGroup && client.companyGroup.trim() !== '') {
+            return true;
+        }
+        
+        return false;
+    }, []);
+
+    // Calculate total grouped clients count (before filters)
+    const totalGroupedClientsCount = useMemo(() => {
+        return clients.filter(client => {
+            // Include clients with type='client' OR null/undefined (legacy clients without type field)
+            if (client.type !== 'client' && client.type !== null && client.type !== undefined) {
+                return false;
+            }
+            
+            // Exclude records with status='Potential' (always a lead)
+            if (client.status === 'Potential') {
+                return false;
+            }
+            
+            return clientHasGroups(client);
+        }).length;
+    }, [clients, clientHasGroups]);
+
+    // Filter grouped clients (clients that belong to groups)
+    const filteredGroups = useMemo(() => {
+        return clients.filter(client => {
+            // Include clients with type='client' OR null/undefined (legacy clients without type field)
+            if (client.type !== 'client' && client.type !== null && client.type !== undefined) {
+                return false; // Exclude leads or any other type value
+            }
+            
+            // Exclude records with status='Potential' (always a lead)
+            if (client.status === 'Potential') {
+                return false;
+            }
+            
+            // Only include clients that have groups
+            if (!clientHasGroups(client)) {
+                return false;
+            }
+            
+            // Apply same filters as clients view
+            const searchLower = searchTerm.toLowerCase();
+            const services = Array.isArray(client.services)
+                ? client.services
+                : (typeof client.services === 'string' ? (()=>{ try { return JSON.parse(client.services||'[]'); } catch { return []; } })() : []);
+            const matchesSearch = searchTerm === '' || 
+                client.name.toLowerCase().includes(searchLower) ||
+                client.industry.toLowerCase().includes(searchLower) ||
+                client.address.toLowerCase().includes(searchLower) ||
+                client.website.toLowerCase().includes(searchLower) ||
+                client.notes.toLowerCase().includes(searchLower) ||
+                services.some(service => 
+                    service.toLowerCase().includes(searchLower)
+                ) ||
+                (client.contacts || []).some(contact => 
+                    contact.name.toLowerCase().includes(searchLower) ||
+                    contact.email.toLowerCase().includes(searchLower) ||
+                    contact.phone.includes(searchTerm)
+                ) ||
+                (client.sites || []).some(site => 
+                    site.name.toLowerCase().includes(searchLower) ||
+                    site.address.toLowerCase().includes(searchLower)
+                );
+            
+            const matchesIndustry = filterIndustry === 'All Industries' || client.industry === filterIndustry;
+            const clientStatus = client.status ? (client.status.charAt(0).toUpperCase() + client.status.slice(1).toLowerCase()) : '';
+            const matchesStatus = filterStatus === 'All Status' || clientStatus === filterStatus;
+            const matchesServices = filterServices.length === 0 || 
+                services.some(service => filterServices.includes(service));
+            const matchesStarred = !showStarredOnly || resolveStarredState(client);
+            
+            return matchesSearch && matchesIndustry && matchesStatus && matchesServices && matchesStarred;
+        });
+    }, [clients, searchTerm, filterIndustry, filterStatus, filterServices, showStarredOnly, clientHasGroups]);
+
+    // PERFORMANCE FIX: Memoize sorted groups
+    const sortedGroups = useMemo(() => {
+        return sortClients(filteredGroups);
+    }, [filteredGroups, sortClients]);
+
     // PERFORMANCE FIX: Memoize pagination calculations
     const paginationData = useMemo(() => {
         const clientsStartIndex = (clientsPage - 1) * ITEMS_PER_PAGE;
@@ -4434,19 +4533,28 @@ const Clients = React.memo(() => {
         const paginatedLeads = sortedLeads.slice(leadsStartIndex, leadsEndIndex);
         const totalLeadsPages = Math.ceil(sortedLeads.length / ITEMS_PER_PAGE);
         
+        const groupsStartIndex = (groupsPage - 1) * ITEMS_PER_PAGE;
+        const groupsEndIndex = groupsStartIndex + ITEMS_PER_PAGE;
+        const paginatedGroups = sortedGroups.slice(groupsStartIndex, groupsEndIndex);
+        const totalGroupsPages = Math.ceil(sortedGroups.length / ITEMS_PER_PAGE);
+        
         return {
             paginatedClients,
             totalClientsPages,
             paginatedLeads,
             totalLeadsPages,
+            paginatedGroups,
+            totalGroupsPages,
             clientsStartIndex,
             clientsEndIndex,
             leadsStartIndex,
-            leadsEndIndex
+            leadsEndIndex,
+            groupsStartIndex,
+            groupsEndIndex
         };
-    }, [sortedClients, sortedLeads, clientsPage, leadsPage]);
+    }, [sortedClients, sortedLeads, sortedGroups, clientsPage, leadsPage, groupsPage]);
     
-    const { paginatedClients, totalClientsPages, paginatedLeads, totalLeadsPages, clientsStartIndex, clientsEndIndex, leadsStartIndex, leadsEndIndex } = paginationData;
+    const { paginatedClients, totalClientsPages, paginatedLeads, totalLeadsPages, paginatedGroups, totalGroupsPages, clientsStartIndex, clientsEndIndex, leadsStartIndex, leadsEndIndex, groupsStartIndex, groupsEndIndex } = paginationData;
 
     // Debug pagination - commented to reduce spam
 
@@ -4517,6 +4625,7 @@ const Clients = React.memo(() => {
     useEffect(() => {
         setClientsPage(1);
         setLeadsPage(1);
+        setGroupsPage(1);
     }, [searchTerm, filterIndustry, filterStatus, filterStage, filterServices, showStarredOnly, sortField, sortDirection, leadSortField, leadSortDirection]);
 
     const pipelineStages = ['Awareness', 'Interest', 'Desire', 'Action'];
@@ -5228,6 +5337,210 @@ const Clients = React.memo(() => {
                         <button
                             onClick={() => setClientsPage(clientsPage + 1)}
                             disabled={clientsPage === totalClientsPages}
+                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                            Next
+                            <i className="fas fa-chevron-right ml-1"></i>
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+
+    const GroupsListView = () => (
+        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border flex flex-col h-full w-full`}>
+            <div className="flex-1 overflow-auto -mx-3 sm:mx-0 px-3 sm:px-0 w-full" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <table className={`w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`} style={{ minWidth: '640px', width: '100%' }}>
+                    <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
+                        <tr>
+                            <th 
+                                className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                onClick={() => handleSort('name')}
+                            >
+                                <div className="flex items-center">
+                                    Client
+                                    {sortField === 'name' && (
+                                        <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
+                                    )}
+                                </div>
+                            </th>
+                            <th 
+                                className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                onClick={() => handleSort('companyGroup')}
+                            >
+                                <div className="flex items-center">
+                                Company Group
+                                    {sortField === 'companyGroup' && (
+                                        <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
+                                    )}
+                                </div>
+                            </th>
+                            <th 
+                                className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                onClick={() => handleSort('industry')}
+                            >
+                                <div className="flex items-center">
+                                    Industry
+                                    {sortField === 'industry' && (
+                                        <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
+                                    )}
+                                </div>
+                            </th>
+                            <th 
+                                className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                onClick={() => handleSort('services')}
+                            >
+                                <div className="flex items-center">
+                                Services
+                                    {sortField === 'services' && (
+                                        <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
+                                    )}
+                                </div>
+                            </th>
+                            <th 
+                                className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                onClick={() => handleSort('status')}
+                            >
+                                <div className="flex items-center">
+                                    Status
+                                    {sortField === 'status' && (
+                                        <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
+                                    )}
+                                </div>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
+                        {paginatedGroups.length === 0 ? (
+                            <tr>
+                                    <td colSpan="6" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                        <i className={`fas fa-inbox text-3xl ${isDark ? 'text-gray-600' : 'text-gray-300'} mb-2`}></i>
+                                    <p>No grouped clients found</p>
+                                </td>
+                            </tr>
+                        ) : (
+                            paginatedGroups.filter(client => {
+                                // Final render-time safety check: ensure type is 'client' and not 'Potential' status
+                                return client.type === 'client' && client.status !== 'Potential';
+                            }).map(client => (
+                                <tr 
+                                    key={client.id} 
+                                    onClick={() => handleOpenClient(client)}
+                                        className={`${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'} cursor-pointer transition`}
+                                >
+                                    <td className="px-6 py-2 whitespace-nowrap">
+                                        <div className="flex items-center gap-3">
+                                            <button
+                                                onClick={(e) => handleToggleStar(e, client, false)}
+                                                className={`flex-shrink-0 w-5 h-5 flex items-center justify-center transition-colors ${isDark ? 'hover:text-yellow-400' : 'hover:text-yellow-600'}`}
+                                                title={client.isStarred ? 'Unstar this client' : 'Star this client'}
+                                            >
+                                                <i className={`${client.isStarred ? 'fas' : 'far'} fa-star ${client.isStarred ? 'text-yellow-500' : isDark ? 'text-white' : 'text-gray-300'}`}></i>
+                                            </button>
+                                            {client.thumbnail ? (
+                                                <img src={client.thumbnail} alt={client.name} className="w-8 h-8 rounded-full object-cover border border-gray-200" />
+                                            ) : (
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
+                                                    {(client.name || '?').charAt(0).toUpperCase()}
+                                                </div>
+                                            )}
+                                            <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{client.name}</div>
+                                        </div>
+                                    </td>
+                                    <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
+                                        {(() => {
+                                            // CRITICAL: Check ref FIRST as fallback if state doesn't have groups
+                                            // This ensures groups are displayed even if state is cleared
+                                            let memberships = [];
+                                            
+                                            // Priority 1: Check ref (restored groups that should never be cleared)
+                                            if (restoredGroupMembershipsRef.current.has(client.id)) {
+                                                const restoredGroups = restoredGroupMembershipsRef.current.get(client.id);
+                                                if (restoredGroups && Array.isArray(restoredGroups) && restoredGroups.length > 0) {
+                                                    memberships = restoredGroups;
+                                                }
+                                            }
+                                            
+                                            // Priority 2: Use state if ref doesn't have groups
+                                            if (memberships.length === 0 && Array.isArray(client.groupMemberships) && client.groupMemberships.length > 0) {
+                                                memberships = client.groupMemberships;
+                                            }
+                                            
+                                            const groupNames = memberships
+                                                .map(m => {
+                                                    // Try multiple possible structures
+                                                    return m?.group?.name || m?.name || (typeof m === 'string' ? m : null);
+                                                })
+                                                .filter(Boolean);
+                                            
+                                            return groupNames.length > 0 
+                                                ? <span>{groupNames.join(', ')}</span>
+                                                : <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>None</span>;
+                                        })()}
+                                    </td>
+                                    <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{client.industry}</td>
+                                    <td className="px-6 py-2 whitespace-nowrap">
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {(() => {
+                                                const services = Array.isArray(client.services)
+                                                    ? client.services
+                                                    : (typeof client.services === 'string' ? (()=>{ try { return JSON.parse(client.services||'[]'); } catch { return []; } })() : []);
+                                                const MAX = 3;
+                                                const visible = services.slice(0, MAX);
+                                                const remaining = services.length - visible.length;
+                                                return (
+                                                    <>
+                                                        {visible.map(s => (
+                                                            <span key={s} className={`inline-flex items-center px-2 py-0.5 text-[10px] rounded ${isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-700'}`}>
+                                                                <i className="fas fa-tag mr-1"></i>{s}
+                                                            </span>
+                                                        ))}
+                                                        {remaining > 0 && (
+                                                            <span className={`inline-flex items-center px-2 py-0.5 text-[10px] rounded ${isDark ? 'bg-primary-900 text-primary-200' : 'bg-primary-100 text-primary-700'}`}>+{remaining}</span>
+                                                        )}
+                                                        {services.length === 0 && (
+                                                            <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>None</span>
+                                                        )}
+                                                    </>
+                                                );
+                                            })()}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-2 whitespace-nowrap">
+                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                            (client.status === 'Active' || client.status === 'active') ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                                        }`}>
+                                            {client.status === 'active' ? 'Active' : client.status}
+                                        </span>
+                                    </td>
+                                </tr>
+                            ))
+                        )}
+                    </tbody>
+                </table>
+            </div>
+            {/* Pagination Controls */}
+            {sortedGroups.length > 0 && (
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t px-6 py-4 flex items-center justify-between pr-32 flex-shrink-0`}>
+                    <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Showing {groupsStartIndex + 1} to {Math.min(groupsEndIndex, sortedGroups.length)} of {sortedGroups.length} grouped clients
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setGroupsPage(groupsPage - 1)}
+                            disabled={groupsPage === 1}
+                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                            <i className="fas fa-chevron-left mr-1"></i>
+                            Previous
+                        </button>
+                        <span className={`px-4 py-2 text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                            Page {groupsPage} of {totalGroupsPages}
+                        </span>
+                        <button
+                            onClick={() => setGroupsPage(groupsPage + 1)}
+                            disabled={groupsPage === totalGroupsPages}
                             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
                         >
                             Next
@@ -6030,6 +6343,20 @@ const Clients = React.memo(() => {
             {/* Modern View Tabs */}
             <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border p-1.5 sm:p-1 flex sm:inline-flex shadow-sm overflow-x-auto sm:overflow-x-visible mb-2 gap-1`}>
                 <button
+                    onClick={() => setViewMode('groups')}
+                    className={`px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
+                        viewMode === 'groups' 
+                            ? 'bg-blue-600 text-white shadow-sm' 
+                            : isDark 
+                                ? 'text-gray-300 hover:text-gray-100 hover:bg-gray-700' 
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    }`}
+                >
+                    <i className="fas fa-layer-group mr-2"></i>
+                    <span className="hidden sm:inline">Groups ({totalGroupedClientsCount})</span>
+                    <span className="sm:hidden">Groups</span>
+                </button>
+                <button
                     onClick={() => setViewMode('clients')}
                     className={`px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
                         viewMode === 'clients' 
@@ -6213,6 +6540,8 @@ const Clients = React.memo(() => {
                                     <span>
                                         {viewMode === 'leads' 
                                             ? `Showing ${filteredLeads.length} of ${leads.length} leads${searchTerm ? ` matching "${searchTerm}"` : ''}`
+                                            : viewMode === 'groups'
+                                            ? `Showing ${filteredGroups.length} of ${clients.length} grouped clients${searchTerm ? ` matching "${searchTerm}"` : ''}`
                                             : `Showing ${filteredClients.length} of ${clients.length} clients${searchTerm ? ` matching "${searchTerm}"` : ''}`
                                         }
                                     </span>
@@ -6241,6 +6570,7 @@ const Clients = React.memo(() => {
 
             {/* Content based on view mode */}
             <div className="flex-1 overflow-hidden pr-2 sm:pr-4 pb-5 sm:pb-6 pt-2 min-h-0">
+            {viewMode === 'groups' && <GroupsListView />}
             {viewMode === 'clients' && <ClientsListView />}
             {viewMode === 'leads' && <LeadsListView />}
             {viewMode === 'pipeline' && (
