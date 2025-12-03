@@ -1755,8 +1755,8 @@ const Clients = React.memo(() => {
                         
                         // CRITICAL: Priority order:
                         // 1. API data (if available) - source of truth
-                        // 2. prevClient.groupMemberships (if restored by useEffect)
-                        // 3. Empty array (only if neither exists)
+                        // 2. prevClient.groupMemberships (if restored by useEffect) - NEVER clear once set!
+                        // 3. Empty array (only if neither exists AND prevClient never had groups)
                         
                         let finalGroupMemberships = [];
                         
@@ -1770,13 +1770,19 @@ const Clients = React.memo(() => {
                                    prevClient.groupMemberships && 
                                    Array.isArray(prevClient.groupMemberships) && 
                                    prevClient.groupMemberships.length > 0) {
-                            // Preserve restored groups from current state (CRITICAL: don't overwrite!)
+                            // CRITICAL: ALWAYS preserve restored groups from current state - NEVER clear them!
+                            // Even if API doesn't have them in this call, they were restored by useEffect
                             finalGroupMemberships = [...prevClient.groupMemberships];
                             if (client.name && client.name.toLowerCase().includes('exxaro')) {
                                 console.log('✅ Preserving restored groupMemberships for:', client.name, 'Count:', finalGroupMemberships.length);
                             }
+                        } else if (prevClient && 
+                                   prevClient.groupMemberships && 
+                                   Array.isArray(prevClient.groupMemberships)) {
+                            // Even if empty array, preserve it (don't create new empty array)
+                            finalGroupMemberships = [...prevClient.groupMemberships];
                         } else {
-                            // No groups found anywhere - set empty array
+                            // No groups found anywhere AND prevClient doesn't exist or never had groups
                             finalGroupMemberships = [];
                         }
                         
