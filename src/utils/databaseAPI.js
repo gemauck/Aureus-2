@@ -2099,14 +2099,37 @@ const DatabaseAPI = {
                         console.log('✅ Successfully loaded existing monthly notes for:', monthKey, 'id:', monthlyNotes.id, 'monthKey:', monthlyNotes.monthKey);
                         return normalizedResponse;
                     } else {
+                        // Log the full structure to debug
+                        const dataKeys = existing?.data ? Object.keys(existing.data) : [];
                         console.warn('⚠️ getMeetingNotes returned but monthlyNotes structure invalid for:', monthKey, {
                             hasData: !!existing?.data,
                             hasMonthlyNotes: !!existing?.monthlyNotes,
-                            dataKeys: existing?.data ? Object.keys(existing.data) : [],
-                            dataKeysValues: existing?.data ? Object.keys(existing.data).map(k => ({ key: k, hasMonthKey: !!(existing.data[k]?.monthKey), hasId: !!(existing.data[k]?.id) })) : [],
+                            dataKeys: dataKeys,
+                            dataKeysValues: existing?.data ? dataKeys.map(k => ({ 
+                                key: k, 
+                                valueType: typeof existing.data[k],
+                                value: existing.data[k],
+                                isNull: existing.data[k] === null,
+                                hasMonthKey: !!(existing.data[k]?.monthKey), 
+                                hasId: !!(existing.data[k]?.id),
+                                isArray: Array.isArray(existing.data[k])
+                            })) : [],
                             topLevelKeys: existing ? Object.keys(existing) : [],
-                            existing: existing
+                            existingStr: JSON.stringify(existing, null, 2).substring(0, 500)
                         });
+                        
+                        // Check if monthlyNotes is null (which means it doesn't exist)
+                        if (existing?.data?.monthlyNotes === null) {
+                            console.log('ℹ️ monthlyNotes is null in response - notes do not exist for:', monthKey);
+                            // Return a consistent structure indicating notes don't exist
+                            return {
+                                data: {
+                                    monthlyNotes: null,
+                                    notFound: true
+                                }
+                            };
+                        }
+                        
                         // Still return the response even if structure is unexpected
                         return existing;
                     }

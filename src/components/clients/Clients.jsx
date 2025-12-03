@@ -655,6 +655,7 @@ const Clients = React.memo(() => {
     const latestApiClientsRef = useRef(null); // Ref to store latest API response for groupMemberships preservation
     const groupMembershipsFetchRef = useRef(false); // Prevent multiple simultaneous groupMemberships fetches
     const processedClientIdsRef = useRef(new Set()); // Track which client IDs have been processed to prevent re-fetching
+    const restoredGroupMembershipsRef = useRef(new Map()); // Track restored groupMemberships by client ID to prevent overwriting
     
     // Industry management state - declared early to avoid temporal dead zone issues
     const [industries, setIndustries] = useState([]);
@@ -1756,7 +1757,8 @@ const Clients = React.memo(() => {
                         // CRITICAL: Priority order:
                         // 1. API data (if available) - source of truth
                         // 2. prevClient.groupMemberships (if restored by useEffect) - NEVER clear once set!
-                        // 3. Empty array (only if neither exists AND prevClient never had groups)
+                        // 3. restoredGroupMembershipsRef (if useEffect restored but prevClient is stale) - NEVER clear once set!
+                        // 4. Empty array (only if neither exists AND prevClient never had groups)
                         
                         let finalGroupMemberships = [];
                         
@@ -1774,7 +1776,17 @@ const Clients = React.memo(() => {
                             // Even if API doesn't have them in this call, they were restored by useEffect
                             finalGroupMemberships = [...prevClient.groupMemberships];
                             if (client.name && client.name.toLowerCase().includes('exxaro')) {
-                                console.log('✅ Preserving restored groupMemberships for:', client.name, 'Count:', finalGroupMemberships.length);
+                                console.log('✅ Preserving restored groupMemberships from prevClient for:', client.name, 'Count:', finalGroupMemberships.length);
+                            }
+                        } else if (restoredGroupMembershipsRef.current.has(client.id)) {
+                            // CRITICAL: Check ref for restored groups even if prevClient is stale (React state updates are async)
+                            // This prevents API handler from overwriting groups restored by useEffect
+                            const restoredGroups = restoredGroupMembershipsRef.current.get(client.id);
+                            if (restoredGroups && Array.isArray(restoredGroups) && restoredGroups.length > 0) {
+                                finalGroupMemberships = [...restoredGroups];
+                                if (client.name && client.name.toLowerCase().includes('exxaro')) {
+                                    console.log('✅ Preserving restored groupMemberships from REF for:', client.name, 'Count:', finalGroupMemberships.length);
+                                }
                             }
                         } else if (prevClient && 
                                    prevClient.groupMemberships && 
@@ -3004,6 +3016,18 @@ const Clients = React.memo(() => {
                 
                 if (clientsToUpdate.length > 0) {
                     console.log(`✅ Found groupMemberships for ${clientsToUpdate.length} clients, updating state...`);
+                    
+                    // Store restored groups in ref BEFORE state update to prevent API handler from overwriting
+                    clientsToUpdate.forEach(client => {
+                        const apiClient = apiClientsMap.get(client.id);
+                        if (apiClient && 
+                            apiClient.groupMemberships && 
+                            Array.isArray(apiClient.groupMemberships) && 
+                            apiClient.groupMemberships.length > 0) {
+                            // Store in ref so API handler can preserve them even if prevClient is stale
+                            restoredGroupMembershipsRef.current.set(client.id, [...apiClient.groupMemberships]);
+                        }
+                    });
                     
                     // Update all clients with their groupMemberships in a single state update
                     setClients(prevClients => {
