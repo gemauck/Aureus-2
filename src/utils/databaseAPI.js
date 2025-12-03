@@ -2050,36 +2050,60 @@ const DatabaseAPI = {
                     // Normalize the response structure to ensure consistent format
                     let monthlyNotes = null;
                     
-                    // Try multiple extraction paths
-                    if (existing?.data?.monthlyNotes) {
+                    // Try multiple extraction paths - check if key exists first, then validate value
+                    if (existing?.data && 'monthlyNotes' in existing.data) {
+                        // Key exists in data, even if value is null
                         monthlyNotes = existing.data.monthlyNotes;
-                    } else if (existing?.monthlyNotes) {
+                        if (monthlyNotes && (monthlyNotes.id || monthlyNotes.monthKey)) {
+                            console.log('✅ Found monthlyNotes at existing.data.monthlyNotes');
+                        }
+                    } else if ('monthlyNotes' in existing) {
                         monthlyNotes = existing.monthlyNotes;
-                    } else if (existing?.data) {
-                        // Check if data itself is the monthlyNotes object
-                        if ((existing.data.monthKey || existing.data.id) && !Array.isArray(existing.data) && typeof existing.data === 'object') {
-                            monthlyNotes = existing.data;
-                        } else if (typeof existing.data === 'object' && !Array.isArray(existing.data)) {
-                            // Deep search within data object
-                            const dataKeys = Object.keys(existing.data);
-                            for (const key of dataKeys) {
-                                const value = existing.data[key];
-                                if (value && typeof value === 'object' && (value.monthKey || value.id) && !Array.isArray(value)) {
-                                    monthlyNotes = value;
-                                    console.log('✅ Found monthlyNotes in getMeetingNotes response at data key:', key);
-                                    break;
+                        if (monthlyNotes && (monthlyNotes.id || monthlyNotes.monthKey)) {
+                            console.log('✅ Found monthlyNotes at existing.monthlyNotes');
+                        }
+                    }
+                    
+                    // If monthlyNotes is null, that means it doesn't exist - handle that case
+                    if (monthlyNotes === null) {
+                        console.log('ℹ️ monthlyNotes is null - notes do not exist for:', monthKey);
+                        return {
+                            data: {
+                                monthlyNotes: null,
+                                notFound: true
+                            }
+                        };
+                    }
+                    
+                    // If we still don't have valid monthlyNotes, try alternative extraction paths
+                    if (!monthlyNotes || !(monthlyNotes.id || monthlyNotes.monthKey)) {
+                        if (existing?.data && typeof existing.data === 'object' && !Array.isArray(existing.data)) {
+                            // Check if data itself is the monthlyNotes object
+                            if ((existing.data.monthKey || existing.data.id) && typeof existing.data === 'object') {
+                                monthlyNotes = existing.data;
+                                console.log('✅ Found monthlyNotes as existing.data itself');
+                            } else {
+                                // Deep search within data object
+                                const dataKeys = Object.keys(existing.data);
+                                for (const key of dataKeys) {
+                                    const value = existing.data[key];
+                                    if (value && typeof value === 'object' && !Array.isArray(value) && (value.monthKey || value.id)) {
+                                        monthlyNotes = value;
+                                        console.log('✅ Found monthlyNotes in getMeetingNotes response at data key:', key);
+                                        break;
+                                    }
                                 }
                             }
                         }
                     }
                     
                     // Also check top-level
-                    if (!monthlyNotes && existing) {
+                    if ((!monthlyNotes || !(monthlyNotes.id || monthlyNotes.monthKey)) && existing) {
                         const topKeys = Object.keys(existing);
                         for (const key of topKeys) {
                             if (key === 'data') continue;
                             const value = existing[key];
-                            if (value && typeof value === 'object' && (value.monthKey || value.id) && !Array.isArray(value)) {
+                            if (value && typeof value === 'object' && !Array.isArray(value) && (value.monthKey || value.id)) {
                                 monthlyNotes = value;
                                 console.log('✅ Found monthlyNotes in getMeetingNotes response at top-level key:', key);
                                 break;
