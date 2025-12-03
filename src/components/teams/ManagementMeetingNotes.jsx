@@ -1270,112 +1270,138 @@ const ManagementMeetingNotes = () => {
 
     // Create monthly meeting notes
     const handleCreateMonth = async (customMonthValue = null) => {
-        const monthKey =
-            normalizeMonthKeyInput(
-                customMonthValue ?? newMonthKey ?? selectedMonth ?? new Date()
-            );
-
-        if (!monthKey) {
-            // Invalid month - return silently
-            return null;
-        }
-
-        const triggeredByInput = Boolean((customMonthValue ?? newMonthKey) && (customMonthValue ?? newMonthKey).toString().trim());
-
-        if (!selectedMonth || selectedMonth !== monthKey) {
-            setSelectedMonth(monthKey);
-        }
-
-        const existingNotes =
-            currentMonthlyNotes?.monthKey === monthKey
-                ? currentMonthlyNotes
-                : monthlyNotesList.find(note => note?.monthKey === monthKey);
-
-        if (existingNotes) {
-            setCurrentMonthlyNotes(existingNotes);
-            setSelectedWeek(null);
-            setNewMonthKey('');
-            // Existing notes loaded silently
-            return existingNotes;
-        }
-
         try {
-            setLoading(true);
-            const response = await window.DatabaseAPI.createMonthlyNotes(monthKey, '');
-            const newNotes = response.data?.monthlyNotes || response.monthlyNotes;
-            if (newNotes) {
-                setCurrentMonthlyNotes(newNotes);
-                setMonthlyNotesList(prev => {
-                    const list = Array.isArray(prev) ? [...prev] : [];
-                    const existingIndex = list.findIndex(note => {
-                        if (!note) return false;
-                        return (note.id && newNotes.id && note.id === newNotes.id) ||
-                               (note.monthKey && newNotes.monthKey && note.monthKey === newNotes.monthKey);
-                    });
-                    if (existingIndex >= 0) {
-                        list[existingIndex] = newNotes;
-                        return list;
-                    }
-                    list.push(newNotes);
-                    return list;
-                });
-                setSelectedMonth(newNotes.monthKey || monthKey);
+            const monthKey =
+                normalizeMonthKeyInput(
+                    customMonthValue ?? newMonthKey ?? selectedMonth ?? new Date()
+                );
+
+            if (!monthKey) {
+                // Invalid month - return silently
+                return null;
+            }
+
+            const triggeredByInput = Boolean((customMonthValue ?? newMonthKey) && (customMonthValue ?? newMonthKey).toString().trim());
+
+            if (!selectedMonth || selectedMonth !== monthKey) {
+                setSelectedMonth(monthKey);
+            }
+
+            const existingNotes =
+                currentMonthlyNotes?.monthKey === monthKey
+                    ? currentMonthlyNotes
+                    : monthlyNotesList.find(note => note?.monthKey === monthKey);
+
+            if (existingNotes) {
+                setCurrentMonthlyNotes(existingNotes);
                 setSelectedWeek(null);
                 setNewMonthKey('');
-                return newNotes;
+                // Existing notes loaded silently
+                return existingNotes;
             }
-        } catch (error) {
-            console.error('Error creating monthly notes:', error);
-            const errorMessage = (error?.message || '').toLowerCase();
-            if (errorMessage.includes('already exist')) {
-                try {
-                    const monthResponse = await window.DatabaseAPI.getMeetingNotes(monthKey);
-                    const duplicateNotes = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes;
-                    if (duplicateNotes) {
-                        setCurrentMonthlyNotes(duplicateNotes);
-                        setMonthlyNotesList(prev => {
-                            const list = Array.isArray(prev) ? [...prev] : [];
-                            const existingIndex = list.findIndex(note => {
-                                if (!note) return false;
-                                return (note.id && duplicateNotes.id && note.id === duplicateNotes.id) ||
-                                       (note.monthKey && duplicateNotes.monthKey && note.monthKey === duplicateNotes.monthKey);
-                            });
-                            if (existingIndex >= 0) {
-                                list[existingIndex] = duplicateNotes;
-                                return list;
-                            }
-                            list.push(duplicateNotes);
-                            return list;
-                        });
-                        setSelectedMonth(duplicateNotes.monthKey || monthKey);
-                        setSelectedWeek(null);
-                        setNewMonthKey('');
-                        if (triggeredByInput && typeof alert === 'function') {
-                            // Existing notes loaded silently
-                        }
-                        return duplicateNotes;
-                    }
-                    if (typeof alert === 'function') {
-                        // Monthly notes already exist - handled silently
-                    }
-                } catch (loadError) {
-                    console.error('Failed to load existing monthly notes after duplicate warning:', loadError);
-                    if (typeof alert === 'function') {
-                        console.error('Monthly notes already exist but could not load automatically.');
-                    }
-                    // Return null to prevent unhandled promise rejection
-                    return null;
-                }
-                // If we get here, loading failed but we didn't return, so return null
-                return null;
-            } else if (typeof alert === 'function') {
-                console.error('Failed to create monthly notes');
-            }
-        } finally {
-            setLoading(false);
-        }
 
-        return null;
+            try {
+                setLoading(true);
+                const response = await window.DatabaseAPI.createMonthlyNotes(monthKey, '').catch(async (createError) => {
+                    // If createMonthlyNotes throws "already exist", try to load existing notes
+                    const errorMessage = (createError?.message || '').toLowerCase();
+                    if (errorMessage.includes('already exist')) {
+                        try {
+                            const monthResponse = await window.DatabaseAPI.getMeetingNotes(monthKey);
+                            const duplicateNotes = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes;
+                            if (duplicateNotes) {
+                                // Return the existing notes as if they were just created
+                                return { data: { monthlyNotes: duplicateNotes }, monthlyNotes: duplicateNotes };
+                            }
+                        } catch (loadError) {
+                            console.error('Failed to load existing monthly notes after duplicate warning:', loadError);
+                        }
+                    }
+                    // Re-throw if we couldn't handle it
+                    throw createError;
+                });
+                const newNotes = response.data?.monthlyNotes || response.monthlyNotes;
+                if (newNotes) {
+                    setCurrentMonthlyNotes(newNotes);
+                    setMonthlyNotesList(prev => {
+                        const list = Array.isArray(prev) ? [...prev] : [];
+                        const existingIndex = list.findIndex(note => {
+                            if (!note) return false;
+                            return (note.id && newNotes.id && note.id === newNotes.id) ||
+                                   (note.monthKey && newNotes.monthKey && note.monthKey === newNotes.monthKey);
+                        });
+                        if (existingIndex >= 0) {
+                            list[existingIndex] = newNotes;
+                            return list;
+                        }
+                        list.push(newNotes);
+                        return list;
+                    });
+                    setSelectedMonth(newNotes.monthKey || monthKey);
+                    setSelectedWeek(null);
+                    setNewMonthKey('');
+                    return newNotes;
+                }
+            } catch (error) {
+                console.error('Error creating monthly notes:', error);
+                const errorMessage = (error?.message || '').toLowerCase();
+                if (errorMessage.includes('already exist')) {
+                    try {
+                        const monthResponse = await window.DatabaseAPI.getMeetingNotes(monthKey);
+                        const duplicateNotes = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes;
+                        if (duplicateNotes) {
+                            setCurrentMonthlyNotes(duplicateNotes);
+                            setMonthlyNotesList(prev => {
+                                const list = Array.isArray(prev) ? [...prev] : [];
+                                const existingIndex = list.findIndex(note => {
+                                    if (!note) return false;
+                                    return (note.id && duplicateNotes.id && note.id === duplicateNotes.id) ||
+                                           (note.monthKey && duplicateNotes.monthKey && note.monthKey === duplicateNotes.monthKey);
+                                });
+                                if (existingIndex >= 0) {
+                                    list[existingIndex] = duplicateNotes;
+                                    return list;
+                                }
+                                list.push(duplicateNotes);
+                                return list;
+                            });
+                            setSelectedMonth(duplicateNotes.monthKey || monthKey);
+                            setSelectedWeek(null);
+                            setNewMonthKey('');
+                            if (triggeredByInput && typeof alert === 'function') {
+                                // Existing notes loaded silently
+                            }
+                            return duplicateNotes;
+                        }
+                        if (typeof alert === 'function') {
+                            // Monthly notes already exist - handled silently
+                        }
+                    } catch (loadError) {
+                        console.error('Failed to load existing monthly notes after duplicate warning:', loadError);
+                        if (typeof alert === 'function') {
+                            console.error('Monthly notes already exist but could not load automatically.');
+                        }
+                        // Return null to prevent unhandled promise rejection
+                        return null;
+                    }
+                    // If we get here, loading failed but we didn't return, so return null
+                    return null;
+                } else if (typeof alert === 'function') {
+                    console.error('Failed to create monthly notes');
+                }
+                // Return null for any other error to prevent unhandled promise rejection
+                return null;
+            } finally {
+                setLoading(false);
+            }
+
+            return null;
+        } catch (error) {
+            // Outer catch to ensure no unhandled promise rejections
+            console.error('Unexpected error in handleCreateMonth:', error);
+            setLoading(false);
+            return null;
+        }
     };
 
     // Generate new monthly plan (copy from previous month)
@@ -1550,74 +1576,108 @@ const ManagementMeetingNotes = () => {
 
     // Create weekly notes
     const handleCreateWeek = async (customWeekValue = null) => {
-        const weekInputValue = customWeekValue ?? newWeekStartInput;
-        let weekDetails = deriveWeekDetails(weekInputValue);
+        try {
+            const weekInputValue = customWeekValue ?? newWeekStartInput;
+            let weekDetails = deriveWeekDetails(weekInputValue);
 
-        if (weekInputValue && !weekDetails) {
-            if (typeof alert === 'function') {
-                // Invalid week date - return silently
-            }
-            return null;
-        }
-
-        if (!weekDetails) {
-            weekDetails = deriveWeekDetails(new Date());
-        }
-
-        if (!weekDetails) {
-            if (typeof alert === 'function') {
-                // Unable to determine week - return silently
-            }
-            return null;
-        }
-
-        const triggeredByInput = Boolean(weekInputValue && typeof weekInputValue === 'string' && weekInputValue.trim());
-
-        let targetMonth =
-            currentMonthlyNotes?.monthKey === weekDetails.monthKey
-                ? currentMonthlyNotes
-                : monthlyNotesList.find(note => note?.monthKey === weekDetails.monthKey) || null;
-
-        if (!targetMonth) {
-            try {
-                const createdMonth = await handleCreateMonth(weekDetails.monthKey);
-                if (!createdMonth) {
-                    return null;
+            if (weekInputValue && !weekDetails) {
+                if (typeof alert === 'function') {
+                    // Invalid week date - return silently
                 }
-                targetMonth = createdMonth;
-            } catch (error) {
-                console.error('Error creating month in handleCreateWeek:', error);
-                // Try to load existing month notes if creation failed
+                return null;
+            }
+
+            if (!weekDetails) {
+                weekDetails = deriveWeekDetails(new Date());
+            }
+
+            if (!weekDetails) {
+                if (typeof alert === 'function') {
+                    // Unable to determine week - return silently
+                }
+                return null;
+            }
+
+            const triggeredByInput = Boolean(weekInputValue && typeof weekInputValue === 'string' && weekInputValue.trim());
+
+            let targetMonth =
+                currentMonthlyNotes?.monthKey === weekDetails.monthKey
+                    ? currentMonthlyNotes
+                    : monthlyNotesList.find(note => note?.monthKey === weekDetails.monthKey) || null;
+
+            if (!targetMonth) {
                 try {
-                    const monthResponse = await window.DatabaseAPI.getMeetingNotes(weekDetails.monthKey);
-                    const existingMonth = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes || null;
-                    if (existingMonth) {
-                        targetMonth = existingMonth;
-                        setCurrentMonthlyNotes(existingMonth);
-                        setMonthlyNotesList(prev => {
-                            const list = Array.isArray(prev) ? [...prev] : [];
-                            const existingIndex = list.findIndex(note => {
-                                if (!note) return false;
-                                return (note.id && existingMonth.id && note.id === existingMonth.id) ||
-                                       (note.monthKey && existingMonth.monthKey && note.monthKey === existingMonth.monthKey);
-                            });
-                            if (existingIndex >= 0) {
-                                list[existingIndex] = existingMonth;
-                                return list;
+                    const createdMonth = await handleCreateMonth(weekDetails.monthKey).catch(error => {
+                        // handleCreateMonth should never throw, but catch just in case
+                        console.error('Error creating month in handleCreateWeek (from handleCreateMonth):', error);
+                        return null;
+                    });
+                    if (!createdMonth) {
+                        // Try to load existing month notes if creation failed
+                        try {
+                            const monthResponse = await window.DatabaseAPI.getMeetingNotes(weekDetails.monthKey);
+                            const existingMonth = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes || null;
+                            if (existingMonth) {
+                                targetMonth = existingMonth;
+                                setCurrentMonthlyNotes(existingMonth);
+                                setMonthlyNotesList(prev => {
+                                    const list = Array.isArray(prev) ? [...prev] : [];
+                                    const existingIndex = list.findIndex(note => {
+                                        if (!note) return false;
+                                        return (note.id && existingMonth.id && note.id === existingMonth.id) ||
+                                               (note.monthKey && existingMonth.monthKey && note.monthKey === existingMonth.monthKey);
+                                    });
+                                    if (existingIndex >= 0) {
+                                        list[existingIndex] = existingMonth;
+                                        return list;
+                                    }
+                                    list.push(existingMonth);
+                                    return list;
+                                });
+                                setSelectedMonth(existingMonth.monthKey);
+                            } else {
+                                return null;
                             }
-                            list.push(existingMonth);
-                            return list;
-                        });
-                        setSelectedMonth(existingMonth.monthKey);
+                        } catch (loadError) {
+                            console.error('Failed to load existing monthly notes:', loadError);
+                            return null;
+                        }
                     } else {
+                        targetMonth = createdMonth;
+                    }
+                } catch (error) {
+                    console.error('Error creating month in handleCreateWeek:', error);
+                    // Try to load existing month notes if creation failed
+                    try {
+                        const monthResponse = await window.DatabaseAPI.getMeetingNotes(weekDetails.monthKey);
+                        const existingMonth = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes || null;
+                        if (existingMonth) {
+                            targetMonth = existingMonth;
+                            setCurrentMonthlyNotes(existingMonth);
+                            setMonthlyNotesList(prev => {
+                                const list = Array.isArray(prev) ? [...prev] : [];
+                                const existingIndex = list.findIndex(note => {
+                                    if (!note) return false;
+                                    return (note.id && existingMonth.id && note.id === existingMonth.id) ||
+                                           (note.monthKey && existingMonth.monthKey && note.monthKey === existingMonth.monthKey);
+                                });
+                                if (existingIndex >= 0) {
+                                    list[existingIndex] = existingMonth;
+                                    return list;
+                                }
+                                list.push(existingMonth);
+                                return list;
+                            });
+                            setSelectedMonth(existingMonth.monthKey);
+                        } else {
+                            return null;
+                        }
+                    } catch (loadError) {
+                        console.error('Failed to load existing monthly notes:', loadError);
                         return null;
                     }
-                } catch (loadError) {
-                    console.error('Failed to load existing monthly notes:', loadError);
-                    return null;
                 }
             }
-        }
 
         if (!targetMonth?.weeklyNotes) {
             try {
@@ -1647,8 +1707,17 @@ const ManagementMeetingNotes = () => {
             }
         }
 
+        if (!targetMonth) {
+            console.error('❌ No target month found for week creation. weekDetails:', weekDetails);
+            if (typeof alert === 'function') {
+                alert('Unable to find or create monthly notes for the selected week.');
+            }
+            return null;
+        }
+
         const existingWeek = targetMonth?.weeklyNotes?.find(week => week?.weekKey === weekDetails.weekKey);
         if (existingWeek) {
+            console.log('ℹ️ Week already exists, selecting it:', weekDetails.weekKey);
             setSelectedMonth(targetMonth.monthKey || weekDetails.monthKey);
             setSelectedWeek(weekDetails.weekKey);
             setNewWeekStartInput('');
@@ -1662,18 +1731,32 @@ const ManagementMeetingNotes = () => {
             setLoading(true);
             const monthId = targetMonth?.id;
             if (!monthId) {
+                console.error('❌ Unable to locate monthly notes ID for the selected week. targetMonth:', {
+                    id: targetMonth?.id,
+                    monthKey: targetMonth?.monthKey,
+                    hasId: !!targetMonth?.id
+                });
                 if (typeof alert === 'function') {
-                    console.error('Unable to locate monthly notes for the selected week.');
+                    alert('Unable to locate monthly notes for the selected week. Please try creating the month first.');
                 }
                 return null;
             }
 
-            await window.DatabaseAPI.createWeeklyNotes(
+            console.log('📝 Creating weekly notes:', {
+                monthId,
+                weekKey: weekDetails.weekKey,
+                weekStart: weekDetails.weekStart.toISOString(),
+                weekEnd: weekDetails.weekEnd.toISOString()
+            });
+
+            const createResponse = await window.DatabaseAPI.createWeeklyNotes(
                 monthId,
                 weekDetails.weekKey,
                 weekDetails.weekStart.toISOString(),
                 weekDetails.weekEnd.toISOString()
             );
+
+            console.log('✅ Weekly notes created successfully:', createResponse);
 
             // Send notifications to all users in the monthly notes
             if (window.DatabaseAPI && targetMonth?.userAllocations && targetMonth.userAllocations.length > 0) {
@@ -1711,7 +1794,37 @@ const ManagementMeetingNotes = () => {
                 });
             }
 
-            await reloadMonthlyNotes(weekDetails.monthKey);
+            // CRITICAL: After creating a week, we MUST reload the full month data to get the new week.
+            // Don't use reloadMonthlyNotes here because it might preserve old data.
+            // Instead, directly load the full month data with the new week.
+            console.log(`🔄 Reloading month data after creating week ${weekDetails.weekKey}`);
+            try {
+                const monthResponse = await window.DatabaseAPI.getMeetingNotes(weekDetails.monthKey);
+                const updatedMonth = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes || null;
+                if (updatedMonth) {
+                    setCurrentMonthlyNotes(updatedMonth);
+                    setSelectedMonth(weekDetails.monthKey);
+                    // Update monthlyNotesList with the updated month
+                    setMonthlyNotesList(prev => {
+                        const list = Array.isArray(prev) ? [...prev] : [];
+                        const existingIndex = list.findIndex(note => note?.monthKey === weekDetails.monthKey);
+                        if (existingIndex >= 0) {
+                            list[existingIndex] = updatedMonth;
+                        } else {
+                            list.push(updatedMonth);
+                        }
+                        return list;
+                    });
+                } else {
+                    // Fallback to reloadMonthlyNotes if direct load fails
+                    await reloadMonthlyNotes(weekDetails.monthKey);
+                }
+            } catch (reloadError) {
+                console.error('Error reloading month after creating week:', reloadError);
+                // Fallback to reloadMonthlyNotes if direct load fails
+                await reloadMonthlyNotes(weekDetails.monthKey);
+            }
+            
             setSelectedWeek(weekDetails.weekKey);
             setNewWeekStartInput('');
             return weekDetails.weekKey;
@@ -1722,7 +1835,25 @@ const ManagementMeetingNotes = () => {
             if (errorMessage.includes('already exist')) {
                 console.info('Weekly notes already exist for the selected week, reloading current month data.');
                 try {
-                    await reloadMonthlyNotes(weekDetails.monthKey);
+                    // Load full month data to ensure we have the existing week
+                    const monthResponse = await window.DatabaseAPI.getMeetingNotes(weekDetails.monthKey);
+                    const existingMonth = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes || null;
+                    if (existingMonth) {
+                        setCurrentMonthlyNotes(existingMonth);
+                        setSelectedMonth(weekDetails.monthKey);
+                        setMonthlyNotesList(prev => {
+                            const list = Array.isArray(prev) ? [...prev] : [];
+                            const existingIndex = list.findIndex(note => note?.monthKey === weekDetails.monthKey);
+                            if (existingIndex >= 0) {
+                                list[existingIndex] = existingMonth;
+                            } else {
+                                list.push(existingMonth);
+                            }
+                            return list;
+                        });
+                    } else {
+                        await reloadMonthlyNotes(weekDetails.monthKey);
+                    }
                     setSelectedWeek(weekDetails.weekKey);
                     setNewWeekStartInput('');
                     if (triggeredByInput && typeof alert === 'function') {
@@ -1734,14 +1865,23 @@ const ManagementMeetingNotes = () => {
                         console.error('Weekly notes already exist but could not load automatically.');
                     }
                 }
-            } else if (typeof alert === 'function') {
-                console.error('Failed to create weekly notes');
+            } else {
+                console.error('❌ Failed to create weekly notes. Error:', error);
+                if (typeof alert === 'function') {
+                    alert(`Failed to create weekly notes: ${error.message || 'Unknown error'}`);
+                }
             }
+            // Return null for any error to prevent unhandled promise rejection
+            return null;
         } finally {
             setLoading(false);
         }
-
-        return null;
+        } catch (error) {
+            // Outer catch to ensure no unhandled promise rejections
+            console.error('❌ Unexpected error in handleCreateWeek (outer catch):', error);
+            setLoading(false);
+            return null;
+        }
     };
 
     // Helper function to get field key

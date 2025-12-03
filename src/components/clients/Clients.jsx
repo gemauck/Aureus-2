@@ -994,23 +994,31 @@ const Clients = React.memo(() => {
                 }
 
                 // Update clients with opportunities WITHOUT triggering re-render loop
-                const updatedClients = clients.map((client) => {
-                    if (!client?.id) {
-                        return client;
-                    }
+                // CRITICAL: Use prevClients to preserve restored groupMemberships
+                setClients(prevClients => {
+                    const updatedClients = prevClients.map((client) => {
+                        if (!client?.id) {
+                            return client;
+                        }
 
-                    const apiOpps = opportunitiesByClient[client.id] || [];
-                    const signature = buildOpportunitiesSignature(apiOpps);
-                    pipelineOpportunitiesLoadedRef.current.set(client.id, { signature });
+                        const apiOpps = opportunitiesByClient[client.id] || [];
+                        const signature = buildOpportunitiesSignature(apiOpps);
+                        pipelineOpportunitiesLoadedRef.current.set(client.id, { signature });
 
-                    return {
-                        ...client,
-                        opportunities: apiOpps
-                    };
+                        // CRITICAL: Always create new object reference and preserve ALL group data
+                        return {
+                            ...client,
+                            opportunities: apiOpps,
+                            // CRITICAL: Preserve group data from current state (which may have been restored)
+                            parentGroup: client.parentGroup || null,
+                            parentGroupId: client.parentGroupId || null,
+                            parentGroupName: client.parentGroupName || null,
+                            groupMemberships: Array.isArray(client.groupMemberships) ? [...client.groupMemberships] : []
+                        };
+                    });
+                    safeStorage.setClients(updatedClients);
+                    return updatedClients;
                 });
-
-                setClients(updatedClients);
-                safeStorage.setClients(updatedClients);
             } catch (error) {
                 const isServerError =
                     error?.message?.includes('500') ||
@@ -1342,14 +1350,18 @@ const Clients = React.memo(() => {
                             setClients(prevClients => {
                                 const updated = prevClients.map(client => {
                                     const opps = opportunitiesByClient[client.id] || client.opportunities || [];
+                                    // CRITICAL: Always create new object reference and preserve ALL group data
                                     return {
-                                ...client,
+                                        ...client,
                                         opportunities: opps,
-                                        // CRITICAL: Preserve groupMemberships from current state (from API)
-                                        groupMemberships: client.groupMemberships || []
+                                        // CRITICAL: Preserve groupMemberships from current state (which may have been restored)
+                                        parentGroup: client.parentGroup || null,
+                                        parentGroupId: client.parentGroupId || null,
+                                        parentGroupName: client.parentGroupName || null,
+                                        groupMemberships: Array.isArray(client.groupMemberships) ? [...client.groupMemberships] : []
                                     };
                                 });
-                            safeStorage.setClients(updated);
+                                safeStorage.setClients(updated);
                                 return updated;
                             });
                         })
@@ -1451,17 +1463,18 @@ const Clients = React.memo(() => {
                             setClients(prevClients => {
                                 const updated = prevClients.map(client => {
                                     const opps = opportunitiesByClient[client.id] || client.opportunities || [];
-                                return {
-                                    ...client,
+                                    // CRITICAL: Always create new object reference and preserve ALL group data
+                                    return {
+                                        ...client,
                                         opportunities: opps,
-                                        // CRITICAL: Preserve ALL group data from current state (from API)
-                                    parentGroup: client.parentGroup || null,
-                                    parentGroupId: client.parentGroupId || null,
-                                    parentGroupName: client.parentGroupName || null,
-                                        groupMemberships: Array.isArray(client.groupMemberships) ? client.groupMemberships : []
-                                };
-                            });
-                            safeStorage.setClients(updated);
+                                        // CRITICAL: Preserve ALL group data from current state (which may have been restored)
+                                        parentGroup: client.parentGroup || null,
+                                        parentGroupId: client.parentGroupId || null,
+                                        parentGroupName: client.parentGroupName || null,
+                                        groupMemberships: Array.isArray(client.groupMemberships) ? [...client.groupMemberships] : []
+                                    };
+                                });
+                                safeStorage.setClients(updated);
                                 return updated;
                             });
                         })
@@ -1810,23 +1823,29 @@ const Clients = React.memo(() => {
                             });
                             
                             // Attach opportunities to their clients
-                            // CRITICAL: Use clientsWithCachedOpps (which has group data) instead of clientsOnly
-                            // This ensures group data is preserved when updating opportunities
-                            const updated = clientsWithCachedOpps.map(client => ({
-                                ...client,
-                                opportunities: opportunitiesByClient[client.id] || client.opportunities || [],
-                                // CRITICAL: Explicitly preserve group data when updating opportunities
-                                parentGroup: client.parentGroup || null,
-                                parentGroupId: client.parentGroupId || null,
-                                parentGroupName: client.parentGroupName || null,
-                                groupMemberships: client.groupMemberships || []
-                            }));
-                            
-                            const totalOpps = updated.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                            if (totalOpps > 0) {
-                            }
-                            setClients(updated);
-                            safeStorage.setClients(updated);
+                            // CRITICAL: Use current state (prevClients) to preserve restored groupMemberships
+                            // This ensures group data restored by useEffect is NOT overwritten
+                            setClients(prevClients => {
+                                const updated = prevClients.map(client => {
+                                    const opps = opportunitiesByClient[client.id] || client.opportunities || [];
+                                    // CRITICAL: Always create new object reference and preserve ALL group data from current state
+                                    return {
+                                        ...client,
+                                        opportunities: opps,
+                                        // CRITICAL: Preserve group data from current state (which may have been restored by useEffect)
+                                        parentGroup: client.parentGroup || null,
+                                        parentGroupId: client.parentGroupId || null,
+                                        parentGroupName: client.parentGroupName || null,
+                                        groupMemberships: Array.isArray(client.groupMemberships) ? [...client.groupMemberships] : []
+                                    };
+                                });
+                                
+                                const totalOpps = updated.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                                if (totalOpps > 0) {
+                                }
+                                safeStorage.setClients(updated);
+                                return updated;
+                            });
                         })
                         .catch(error => {
                             // Handle error gracefully - don't log for server errors (500s)
