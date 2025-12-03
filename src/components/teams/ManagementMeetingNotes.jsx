@@ -1315,19 +1315,28 @@ const ManagementMeetingNotes = () => {
                         try {
                             const monthResponse = await window.DatabaseAPI.getMeetingNotes(monthKey);
                             console.log('📦 getMeetingNotes response:', monthResponse);
-                            const duplicateNotes = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes;
-                            if (duplicateNotes) {
+                            console.log('🔍 getMeetingNotes structure:', {
+                                hasData: !!monthResponse?.data,
+                                hasMonthlyNotes: !!monthResponse?.monthlyNotes,
+                                dataKeys: monthResponse?.data ? Object.keys(monthResponse.data) : [],
+                                monthlyNotesValue: monthResponse?.data?.monthlyNotes,
+                                dataHasMonthKey: !!(monthResponse?.data?.monthKey || monthResponse?.data?.id)
+                            });
+                            
+                            // Try multiple extraction paths
+                            const duplicateNotes = monthResponse?.data?.monthlyNotes || 
+                                                  monthResponse?.monthlyNotes ||
+                                                  (monthResponse?.data && (monthResponse.data.monthKey || monthResponse.data.id) ? monthResponse.data : null);
+                            
+                            if (duplicateNotes && (duplicateNotes.monthKey || duplicateNotes.id)) {
                                 console.log('✅ Found existing notes:', duplicateNotes.id, duplicateNotes.monthKey);
                                 // Return the existing notes as if they were just created
                                 response = { data: { monthlyNotes: duplicateNotes }, monthlyNotes: duplicateNotes };
                             } else {
-                                console.warn('⚠️ getMeetingNotes returned but no monthlyNotes found');
-                                // Try to extract from alternative structure
-                                if (monthResponse?.data && (monthResponse.data.monthKey || monthResponse.data.id)) {
-                                    response = { data: { monthlyNotes: monthResponse.data }, monthlyNotes: monthResponse.data };
-                                } else {
-                                    throw new Error('Could not extract monthly notes from response');
-                                }
+                                console.warn('⚠️ getMeetingNotes returned but no monthlyNotes found. Response:', monthResponse);
+                                // Don't throw - return null to prevent unhandled rejection
+                                // The component will try other fallback methods
+                                return null;
                             }
                         } catch (loadError) {
                             console.error('❌ Failed to load existing monthly notes after duplicate warning:', loadError);
@@ -1366,17 +1375,24 @@ const ManagementMeetingNotes = () => {
                 let newNotes = null;
                 
                 // Try response.data.monthlyNotes first (most common structure)
-                if (response?.data?.monthlyNotes) {
-                    newNotes = response.data.monthlyNotes;
-                    console.log('✅ Found notes in response.data.monthlyNotes');
-                } 
-                // Try response.monthlyNotes (top-level)
-                else if (response?.monthlyNotes) {
+                // Also check if it's null but the key exists (API might return null when notes exist but structure is different)
+                if (response?.data?.monthlyNotes !== undefined) {
+                    if (response.data.monthlyNotes !== null) {
+                        newNotes = response.data.monthlyNotes;
+                        console.log('✅ Found notes in response.data.monthlyNotes');
+                    } else {
+                        // monthlyNotes is explicitly null, but notes might exist elsewhere
+                        console.log('⚠️ response.data.monthlyNotes is null, checking other locations...');
+                    }
+                }
+                
+                // If not found yet, try response.monthlyNotes (top-level)
+                if (!newNotes && response?.monthlyNotes) {
                     newNotes = response.monthlyNotes;
                     console.log('✅ Found notes in response.monthlyNotes');
                 } 
                 // Check if response.data itself is the monthlyNotes object
-                else if (response?.data) {
+                else if (!newNotes && response?.data) {
                     // Check if data has monthKey or id (it's the monthlyNotes object)
                     if (response.data.monthKey || response.data.id) {
                         newNotes = response.data;
@@ -1391,7 +1407,7 @@ const ManagementMeetingNotes = () => {
                     else {
                         for (const key of Object.keys(response.data)) {
                             const value = response.data[key];
-                            if (value && typeof value === 'object' && (value.monthKey || value.id)) {
+                            if (value && typeof value === 'object' && !Array.isArray(value) && (value.monthKey || value.id)) {
                                 newNotes = value;
                                 console.log(`✅ Found notes in response.data.${key}`);
                                 break;
@@ -1400,7 +1416,7 @@ const ManagementMeetingNotes = () => {
                     }
                 } 
                 // Check if response itself is the monthlyNotes object
-                else if (response && (response.monthKey || response.id)) {
+                else if (!newNotes && response && (response.monthKey || response.id)) {
                     newNotes = response;
                     console.log('✅ Found notes as response itself');
                 }
@@ -1505,8 +1521,20 @@ const ManagementMeetingNotes = () => {
                     try {
                         const monthResponse = await window.DatabaseAPI.getMeetingNotes(monthKey);
                         console.log('📦 Fallback getMeetingNotes response:', monthResponse);
-                        const fallbackNotes = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes;
-                        if (fallbackNotes) {
+                        console.log('🔍 Fallback response structure:', {
+                            hasData: !!monthResponse?.data,
+                            hasMonthlyNotes: !!monthResponse?.monthlyNotes,
+                            dataKeys: monthResponse?.data ? Object.keys(monthResponse.data) : [],
+                            monthlyNotesValue: monthResponse?.data?.monthlyNotes,
+                            monthlyNotesType: typeof monthResponse?.data?.monthlyNotes
+                        });
+                        
+                        // Try multiple extraction paths
+                        const fallbackNotes = monthResponse?.data?.monthlyNotes || 
+                                            monthResponse?.monthlyNotes ||
+                                            (monthResponse?.data && (monthResponse.data.monthKey || monthResponse.data.id) ? monthResponse.data : null);
+                        
+                        if (fallbackNotes && (fallbackNotes.monthKey || fallbackNotes.id)) {
                             console.log('✅ Successfully loaded notes via fallback');
                             setCurrentMonthlyNotes(fallbackNotes);
                             setMonthlyNotesList(prev => {
@@ -1528,11 +1556,15 @@ const ManagementMeetingNotes = () => {
                             setNewMonthKey('');
                             return fallbackNotes;
                         } else {
-                            console.warn('⚠️ Fallback getMeetingNotes returned but no monthlyNotes found');
+                            console.warn('⚠️ Fallback getMeetingNotes returned but no monthlyNotes found. Response:', monthResponse);
                         }
                     } catch (fallbackError) {
                         console.error('❌ Fallback load also failed:', fallbackError);
                     }
+                    
+                    // If all extraction attempts failed, return null gracefully
+                    console.warn('⚠️ Could not extract monthly notes from any response structure. Returning null.');
+                    return null;
                 }
             } catch (error) {
                 console.error('❌ Error creating monthly notes:', error);
@@ -1810,8 +1842,12 @@ const ManagementMeetingNotes = () => {
                         // Try to load existing month notes if creation failed
                         try {
                             const monthResponse = await window.DatabaseAPI.getMeetingNotes(weekDetails.monthKey);
-                            const existingMonth = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes || null;
-                            if (existingMonth) {
+                            console.log('🔍 handleCreateWeek fallback - monthResponse:', monthResponse);
+                            // Try multiple extraction paths
+                            const existingMonth = monthResponse?.data?.monthlyNotes || 
+                                                monthResponse?.monthlyNotes ||
+                                                (monthResponse?.data && (monthResponse.data.monthKey || monthResponse.data.id) ? monthResponse.data : null);
+                            if (existingMonth && (existingMonth.monthKey || existingMonth.id)) {
                                 console.log('✅ Loaded existing month:', existingMonth.id, existingMonth.monthKey);
                                 targetMonth = existingMonth;
                                 setCurrentMonthlyNotes(existingMonth);
@@ -1851,8 +1887,12 @@ const ManagementMeetingNotes = () => {
                     // Try to load existing month notes if creation failed
                     try {
                         const monthResponse = await window.DatabaseAPI.getMeetingNotes(weekDetails.monthKey);
-                        const existingMonth = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes || null;
-                        if (existingMonth) {
+                        console.log('🔍 handleCreateWeek error fallback - monthResponse:', monthResponse);
+                        // Try multiple extraction paths
+                        const existingMonth = monthResponse?.data?.monthlyNotes || 
+                                            monthResponse?.monthlyNotes ||
+                                            (monthResponse?.data && (monthResponse.data.monthKey || monthResponse.data.id) ? monthResponse.data : null);
+                        if (existingMonth && (existingMonth.monthKey || existingMonth.id)) {
                             targetMonth = existingMonth;
                             setCurrentMonthlyNotes(existingMonth);
                             setMonthlyNotesList(prev => {
