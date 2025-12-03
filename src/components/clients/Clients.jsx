@@ -1701,22 +1701,13 @@ const Clients = React.memo(() => {
                 // This ensures groups restored by useEffect are NOT overwritten by API response
                 setClients(prevClients => {
                     const verifiedClients = finalClients.map(client => {
-                        // First, check if this client already has restored groupMemberships in current state
+                        // CRITICAL: Always find prevClient FIRST to preserve any restored groups
                         const prevClient = prevClients.find(c => c && c.id === client.id);
-                        if (prevClient && 
-                            prevClient.groupMemberships && 
-                            Array.isArray(prevClient.groupMemberships) && 
-                            prevClient.groupMemberships.length > 0) {
-                            // Preserve restored groups from current state
-                            return {
-                                ...client,
-                                groupMemberships: [...prevClient.groupMemberships]
-                            };
-                        }
                         
                         // ALWAYS check raw API response first - it's the source of truth
                         let apiClient = null;
                         let foundInRawApi = false;
+                        let groupMembershipsFromApi = null;
                         
                         if (latestApiClientsRef.current && Array.isArray(latestApiClientsRef.current)) {
                             apiClient = latestApiClientsRef.current.find(c => c && c.id === client.id);
@@ -1736,17 +1727,13 @@ const Clients = React.memo(() => {
                                 }
                                 
                                 if (groupMemberships && Array.isArray(groupMemberships) && groupMemberships.length > 0) {
-                                    console.log('✅ Restoring groupMemberships from raw API for:', client.name, 'Count:', groupMemberships.length, 'First group:', groupMemberships[0]?.group?.name || groupMemberships[0]);
-                                    return {
-                                        ...client,
-                                        groupMemberships: groupMemberships
-                                    };
+                                    groupMembershipsFromApi = groupMemberships;
                                 }
                             }
                         }
                         
                         // If not in raw API, try processedClients (from API after processing)
-                        if (!apiClient || !apiClient.groupMemberships || !Array.isArray(apiClient.groupMemberships) || apiClient.groupMemberships.length === 0) {
+                        if (!groupMembershipsFromApi) {
                             apiClient = processedClients.find(c => c && c.id === client.id);
                             if (apiClient) {
                                 let groupMemberships = apiClient.groupMemberships;
@@ -1761,29 +1748,46 @@ const Clients = React.memo(() => {
                                 }
                                 
                                 if (groupMemberships && Array.isArray(groupMemberships) && groupMemberships.length > 0) {
-                                    console.log('✅ Restoring groupMemberships from processedClients for:', client.name, 'Count:', groupMemberships.length);
-                                    return {
-                                        ...client,
-                                        groupMemberships: groupMemberships
-                                    };
+                                    groupMembershipsFromApi = groupMemberships;
                                 }
                             }
                         }
                         
-                        // If still no groupMemberships, preserve from prevClient if available, otherwise empty array
-                        if (prevClient && prevClient.groupMemberships && Array.isArray(prevClient.groupMemberships)) {
-                            return {
-                                ...client,
-                                groupMemberships: [...prevClient.groupMemberships]
-                            };
+                        // CRITICAL: Priority order:
+                        // 1. API data (if available) - source of truth
+                        // 2. prevClient.groupMemberships (if restored by useEffect)
+                        // 3. Empty array (only if neither exists)
+                        
+                        let finalGroupMemberships = [];
+                        
+                        if (groupMembershipsFromApi && Array.isArray(groupMembershipsFromApi) && groupMembershipsFromApi.length > 0) {
+                            // Use API data (highest priority)
+                            finalGroupMemberships = groupMembershipsFromApi;
+                            if (client.name && client.name.toLowerCase().includes('exxaro')) {
+                                console.log('✅ Using API groupMemberships for:', client.name, 'Count:', finalGroupMemberships.length);
+                            }
+                        } else if (prevClient && 
+                                   prevClient.groupMemberships && 
+                                   Array.isArray(prevClient.groupMemberships) && 
+                                   prevClient.groupMemberships.length > 0) {
+                            // Preserve restored groups from current state (CRITICAL: don't overwrite!)
+                            finalGroupMemberships = [...prevClient.groupMemberships];
+                            if (client.name && client.name.toLowerCase().includes('exxaro')) {
+                                console.log('✅ Preserving restored groupMemberships for:', client.name, 'Count:', finalGroupMemberships.length);
+                            }
+                        } else {
+                            // No groups found anywhere - set empty array
+                            finalGroupMemberships = [];
                         }
                         
                         // Only log for AccuFarm to reduce noise
-                        if (client.name && client.name.toLowerCase().includes('accufarm')) {
+                        if (client.name && client.name.toLowerCase().includes('accufarm') && finalGroupMemberships.length === 0) {
                             console.error('❌ AccuFarm MISSING groupMemberships!', {
                                 foundInRawApi,
                                 rawApiRefExists: !!latestApiClientsRef.current,
-                                rawApiClient: apiClient ? {
+                                hasPrevClient: !!prevClient,
+                                prevClientHasGroups: prevClient && prevClient.groupMemberships && Array.isArray(prevClient.groupMemberships) && prevClient.groupMemberships.length > 0,
+                                apiClient: apiClient ? {
                                     id: apiClient.id,
                                     name: apiClient.name,
                                     hasGroupMemberships: !!apiClient.groupMemberships,
@@ -1792,16 +1796,13 @@ const Clients = React.memo(() => {
                                 } : null,
                                 processedClient: processedClients.find(c => c.id === client.id) ? {
                                     hasGroupMemberships: !!processedClients.find(c => c.id === client.id).groupMemberships
-                                } : null,
-                                currentClient: {
-                                    hasGroupMemberships: !!client.groupMemberships,
-                                    groupMembershipsValue: client.groupMemberships
-                                }
+                                } : null
                             });
                         }
+                        
                         return {
                             ...client,
-                            groupMemberships: []
+                            groupMemberships: finalGroupMemberships
                         };
                     });
                     
