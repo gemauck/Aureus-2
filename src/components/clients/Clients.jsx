@@ -2260,12 +2260,27 @@ const Clients = React.memo(() => {
             if (cachedClients && Array.isArray(cachedClients) && cachedClients.length > 0) {
                 const filteredClients = cachedClients
                     .filter(c => c.type === 'client' || !c.type)
-                    .map(client => ({
-                        ...client,
-                        isStarred: resolveStarredState(client),
-                        // CRITICAL: Ensure groupMemberships is always an array
-                        groupMemberships: Array.isArray(client.groupMemberships) ? [...client.groupMemberships] : []
-                    }));
+                    .map(client => {
+                        // CRITICAL: Check ref FIRST - if groups were restored, preserve them
+                        let finalGroupMemberships = [];
+                        if (restoredGroupMembershipsRef.current.has(client.id)) {
+                            const restoredGroups = restoredGroupMembershipsRef.current.get(client.id);
+                            if (restoredGroups && Array.isArray(restoredGroups) && restoredGroups.length > 0) {
+                                finalGroupMemberships = [...restoredGroups];
+                            }
+                        } else if (Array.isArray(client.groupMemberships) && client.groupMemberships.length > 0) {
+                            finalGroupMemberships = [...client.groupMemberships];
+                        } else {
+                            finalGroupMemberships = [];
+                        }
+                        
+                        return {
+                            ...client,
+                            isStarred: resolveStarredState(client),
+                            // CRITICAL: Preserve restored groups from ref if available
+                            groupMemberships: finalGroupMemberships
+                        };
+                    });
                 if (filteredClients.length > 0) {
                     setClients(filteredClients);
                 }
