@@ -2969,10 +2969,70 @@ const Clients = React.memo(() => {
         }
     }, [clients]);
     
+    // CRITICAL: Load restored groups from localStorage on mount to survive navigation
+    useEffect(() => {
+        try {
+            const storedGroups = localStorage.getItem('restoredGroupMemberships');
+            if (storedGroups) {
+                const groupsMap = JSON.parse(storedGroups);
+                Object.entries(groupsMap).forEach(([clientId, groups]) => {
+                    if (groups && Array.isArray(groups) && groups.length > 0) {
+                        restoredGroupMembershipsRef.current.set(parseInt(clientId), groups);
+                    }
+                });
+                console.log(`📥 Loaded ${Object.keys(groupsMap).length} restored groups from localStorage on mount`);
+            }
+        } catch (error) {
+            console.warn('⚠️ Failed to load restored groups from localStorage:', error);
+        }
+    }, []); // Run only on mount
+    
     // CRITICAL FIX: If any clients are missing groupMemberships, fetch them directly from API
     // This ensures ALL clients with groups show their groups, not just those that were cached correctly
     useEffect(() => {
         if (!clients || clients.length === 0) return;
+        
+        // First, check localStorage for restored groups and apply them immediately
+        try {
+            const storedGroups = localStorage.getItem('restoredGroupMemberships');
+            if (storedGroups) {
+                const groupsMap = JSON.parse(storedGroups);
+                let restoredCount = 0;
+                setClients(prevClients => {
+                    const updated = prevClients.map(client => {
+                        if (client && client.id && groupsMap[client.id]) {
+                            const storedGroups = groupsMap[client.id];
+                            if (Array.isArray(storedGroups) && storedGroups.length > 0) {
+                                // Check if client already has these groups (avoid unnecessary update)
+                                const currentGroups = client.groupMemberships || [];
+                                const groupsMatch = currentGroups.length === storedGroups.length &&
+                                    currentGroups.every((g, i) => {
+                                        const stored = storedGroups[i];
+                                        return g?.group?.id === stored?.group?.id || g?.group?.name === stored?.group?.name;
+                                    });
+                                
+                                if (!groupsMatch) {
+                                    restoredCount++;
+                                    // Populate ref
+                                    restoredGroupMembershipsRef.current.set(client.id, [...storedGroups]);
+                                    return {
+                                        ...client,
+                                        groupMemberships: [...storedGroups]
+                                    };
+                                }
+                            }
+                        }
+                        return client;
+                    });
+                    if (restoredCount > 0) {
+                        console.log(`✅ Restored ${restoredCount} clients' groups from localStorage`);
+                    }
+                    return updated;
+                });
+            }
+        } catch (error) {
+            console.warn('⚠️ Failed to restore groups from localStorage:', error);
+        }
         
         // Check if any clients are missing groupMemberships
         const clientsMissingGroups = clients.filter(c => 
@@ -3057,7 +3117,7 @@ const Clients = React.memo(() => {
                         const existing = apiClientsMap.get(client.id);
                         if (!existing) {
                             // Client not in latestApiClientsRef - add from API call
-                            apiClientsMap.set(client.id, client);
+                        apiClientsMap.set(client.id, client);
                         } else if (existing.groupMemberships && Array.isArray(existing.groupMemberships) && existing.groupMemberships.length > 0) {
                             // Keep existing groups from latestApiClientsRef (don't overwrite)
                             // Just update other properties if needed
@@ -3088,7 +3148,8 @@ const Clients = React.memo(() => {
                 if (clientsToUpdate.length > 0) {
                     console.log(`✅ Found groupMemberships for ${clientsToUpdate.length} clients, updating state...`);
                     
-                    // Store restored groups in ref BEFORE state update to prevent API handler from overwriting
+                    // Store restored groups in ref AND localStorage BEFORE state update to prevent API handler from overwriting
+                    const groupsToPersist = new Map();
                     clientsToUpdate.forEach(client => {
                         const apiClient = apiClientsMap.get(client.id);
                         if (apiClient && 
@@ -3097,11 +3158,27 @@ const Clients = React.memo(() => {
                             apiClient.groupMemberships.length > 0) {
                             // Store in ref so API handler can preserve them even if prevClient is stale
                             restoredGroupMembershipsRef.current.set(client.id, [...apiClient.groupMemberships]);
+                            // Also store in Map for localStorage persistence
+                            groupsToPersist.set(client.id, [...apiClient.groupMemberships]);
                             if (client.name && client.name.toLowerCase().includes('exxaro')) {
                                 console.log('🔒 Stored in REF:', client.name, 'Count:', apiClient.groupMemberships.length);
                             }
                         }
                     });
+                    
+                    // CRITICAL: Persist restored groups to localStorage so they survive navigation
+                    if (groupsToPersist.size > 0) {
+                        try {
+                            const existingGroups = JSON.parse(localStorage.getItem('restoredGroupMemberships') || '{}');
+                            groupsToPersist.forEach((groups, clientId) => {
+                                existingGroups[clientId] = groups;
+                            });
+                            localStorage.setItem('restoredGroupMemberships', JSON.stringify(existingGroups));
+                            console.log(`💾 Persisted ${groupsToPersist.size} restored groups to localStorage`);
+                        } catch (error) {
+                            console.warn('⚠️ Failed to persist restored groups to localStorage:', error);
+                        }
+                    }
                     
                     // Update all clients with their groupMemberships in a single state update
                     setClients(prevClients => {
@@ -4116,16 +4193,16 @@ const Clients = React.memo(() => {
                     // Priority 2: Use client's groupMemberships if ref doesn't have them
                     if (memberships.length === 0) {
                         memberships = client.groupMemberships;
-                        if (typeof memberships === 'string') {
-                            try {
-                                memberships = JSON.parse(memberships);
-                            } catch {
-                                memberships = [];
-                            }
-                        }
-                        if (!Array.isArray(memberships)) {
+                    if (typeof memberships === 'string') {
+                        try {
+                            memberships = JSON.parse(memberships);
+                        } catch {
                             memberships = [];
                         }
+                    }
+                    if (!Array.isArray(memberships)) {
+                        memberships = [];
+                    }
                     }
                     
                     const groupNames = [];
