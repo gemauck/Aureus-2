@@ -9,70 +9,11 @@ import { verifyToken } from './_lib/jwt.js'
 // Notify admins when feedback is submitted
 async function notifyAdminsOfFeedback(feedback, submittingUser) {
   try {
-    
-    // Get all admin users (case-insensitive role check)
-    const admins = await prisma.user.findMany({
-      where: {
-        OR: [
-          { role: 'admin' },
-          { role: 'ADMIN' },
-          { role: 'Admin' }
-        ],
-        status: {
-          in: ['active', 'Active', 'ACTIVE']
-        }
-      },
-      select: {
-        email: true,
-        name: true,
-        role: true,
-        status: true
-      }
-    })
-    
-    // Filter out admins without email addresses
-    const adminsWithEmail = admins.filter(admin => admin.email && admin.email.trim())
+    // Send email only to garethm@abcotronics.co.za
+    const recipientEmail = 'garethm@abcotronics.co.za'
 
-    const fallbackRecipientEnv = process.env.FEEDBACK_NOTIFY_EMAILS ||
-                                 process.env.FEEDBACK_NOTIFY_EMAIL ||
-                                 process.env.FEEDBACK_ALERT_EMAILS ||
-                                 process.env.FEEDBACK_ALERT_RECIPIENTS ||
-                                 ''
-    const fallbackRecipientsConfigured = fallbackRecipientEnv
-      .split(',')
-      .map(email => email.trim())
-      .filter(email => email.length > 0)
-
-    const fallbackRecipients = fallbackRecipientsConfigured
-      .filter(email => !adminsWithEmail.some(admin => admin.email?.toLowerCase() === email.toLowerCase()))
-      .map(email => ({
-        email,
-        name: 'Feedback recipient (fallback)',
-        role: 'fallback',
-        status: 'configured'
-      }))
-
-    if (adminsWithEmail.length === 0) {
-      console.warn('⚠️ No admin users found for feedback notification. Feedback was still saved.')
-      console.warn('   Searched for users with role: admin/ADMIN/Admin and status: active')
-      console.warn('   Found admins:', admins.length, '| With emails:', adminsWithEmail.length)
-      if (admins.length > 0) {
-        console.warn('   Admin users found but no email addresses:', admins.map(a => ({ email: a.email, role: a.role, status: a.status })))
-      }
-    }
-
-    if (fallbackRecipients.length > 0) {
-    } else if (fallbackRecipientsConfigured.length > 0) {
-      console.warn('⚠️ Fallback feedback recipients configured, but all addresses already belong to admin users (no additional recipients added).')
-    }
-
-    const recipients = [...adminsWithEmail, ...fallbackRecipients]
-
-    if (recipients.length === 0) {
-      console.warn('⚠️ No feedback notification recipients available (no admins with email and no fallback recipients). Feedback was still saved.')
-      if (fallbackRecipientsConfigured.length === 0) {
-        console.warn('   Tip: Set FEEDBACK_NOTIFY_EMAILS in environment variables (comma-separated list) to ensure at least one recipient receives feedback notifications.')
-      }
+    if (!recipientEmail || !recipientEmail.trim()) {
+      console.warn('⚠️ No feedback notification recipient configured. Feedback was still saved.')
       return
     }
 
@@ -128,47 +69,27 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
     // Import sendNotificationEmail dynamically to avoid circular deps
     const { sendNotificationEmail } = await import('./_lib/email.js')
     
-    // Send email to all admins
-    let successCount = 0
-    let failureCount = 0
-    
-    const emailPromises = recipients.map(async (recipient) => {
-      try {
-        const result = await sendNotificationEmail(
-          recipient.email,
-          subject,
-          htmlContent
-        )
-        successCount++
-        return { success: true, email: recipient.email }
-      } catch (emailError) {
-        console.error(`❌ Failed to send feedback email to ${recipient.email}:`, emailError.message)
-        console.error('❌ Feedback email error details:', {
-          message: emailError.message,
-          code: emailError.code,
-          command: emailError.command,
-          response: emailError.response,
-          to: recipient.email,
-          stack: emailError.stack
-        })
-        if (emailError.stack) {
-          console.error('❌ Feedback email error stack:', emailError.stack)
-        }
-        failureCount++
-        return { success: false, email: recipient.email, error: emailError.message }
+    // Send email to garethm@abcotronics.co.za
+    try {
+      const result = await sendNotificationEmail(
+        recipientEmail,
+        subject,
+        htmlContent
+      )
+      console.log(`✅ Feedback email sent successfully to ${recipientEmail}`)
+    } catch (emailError) {
+      console.error(`❌ Failed to send feedback email to ${recipientEmail}:`, emailError.message)
+      console.error('❌ Feedback email error details:', {
+        message: emailError.message,
+        code: emailError.code,
+        command: emailError.command,
+        response: emailError.response,
+        to: recipientEmail,
+        stack: emailError.stack
+      })
+      if (emailError.stack) {
+        console.error('❌ Feedback email error stack:', emailError.stack)
       }
-    })
-
-    const results = await Promise.all(emailPromises)
-    
-    
-    if (failureCount > 0) {
-      console.error(`⚠️ Some feedback emails failed to send. Check email configuration:`)
-      console.error(`   - SMTP_HOST: ${process.env.SMTP_HOST || 'NOT SET'}`)
-      console.error(`   - SENDGRID_API_KEY: ${process.env.SENDGRID_API_KEY ? 'SET (hidden)' : 'NOT SET'}`)
-      console.error(`   - SMTP_PASS: ${process.env.SMTP_PASS ? (process.env.SMTP_PASS.startsWith('SG.') ? 'SET (SendGrid key detected)' : 'SET (hidden)') : 'NOT SET'}`)
-      console.error(`   - SMTP_USER: ${process.env.SMTP_USER || 'NOT SET'}`)
-      console.error(`   - EMAIL_FROM: ${process.env.EMAIL_FROM || 'NOT SET'}`)
     }
   } catch (error) {
     console.error('❌ Error in notifyAdminsOfFeedback:', error)
