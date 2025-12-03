@@ -2944,21 +2944,32 @@ const Clients = React.memo(() => {
                                 apiClient.groupMemberships && 
                                 Array.isArray(apiClient.groupMemberships) && 
                                 apiClient.groupMemberships.length > 0) {
-                                // Only update if client was missing groupMemberships
-                                if (!client.groupMemberships || 
-                                    !Array.isArray(client.groupMemberships) || 
-                                    client.groupMemberships.length === 0) {
-                                    console.log(`✅ Restoring groupMemberships for ${client.name}:`, apiClient.groupMemberships.length, 'groups');
-                                    // Create new client object with groupMemberships
-                                    return {
-                                        ...client,
-                                        groupMemberships: [...apiClient.groupMemberships] // Create new array reference
-                                    };
-                                }
+                                // Always update with API data if available (don't check if client already has it)
+                                console.log(`✅ Restoring groupMemberships for ${client.name}:`, apiClient.groupMemberships.length, 'groups');
+                                // Create new client object with groupMemberships
+                                return {
+                                    ...client,
+                                    groupMemberships: [...apiClient.groupMemberships] // Create new array reference
+                                };
                             }
                             // Always return a new object reference to ensure React detects changes
-                            return { ...client };
+                            // Preserve existing groupMemberships if API doesn't have them
+                            return { 
+                                ...client,
+                                groupMemberships: client.groupMemberships ? [...client.groupMemberships] : []
+                            };
                         });
+                        
+                        // Debug: Verify Exxaro clients have groupMemberships after update
+                        const exxaroAfterUpdate = updated.filter(c => c.name && c.name.toLowerCase().includes('exxaro'));
+                        exxaroAfterUpdate.forEach(c => {
+                            console.log(`🔍 After state update - ${c.name}:`, {
+                                hasGroupMemberships: !!c.groupMemberships,
+                                isArray: Array.isArray(c.groupMemberships),
+                                length: c.groupMemberships?.length || 0
+                            });
+                        });
+                        
                         // Always return new array reference
                         return updated;
                     });
