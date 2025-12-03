@@ -4071,19 +4071,32 @@ const Clients = React.memo(() => {
             
             // Handle Company Group sorting
             if (sortField === 'companyGroup') {
-                // Extract group names from groupMemberships
+                // Extract group names from groupMemberships (check ref first)
                 const getGroupNames = (client) => {
-                    let memberships = client.groupMemberships;
-                    if (typeof memberships === 'string') {
-                        try {
-                            memberships = JSON.parse(memberships);
-                        } catch {
+                    // Priority 1: Check ref (restored groups that should never be cleared)
+                    let memberships = [];
+                    if (restoredGroupMembershipsRef.current.has(client.id)) {
+                        const restoredGroups = restoredGroupMembershipsRef.current.get(client.id);
+                        if (restoredGroups && Array.isArray(restoredGroups) && restoredGroups.length > 0) {
+                            memberships = restoredGroups;
+                        }
+                    }
+                    
+                    // Priority 2: Use client's groupMemberships if ref doesn't have them
+                    if (memberships.length === 0) {
+                        memberships = client.groupMemberships;
+                        if (typeof memberships === 'string') {
+                            try {
+                                memberships = JSON.parse(memberships);
+                            } catch {
+                                memberships = [];
+                            }
+                        }
+                        if (!Array.isArray(memberships)) {
                             memberships = [];
                         }
                     }
-                    if (!Array.isArray(memberships)) {
-                        memberships = [];
-                    }
+                    
                     const groupNames = [];
                     memberships.forEach(membership => {
                         if (membership && typeof membership === 'object') {
@@ -4134,17 +4147,39 @@ const Clients = React.memo(() => {
             }
         });
         
-        // CRITICAL: Restore groupMemberships from original clients to ensure they're preserved
+        // CRITICAL: Restore groupMemberships from original clients AND ref to ensure they're preserved
         return sorted.map(client => {
             const original = clientsMap.get(client.id);
+            
+            // Priority 1: Check ref (restored groups that should never be cleared)
+            let finalGroupMemberships = [];
+            if (restoredGroupMembershipsRef.current.has(client.id)) {
+                const restoredGroups = restoredGroupMembershipsRef.current.get(client.id);
+                if (restoredGroups && Array.isArray(restoredGroups) && restoredGroups.length > 0) {
+                    finalGroupMemberships = [...restoredGroups];
+                }
+            }
+            
+            // Priority 2: Use original client's groupMemberships if ref doesn't have them
+            if (finalGroupMemberships.length === 0 && original) {
+                if (Array.isArray(original.groupMemberships) && original.groupMemberships.length > 0) {
+                    finalGroupMemberships = [...original.groupMemberships];
+                } else if (Array.isArray(client.groupMemberships) && client.groupMemberships.length > 0) {
+                    finalGroupMemberships = [...client.groupMemberships];
+                }
+            }
+            
             if (original) {
-                // Preserve all properties from original, especially groupMemberships
+                // Preserve all properties from original, especially groupMemberships from ref or original
                 return {
                     ...client,
-                    groupMemberships: original.groupMemberships || client.groupMemberships || []
+                    groupMemberships: finalGroupMemberships
                 };
             }
-            return client;
+            return {
+                ...client,
+                groupMemberships: finalGroupMemberships
+            };
         });
     }, [sortField, sortDirection]);
 
