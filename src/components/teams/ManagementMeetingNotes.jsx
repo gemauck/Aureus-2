@@ -624,7 +624,59 @@ const ManagementMeetingNotes = () => {
 
             setSelectedMonth(nextMonthKey);
             const nextMonth = notes.find((note) => note?.monthKey === nextMonthKey) || null;
-            setCurrentMonthlyNotes(nextMonth);
+            
+            // CRITICAL: If we're reloading the same month that's already loaded with weeks,
+            // preserve the existing currentMonthlyNotes to avoid losing weeklyNotes data.
+            // Only update if the month changed or if current data doesn't have weeklyNotes
+            if (nextMonth) {
+                const currentMonthKey = currentMonthlyNotes?.monthKey;
+                const hasExistingWeeks = currentMonthlyNotes?.weeklyNotes && 
+                    Array.isArray(currentMonthlyNotes.weeklyNotes) && 
+                    currentMonthlyNotes.weeklyNotes.length > 0;
+                
+                if (nextMonthKey === currentMonthKey && hasExistingWeeks) {
+                    // Same month and we already have weeks loaded - preserve existing data
+                    console.log('🔄 Preserving existing monthly notes with weeks data');
+                    // Still update the monthlyNotesList but keep currentMonthlyNotes
+                } else {
+                    // Different month or no weeks loaded - check if we need to load full data
+                    const hasWeeklyNotes = nextMonth.weeklyNotes && 
+                        Array.isArray(nextMonth.weeklyNotes) && 
+                        nextMonth.weeklyNotes.length > 0;
+                    
+                    if (!hasWeeklyNotes && nextMonthKey) {
+                        // Load full month data to get weeklyNotes
+                        console.log(`📥 Loading full month data for ${nextMonthKey} to get weeklyNotes`);
+                        try {
+                            const fullMonthResponse = await window.DatabaseAPI.getMeetingNotes(nextMonthKey);
+                            const fullMonthData = fullMonthResponse?.data?.monthlyNotes || fullMonthResponse?.monthlyNotes;
+                            if (fullMonthData) {
+                                setCurrentMonthlyNotes(fullMonthData);
+                                // Update the monthlyNotesList with the full data too
+                                setMonthlyNotesList(prev => {
+                                    const list = Array.isArray(prev) ? [...prev] : [];
+                                    const existingIndex = list.findIndex(note => note?.monthKey === nextMonthKey);
+                                    if (existingIndex >= 0) {
+                                        list[existingIndex] = fullMonthData;
+                                    } else {
+                                        list.push(fullMonthData);
+                                    }
+                                    return list;
+                                });
+                            } else {
+                                setCurrentMonthlyNotes(nextMonth);
+                            }
+                        } catch (error) {
+                            console.error('Error loading full month data:', error);
+                            setCurrentMonthlyNotes(nextMonth);
+                        }
+                    } else {
+                        setCurrentMonthlyNotes(nextMonth);
+                    }
+                }
+            } else {
+                setCurrentMonthlyNotes(null);
+            }
             setSelectedWeek(null);
             
             // Restore scroll position after state updates if preserved - AGGRESSIVE with multiple attempts
@@ -863,6 +915,18 @@ const ManagementMeetingNotes = () => {
 
         const loadCurrentMonth = async () => {
             if (!selectedMonth || !window.DatabaseAPI) return;
+            
+            // Check if we already have data for this month with weeks loaded
+            const existingData = currentMonthlyNotes;
+            const hasExistingWeeks = existingData?.monthKey === selectedMonth && 
+                existingData?.weeklyNotes && 
+                Array.isArray(existingData.weeklyNotes) && 
+                existingData.weeklyNotes.length > 0;
+            
+            if (hasExistingWeeks) {
+                console.log(`✅ Already have weeks data for ${selectedMonth}, skipping reload`);
+                return;
+            }
             
             try {
                 setLoading(true);
