@@ -1788,6 +1788,18 @@ const Clients = React.memo(() => {
                             if (client.name && client.name.toLowerCase().includes('exxaro')) {
                                 console.log('✅ Preserving restored groupMemberships from prevClient for:', client.name, 'Count:', finalGroupMemberships.length);
                             }
+                        } else if (restoredGroupMembershipsRef.current.has(client.id)) {
+                            // CRITICAL: Check ref again here - even if prevClient doesn't have groups, ref might have them
+                            // This prevents clearing groups that were restored but prevClient is stale
+                            const restoredGroups = restoredGroupMembershipsRef.current.get(client.id);
+                            if (restoredGroups && Array.isArray(restoredGroups) && restoredGroups.length > 0) {
+                                finalGroupMemberships = [...restoredGroups];
+                                if (client.name && client.name.toLowerCase().includes('exxaro')) {
+                                    console.log('✅ Preserving restored groupMemberships from REF (fallback check) for:', client.name, 'Count:', finalGroupMemberships.length);
+                                }
+                            } else {
+                                finalGroupMemberships = [];
+                            }
                         } else if (prevClient && 
                                    prevClient.groupMemberships && 
                                    Array.isArray(prevClient.groupMemberships)) {
@@ -1795,7 +1807,20 @@ const Clients = React.memo(() => {
                             finalGroupMemberships = [...prevClient.groupMemberships];
                         } else {
                             // No groups found anywhere AND prevClient doesn't exist or never had groups
-                            finalGroupMemberships = [];
+                            // CRITICAL: Final check of ref before setting empty array
+                            if (restoredGroupMembershipsRef.current.has(client.id)) {
+                                const restoredGroups = restoredGroupMembershipsRef.current.get(client.id);
+                                if (restoredGroups && Array.isArray(restoredGroups) && restoredGroups.length > 0) {
+                                    finalGroupMemberships = [...restoredGroups];
+                                    if (client.name && client.name.toLowerCase().includes('exxaro')) {
+                                        console.log('✅ Preserving restored groupMemberships from REF (final check) for:', client.name, 'Count:', finalGroupMemberships.length);
+                                    }
+                                } else {
+                                    finalGroupMemberships = [];
+                                }
+                            } else {
+                                finalGroupMemberships = [];
+                            }
                         }
                         
                         // Only log for AccuFarm to reduce noise
@@ -3026,6 +3051,9 @@ const Clients = React.memo(() => {
                             apiClient.groupMemberships.length > 0) {
                             // Store in ref so API handler can preserve them even if prevClient is stale
                             restoredGroupMembershipsRef.current.set(client.id, [...apiClient.groupMemberships]);
+                            if (client.name && client.name.toLowerCase().includes('exxaro')) {
+                                console.log('🔒 Stored in REF:', client.name, 'Count:', apiClient.groupMemberships.length);
+                            }
                         }
                     });
                     
