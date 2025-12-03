@@ -2937,6 +2937,7 @@ const Clients = React.memo(() => {
                     
                     // Update all clients with their groupMemberships in a single state update
                     setClients(prevClients => {
+                        let hasChanges = false;
                         const updated = prevClients.map(client => {
                             const apiClient = apiClientsMap.get(client.id);
                             if (apiClient && 
@@ -2948,6 +2949,7 @@ const Clients = React.memo(() => {
                                     !Array.isArray(client.groupMemberships) || 
                                     client.groupMemberships.length === 0) {
                                     console.log(`✅ Restoring groupMemberships for ${client.name}:`, apiClient.groupMemberships.length, 'groups');
+                                    hasChanges = true;
                                     return {
                                         ...client,
                                         groupMemberships: apiClient.groupMemberships
@@ -2956,7 +2958,8 @@ const Clients = React.memo(() => {
                             }
                             return client;
                         });
-                        return updated;
+                        // Force new array reference even if no changes to ensure re-render
+                        return hasChanges ? updated : [...updated];
                     });
                 } else {
                     console.log('ℹ️ No clients found with groupMemberships in API response');
