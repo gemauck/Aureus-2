@@ -95,6 +95,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Industries state
     const [industries, setIndustries] = useState([]);
     
+    // Groups state for Services section
+    const [availableGroups, setAvailableGroups] = useState([]);
+    const [clientGroupMemberships, setClientGroupMemberships] = useState([]);
+    const [isLoadingGroups, setIsLoadingGroups] = useState(false);
+    const [showGroupSelector, setShowGroupSelector] = useState(false);
+    const [selectedGroupId, setSelectedGroupId] = useState('');
+    
     // Track if user has edited the form to prevent unwanted resets
     const hasUserEditedForm = useRef(false);
     const lastSavedClientId = useRef(client?.id);
@@ -867,6 +874,143 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     };
 
+    // Load groups for Services section
+    const isLoadingGroupsRef = useRef(false);
+    const loadGroups = useCallback(async () => {
+        if (isLoadingGroupsRef.current) return;
+        
+        try {
+            isLoadingGroupsRef.current = true;
+            setIsLoadingGroups(true);
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                isLoadingGroupsRef.current = false;
+                setIsLoadingGroups(false);
+                return;
+            }
+            
+            // Load available groups
+            const groupsResponse = await fetch('/api/clients/groups', {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
+            });
+            
+            if (groupsResponse.ok) {
+                const groupsData = await groupsResponse.json();
+                const groups = groupsData?.data?.groups || groupsData?.groups || [];
+                setAvailableGroups(groups);
+            }
+            
+            // Load client's current group memberships if client exists
+            if (client?.id) {
+                const membershipsResponse = await fetch(`/api/clients/${client.id}/groups`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include'
+                });
+                
+                if (membershipsResponse.ok) {
+                    const membershipsData = await membershipsResponse.json();
+                    const memberships = membershipsData?.data?.groupMemberships || membershipsData?.groupMemberships || [];
+                    setClientGroupMemberships(memberships);
+                }
+            }
+        } catch (error) {
+            console.error('Error loading groups:', error);
+        } finally {
+            isLoadingGroupsRef.current = false;
+            setIsLoadingGroups(false);
+        }
+    }, [client?.id]);
+    
+    // Load groups when client changes
+    useEffect(() => {
+        if (client?.id) {
+            loadGroups();
+        } else {
+            setClientGroupMemberships([]);
+        }
+    }, [client?.id, loadGroups]);
+    
+    // Handle adding client to group
+    const handleAddToGroup = async () => {
+        if (!client?.id || !selectedGroupId) {
+            alert('Please select a group');
+            return;
+        }
+        
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                alert('Please log in to assign groups');
+                return;
+            }
+            
+            const response = await fetch(`/api/clients/${client.id}/groups`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include',
+                body: JSON.stringify({ groupId: selectedGroupId, role: 'member' })
+            });
+            
+            if (response.ok) {
+                setShowGroupSelector(false);
+                setSelectedGroupId('');
+                await loadGroups(); // Reload groups
+                alert('✅ Client added to group successfully');
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                alert(errorData?.error?.message || errorData?.error || 'Failed to add client to group');
+            }
+        } catch (error) {
+            console.error('Error adding client to group:', error);
+            alert('Failed to add client to group. Please try again.');
+        }
+    };
+    
+    // Handle removing client from group
+    const handleRemoveFromGroup = async (groupId) => {
+        if (!client?.id || !groupId) return;
+        
+        if (!confirm('Remove this client from the group?')) return;
+        
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                alert('Please log in to remove groups');
+                return;
+            }
+            
+            const response = await fetch(`/api/clients/${client.id}/groups/${groupId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
+            });
+            
+            if (response.ok) {
+                await loadGroups(); // Reload groups
+                alert('✅ Client removed from group successfully');
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                alert(errorData?.error?.message || errorData?.error || 'Failed to remove client from group');
+            }
+        } catch (error) {
+            console.error('Error removing client from group:', error);
+            alert('Failed to remove client from group. Please try again.');
+        }
+    };
+    
     // Load sites from database
     const loadSitesFromDatabase = async (clientId) => {
         try {
@@ -2394,6 +2538,144 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             );
                                         })}
                                     </div>
+                                </div>
+
+                                {/* Group Assignment */}
+                                <div className="mt-4">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="block text-sm font-medium text-gray-700">Group Assignment</label>
+                                        {client?.id && (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setShowGroupSelector(true);
+                                                    setSelectedGroupId('');
+                                                }}
+                                                className="px-3 py-1 text-xs rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                                            >
+                                                <i className="fas fa-plus mr-1"></i>
+                                                Assign Group
+                                            </button>
+                                        )}
+                                    </div>
+                                    
+                                    {!client?.id ? (
+                                        <p className="text-xs text-gray-500">Save the client first to assign groups</p>
+                                    ) : isLoadingGroups ? (
+                                        <p className="text-xs text-gray-500">
+                                            <i className="fas fa-spinner fa-spin mr-1"></i>
+                                            Loading groups...
+                                        </p>
+                                    ) : clientGroupMemberships.length > 0 ? (
+                                        <div className="flex flex-wrap gap-2">
+                                            {clientGroupMemberships.map((membership) => (
+                                                <div
+                                                    key={membership.id || membership.group?.id}
+                                                    className="px-3 py-1.5 text-xs rounded-full border bg-blue-50 text-blue-700 border-blue-200 flex items-center gap-2"
+                                                >
+                                                    <i className="fas fa-layer-group"></i>
+                                                    <span>{membership.group?.name || 'Unknown Group'}</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemoveFromGroup(membership.group?.id)}
+                                                        className="ml-1 text-blue-500 hover:text-blue-700"
+                                                        title="Remove from group"
+                                                    >
+                                                        <i className="fas fa-times"></i>
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs text-gray-500">No groups assigned</p>
+                                    )}
+                                    
+                                    {/* Group Selector Modal */}
+                                    {showGroupSelector && (
+                                        <div 
+                                            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]" 
+                                            onClick={() => {
+                                                setShowGroupSelector(false);
+                                                setSelectedGroupId('');
+                                            }}
+                                            style={{ zIndex: 9999 }}
+                                        >
+                                            <div 
+                                                className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl"
+                                                onClick={(e) => e.stopPropagation()}
+                                                style={{ zIndex: 10000 }}
+                                            >
+                                                <div className="flex justify-between items-center mb-4">
+                                                    <h3 className="text-lg font-semibold text-gray-900">
+                                                        Assign to Group
+                                                    </h3>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setShowGroupSelector(false);
+                                                            setSelectedGroupId('');
+                                                        }}
+                                                        className="text-gray-500 hover:text-gray-700 transition-colors"
+                                                    >
+                                                        <i className="fas fa-times text-xl"></i>
+                                                    </button>
+                                                </div>
+                                                
+                                                <div className="space-y-4">
+                                                    <div>
+                                                        <label className="block text-sm font-medium mb-2 text-gray-700">
+                                                            Select Group
+                                                        </label>
+                                                        {availableGroups.length === 0 ? (
+                                                            <p className="text-sm text-gray-500">
+                                                                No groups available. Create a group from the Groups tab first.
+                                                            </p>
+                                                        ) : (
+                                                            <select
+                                                                value={selectedGroupId}
+                                                                onChange={(e) => setSelectedGroupId(e.target.value)}
+                                                                className="w-full px-3 py-2 rounded-md border bg-white border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                            >
+                                                                <option value="">Select a group...</option>
+                                                                {availableGroups
+                                                                    .filter(g => !clientGroupMemberships.some(m => m.group?.id === g.id))
+                                                                    .map((group) => (
+                                                                        <option key={group.id} value={group.id}>
+                                                                            {group.name} {group.industry ? `(${group.industry})` : ''}
+                                                                        </option>
+                                                                    ))}
+                                                            </select>
+                                                        )}
+                                                    </div>
+                                                    
+                                                    <div className="flex gap-3 justify-end">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setShowGroupSelector(false);
+                                                                setSelectedGroupId('');
+                                                            }}
+                                                            className="px-4 py-2 rounded-md transition-colors bg-gray-200 hover:bg-gray-300 text-gray-900"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleAddToGroup}
+                                                            disabled={!selectedGroupId}
+                                                            className={`px-4 py-2 rounded-md transition-colors ${
+                                                                !selectedGroupId
+                                                                    ? 'bg-gray-400 cursor-not-allowed text-gray-200'
+                                                                    : 'bg-blue-500 hover:bg-blue-600 text-white'
+                                                            }`}
+                                                        >
+                                                            Assign
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Delete Client Section */}
