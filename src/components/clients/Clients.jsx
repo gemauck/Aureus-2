@@ -4321,6 +4321,20 @@ const Clients = React.memo(() => {
                 bValue = stageOrder[bValue] || 0;
             }
             
+            // Handle Company Group sorting
+            if (leadSortField === 'companyGroup') {
+                // Extract group names from groupMemberships
+                const getGroupNames = (lead) => {
+                    const memberships = Array.isArray(lead.groupMemberships) ? lead.groupMemberships : [];
+                    const groupNames = memberships
+                        .map(m => m?.group?.name || m?.name)
+                        .filter(Boolean);
+                    return groupNames.length > 0 ? groupNames.join(', ') : 'None';
+                };
+                aValue = getGroupNames(a);
+                bValue = getGroupNames(b);
+            }
+            
             // Convert to strings for comparison
             if (typeof aValue === 'string') aValue = aValue.toLowerCase();
             if (typeof bValue === 'string') bValue = bValue.toLowerCase();
@@ -5951,6 +5965,17 @@ const Clients = React.memo(() => {
                                     )}
                                 </div>
                             </th>
+                            <th 
+                                className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                onClick={() => handleLeadSort('companyGroup')}
+                            >
+                                <div className="flex items-center">
+                                    Company Group
+                                    {leadSortField === 'companyGroup' && (
+                                        <i className={`fas fa-sort-${leadSortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
+                                    )}
+                                </div>
+                            </th>
                             <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
                                 Tags
                             </th>
@@ -5962,7 +5987,7 @@ const Clients = React.memo(() => {
                     <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
                         {paginatedLeads.length === 0 ? (
                             <tr>
-                                <td colSpan="6" className={`px-6 py-12 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <td colSpan="7" className={`px-6 py-12 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                     <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
                                         <i className="fas fa-user-plus text-2xl text-gray-400"></i>
                                     </div>
@@ -6018,6 +6043,19 @@ const Clients = React.memo(() => {
                                         }`}>
                                             {lead.stage || 'Awareness'}
                                         </span>
+                                    </td>
+                                    <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
+                                        {(() => {
+                                            // Simple: just get group names from groupMemberships
+                                            const memberships = Array.isArray(lead.groupMemberships) ? lead.groupMemberships : [];
+                                            const groupNames = memberships
+                                                .map(m => m?.group?.name || m?.name)
+                                                .filter(Boolean);
+                                            
+                                            return groupNames.length > 0 
+                                                ? <span>{groupNames.join(', ')}</span>
+                                                : <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>None</span>;
+                                        })()}
                                     </td>
                                     <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
                                         {lead.externalAgent?.name || '—'}

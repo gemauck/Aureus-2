@@ -167,7 +167,27 @@ async function handler(req, res) {
                     userId: true
                   }
                 }
-              } : {})
+              } : {}),
+              // Include group memberships (same as clients)
+              parentGroup: {
+                select: {
+                  id: true,
+                  name: true,
+                  type: true
+                }
+              },
+              groupMemberships: {
+                include: {
+                  group: {
+                    select: {
+                      id: true,
+                      name: true,
+                      type: true,
+                      industry: true
+                    }
+                  }
+                }
+              }
             }
             
             leads = await prisma.client.findMany({ 
@@ -203,7 +223,27 @@ async function handler(req, res) {
                           userId: true
                         }
                       }
-                    } : {})
+                    } : {}),
+                    // Include group memberships
+                    parentGroup: {
+                      select: {
+                        id: true,
+                        name: true,
+                        type: true
+                      }
+                    },
+                    groupMemberships: {
+                      include: {
+                        group: {
+                          select: {
+                            id: true,
+                            name: true,
+                            type: true,
+                            industry: true
+                          }
+                        }
+                      }
+                    }
                   },
                   orderBy: { createdAt: 'desc' } 
                 })
@@ -427,6 +467,30 @@ async function handler(req, res) {
         // Parse JSON fields (services, contacts, etc.) and extract tags
         const parsedLeads = leads.map(lead => {
           const parsed = parseClientJsonFields(lead);
+          
+          // Preserve group data (parentGroup and groupMemberships are objects, not JSON strings)
+          // These come from Prisma relations and should be preserved as-is
+          const rawParentGroup = lead.parentGroup || parsed.parentGroup
+          const rawParentGroupId = lead.parentGroupId || parsed.parentGroupId
+          
+          if (rawParentGroup) {
+            parsed.parentGroup = rawParentGroup
+            parsed.parentGroupName = rawParentGroup.name
+          } else {
+            parsed.parentGroup = null
+            parsed.parentGroupName = null
+          }
+          if (rawParentGroupId) {
+            parsed.parentGroupId = rawParentGroupId
+          }
+          
+          const rawGroupMemberships = lead.groupMemberships || parsed.groupMemberships
+          if (rawGroupMemberships && Array.isArray(rawGroupMemberships)) {
+            parsed.groupMemberships = rawGroupMemberships
+          } else {
+            parsed.groupMemberships = []
+          }
+          
           // Check if current user has starred this lead
           // starredBy will always be an array (empty if no matches) due to Prisma relation behavior
           const starredByArray = Array.isArray(lead.starredBy) ? lead.starredBy : []
