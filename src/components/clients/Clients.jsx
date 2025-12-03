@@ -3038,12 +3038,31 @@ const Clients = React.memo(() => {
                 console.log('📦 Fetched', apiClients.length, 'clients from API for groupMemberships restoration');
                 
                 // Create a map of API clients by ID for fast lookup
+                // CRITICAL: Also check rawApiClientsRef from main API handler - it may have groups that this call doesn't
                 const apiClientsMap = new Map();
                 apiClients.forEach(client => {
                     if (client && client.id) {
                         apiClientsMap.set(client.id, client);
                     }
                 });
+                
+                // Merge with rawApiClientsRef if available (main API handler may have groups)
+                if (rawApiClientsRef.current && Array.isArray(rawApiClientsRef.current)) {
+                    rawApiClientsRef.current.forEach(client => {
+                        if (client && client.id) {
+                            const existing = apiClientsMap.get(client.id);
+                            // If rawApiClientsRef has groupMemberships and the API call doesn't, use rawApiClientsRef
+                            if (existing && client.groupMemberships && Array.isArray(client.groupMemberships) && client.groupMemberships.length > 0) {
+                                if (!existing.groupMemberships || !Array.isArray(existing.groupMemberships) || existing.groupMemberships.length === 0) {
+                                    apiClientsMap.set(client.id, { ...existing, groupMemberships: [...client.groupMemberships] });
+                                }
+                            } else if (!existing && client.groupMemberships && Array.isArray(client.groupMemberships) && client.groupMemberships.length > 0) {
+                                // Client exists in rawApiClientsRef but not in API call - use rawApiClientsRef
+                                apiClientsMap.set(client.id, client);
+                            }
+                        }
+                    });
+                }
                 
                 // Find all clients that need groupMemberships updated
                 const clientsToUpdate = unprocessedClients.filter(client => {
