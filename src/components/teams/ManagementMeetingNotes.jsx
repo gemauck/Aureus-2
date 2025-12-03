@@ -1330,8 +1330,23 @@ const ManagementMeetingNotes = () => {
                     throw createError;
                 });
                 console.log('📦 createMonthlyNotes response:', response);
-                const newNotes = response?.data?.monthlyNotes || response?.monthlyNotes || response?.data;
-                if (newNotes) {
+                // Extract monthlyNotes from various possible response structures
+                let newNotes = null;
+                if (response?.data?.monthlyNotes) {
+                    newNotes = response.data.monthlyNotes;
+                } else if (response?.monthlyNotes) {
+                    newNotes = response.monthlyNotes;
+                } else if (response?.data) {
+                    // Check if data itself is the monthlyNotes object (has monthKey property)
+                    if (response.data.monthKey || response.data.id) {
+                        newNotes = response.data;
+                    } else if (Array.isArray(response.data) && response.data.length > 0 && response.data[0]?.monthKey) {
+                        // Handle case where data is an array of monthlyNotes
+                        newNotes = response.data[0];
+                    }
+                }
+                
+                if (newNotes && (newNotes.id || newNotes.monthKey)) {
                     console.log('✅ Successfully got notes (new or existing):', newNotes.id, newNotes.monthKey);
                     setCurrentMonthlyNotes(newNotes);
                     setMonthlyNotesList(prev => {
@@ -1352,6 +1367,10 @@ const ManagementMeetingNotes = () => {
                     setSelectedWeek(null);
                     setNewMonthKey('');
                     return newNotes;
+                } else if (newNotes) {
+                    // newNotes exists but doesn't have id/monthKey - might be incomplete data
+                    console.warn('⚠️ Got notes object but missing id/monthKey. Attempting to load via monthKey:', monthKey);
+                    // Fall through to manual load below
                 } else {
                     console.warn('⚠️ createMonthlyNotes returned but no notes found in response. Response structure:', {
                         hasData: !!response?.data,
@@ -1722,11 +1741,45 @@ const ManagementMeetingNotes = () => {
                             return null;
                         }
                     } else {
-                        console.log('✅ Month created successfully:', createdMonth.id, createdMonth.monthKey);
+                        console.log('✅ Month created successfully:', createdMonth?.id, createdMonth?.monthKey);
                         targetMonth = createdMonth;
-                        // Ensure targetMonth has all necessary properties
-                        if (!targetMonth.id && createdMonth.id) {
-                            targetMonth = { ...targetMonth, id: createdMonth.id };
+                        
+                        // Validate that createdMonth has required properties
+                        if (!targetMonth?.id || !targetMonth?.monthKey) {
+                            console.warn('⚠️ Created month missing id or monthKey. Refreshing from server...', {
+                                hasId: !!targetMonth?.id,
+                                hasMonthKey: !!targetMonth?.monthKey,
+                                monthKey: weekDetails.monthKey
+                            });
+                            // Try to load the month from server to get complete data
+                            try {
+                                const monthResponse = await window.DatabaseAPI.getMeetingNotes(weekDetails.monthKey);
+                                const refreshedMonth = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes || null;
+                                if (refreshedMonth && (refreshedMonth.id || refreshedMonth.monthKey)) {
+                                    console.log('✅ Refreshed month data after creation:', refreshedMonth.id, refreshedMonth.monthKey);
+                                    targetMonth = refreshedMonth;
+                                    setCurrentMonthlyNotes(refreshedMonth);
+                                    setMonthlyNotesList(prev => {
+                                        const list = Array.isArray(prev) ? [...prev] : [];
+                                        const existingIndex = list.findIndex(note => {
+                                            if (!note) return false;
+                                            return (note.id && refreshedMonth.id && note.id === refreshedMonth.id) ||
+                                                   (note.monthKey && refreshedMonth.monthKey && note.monthKey === refreshedMonth.monthKey);
+                                        });
+                                        if (existingIndex >= 0) {
+                                            list[existingIndex] = refreshedMonth;
+                                            return list;
+                                        }
+                                        list.push(refreshedMonth);
+                                        return list;
+                                    });
+                                    setSelectedMonth(refreshedMonth.monthKey);
+                                } else {
+                                    console.error('❌ Could not refresh month data. monthKey:', weekDetails.monthKey);
+                                }
+                            } catch (refreshError) {
+                                console.error('❌ Error refreshing month data after creation:', refreshError);
+                            }
                         }
                     }
                 } catch (error) {
@@ -1764,31 +1817,51 @@ const ManagementMeetingNotes = () => {
             }
 
         if (!targetMonth?.weeklyNotes) {
-            console.log('🔄 Refreshing month data to get weeklyNotes. Current targetMonth.id:', targetMonth?.id);
+            console.log('🔄 Refreshing month data to get weeklyNotes. Current targetMonth.id:', targetMonth?.id, 'monthKey:', targetMonth?.monthKey || weekDetails.monthKey);
             try {
-                const monthResponse = await window.DatabaseAPI.getMeetingNotes(targetMonth.monthKey || weekDetails.monthKey);
-                const refreshedMonth = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes || null;
-                if (refreshedMonth) {
-                    console.log('✅ Refreshed month data. New id:', refreshedMonth.id, 'Has weeklyNotes:', !!refreshedMonth.weeklyNotes);
-                    targetMonth = refreshedMonth;
-                    setCurrentMonthlyNotes(refreshedMonth);
-                    setMonthlyNotesList(prev => {
-                        const list = Array.isArray(prev) ? [...prev] : [];
-                        const existingIndex = list.findIndex(note => {
-                            if (!note) return false;
-                            return (note.id && refreshedMonth.id && note.id === refreshedMonth.id) ||
-                                   (note.monthKey && refreshedMonth.monthKey && note.monthKey === refreshedMonth.monthKey);
-                        });
-                        if (existingIndex >= 0) {
-                            list[existingIndex] = refreshedMonth;
-                            return list;
-                        }
-                        list.push(refreshedMonth);
-                        return list;
-                    });
-                    setSelectedMonth(refreshedMonth.monthKey);
+                const monthKeyToLoad = targetMonth?.monthKey || weekDetails.monthKey;
+                if (!monthKeyToLoad) {
+                    console.error('❌ Cannot refresh month - no monthKey available');
                 } else {
-                    console.warn('⚠️ Refreshed month response was null');
+                    const monthResponse = await window.DatabaseAPI.getMeetingNotes(monthKeyToLoad);
+                    // Try multiple response structures
+                    let refreshedMonth = null;
+                    if (monthResponse?.data?.monthlyNotes) {
+                        refreshedMonth = monthResponse.data.monthlyNotes;
+                    } else if (monthResponse?.monthlyNotes) {
+                        refreshedMonth = monthResponse.monthlyNotes;
+                    } else if (monthResponse?.data && (monthResponse.data.monthKey || monthResponse.data.id)) {
+                        refreshedMonth = monthResponse.data;
+                    }
+                    
+                    if (refreshedMonth && (refreshedMonth.id || refreshedMonth.monthKey)) {
+                        console.log('✅ Refreshed month data. New id:', refreshedMonth.id, 'monthKey:', refreshedMonth.monthKey, 'Has weeklyNotes:', !!refreshedMonth.weeklyNotes);
+                        targetMonth = refreshedMonth;
+                        setCurrentMonthlyNotes(refreshedMonth);
+                        setMonthlyNotesList(prev => {
+                            const list = Array.isArray(prev) ? [...prev] : [];
+                            const existingIndex = list.findIndex(note => {
+                                if (!note) return false;
+                                return (note.id && refreshedMonth.id && note.id === refreshedMonth.id) ||
+                                       (note.monthKey && refreshedMonth.monthKey && note.monthKey === refreshedMonth.monthKey);
+                            });
+                            if (existingIndex >= 0) {
+                                list[existingIndex] = refreshedMonth;
+                                return list;
+                            }
+                            list.push(refreshedMonth);
+                            return list;
+                        });
+                        setSelectedMonth(refreshedMonth.monthKey);
+                    } else {
+                        console.warn('⚠️ Refreshed month response was null or invalid. Response structure:', {
+                            hasData: !!monthResponse?.data,
+                            hasMonthlyNotes: !!monthResponse?.monthlyNotes,
+                            dataKeys: monthResponse?.data ? Object.keys(monthResponse.data) : [],
+                            topLevelKeys: monthResponse ? Object.keys(monthResponse) : [],
+                            monthKey: monthKeyToLoad
+                        });
+                    }
                 }
             } catch (monthLoadError) {
                 console.error('❌ Error refreshing monthly notes before creating week:', monthLoadError);
@@ -1800,12 +1873,43 @@ const ManagementMeetingNotes = () => {
             console.error('❌ targetMonth still missing id after all attempts. targetMonth:', {
                 monthKey: targetMonth?.monthKey,
                 hasId: !!targetMonth?.id,
-                id: targetMonth?.id
+                id: targetMonth?.id,
+                weekDetailsMonthKey: weekDetails?.monthKey
             });
-            if (typeof alert === 'function') {
-                alert('Unable to get monthly notes ID. Please try refreshing the page.');
+            
+            // Last attempt: try to load by monthKey if we have one
+            const finalMonthKey = targetMonth?.monthKey || weekDetails?.monthKey;
+            if (finalMonthKey) {
+                try {
+                    console.log('🔄 Final attempt: Loading month by monthKey:', finalMonthKey);
+                    const finalResponse = await window.DatabaseAPI.getMeetingNotes(finalMonthKey);
+                    const finalMonth = finalResponse?.data?.monthlyNotes || finalResponse?.monthlyNotes || null;
+                    if (finalMonth && (finalMonth.id || finalMonth.monthKey)) {
+                        console.log('✅ Final load successful:', finalMonth.id, finalMonth.monthKey);
+                        targetMonth = finalMonth;
+                        setCurrentMonthlyNotes(finalMonth);
+                        setSelectedMonth(finalMonth.monthKey);
+                    } else {
+                        console.error('❌ Final load also failed - month not found in database');
+                        if (typeof alert === 'function') {
+                            alert(`Unable to load monthly notes for ${finalMonthKey}. The month may not exist in the database.`);
+                        }
+                        return null;
+                    }
+                } catch (finalError) {
+                    console.error('❌ Final load attempt failed:', finalError);
+                    if (typeof alert === 'function') {
+                        alert('Unable to get monthly notes ID. Please try refreshing the page.');
+                    }
+                    return null;
+                }
+            } else {
+                console.error('❌ No monthKey available for final load attempt');
+                if (typeof alert === 'function') {
+                    alert('Unable to get monthly notes ID. Please try refreshing the page.');
+                }
+                return null;
             }
-            return null;
         }
 
         if (!targetMonth) {

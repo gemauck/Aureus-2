@@ -2047,15 +2047,35 @@ const DatabaseAPI = {
                 console.warn('⚠️ Monthly meeting notes already exist. Returning existing notes instead of throwing.');
                 try {
                     const existing = await this.getMeetingNotes(monthKey);
-                    if (existing?.data || existing?.monthlyNotes) {
-                        // Mark as duplicate so caller knows it's an existing record
-                        if (existing.data) {
-                            existing.data.duplicate = true;
-                        }
-                        console.log('✅ Successfully loaded existing monthly notes for:', monthKey);
-                        return existing;
+                    // Normalize the response structure to ensure consistent format
+                    let monthlyNotes = null;
+                    if (existing?.data?.monthlyNotes) {
+                        monthlyNotes = existing.data.monthlyNotes;
+                    } else if (existing?.monthlyNotes) {
+                        monthlyNotes = existing.monthlyNotes;
+                    } else if (existing?.data && (existing.data.monthKey || existing.data.id)) {
+                        // data itself is the monthlyNotes object
+                        monthlyNotes = existing.data;
+                    }
+                    
+                    if (monthlyNotes && (monthlyNotes.id || monthlyNotes.monthKey)) {
+                        // Return in consistent format matching what a successful create would return
+                        const normalizedResponse = {
+                            data: {
+                                monthlyNotes: monthlyNotes,
+                                duplicate: true
+                            },
+                            monthlyNotes: monthlyNotes
+                        };
+                        console.log('✅ Successfully loaded existing monthly notes for:', monthKey, 'id:', monthlyNotes.id, 'monthKey:', monthlyNotes.monthKey);
+                        return normalizedResponse;
                     } else {
-                        console.warn('⚠️ getMeetingNotes returned but no data found for:', monthKey);
+                        console.warn('⚠️ getMeetingNotes returned but monthlyNotes structure invalid for:', monthKey, {
+                            hasData: !!existing?.data,
+                            hasMonthlyNotes: !!existing?.monthlyNotes,
+                            dataKeys: existing?.data ? Object.keys(existing.data) : [],
+                            existing: existing
+                        });
                         // Still return the response even if structure is unexpected
                         return existing;
                     }
