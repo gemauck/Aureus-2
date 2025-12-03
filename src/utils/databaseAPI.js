@@ -2049,13 +2049,42 @@ const DatabaseAPI = {
                     const existing = await this.getMeetingNotes(monthKey);
                     // Normalize the response structure to ensure consistent format
                     let monthlyNotes = null;
+                    
+                    // Try multiple extraction paths
                     if (existing?.data?.monthlyNotes) {
                         monthlyNotes = existing.data.monthlyNotes;
                     } else if (existing?.monthlyNotes) {
                         monthlyNotes = existing.monthlyNotes;
-                    } else if (existing?.data && (existing.data.monthKey || existing.data.id)) {
-                        // data itself is the monthlyNotes object
-                        monthlyNotes = existing.data;
+                    } else if (existing?.data) {
+                        // Check if data itself is the monthlyNotes object
+                        if ((existing.data.monthKey || existing.data.id) && !Array.isArray(existing.data) && typeof existing.data === 'object') {
+                            monthlyNotes = existing.data;
+                        } else if (typeof existing.data === 'object' && !Array.isArray(existing.data)) {
+                            // Deep search within data object
+                            const dataKeys = Object.keys(existing.data);
+                            for (const key of dataKeys) {
+                                const value = existing.data[key];
+                                if (value && typeof value === 'object' && (value.monthKey || value.id) && !Array.isArray(value)) {
+                                    monthlyNotes = value;
+                                    console.log('✅ Found monthlyNotes in getMeetingNotes response at data key:', key);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Also check top-level
+                    if (!monthlyNotes && existing) {
+                        const topKeys = Object.keys(existing);
+                        for (const key of topKeys) {
+                            if (key === 'data') continue;
+                            const value = existing[key];
+                            if (value && typeof value === 'object' && (value.monthKey || value.id) && !Array.isArray(value)) {
+                                monthlyNotes = value;
+                                console.log('✅ Found monthlyNotes in getMeetingNotes response at top-level key:', key);
+                                break;
+                            }
+                        }
                     }
                     
                     if (monthlyNotes && (monthlyNotes.id || monthlyNotes.monthKey)) {
@@ -2074,6 +2103,8 @@ const DatabaseAPI = {
                             hasData: !!existing?.data,
                             hasMonthlyNotes: !!existing?.monthlyNotes,
                             dataKeys: existing?.data ? Object.keys(existing.data) : [],
+                            dataKeysValues: existing?.data ? Object.keys(existing.data).map(k => ({ key: k, hasMonthKey: !!(existing.data[k]?.monthKey), hasId: !!(existing.data[k]?.id) })) : [],
+                            topLevelKeys: existing ? Object.keys(existing) : [],
                             existing: existing
                         });
                         // Still return the response even if structure is unexpected
