@@ -618,12 +618,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             } else {
                 const errorText = await response.text().catch(() => 'Unknown error');
                 console.error('❌ Failed to load job cards:', response.status, errorText);
-                setError(`Failed to load job cards (${response.status}). Please try again.`);
                 setJobCards([]);
             }
         } catch (error) {
             console.error('Error loading job cards:', error);
-            setError('Failed to load job cards. Please try again.');
             setJobCards([]);
         } finally {
             setLoadingJobCards(false);
