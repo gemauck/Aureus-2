@@ -4828,8 +4828,22 @@ const Clients = React.memo(() => {
                                     </td>
                                     <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
                                         {(() => {
-                                            // SIMPLE: Does this client have a group? If yes, show it. If no, show "None"
+                                            // Collect all group names from both parentGroup and groupMemberships
                                             const groupNames = [];
+                                            
+                                            // Check parentGroup first (primary parent)
+                                            if (client.parentGroup) {
+                                                const parentName = typeof client.parentGroup === 'object' && client.parentGroup !== null
+                                                    ? client.parentGroup.name
+                                                    : (typeof client.parentGroup === 'string' ? client.parentGroup : null);
+                                                if (parentName && !groupNames.includes(parentName)) {
+                                                    groupNames.push(parentName);
+                                                }
+                                            }
+                                            // Also check parentGroupName if parentGroup object is not available
+                                            if (client.parentGroupName && !groupNames.includes(client.parentGroupName)) {
+                                                groupNames.push(client.parentGroupName);
+                                            }
                                             
                                             // Check groupMemberships - handle all possible data structures
                                             let memberships = client.groupMemberships;
@@ -4848,26 +4862,26 @@ const Clients = React.memo(() => {
                                                 memberships = [];
                                             }
                                             
-                                            // Extract group names
-                                                memberships.forEach(membership => {
-                                                    if (membership && typeof membership === 'object') {
+                                            // Extract group names from memberships
+                                            memberships.forEach(membership => {
+                                                if (membership && typeof membership === 'object') {
                                                     // Check for nested group object (from API: { group: { name: "Exxaro" } })
-                                                        if (membership.group) {
-                                                            const groupName = typeof membership.group === 'object' && membership.group !== null
-                                                                ? membership.group.name
-                                                                : (typeof membership.group === 'string' ? membership.group : null);
-                                                            if (groupName && !groupNames.includes(groupName)) {
-                                                                groupNames.push(groupName);
-                                                            }
-                                                        }
-                                                    // Fallback: check if membership itself has a name property
-                                                        if (!groupNames.length && membership.name && !groupNames.includes(membership.name)) {
-                                                            groupNames.push(membership.name);
+                                                    if (membership.group) {
+                                                        const groupName = typeof membership.group === 'object' && membership.group !== null
+                                                            ? membership.group.name
+                                                            : (typeof membership.group === 'string' ? membership.group : null);
+                                                        if (groupName && !groupNames.includes(groupName)) {
+                                                            groupNames.push(groupName);
                                                         }
                                                     }
-                                                });
+                                                    // Also check if membership itself has a name property
+                                                    if (membership.name && !groupNames.includes(membership.name)) {
+                                                        groupNames.push(membership.name);
+                                                    }
+                                                }
+                                            });
                                             
-                                            // SIMPLE: Show group name or "None"
+                                            // Show group name(s) or "None"
                                             return groupNames.length > 0 
                                                 ? <span>{groupNames.join(', ')}</span>
                                                 : <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>None</span>;
