@@ -4502,35 +4502,48 @@ const Clients = React.memo(() => {
                 // Response structure: { data: { groups: [...] } } or { groups: [...] }
                 const groupsList = data?.data?.groups || data?.groups || [];
                 console.log(`✅ Loaded ${groupsList.length} groups from API:`, groupsList.map(g => ({ id: g.id, name: g.name, type: g.type, members: (g._count?.childCompanies || 0) + (g._count?.groupChildren || 0) })));
-                if (groupsList.length > 0) {
-                    setGroups(groupsList);
-                } else {
-                    console.warn('⚠️ API returned empty groups array');
-                    setGroups([]);
-                }
+                setGroups(groupsList); // Always set groups, even if empty
+                console.log(`✅ Groups state updated: ${groupsList.length} groups`);
+                groupsLoadedRef.current = true;
             } else {
                 const errorText = await response.text().catch(() => 'Unknown error');
                 console.error('❌ Failed to load groups:', response.status, response.statusText, errorText);
                 // Set empty array on error to show empty state
                 setGroups([]);
+                groupsLoadedRef.current = true; // Mark as loaded even on error to prevent retry loops
             }
         } catch (error) {
             console.error('❌ Error loading groups:', error);
             // Set empty array on error to show empty state
             setGroups([]);
+            groupsLoadedRef.current = true; // Mark as loaded even on error to prevent retry loops
         } finally {
             isLoadingGroupsRef.current = false;
             setIsLoadingGroups(false);
         }
     }, []); // Empty deps - function is stable and uses refs for state
 
-    // Load groups when Groups tab is active
+    // Load groups when Groups tab is active OR on initial mount to show count
     // Use ref to track last loaded viewMode to prevent infinite loops
     const lastLoadedViewModeRef = useRef(null);
+    const groupsLoadedRef = useRef(false);
+    
+    // Load groups on mount to show count in tab
+    useEffect(() => {
+        if (!groupsLoadedRef.current && groups.length === 0) {
+            groupsLoadedRef.current = true;
+            loadGroups(true);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // Run once on mount
+    
+    // Load groups when Groups tab is active (if not already loaded)
     useEffect(() => {
         if (viewMode === 'groups' && lastLoadedViewModeRef.current !== 'groups') {
             lastLoadedViewModeRef.current = 'groups';
-            loadGroups(true);
+            if (!groupsLoadedRef.current || groups.length === 0) {
+                loadGroups(true);
+            }
         } else if (viewMode !== 'groups') {
             lastLoadedViewModeRef.current = null;
         }
