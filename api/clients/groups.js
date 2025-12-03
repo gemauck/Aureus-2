@@ -11,6 +11,7 @@ async function handler(req, res) {
   try {
     const urlPath = req.url.split('?')[0].split('#')[0].replace(/^\/api\//, '')
     const pathSegments = urlPath.split('/').filter(Boolean)
+    console.log('🔍 Groups API handler - URL:', req.url, 'pathSegments:', pathSegments, 'method:', req.method)
     
     // GET /api/clients/groups - List all company groups
     if (req.method === 'GET' && pathSegments.length === 2 && pathSegments[0] === 'clients' && pathSegments[1] === 'groups') {
@@ -472,8 +473,11 @@ async function handler(req, res) {
     }
     
     // GET /api/clients/groups/:groupId/members - Get all clients and leads in a group
-    if (req.method === 'GET' && pathSegments.length === 4 && pathSegments[0] === 'clients' && pathSegments[1] === 'groups' && pathSegments[3] === 'members') {
+    // URL: /api/clients/groups/:groupId/members
+    // pathSegments after removing /api/: ['clients', 'groups', groupId, 'members']
+    if (req.method === 'GET' && pathSegments.length === 4 && pathSegments[0] === 'clients' && pathSegments[1] === 'groups' && pathSegments[pathSegments.length - 1] === 'members') {
       const groupId = pathSegments[2]
+      console.log('🔍 GET /api/clients/groups/:groupId/members - groupId:', groupId, 'pathSegments:', pathSegments)
       
       try {
         // Verify group exists
@@ -487,7 +491,8 @@ async function handler(req, res) {
         }
         
         // Get all clients and leads that are members of this group
-        // This includes both direct groupChildren (via ClientCompanyGroup) and childCompanies (via parentGroupId)
+        // This includes direct groupChildren (via ClientCompanyGroup)
+        // Note: parentGroupId relationship doesn't exist in database, so we only use ClientCompanyGroup
         const groupMembers = await prisma.clientCompanyGroup.findMany({
           where: { groupId },
           include: {
@@ -512,54 +517,13 @@ async function handler(req, res) {
           }
         })
         
-        // Also get child companies (via parentGroupId relationship)
-        const childCompanies = await prisma.client.findMany({
-          where: { parentGroupId: groupId },
-          select: {
-            id: true,
-            name: true,
-            type: true,
-            industry: true,
-            status: true,
-            revenue: true,
-            value: true,
-            website: true,
-            createdAt: true
-          },
-          orderBy: {
-            name: 'asc'
-          }
-        })
-        
-        // Combine and deduplicate (a client might be in both)
-        const allMembers = []
-        const memberIds = new Set()
-        
-        // Add group members
-        groupMembers.forEach(m => {
-          if (!memberIds.has(m.client.id)) {
-            memberIds.add(m.client.id)
-            allMembers.push({
-              ...m.client,
-              relationship: 'Group Member',
-              membershipId: m.id,
-              role: m.role
-            })
-          }
-        })
-        
-        // Add child companies
-        childCompanies.forEach(c => {
-          if (!memberIds.has(c.id)) {
-            memberIds.add(c.id)
-            allMembers.push({
-              ...c,
-              relationship: 'Child Company',
-              membershipId: null,
-              role: null
-            })
-          }
-        })
+        // Combine group members
+        const allMembers = groupMembers.map(m => ({
+          ...m.client,
+          relationship: 'Group Member',
+          membershipId: m.id,
+          role: m.role
+        }))
         
         // Separate clients and leads
         const clients = allMembers.filter(m => m.type === 'client' || !m.type)
