@@ -218,12 +218,6 @@ async function handler(req, res) {
                       }
                     } : {}),
                     // Include group memberships
-                      select: {
-                        id: true,
-                        name: true,
-                        type: true
-                      }
-                    },
                     groupMemberships: {
                       include: {
                         group: {
