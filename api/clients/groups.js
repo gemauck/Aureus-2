@@ -56,11 +56,10 @@ async function handler(req, res) {
     // GET /api/clients/groups - List all company groups
     if (req.method === 'GET' && pathSegments.length === 2 && pathSegments[0] === 'clients' && pathSegments[1] === 'groups') {
       try {
-        // Get all clients that can be used as groups:
+        // Get only actual groups:
         // 1. Clients with type='group' (named groups like "Exxaro Group")
-        // 2. Clients that have child companies (parent companies)
-        // 3. Clients that are used as groups (have groupChildren)
-        // 4. All regular clients (can be assigned to groups)
+        // 2. Clients that have child companies (parent companies acting as groups)
+        // 3. Clients that are used as groups (have groupChildren - other clients assigned to them)
         const groups = await prisma.client.findMany({
           where: {
             OR: [
@@ -76,9 +75,6 @@ async function handler(req, res) {
                 groupChildren: {
                   some: {}
                 }
-              },
-              {
-                type: 'client' // Regular clients can also be groups
               }
             ]
           },
@@ -101,9 +97,10 @@ async function handler(req, res) {
           }
         })
         
+        console.log(`✅ Fetched ${groups.length} groups from database`)
         return ok(res, { groups })
       } catch (error) {
-        console.error('Error fetching groups:', error)
+        console.error('❌ Error fetching groups:', error)
         return serverError(res, 'Failed to fetch groups')
       }
     }

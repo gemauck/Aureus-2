@@ -4468,16 +4468,21 @@ const Clients = React.memo(() => {
     // Calculate total grouped clients count (before filters)
     // Load groups from API
     const loadGroups = useCallback(async (forceRefresh = false) => {
-        if (isLoadingGroups) return;
+        if (isLoadingGroups) {
+            console.log('⏸️ loadGroups already in progress, skipping...');
+            return;
+        }
         
         try {
             setIsLoadingGroups(true);
             const token = window.storage?.getToken?.();
             if (!token) {
-                console.warn('No token available for fetching groups');
+                console.warn('⚠️ No token available for fetching groups');
+                setIsLoadingGroups(false);
                 return;
             }
             
+            console.log('🔄 Fetching groups from API...');
             const response = await fetch('/api/clients/groups', {
                 method: 'GET',
                 headers: {
@@ -4487,15 +4492,30 @@ const Clients = React.memo(() => {
                 credentials: 'include'
             });
             
+            console.log('📡 Groups API response status:', response.status);
+            
             if (response.ok) {
                 const data = await response.json();
+                console.log('📦 Groups API response data:', data);
+                // Response structure: { data: { groups: [...] } } or { groups: [...] }
                 const groupsList = data?.data?.groups || data?.groups || [];
-                setGroups(groupsList);
+                console.log(`✅ Loaded ${groupsList.length} groups from API:`, groupsList.map(g => ({ id: g.id, name: g.name, type: g.type, members: (g._count?.childCompanies || 0) + (g._count?.groupChildren || 0) })));
+                if (groupsList.length > 0) {
+                    setGroups(groupsList);
+                } else {
+                    console.warn('⚠️ API returned empty groups array');
+                    setGroups([]);
+                }
             } else {
-                console.error('Failed to load groups:', response.statusText);
+                const errorText = await response.text().catch(() => 'Unknown error');
+                console.error('❌ Failed to load groups:', response.status, response.statusText, errorText);
+                // Set empty array on error to show empty state
+                setGroups([]);
             }
         } catch (error) {
-            console.error('Error loading groups:', error);
+            console.error('❌ Error loading groups:', error);
+            // Set empty array on error to show empty state
+            setGroups([]);
         } finally {
             setIsLoadingGroups(false);
         }
