@@ -3002,8 +3002,10 @@ const Clients = React.memo(() => {
                 let restoredCount = 0;
                 setClients(prevClients => {
                     const updated = prevClients.map(client => {
-                        if (client && client.id && groupsMap[client.id]) {
-                            const storedGroups = groupsMap[client.id];
+                        // Ensure we check with string ID to match localStorage keys
+                        const clientIdKey = String(client.id);
+                        if (client && client.id && groupsMap[clientIdKey]) {
+                            const storedGroups = groupsMap[clientIdKey];
                             if (Array.isArray(storedGroups) && storedGroups.length > 0) {
                                 // Check if client already has these groups (avoid unnecessary update)
                                 const currentGroups = client.groupMemberships || [];
