@@ -3249,7 +3249,7 @@ const ManagementMeetingNotes = () => {
             </div>
 
             {/* Month Selection Info */}
-            {selectedMonth && currentMonthlyNotes && (
+            {selectedMonth && (
                 <div className={`rounded-xl border p-4 ${isDark ? 'bg-gradient-to-r from-blue-900/40 to-blue-800/30 border-blue-700/50' : 'bg-gradient-to-r from-blue-50 to-blue-100/50 border-blue-200 shadow-sm'}`}>
                     <div className="flex items-center justify-between flex-wrap gap-3">
                         <div>
@@ -3258,7 +3258,13 @@ const ManagementMeetingNotes = () => {
                                 {formatMonth(selectedMonth)}
                             </h3>
                             <p className={`text-xs ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
-                                {weeks.length} {weeks.length === 1 ? 'week' : 'weeks'} available
+                                {currentMonthlyNotes ? (
+                                    <>
+                                        {weeks.length} {weeks.length === 1 ? 'week' : 'weeks'} available
+                                    </>
+                                ) : (
+                                    <>No meeting notes for this month yet</>
+                                )}
                             </p>
                         </div>
                         <div className="flex items-center gap-2">
