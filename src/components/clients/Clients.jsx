@@ -1765,8 +1765,8 @@ const Clients = React.memo(() => {
                         
                         // CRITICAL: Check ref FIRST - if groups were restored by useEffect, ALWAYS preserve them
                         // This prevents API handler from overwriting groups even if API response is missing them
-                        if (restoredGroupMembershipsRef.current.has(client.id)) {
-                            const restoredGroups = restoredGroupMembershipsRef.current.get(client.id);
+                        if (restoredGroupMembershipsRef.current.has(String(client.id))) {
+                            const restoredGroups = restoredGroupMembershipsRef.current.get(String(client.id));
                             if (restoredGroups && Array.isArray(restoredGroups) && restoredGroups.length > 0) {
                                 finalGroupMemberships = [...restoredGroups];
                                 if (client.name && client.name.toLowerCase().includes('exxaro')) {
@@ -2978,7 +2978,8 @@ const Clients = React.memo(() => {
                 const groupsMap = JSON.parse(storedGroups);
                 Object.entries(groupsMap).forEach(([clientId, groups]) => {
                     if (groups && Array.isArray(groups) && groups.length > 0) {
-                        restoredGroupMembershipsRef.current.set(parseInt(clientId), groups);
+                        // Store as string (client IDs are strings, not numbers)
+                        restoredGroupMembershipsRef.current.set(String(clientId), groups);
                     }
                 });
                 console.log(`📥 Loaded ${Object.keys(groupsMap).length} restored groups from localStorage on mount`);
@@ -3014,8 +3015,8 @@ const Clients = React.memo(() => {
                                 
                                 if (!groupsMatch) {
                                     restoredCount++;
-                                    // Populate ref
-                                    restoredGroupMembershipsRef.current.set(client.id, [...storedGroups]);
+                                    // Populate ref (ensure ID is string for consistency)
+                                    restoredGroupMembershipsRef.current.set(String(client.id), [...storedGroups]);
                                     return {
                                         ...client,
                                         groupMemberships: [...storedGroups]
@@ -3157,10 +3158,10 @@ const Clients = React.memo(() => {
                             apiClient.groupMemberships && 
                             Array.isArray(apiClient.groupMemberships) && 
                             apiClient.groupMemberships.length > 0) {
-                            // Store in ref so API handler can preserve them even if prevClient is stale
-                            restoredGroupMembershipsRef.current.set(client.id, [...apiClient.groupMemberships]);
+                            // Store in ref so API handler can preserve them even if prevClient is stale (ensure ID is string)
+                            restoredGroupMembershipsRef.current.set(String(client.id), [...apiClient.groupMemberships]);
                             // Also store in Map for localStorage persistence
-                            groupsToPersist.set(client.id, [...apiClient.groupMemberships]);
+                            groupsToPersist.set(String(client.id), [...apiClient.groupMemberships]);
                             if (client.name && client.name.toLowerCase().includes('exxaro')) {
                                 console.log('🔒 Stored in REF:', client.name, 'Count:', apiClient.groupMemberships.length);
                             }
