@@ -277,28 +277,60 @@ async function handler(req, res) {
           } catch (fallbackError) {
             // Last resort: query without any relations
             console.error('❌ Fallback query with relations failed, trying minimal query:', fallbackError.message)
-            rawClients = await prisma.client.findMany({
-              include: {
-                groupMemberships: {
-                  include: {
-                    group: {
-                      select: {
-                        id: true,
-                        name: true,
-                        type: true,
-                        industry: true
+            // Check if error is about missing column (like parentGroupId)
+            const isMissingColumnError = fallbackError.code === 'P2022' || 
+                                       fallbackError.message?.includes('does not exist') ||
+                                       fallbackError.message?.includes('parentGroupId')
+            if (isMissingColumnError) {
+              // Use raw SQL query to avoid Prisma schema validation issues with missing columns
+              console.warn('⚠️ Column missing error detected, using raw SQL query to bypass Prisma validation')
+              try {
+                const allRecordsRaw = await prisma.$queryRaw`
+                  SELECT id, name, type, industry, status, stage, revenue, value, probability, 
+                         "lastContact", address, website, notes, contacts, "followUps", 
+                         "projectIds", comments, sites, contracts, "activityLog", 
+                         "billingTerms", "ownerId", "externalAgentId", "createdAt", "updatedAt",
+                         proposals, thumbnail, services, "rssSubscribed"
+                  FROM "Client"
+                  WHERE (type = 'client' OR type IS NULL)
+                  AND type != 'lead'
+                  ORDER BY "createdAt" DESC
+                `
+                rawClients = allRecordsRaw.map(record => {
+                  const parsed = parseClientJsonFields(record)
+                  return {
+                    ...parsed,
+                    groupMemberships: []
+                  }
+                })
+              } catch (rawSqlError) {
+                console.error('❌ Raw SQL query also failed:', rawSqlError.message)
+                throw rawSqlError
+              }
+            } else {
+              rawClients = await prisma.client.findMany({
+                include: {
+                  groupMemberships: {
+                    include: {
+                      group: {
+                        select: {
+                          id: true,
+                          name: true,
+                          type: true,
+                          industry: true
+                        }
                       }
                     }
                   }
+                },
+                orderBy: {
+                  createdAt: 'desc'
                 }
-              },
-              orderBy: {
-                createdAt: 'desc'
-              }
-            })
-            // Filter manually and add empty tags
-            rawClients = rawClients
-              .filter(c => !c.type || c.type === 'client' || c.type === null)
+              })
+              // Filter manually and add empty tags
+              rawClients = rawClients
+                .filter(c => !c.type || c.type === 'client' || c.type === null)
+            }
           }
         }
         

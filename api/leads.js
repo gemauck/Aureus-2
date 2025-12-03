@@ -464,9 +464,37 @@ async function handler(req, res) {
               } else {
                 // Last resort: query without any relations
                 console.warn('⚠️ Fallback query with relations failed, trying minimal query:', fallbackRelationError.message)
-                const allRecords = await prisma.client.findMany({
-                  orderBy: { createdAt: 'desc' }
-                })
+                // Check if error is about missing column (like parentGroupId)
+                const isMissingColumnError = fallbackRelationError.code === 'P2022' || 
+                                           fallbackRelationError.message?.includes('does not exist')
+                if (isMissingColumnError) {
+                  // Use raw SQL query to avoid Prisma schema validation issues
+                  console.warn('⚠️ Column missing error detected, using raw SQL query')
+                  const allRecordsRaw = await prisma.$queryRaw`
+                    SELECT id, name, type, industry, status, stage, revenue, value, probability, 
+                           "lastContact", address, website, notes, contacts, "followUps", 
+                           "projectIds", comments, sites, contracts, "activityLog", 
+                           "billingTerms", "ownerId", "externalAgentId", "createdAt", "updatedAt",
+                           proposals, thumbnail, services, "rssSubscribed"
+                    FROM "Client"
+                    ORDER BY "createdAt" DESC
+                  `
+                  const allRecords = allRecordsRaw.map(record => {
+                    const parsed = parseClientJsonFields(record)
+                    return parsed
+                  })
+                  leads = allRecords
+                    .filter(record => {
+                      if (record.type !== null && record.type !== undefined && record.type !== '') {
+                        return record.type === 'lead'
+                      }
+                      return false
+                    })
+                    .map(l => ({ ...l, tags: [], externalAgent: null, groupMemberships: [] }))
+                } else {
+                  const allRecords = await prisma.client.findMany({
+                    orderBy: { createdAt: 'desc' }
+                  })
                 // Filter to only leads and add empty tags
                 leads = allRecords
                   .filter(record => {
