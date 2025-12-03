@@ -2972,13 +2972,6 @@ const Clients = React.memo(() => {
         }
     }, [clients]);
     
-    // Load groups when Groups tab is active
-    useEffect(() => {
-        if (viewMode === 'groups') {
-            loadGroups(true);
-        }
-    }, [viewMode, loadGroups]);
-
     // CRITICAL: Load restored groups from localStorage on mount to survive navigation
     useEffect(() => {
         try {
@@ -4507,6 +4500,13 @@ const Clients = React.memo(() => {
             setIsLoadingGroups(false);
         }
     }, [isLoadingGroups]);
+
+    // Load groups when Groups tab is active
+    useEffect(() => {
+        if (viewMode === 'groups') {
+            loadGroups(true);
+        }
+    }, [viewMode, loadGroups]);
 
     // Filter groups (actual group entities, not clients with groups)
     const filteredGroups = useMemo(() => {
