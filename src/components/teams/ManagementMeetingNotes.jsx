@@ -1346,22 +1346,44 @@ const ManagementMeetingNotes = () => {
                 }
                 
                 console.log('📦 createMonthlyNotes response:', response);
+                console.log('🔍 Detailed response structure:', {
+                    hasResponse: !!response,
+                    hasData: !!response?.data,
+                    dataType: typeof response?.data,
+                    dataKeys: response?.data ? Object.keys(response.data) : [],
+                    hasMonthlyNotesInData: !!response?.data?.monthlyNotes,
+                    hasMonthlyNotesTopLevel: !!response?.monthlyNotes,
+                    dataValue: response?.data,
+                    fullResponse: JSON.stringify(response, null, 2).substring(0, 500)
+                });
+                
                 // Extract monthlyNotes from various possible response structures
                 let newNotes = null;
+                
+                // Try response.data.monthlyNotes first (most common structure)
                 if (response?.data?.monthlyNotes) {
                     newNotes = response.data.monthlyNotes;
-                } else if (response?.monthlyNotes) {
+                    console.log('✅ Found notes in response.data.monthlyNotes');
+                } 
+                // Try response.monthlyNotes (top-level)
+                else if (response?.monthlyNotes) {
                     newNotes = response.monthlyNotes;
-                } else if (response?.data) {
-                    // Check if response.data itself is the monthlyNotes object
+                    console.log('✅ Found notes in response.monthlyNotes');
+                } 
+                // Check if response.data itself is the monthlyNotes object
+                else if (response?.data) {
                     if (response.data.monthKey || response.data.id) {
                         newNotes = response.data;
+                        console.log('✅ Found notes as response.data itself');
                     } else if (response.data.data?.monthlyNotes) {
                         newNotes = response.data.data.monthlyNotes;
+                        console.log('✅ Found notes in response.data.data.monthlyNotes');
                     }
-                } else if (response && (response.monthKey || response.id)) {
-                    // Response itself might be the monthlyNotes object
+                } 
+                // Check if response itself is the monthlyNotes object
+                else if (response && (response.monthKey || response.id)) {
                     newNotes = response;
+                    console.log('✅ Found notes as response itself');
                 }
                 
                 if (newNotes) {
