@@ -1565,19 +1565,6 @@ const LeadDetailModal = ({
         gpsCoordinates: ''
     });
     
-    // Company Groups state (for leads)
-    const [allGroups, setAllGroups] = useState([]);
-    const [loadingGroups, setLoadingGroups] = useState(false);
-    const [groupMemberships, setGroupMemberships] = useState([]);
-    const [showAddGroupModal, setShowAddGroupModal] = useState(false);
-    const [selectedGroupId, setSelectedGroupId] = useState('');
-    // Group management state
-    const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
-    const [showDeleteGroupModal, setShowDeleteGroupModal] = useState(false);
-    const [groupToDelete, setGroupToDelete] = useState(null);
-    const [standaloneGroupName, setStandaloneGroupName] = useState('');
-    const [standaloneGroupIndustry, setStandaloneGroupIndustry] = useState('Other');
-    const isLoadingGroupsRef = useRef(false);
     
     const [newContact, setNewContact] = useState({
         name: '',
@@ -2412,345 +2399,6 @@ const LeadDetailModal = ({
         }
     };
 
-    // Company Groups: Load groups data function (for leads)
-    const loadGroupsData = useCallback(async () => {
-        if (!lead?.id) {
-            return;
-        }
-
-        if (isLoadingGroupsRef.current) {
-            return;
-        }
-
-        try {
-            isLoadingGroupsRef.current = true;
-            setLoadingGroups(true);
-
-            const token = window.storage?.getToken?.();
-            if (!token) {
-                setLoadingGroups(false);
-                return;
-            }
-
-            // Fetch lead's groups (leads use the same API as clients)
-            const groupsResponse = await fetch(`/api/clients/${lead.id}/groups`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (groupsResponse.ok) {
-                const groupsData = await groupsResponse.json();
-                const data = groupsData?.data || groupsData;
-                setGroupMemberships(data.groupMemberships || []);
-            }
-
-            // Fetch all available groups (including named groups with type='group' and regular clients)
-            const groupsListResponse = await fetch('/api/clients/groups', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (groupsListResponse.ok) {
-                const groupsListData = await groupsListResponse.json();
-                const groups = groupsListData?.data?.groups || groupsListData?.groups || [];
-                // Filter out current lead and map to expected format
-                const availableGroups = groups
-                    .filter(g => g.id !== lead.id)
-                    .map(g => ({ id: g.id, name: g.name, type: g.type || 'client', industry: g.industry || 'Other' }));
-                setAllGroups(availableGroups);
-            } else {
-                // Fallback to clients endpoint if groups endpoint fails
-                const clientsResponse = await fetch('/api/clients?limit=1000', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-
-                if (clientsResponse.ok) {
-                    const clientsData = await clientsResponse.json();
-                    const clients = clientsData?.data?.clients || clientsData?.clients || [];
-                    const potentialGroups = clients
-                        .filter(c => c.id !== lead.id && (c.type === 'client' || c.type === 'group'))
-                        .map(c => ({ id: c.id, name: c.name, type: c.type || 'client', industry: c.industry || 'Other' }));
-                    setAllGroups(potentialGroups);
-                }
-            }
-        } catch (error) {
-            console.error('Failed to load groups:', error);
-        } finally {
-            setLoadingGroups(false);
-            isLoadingGroupsRef.current = false;
-        }
-    }, [lead?.id]);
-
-    // Company Groups: Load groups data when groups tab is active
-    useEffect(() => {
-        if (activeTab !== 'groups' || !lead?.id) {
-            return;
-        }
-
-        loadGroupsData();
-    }, [activeTab, lead?.id, loadGroupsData]);
-
-    // Company Groups: Handle adding lead to group
-    const handleAddToGroup = async () => {
-        if (!lead?.id || !selectedGroupId) {
-            console.warn('Cannot add group: missing lead ID or selected group ID');
-            return;
-        }
-
-        try {
-            const token = window.storage?.getToken?.();
-            if (!token) {
-                alert('Please log in to add groups');
-                return;
-            }
-
-            const requestBody = { groupId: selectedGroupId, role: 'member' };
-
-            console.log('Adding lead to group:', { 
-                leadId: lead.id, 
-                ...requestBody 
-            });
-            
-            const response = await fetch(`/api/clients/${lead.id}/groups`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify(requestBody)
-            });
-
-            const responseData = await response.json().catch(() => ({}));
-            console.log('Add group response:', { status: response.status, statusText: response.statusText, data: responseData });
-
-            if (response.ok) {
-                console.log('✅ Group added successfully:', responseData);
-                
-                // Close modal first
-                setShowAddGroupModal(false);
-                setSelectedGroupId('');
-                
-                // Wait a moment for database to commit, then reload all groups data
-                await new Promise(resolve => setTimeout(resolve, 500));
-                
-                // Force reload by resetting loading flag
-                isLoadingGroupsRef.current = false;
-                
-                // Reload groups data
-                try {
-                    setLoadingGroups(true);
-                    const groupsResponse = await fetch(`/api/clients/${lead.id}/groups`, {
-                        headers: {
-                            'Authorization': `Bearer ${token}`
-                        }
-                    });
-
-                    if (groupsResponse.ok) {
-                        const groupsData = await groupsResponse.json();
-                        const gData = groupsData?.data || groupsData;
-                        console.log('Reloaded groups data:', gData);
-                        setGroupMemberships(gData.groupMemberships || []);
-                    } else {
-                        console.error('Failed to reload groups:', groupsResponse.status, groupsResponse.statusText);
-                    }
-                    
-                    // Also reload available groups list to update the dropdown
-                    const groupsListResponse = await fetch('/api/clients/groups', {
-                        headers: {
-                            'Authorization': `Bearer ${token}`
-                        }
-                    });
-                    
-                    if (groupsListResponse.ok) {
-                        const groupsListData = await groupsListResponse.json();
-                        const groups = groupsListData?.data?.groups || groupsListData?.groups || [];
-                        const availableGroups = groups
-                            .filter(g => g.id !== lead.id)
-                            .map(g => ({ id: g.id, name: g.name, type: g.type || 'client', industry: g.industry || 'Other' }));
-                        setAllGroups(availableGroups);
-                    }
-                } catch (reloadError) {
-                    console.error('Error reloading groups:', reloadError);
-                } finally {
-                    setLoadingGroups(false);
-                    isLoadingGroupsRef.current = false;
-                }
-            } else {
-                const errorMessage = responseData.message || responseData.error || 'Failed to add lead to group. Please try again.';
-                console.error('Failed to add group:', { status: response.status, message: errorMessage, data: responseData });
-                alert(`❌ ${errorMessage}`);
-            }
-        } catch (error) {
-            console.error('Failed to add lead to group:', error);
-            alert('Failed to add lead to group. Please try again.');
-        }
-    };
-
-    // Company Groups: Handle removing lead from group
-    const handleRemoveFromGroup = async (groupId) => {
-        if (!lead?.id || !groupId) return;
-
-        if (!confirm('Remove this lead from the group?')) return;
-
-        try {
-            const token = window.storage?.getToken?.();
-            if (!token) {
-                alert('Please log in to remove groups');
-                return;
-            }
-
-            const response = await fetch(`/api/clients/${lead.id}/groups/${groupId}`, {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (response.ok) {
-                // Reload groups data
-                isLoadingGroupsRef.current = false;
-                const groupsResponse = await fetch(`/api/clients/${lead.id}/groups`, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                });
-
-                if (groupsResponse.ok) {
-                    const groupsData = await groupsResponse.json();
-                    const gData = groupsData?.data || groupsData;
-                    setGroupMemberships(gData.groupMemberships || []);
-                }
-                alert('✅ Successfully removed from group');
-            } else {
-                alert('Failed to remove lead from group. Please try again.');
-            }
-        } catch (error) {
-            console.error('Failed to remove lead from group:', error);
-            alert('Failed to remove lead from group. Please try again.');
-        }
-    };
-
-    // Create a standalone group
-    const handleCreateStandaloneGroup = async () => {
-        if (!standaloneGroupName?.trim()) {
-            alert('Please enter a group name');
-            return;
-        }
-
-        try {
-            const token = window.storage?.getToken?.();
-            if (!token) {
-                alert('Please log in to create groups');
-                return;
-            }
-
-            const requestBody = {
-                name: standaloneGroupName.trim(),
-                industry: standaloneGroupIndustry || 'Other'
-            };
-            
-            console.log('Creating group with data:', requestBody);
-            
-            const response = await fetch('/api/clients/groups', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify(requestBody)
-            });
-
-            const responseData = await response.json().catch(() => ({}));
-            const data = responseData?.data || responseData;
-
-            console.log('Create group response:', { status: response.status, statusText: response.statusText, responseData, data });
-
-            if (response.ok) {
-                alert('✅ Group created successfully');
-                setShowCreateGroupModal(false);
-                setStandaloneGroupName('');
-                setStandaloneGroupIndustry('Other');
-                // Reload all groups
-                await loadGroupsData();
-            } else {
-                const errorMessage = responseData?.error?.message || 
-                                   responseData?.error || 
-                                   data?.error?.message || 
-                                   data?.error || 
-                                   data?.message || 
-                                   `Failed to create group (${response.status}). Please try again.`;
-                console.error('Failed to create group:', { status: response.status, error: errorMessage, responseData });
-                alert(errorMessage);
-            }
-        } catch (error) {
-            console.error('Failed to create group:', error);
-            alert('Failed to create group. Please try again.');
-        }
-    };
-
-    // Delete a group
-    const handleDeleteGroup = async () => {
-        if (!groupToDelete) return;
-
-        const memberCount = (groupToDelete._count?.childCompanies || 0) + (groupToDelete._count?.groupChildren || 0);
-        if (memberCount > 0 && !confirm(`This group has ${memberCount} member(s). Are you sure you want to delete it?`)) {
-            return;
-        }
-
-        try {
-            const token = window.storage?.getToken?.();
-            if (!token) {
-                alert('Please log in to delete groups');
-                return;
-            }
-
-            const response = await fetch(`/api/clients/groups/${groupToDelete.id}`, {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (response.ok) {
-                alert('✅ Group deleted successfully');
-                setShowDeleteGroupModal(false);
-                setGroupToDelete(null);
-                // Reload all groups
-                await loadGroupsData();
-            } else {
-                const errorData = await response.json().catch(() => ({}));
-                const errorMessage = errorData?.error?.message || errorData?.error || errorData?.message || 'Failed to delete group. Please try again.';
-                const errorDetails = errorData?.error?.details;
-                
-                // If we have linked clients, display them in a formatted message
-                if (errorDetails?.linkedClients) {
-                    const { primaryParent = [], groupMembers = [] } = errorDetails.linkedClients;
-                    const allLinked = [...primaryParent, ...groupMembers];
-                    
-                    if (allLinked.length > 0) {
-                        const clientList = allLinked.map(client => 
-                            `  • ${client.name} (${client.relationship})`
-                        ).join('\n');
-                        
-                        const fullMessage = `${errorMessage}\n\nLinked Clients:\n${clientList}\n\nPlease remove or reassign these clients before deleting the group.`;
-                        alert(fullMessage);
-                    } else {
-                        alert(errorMessage);
-                    }
-                } else {
-                    alert(errorMessage);
-                }
-            }
-        } catch (error) {
-            console.error('Failed to delete group:', error);
-            alert('Failed to delete group. Please try again.');
-        }
-    };
-
     const handleAddFollowUp = () => {
         if (!newFollowUp.date || !newFollowUp.description) {
             alert('Date and description are required');
@@ -3208,7 +2856,7 @@ const LeadDetailModal = ({
                 {/* Tabs */}
                 <div className="border-b border-gray-200 px-3 sm:px-6">
                     <div className="flex flex-wrap gap-2 sm:gap-6">
-                        {['overview', 'contacts', 'sites', 'groups', 'calendar', ...(isAdmin ? ['proposals'] : []), 'activity', 'notes'].map(tab => (
+                        {['overview', 'contacts', 'sites', 'calendar', ...(isAdmin ? ['proposals'] : []), 'activity', 'notes'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => handleTabChange(tab)}
@@ -3223,7 +2871,6 @@ const LeadDetailModal = ({
                                     tab === 'overview' ? 'info-circle' :
                                     tab === 'contacts' ? 'users' :
                                     tab === 'sites' ? 'map-marker-alt' :
-                                    tab === 'groups' ? 'layer-group' :
                                     tab === 'calendar' ? 'calendar-alt' :
                                     tab === 'proposals' ? 'file-contract' :
                                     tab === 'activity' ? 'history' :
@@ -4465,16 +4112,111 @@ const LeadDetailModal = ({
                             </div>
                         )}
 
-                        {/* Company Groups Tab */}
-                        {activeTab === 'groups' && (
-                            <div className="space-y-6">
+                        {/* Calendar/Follow-ups Tab */}
+                        {activeTab === 'calendar' && (
+                            <div className="space-y-4">
                                 <div className="flex justify-between items-center">
-                                    <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                        Company Groups
-                                    </h3>
+                                    <h3 className="text-lg font-semibold text-gray-900">Follow-ups & Meetings</h3>
                                 </div>
 
-                                {loadingGroups ? (
+                                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                                    <h4 className="font-medium text-gray-900 mb-3 text-sm">Schedule Follow-up</h4>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">Date *</label>
+                                            <input
+                                                type="date"
+                                                value={newFollowUp.date}
+                                                onChange={(e) => setNewFollowUp({...newFollowUp, date: e.target.value})}
+                                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">Time</label>
+                                            <input
+                                                type="time"
+                                                value={newFollowUp.time}
+                                                onChange={(e) => setNewFollowUp({...newFollowUp, time: e.target.value})}
+                                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">Type</label>
+                                            <select
+                                                value={newFollowUp.type}
+                                                onChange={(e) => setNewFollowUp({...newFollowUp, type: e.target.value})}
+                                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                            >
+                                                <option value="Call">Call</option>
+                                                <option value="Meeting">Meeting</option>
+                                                <option value="Email">Email</option>
+                                                <option value="Visit">Visit</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">Description *</label>
+                                            <input
+                                                type="text"
+                                                value={newFollowUp.description}
+                                                onChange={(e) => setNewFollowUp({...newFollowUp, description: e.target.value})}
+                                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                placeholder="Enter follow-up description"
+                                            />
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={handleAddFollowUp}
+                                        className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+                                    >
+                                        Add Follow-up
+                                    </button>
+                                </div>
+
+                                <div className="bg-white rounded-lg border border-gray-200">
+                                    <h4 className="font-medium text-gray-900 mb-3 p-4 border-b border-gray-200">Upcoming Follow-ups</h4>
+                                    <div className="divide-y divide-gray-200">
+                                        {formData.followUps && formData.followUps.length > 0 ? (
+                                            formData.followUps
+                                                .filter(f => !f.completed)
+                                                .sort((a, b) => {
+                                                    const dateA = new Date(`${a.date}T${a.time || '00:00'}`);
+                                                    const dateB = new Date(`${b.date}T${b.time || '00:00'}`);
+                                                    return dateA - dateB;
+                                                })
+                                                .map((followUp) => (
+                                                    <div key={followUp.id} className="p-4 hover:bg-gray-50">
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="flex-1">
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <span className="font-medium text-gray-900">{followUp.type}</span>
+                                                                    <span className="text-xs text-gray-500">
+                                                                        {new Date(`${followUp.date}T${followUp.time || '00:00'}`).toLocaleString()}
+                                                                    </span>
+                                                                </div>
+                                                                <p className="text-sm text-gray-600">{followUp.description}</p>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => {
+                                                                    const updatedFollowUps = formData.followUps.map(f =>
+                                                                        f.id === followUp.id ? { ...f, completed: true } : f
+                                                                    );
+                                                                    setFormData({ ...formData, followUps: updatedFollowUps });
+                                                                    onSave({ ...formData, followUps: updatedFollowUps }, true);
+                                                                }}
+                                                                className="ml-4 px-3 py-1 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700"
+                                                            >
+                                                                Mark Complete
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))
+                                        ) : (
+                                            <p className="p-4 text-sm text-gray-500">No upcoming follow-ups</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                                     <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                         <i className="fas fa-spinner fa-spin text-2xl mb-2"></i>
                                         <p>Loading groups...</p>
