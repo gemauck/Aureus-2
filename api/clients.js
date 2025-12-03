@@ -102,13 +102,6 @@ async function handler(req, res) {
                     }
                   }
                 } : {}),
-                parentGroup: {
-                  select: {
-                    id: true,
-                    name: true,
-                    type: true
-                  }
-                },
                 groupMemberships: {
                   include: {
                     group: {
@@ -135,13 +128,6 @@ async function handler(req, res) {
                   type: 'client'
                 },
                 include: {
-                  parentGroup: {
-                    select: {
-                      id: true,
-                      name: true,
-                      type: true
-                    }
-                  },
                   groupMemberships: {
                     include: {
                       group: {
@@ -173,8 +159,7 @@ async function handler(req, res) {
               // Manually set empty groupMemberships for all clients
               rawClients = rawClients.map(client => ({
                 ...client,
-                groupMemberships: [],
-                parentGroup: null
+                groupMemberships: []
               }))
             }
           }
@@ -207,13 +192,6 @@ async function handler(req, res) {
                     }
                   }
                 } : {}),
-                parentGroup: {
-                  select: {
-                    id: true,
-                    name: true,
-                    type: true
-                  }
-                },
                 groupMemberships: {
                   include: {
                     group: {
@@ -323,20 +301,8 @@ async function handler(req, res) {
           // Check if current user has starred this client
           parsed.isStarred = validUserId && client.starredBy && Array.isArray(client.starredBy) && client.starredBy.length > 0
           
-          // Preserve group data (parentGroup and groupMemberships are objects, not JSON strings)
+          // Preserve group data (groupMemberships are objects, not JSON strings)
           // These come from Prisma relations and should be preserved as-is
-          // IMPORTANT: Check both client (raw) and parsed, as parseClientJsonFields might preserve it
-          const rawParentGroup = client.parentGroup || parsed.parentGroup
-          const rawParentGroupId = client.parentGroupId || parsed.parentGroupId
-          
-          if (rawParentGroup) {
-            parsed.parentGroup = rawParentGroup
-            parsed.parentGroupId = rawParentGroupId || rawParentGroup.id
-            parsed.parentGroupName = rawParentGroup.name
-          } else if (rawParentGroupId) {
-            parsed.parentGroupId = rawParentGroupId
-          }
-          
           const rawGroupMemberships = client.groupMemberships || parsed.groupMemberships
           if (rawGroupMemberships && Array.isArray(rawGroupMemberships)) {
             parsed.groupMemberships = rawGroupMemberships
@@ -344,48 +310,7 @@ async function handler(req, res) {
             parsed.groupMemberships = []
           }
           
-          // Debug logging for Exxaro clients
-          if (parsed.name && parsed.name.toLowerCase().includes('exxaro')) {
-            console.log('🔍 API: Exxaro client group data:', {
-              id: parsed.id,
-              name: parsed.name,
-              parentGroup: parsed.parentGroup,
-              parentGroupId: parsed.parentGroupId,
-              parentGroupName: parsed.parentGroupName,
-              groupMemberships: parsed.groupMemberships,
-              rawParentGroup: client.parentGroup,
-              rawParentGroupId: client.parentGroupId,
-              rawGroupMemberships: client.groupMemberships,
-              rawClientKeys: Object.keys(client)
-            })
-          }
-          
-          // Debug logging for AccuFarm
-          if (parsed.name && parsed.name.toLowerCase().includes('accufarm')) {
-            console.log('🔍 API: AccuFarm client group data:', {
-              id: parsed.id,
-              name: parsed.name,
-              parentGroup: parsed.parentGroup,
-              parentGroupId: parsed.parentGroupId,
-              parentGroupName: parsed.parentGroupName,
-              groupMemberships: parsed.groupMemberships,
-              groupMembershipsType: typeof parsed.groupMemberships,
-              groupMembershipsLength: Array.isArray(parsed.groupMemberships) ? parsed.groupMemberships.length : 'not array',
-              firstMembership: Array.isArray(parsed.groupMemberships) && parsed.groupMemberships.length > 0 ? parsed.groupMemberships[0] : null,
-              rawParentGroup: client.parentGroup,
-              rawParentGroupId: client.parentGroupId,
-              rawGroupMemberships: client.groupMemberships,
-              rawClientKeys: Object.keys(client)
-            })
-          }
-          
-          // CRITICAL: Ensure group data is always present (even if null/undefined, set to null for JSON serialization)
-          // JSON.stringify drops undefined values, so we need to explicitly set them
-          if (!parsed.parentGroup && !parsed.parentGroupId) {
-            parsed.parentGroup = null
-            parsed.parentGroupId = null
-            parsed.parentGroupName = null
-          }
+          // CRITICAL: Ensure group data is always present (even if null/undefined, set to empty array for JSON serialization)
           if (!parsed.groupMemberships) {
             parsed.groupMemberships = []
           }
@@ -416,33 +341,6 @@ async function handler(req, res) {
         res.setHeader('Pragma', 'no-cache')
         res.setHeader('Expires', '0')
         
-        // Debug: Check if Exxaro clients have group data in final response
-        const exxaroInResponse = parsedClients.filter(c => c.name && c.name.toLowerCase().includes('exxaro'))
-        if (exxaroInResponse.length > 0) {
-          console.log('🔍 Final API response - Exxaro clients:', exxaroInResponse.map(c => ({
-            name: c.name,
-            parentGroup: c.parentGroup,
-            parentGroupName: c.parentGroupName,
-            parentGroupId: c.parentGroupId,
-            groupMemberships: c.groupMemberships
-          })))
-        }
-        
-        // Debug: Check AccuFarm in final response
-        const accufarmInResponse = parsedClients.find(c => c.name && c.name.toLowerCase().includes('accufarm'))
-        if (accufarmInResponse) {
-          console.log('🔍 Final API response - AccuFarm:', {
-            name: accufarmInResponse.name,
-            id: accufarmInResponse.id,
-            parentGroup: accufarmInResponse.parentGroup,
-            parentGroupName: accufarmInResponse.parentGroupName,
-            parentGroupId: accufarmInResponse.parentGroupId,
-            groupMemberships: accufarmInResponse.groupMemberships,
-            groupMembershipsType: typeof accufarmInResponse.groupMemberships,
-            groupMembershipsLength: Array.isArray(accufarmInResponse.groupMemberships) ? accufarmInResponse.groupMemberships.length : 'not array',
-            firstMembership: Array.isArray(accufarmInResponse.groupMemberships) && accufarmInResponse.groupMemberships.length > 0 ? accufarmInResponse.groupMemberships[0] : null
-          })
-        }
         
         return ok(res, { clients: parsedClients })
       } catch (dbError) {
@@ -550,8 +448,7 @@ async function handler(req, res) {
           taxExempt: false,
           notes: ''
         }),
-        ...(ownerId ? { ownerId } : {}),
-        ...(body.parentGroupId ? { parentGroupId: body.parentGroupId } : {})
+        ...(ownerId ? { ownerId } : {})
       }
 
       
@@ -615,8 +512,7 @@ async function handler(req, res) {
             activityLog: Array.isArray(clientData.activityLog) ? JSON.stringify(clientData.activityLog) : (typeof clientData.activityLog === 'string' ? clientData.activityLog : '[]'),
             services: Array.isArray(clientData.services) ? JSON.stringify(clientData.services) : (typeof clientData.services === 'string' ? clientData.services : '[]'),
             billingTerms: typeof clientData.billingTerms === 'object' ? JSON.stringify(clientData.billingTerms) : (typeof clientData.billingTerms === 'string' ? clientData.billingTerms : '{}'),
-            ...(ownerId ? { ownerId } : {}),
-            ...(clientData.parentGroupId ? { parentGroupId: clientData.parentGroupId } : {})
+            ...(ownerId ? { ownerId } : {})
           }
         })
         
@@ -755,44 +651,13 @@ async function handler(req, res) {
           contracts: typeof body.contracts === 'string' ? body.contracts : JSON.stringify(Array.isArray(body.contracts) ? body.contracts : []),
           activityLog: typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : []),
           services: servicesValue, // Always include services
-          billingTerms: typeof body.billingTerms === 'string' ? body.billingTerms : JSON.stringify(typeof body.billingTerms === 'object' && body.billingTerms !== null ? body.billingTerms : {}),
-          ...(body.parentGroupId !== undefined ? { parentGroupId: body.parentGroupId || null } : {})
+          billingTerms: typeof body.billingTerms === 'string' ? body.billingTerms : JSON.stringify(typeof body.billingTerms === 'object' && body.billingTerms !== null ? body.billingTerms : {})
         }
         Object.keys(updateData).forEach(key => {
           if (updateData[key] === undefined) {
             delete updateData[key]
           }
         })
-        
-        // Validate parentGroupId doesn't create circular reference
-        if (updateData.parentGroupId) {
-          try {
-            // Check if parentGroupId is a descendant of this client
-            let currentId = updateData.parentGroupId
-            const visited = new Set()
-            
-            while (currentId) {
-              if (currentId === id) {
-                return badRequest(res, 'Cannot set parent group to a descendant of this client (circular reference)')
-              }
-              if (visited.has(currentId)) {
-                return badRequest(res, 'Circular reference detected in parent group hierarchy')
-              }
-              visited.add(currentId)
-              
-              const parent = await prisma.client.findUnique({
-                where: { id: currentId },
-                select: { parentGroupId: true }
-              })
-              
-              if (!parent || !parent.parentGroupId) break
-              currentId = parent.parentGroupId
-            }
-          } catch (validationError) {
-            console.error('Error validating parentGroupId:', validationError)
-            // Continue with update if validation fails (non-blocking)
-          }
-        }
         
         try {
           const client = await prisma.client.update({ where: { id }, data: updateData })

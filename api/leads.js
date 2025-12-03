@@ -169,13 +169,6 @@ async function handler(req, res) {
                 }
               } : {}),
               // Include group memberships (same as clients)
-              parentGroup: {
-                select: {
-                  id: true,
-                  name: true,
-                  type: true
-                }
-              },
               groupMemberships: {
                 include: {
                   group: {
@@ -225,7 +218,6 @@ async function handler(req, res) {
                       }
                     } : {}),
                     // Include group memberships
-                    parentGroup: {
                       select: {
                         id: true,
                         name: true,
@@ -468,22 +460,8 @@ async function handler(req, res) {
         const parsedLeads = leads.map(lead => {
           const parsed = parseClientJsonFields(lead);
           
-          // Preserve group data (parentGroup and groupMemberships are objects, not JSON strings)
+          // Preserve group data (groupMemberships are objects, not JSON strings)
           // These come from Prisma relations and should be preserved as-is
-          const rawParentGroup = lead.parentGroup || parsed.parentGroup
-          const rawParentGroupId = lead.parentGroupId || parsed.parentGroupId
-          
-          if (rawParentGroup) {
-            parsed.parentGroup = rawParentGroup
-            parsed.parentGroupName = rawParentGroup.name
-          } else {
-            parsed.parentGroup = null
-            parsed.parentGroupName = null
-          }
-          if (rawParentGroupId) {
-            parsed.parentGroupId = rawParentGroupId
-          }
-          
           const rawGroupMemberships = lead.groupMemberships || parsed.groupMemberships
           if (rawGroupMemberships && Array.isArray(rawGroupMemberships)) {
             parsed.groupMemberships = rawGroupMemberships
