@@ -3037,29 +3037,29 @@ const Clients = React.memo(() => {
                 const apiClients = res?.data?.clients || res?.clients || [];
                 console.log('📦 Fetched', apiClients.length, 'clients from API for groupMemberships restoration');
                 
-                // CRITICAL: Use rawApiClientsRef as PRIMARY source - it has groups from main API call
-                // Only fall back to separate API call if rawApiClientsRef doesn't have the client
+                // CRITICAL: Use latestApiClientsRef as PRIMARY source - it has groups from main API call
+                // Only fall back to separate API call if latestApiClientsRef doesn't have the client
                 const apiClientsMap = new Map();
                 
-                // First, populate from rawApiClientsRef (highest priority - has groups from main API)
-                if (rawApiClientsRef.current && Array.isArray(rawApiClientsRef.current)) {
-                    rawApiClientsRef.current.forEach(client => {
+                // First, populate from latestApiClientsRef (highest priority - has groups from main API)
+                if (latestApiClientsRef.current && Array.isArray(latestApiClientsRef.current)) {
+                    latestApiClientsRef.current.forEach(client => {
                         if (client && client.id) {
                             apiClientsMap.set(client.id, client);
                         }
                     });
-                    console.log('📦 Loaded', apiClientsMap.size, 'clients from rawApiClientsRef (primary source)');
+                    console.log('📦 Loaded', apiClientsMap.size, 'clients from latestApiClientsRef (primary source)');
                 }
                 
-                // Then, merge in clients from separate API call (for clients not in rawApiClientsRef)
+                // Then, merge in clients from separate API call (for clients not in latestApiClientsRef)
                 apiClients.forEach(client => {
                     if (client && client.id) {
                         const existing = apiClientsMap.get(client.id);
                         if (!existing) {
-                            // Client not in rawApiClientsRef - add from API call
+                            // Client not in latestApiClientsRef - add from API call
                             apiClientsMap.set(client.id, client);
                         } else if (existing.groupMemberships && Array.isArray(existing.groupMemberships) && existing.groupMemberships.length > 0) {
-                            // Keep existing groups from rawApiClientsRef (don't overwrite)
+                            // Keep existing groups from latestApiClientsRef (don't overwrite)
                             // Just update other properties if needed
                             apiClientsMap.set(client.id, { ...client, groupMemberships: [...existing.groupMemberships] });
                         }
