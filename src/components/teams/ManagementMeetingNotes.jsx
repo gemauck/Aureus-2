@@ -1303,7 +1303,10 @@ const ManagementMeetingNotes = () => {
             try {
                 setLoading(true);
                 console.log('📝 Attempting to create monthly notes for:', monthKey);
-                const response = await window.DatabaseAPI.createMonthlyNotes(monthKey, '').catch(async (createError) => {
+                let response;
+                try {
+                    response = await window.DatabaseAPI.createMonthlyNotes(monthKey, '');
+                } catch (createError) {
                     // If createMonthlyNotes throws "already exist", try to load existing notes
                     const errorMessage = (createError?.message || '').toLowerCase();
                     console.log('⚠️ createMonthlyNotes error caught:', errorMessage, createError);
@@ -1316,19 +1319,32 @@ const ManagementMeetingNotes = () => {
                             if (duplicateNotes) {
                                 console.log('✅ Found existing notes:', duplicateNotes.id, duplicateNotes.monthKey);
                                 // Return the existing notes as if they were just created
-                                return { data: { monthlyNotes: duplicateNotes }, monthlyNotes: duplicateNotes };
+                                response = { data: { monthlyNotes: duplicateNotes }, monthlyNotes: duplicateNotes };
                             } else {
                                 console.warn('⚠️ getMeetingNotes returned but no monthlyNotes found');
+                                // Try to extract from alternative structure
+                                if (monthResponse?.data && (monthResponse.data.monthKey || monthResponse.data.id)) {
+                                    response = { data: { monthlyNotes: monthResponse.data }, monthlyNotes: monthResponse.data };
+                                } else {
+                                    throw new Error('Could not extract monthly notes from response');
+                                }
                             }
                         } catch (loadError) {
                             console.error('❌ Failed to load existing monthly notes after duplicate warning:', loadError);
-                            // Re-throw with more context
-                            throw new Error(`Could not load existing notes: ${loadError.message}`);
+                            // Don't re-throw - return null to prevent unhandled rejection
+                            return null;
                         }
+                    } else {
+                        // Re-throw if we couldn't handle it
+                        throw createError;
                     }
-                    // Re-throw if we couldn't handle it
-                    throw createError;
-                });
+                }
+                
+                if (!response) {
+                    console.warn('⚠️ createMonthlyNotes returned null or undefined response');
+                    return null;
+                }
+                
                 console.log('📦 createMonthlyNotes response:', response);
                 // Extract monthlyNotes from various possible response structures
                 let newNotes = null;
