@@ -1330,7 +1330,24 @@ const ManagementMeetingNotes = () => {
                     throw createError;
                 });
                 console.log('📦 createMonthlyNotes response:', response);
-                const newNotes = response?.data?.monthlyNotes || response?.monthlyNotes || response?.data;
+                // Extract monthlyNotes from various possible response structures
+                let newNotes = null;
+                if (response?.data?.monthlyNotes) {
+                    newNotes = response.data.monthlyNotes;
+                } else if (response?.monthlyNotes) {
+                    newNotes = response.monthlyNotes;
+                } else if (response?.data) {
+                    // Check if response.data itself is the monthlyNotes object
+                    if (response.data.monthKey || response.data.id) {
+                        newNotes = response.data;
+                    } else if (response.data.data?.monthlyNotes) {
+                        newNotes = response.data.data.monthlyNotes;
+                    }
+                } else if (response && (response.monthKey || response.id)) {
+                    // Response itself might be the monthlyNotes object
+                    newNotes = response;
+                }
+                
                 if (newNotes) {
                     console.log('✅ Successfully got notes (new or existing):', newNotes.id, newNotes.monthKey);
                     setCurrentMonthlyNotes(newNotes);
