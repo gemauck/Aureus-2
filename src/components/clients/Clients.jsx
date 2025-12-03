@@ -643,6 +643,8 @@ const Clients = React.memo(() => {
     const isNewPipelineAvailable = Boolean(PipelineComponent);
     const [clients, setClients] = useState([]);
     const [leads, setLeads] = useState([]);
+    const [groups, setGroups] = useState([]);
+    const [isLoadingGroups, setIsLoadingGroups] = useState(false);
     const clientsRef = useRef(clients); // Ref to track current clients for LiveDataSync
     const leadsRef = useRef(leads);
     const viewModeRef = useRef(viewMode); // Ref to track current viewMode for LiveDataSync
@@ -2970,6 +2972,13 @@ const Clients = React.memo(() => {
         }
     }, [clients]);
     
+    // Load groups when Groups tab is active
+    useEffect(() => {
+        if (viewMode === 'groups') {
+            loadGroups(true);
+        }
+    }, [viewMode, loadGroups]);
+
     // CRITICAL: Load restored groups from localStorage on mount to survive navigation
     useEffect(() => {
         try {
@@ -4464,79 +4473,81 @@ const Clients = React.memo(() => {
     }, []);
 
     // Calculate total grouped clients count (before filters)
-    const totalGroupedClientsCount = useMemo(() => {
-        return clients.filter(client => {
-            // Include clients with type='client' OR null/undefined (legacy clients without type field)
-            if (client.type !== 'client' && client.type !== null && client.type !== undefined) {
-                return false;
+    // Load groups from API
+    const loadGroups = useCallback(async (forceRefresh = false) => {
+        if (isLoadingGroups) return;
+        
+        try {
+            setIsLoadingGroups(true);
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                console.warn('No token available for fetching groups');
+                return;
             }
             
-            // Exclude records with status='Potential' (always a lead)
-            if (client.status === 'Potential') {
-                return false;
-            }
+            const response = await fetch('/api/clients/groups', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
+            });
             
-            return clientHasGroups(client);
-        }).length;
-    }, [clients, clientHasGroups]);
+            if (response.ok) {
+                const data = await response.json();
+                const groupsList = data?.data?.groups || data?.groups || [];
+                setGroups(groupsList);
+            } else {
+                console.error('Failed to load groups:', response.statusText);
+            }
+        } catch (error) {
+            console.error('Error loading groups:', error);
+        } finally {
+            setIsLoadingGroups(false);
+        }
+    }, [isLoadingGroups]);
 
-    // Filter grouped clients (clients that belong to groups)
+    // Filter groups (actual group entities, not clients with groups)
     const filteredGroups = useMemo(() => {
-        return clients.filter(client => {
-            // Include clients with type='client' OR null/undefined (legacy clients without type field)
-            if (client.type !== 'client' && client.type !== null && client.type !== undefined) {
-                return false; // Exclude leads or any other type value
-            }
-            
-            // Exclude records with status='Potential' (always a lead)
-            if (client.status === 'Potential') {
-                return false;
-            }
-            
-            // Only include clients that have groups
-            if (!clientHasGroups(client)) {
-                return false;
-            }
-            
-            // Apply same filters as clients view
+        return groups.filter(group => {
+            // Apply search filter
             const searchLower = searchTerm.toLowerCase();
-            const services = Array.isArray(client.services)
-                ? client.services
-                : (typeof client.services === 'string' ? (()=>{ try { return JSON.parse(client.services||'[]'); } catch { return []; } })() : []);
             const matchesSearch = searchTerm === '' || 
-                client.name.toLowerCase().includes(searchLower) ||
-                client.industry.toLowerCase().includes(searchLower) ||
-                client.address.toLowerCase().includes(searchLower) ||
-                client.website.toLowerCase().includes(searchLower) ||
-                client.notes.toLowerCase().includes(searchLower) ||
-                services.some(service => 
-                    service.toLowerCase().includes(searchLower)
-                ) ||
-                (client.contacts || []).some(contact => 
-                    contact.name.toLowerCase().includes(searchLower) ||
-                    contact.email.toLowerCase().includes(searchLower) ||
-                    contact.phone.includes(searchTerm)
-                ) ||
-                (client.sites || []).some(site => 
-                    site.name.toLowerCase().includes(searchLower) ||
-                    site.address.toLowerCase().includes(searchLower)
-                );
+                group.name.toLowerCase().includes(searchLower) ||
+                (group.industry || '').toLowerCase().includes(searchLower);
             
-            const matchesIndustry = filterIndustry === 'All Industries' || client.industry === filterIndustry;
-            const clientStatus = client.status ? (client.status.charAt(0).toUpperCase() + client.status.slice(1).toLowerCase()) : '';
-            const matchesStatus = filterStatus === 'All Status' || clientStatus === filterStatus;
-            const matchesServices = filterServices.length === 0 || 
-                services.some(service => filterServices.includes(service));
-            const matchesStarred = !showStarredOnly || resolveStarredState(client);
+            // Apply industry filter
+            const matchesIndustry = filterIndustry === 'All Industries' || group.industry === filterIndustry;
             
-            return matchesSearch && matchesIndustry && matchesStatus && matchesServices && matchesStarred;
+            return matchesSearch && matchesIndustry;
         });
-    }, [clients, searchTerm, filterIndustry, filterStatus, filterServices, showStarredOnly, clientHasGroups]);
+    }, [groups, searchTerm, filterIndustry]);
 
     // PERFORMANCE FIX: Memoize sorted groups
     const sortedGroups = useMemo(() => {
-        return sortClients(filteredGroups);
-    }, [filteredGroups, sortClients]);
+        // Sort groups by name (ascending by default)
+        const sorted = [...filteredGroups].sort((a, b) => {
+            if (sortField === 'name') {
+                const comparison = a.name.localeCompare(b.name);
+                return sortDirection === 'asc' ? comparison : -comparison;
+            }
+            if (sortField === 'industry') {
+                const aIndustry = a.industry || '';
+                const bIndustry = b.industry || '';
+                const comparison = aIndustry.localeCompare(bIndustry);
+                return sortDirection === 'asc' ? comparison : -comparison;
+            }
+            if (sortField === 'members') {
+                const aCount = (a._count?.childCompanies || 0) + (a._count?.groupChildren || 0);
+                const bCount = (b._count?.childCompanies || 0) + (b._count?.groupChildren || 0);
+                return sortDirection === 'asc' ? aCount - bCount : bCount - aCount;
+            }
+            // Default: sort by name
+            return a.name.localeCompare(b.name);
+        });
+        return sorted;
+    }, [filteredGroups, sortField, sortDirection]);
 
     // PERFORMANCE FIX: Memoize pagination calculations
     const paginationData = useMemo(() => {
@@ -5365,209 +5376,429 @@ const Clients = React.memo(() => {
         </div>
     );
 
-    const GroupsListView = () => (
-        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border flex flex-col h-full w-full`}>
-            <div className="flex-1 overflow-auto -mx-3 sm:mx-0 px-3 sm:px-0 w-full" style={{ WebkitOverflowScrolling: 'touch' }}>
-                <table className={`w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`} style={{ minWidth: '640px', width: '100%' }}>
-                    <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
-                        <tr>
-                            <th 
-                                className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
-                                onClick={() => handleSort('name')}
-                            >
-                                <div className="flex items-center">
-                                    Client
-                                    {sortField === 'name' && (
-                                        <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
-                                    )}
-                                </div>
-                            </th>
-                            <th 
-                                className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
-                                onClick={() => handleSort('companyGroup')}
-                            >
-                                <div className="flex items-center">
-                                Company Group
-                                    {sortField === 'companyGroup' && (
-                                        <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
-                                    )}
-                                </div>
-                            </th>
-                            <th 
-                                className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
-                                onClick={() => handleSort('industry')}
-                            >
-                                <div className="flex items-center">
-                                    Industry
-                                    {sortField === 'industry' && (
-                                        <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
-                                    )}
-                                </div>
-                            </th>
-                            <th 
-                                className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
-                                onClick={() => handleSort('services')}
-                            >
-                                <div className="flex items-center">
-                                Services
-                                    {sortField === 'services' && (
-                                        <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
-                                    )}
-                                </div>
-                            </th>
-                            <th 
-                                className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
-                                onClick={() => handleSort('status')}
-                            >
-                                <div className="flex items-center">
-                                    Status
-                                    {sortField === 'status' && (
-                                        <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
-                                    )}
-                                </div>
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
-                        {paginatedGroups.length === 0 ? (
-                            <tr>
-                                    <td colSpan="6" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                        <i className={`fas fa-inbox text-3xl ${isDark ? 'text-gray-600' : 'text-gray-300'} mb-2`}></i>
-                                    <p>No grouped clients found</p>
-                                </td>
-                            </tr>
-                        ) : (
-                            paginatedGroups.filter(client => {
-                                // Final render-time safety check: ensure type is 'client' and not 'Potential' status
-                                return client.type === 'client' && client.status !== 'Potential';
-                            }).map(client => (
-                                <tr 
-                                    key={client.id} 
-                                    onClick={() => handleOpenClient(client)}
-                                        className={`${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'} cursor-pointer transition`}
-                                >
-                                    <td className="px-6 py-2 whitespace-nowrap">
-                                        <div className="flex items-center gap-3">
-                                            <button
-                                                onClick={(e) => handleToggleStar(e, client, false)}
-                                                className={`flex-shrink-0 w-5 h-5 flex items-center justify-center transition-colors ${isDark ? 'hover:text-yellow-400' : 'hover:text-yellow-600'}`}
-                                                title={client.isStarred ? 'Unstar this client' : 'Star this client'}
-                                            >
-                                                <i className={`${client.isStarred ? 'fas' : 'far'} fa-star ${client.isStarred ? 'text-yellow-500' : isDark ? 'text-white' : 'text-gray-300'}`}></i>
-                                            </button>
-                                            {client.thumbnail ? (
-                                                <img src={client.thumbnail} alt={client.name} className="w-8 h-8 rounded-full object-cover border border-gray-200" />
-                                            ) : (
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
-                                                    {(client.name || '?').charAt(0).toUpperCase()}
-                                                </div>
-                                            )}
-                                            <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{client.name}</div>
-                                        </div>
-                                    </td>
-                                    <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
-                                        {(() => {
-                                            // CRITICAL: Check ref FIRST as fallback if state doesn't have groups
-                                            // This ensures groups are displayed even if state is cleared
-                                            let memberships = [];
-                                            
-                                            // Priority 1: Check ref (restored groups that should never be cleared)
-                                            if (restoredGroupMembershipsRef.current.has(client.id)) {
-                                                const restoredGroups = restoredGroupMembershipsRef.current.get(client.id);
-                                                if (restoredGroups && Array.isArray(restoredGroups) && restoredGroups.length > 0) {
-                                                    memberships = restoredGroups;
-                                                }
-                                            }
-                                            
-                                            // Priority 2: Use state if ref doesn't have groups
-                                            if (memberships.length === 0 && Array.isArray(client.groupMemberships) && client.groupMemberships.length > 0) {
-                                                memberships = client.groupMemberships;
-                                            }
-                                            
-                                            const groupNames = memberships
-                                                .map(m => {
-                                                    // Try multiple possible structures
-                                                    return m?.group?.name || m?.name || (typeof m === 'string' ? m : null);
-                                                })
-                                                .filter(Boolean);
-                                            
-                                            return groupNames.length > 0 
-                                                ? <span>{groupNames.join(', ')}</span>
-                                                : <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>None</span>;
-                                        })()}
-                                    </td>
-                                    <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{client.industry}</td>
-                                    <td className="px-6 py-2 whitespace-nowrap">
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {(() => {
-                                                const services = Array.isArray(client.services)
-                                                    ? client.services
-                                                    : (typeof client.services === 'string' ? (()=>{ try { return JSON.parse(client.services||'[]'); } catch { return []; } })() : []);
-                                                const MAX = 3;
-                                                const visible = services.slice(0, MAX);
-                                                const remaining = services.length - visible.length;
-                                                return (
-                                                    <>
-                                                        {visible.map(s => (
-                                                            <span key={s} className={`inline-flex items-center px-2 py-0.5 text-[10px] rounded ${isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-700'}`}>
-                                                                <i className="fas fa-tag mr-1"></i>{s}
-                                                            </span>
-                                                        ))}
-                                                        {remaining > 0 && (
-                                                            <span className={`inline-flex items-center px-2 py-0.5 text-[10px] rounded ${isDark ? 'bg-primary-900 text-primary-200' : 'bg-primary-100 text-primary-700'}`}>+{remaining}</span>
-                                                        )}
-                                                        {services.length === 0 && (
-                                                            <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>None</span>
-                                                        )}
-                                                    </>
-                                                );
-                                            })()}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-2 whitespace-nowrap">
-                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                                            (client.status === 'Active' || client.status === 'active') ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                                        }`}>
-                                            {client.status === 'active' ? 'Active' : client.status}
-                                        </span>
-                                    </td>
-                                </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
-            </div>
-            {/* Pagination Controls */}
-            {sortedGroups.length > 0 && (
-                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t px-6 py-4 flex items-center justify-between pr-32 flex-shrink-0`}>
-                    <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Showing {groupsStartIndex + 1} to {Math.min(groupsEndIndex, sortedGroups.length)} of {sortedGroups.length} grouped clients
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => setGroupsPage(groupsPage - 1)}
-                            disabled={groupsPage === 1}
-                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
-                        >
-                            <i className="fas fa-chevron-left mr-1"></i>
-                            Previous
-                        </button>
-                        <span className={`px-4 py-2 text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                            Page {groupsPage} of {totalGroupsPages}
-                        </span>
-                        <button
-                            onClick={() => setGroupsPage(groupsPage + 1)}
-                            disabled={groupsPage === totalGroupsPages}
-                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
-                        >
-                            Next
-                            <i className="fas fa-chevron-right ml-1"></i>
-                        </button>
-                    </div>
+    // Group management handlers
+    const [editingGroupId, setEditingGroupId] = useState(null);
+    const [showGroupModal, setShowGroupModal] = useState(false);
+    const [groupFormData, setGroupFormData] = useState({ name: '', industry: 'Other', notes: '' });
+
+    const handleCreateGroup = () => {
+        setGroupFormData({ name: '', industry: 'Other', notes: '' });
+        setEditingGroupId(null);
+        setShowGroupModal(true);
+    };
+
+    const handleEditGroup = (group) => {
+        setGroupFormData({ 
+            name: group.name || '', 
+            industry: group.industry || 'Other', 
+            notes: group.notes || '' 
+        });
+        setEditingGroupId(group.id);
+        setShowGroupModal(true);
+    };
+
+    const handleSaveGroup = async () => {
+        if (!groupFormData.name || !groupFormData.name.trim()) {
+            alert('Please enter a group name');
+            return;
+        }
+
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                alert('Authentication required');
+                return;
+            }
+
+            if (editingGroupId) {
+                // Update existing group - use client update API
+                const response = await fetch(`/api/clients/${editingGroupId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        name: groupFormData.name.trim(),
+                        industry: groupFormData.industry,
+                        notes: groupFormData.notes || ''
+                    })
+                });
+
+                if (response.ok) {
+                    await loadGroups(true);
+                    setShowGroupModal(false);
+                    setEditingGroupId(null);
+                } else {
+                    const errorData = await response.json().catch(() => ({}));
+                    alert(errorData?.error || 'Failed to update group');
+                }
+            } else {
+                // Create new group
+                const response = await fetch('/api/clients/groups', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        name: groupFormData.name.trim(),
+                        industry: groupFormData.industry,
+                        notes: groupFormData.notes || ''
+                    })
+                });
+
+                if (response.ok) {
+                    await loadGroups(true);
+                    setShowGroupModal(false);
+                    setGroupFormData({ name: '', industry: 'Other', notes: '' });
+                } else {
+                    const errorData = await response.json().catch(() => ({}));
+                    alert(errorData?.error || 'Failed to create group');
+                }
+            }
+        } catch (error) {
+            console.error('Error saving group:', error);
+            alert('Error saving group: ' + error.message);
+        }
+    };
+
+    const handleDeleteGroup = async (groupId) => {
+        if (!confirm('Are you sure you want to delete this group? This will remove all client associations with this group.')) {
+            return;
+        }
+
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                alert('Authentication required');
+                return;
+            }
+
+            const response = await fetch(`/api/clients/groups/${groupId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
+            });
+
+            if (response.ok) {
+                await loadGroups(true);
+            } else {
+                const errorData = await response.json().catch(() => ({}));
+                alert(errorData?.error || 'Failed to delete group');
+            }
+        } catch (error) {
+            console.error('Error deleting group:', error);
+            alert('Error deleting group: ' + error.message);
+        }
+    };
+
+    const GroupsListView = () => {
+        const paginatedGroups = sortedGroups.slice(groupsStartIndex, groupsEndIndex);
+        
+        return (
+            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border flex flex-col h-full w-full`}>
+                {/* Header with Add Group button */}
+                <div className={`${isDark ? 'bg-gray-750 border-gray-700' : 'bg-gray-50 border-gray-200'} border-b px-6 py-4 flex items-center justify-between`}>
+                    <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Company Groups</h3>
+                    <button
+                        onClick={handleCreateGroup}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                            isDark 
+                                ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                                : 'bg-blue-600 hover:bg-blue-700 text-white'
+                        }`}
+                    >
+                        <i className="fas fa-plus mr-2"></i>
+                        Add Group
+                    </button>
                 </div>
-            )}
-        </div>
-    );
+
+                {/* Group Modal */}
+                {showGroupModal && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg shadow-xl p-6 w-full max-w-md`}>
+                            <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                {editingGroupId ? 'Edit Group' : 'Create New Group'}
+                            </h3>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                        Group Name *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={groupFormData.name}
+                                        onChange={(e) => setGroupFormData({ ...groupFormData, name: e.target.value })}
+                                        className={`w-full px-3 py-2 rounded-md border ${
+                                            isDark 
+                                                ? 'bg-gray-700 border-gray-600 text-gray-100' 
+                                                : 'bg-white border-gray-300 text-gray-900'
+                                        }`}
+                                        placeholder="Enter group name"
+                                        autoFocus
+                                    />
+                                </div>
+                                <div>
+                                    <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                        Industry
+                                    </label>
+                                    <select
+                                        value={groupFormData.industry}
+                                        onChange={(e) => setGroupFormData({ ...groupFormData, industry: e.target.value })}
+                                        className={`w-full px-3 py-2 rounded-md border ${
+                                            isDark 
+                                                ? 'bg-gray-700 border-gray-600 text-gray-100' 
+                                                : 'bg-white border-gray-300 text-gray-900'
+                                        }`}
+                                    >
+                                        {industries.length > 0 ? (
+                                            industries.map(ind => (
+                                                <option key={ind.id || ind.name} value={ind.name}>{ind.name}</option>
+                                            ))
+                                        ) : (
+                                            <option value="Other">Other</option>
+                                        )}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                        Notes
+                                    </label>
+                                    <textarea
+                                        value={groupFormData.notes}
+                                        onChange={(e) => setGroupFormData({ ...groupFormData, notes: e.target.value })}
+                                        rows={3}
+                                        className={`w-full px-3 py-2 rounded-md border ${
+                                            isDark 
+                                                ? 'bg-gray-700 border-gray-600 text-gray-100' 
+                                                : 'bg-white border-gray-300 text-gray-900'
+                                        }`}
+                                        placeholder="Optional notes about this group"
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex justify-end gap-2 mt-6">
+                                <button
+                                    onClick={() => {
+                                        setShowGroupModal(false);
+                                        setEditingGroupId(null);
+                                        setGroupFormData({ name: '', industry: 'Other', notes: '' });
+                                    }}
+                                    className={`px-4 py-2 rounded-md text-sm font-medium ${
+                                        isDark 
+                                            ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' 
+                                            : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                                    }`}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleSaveGroup}
+                                    className="px-4 py-2 rounded-md text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white"
+                                >
+                                    {editingGroupId ? 'Update' : 'Create'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex-1 overflow-auto -mx-3 sm:mx-0 px-3 sm:px-0 w-full" style={{ WebkitOverflowScrolling: 'touch' }}>
+                    {isLoadingGroups ? (
+                        <div className="flex items-center justify-center py-12">
+                            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <i className="fas fa-spinner fa-spin mr-2"></i>
+                                Loading groups...
+                            </div>
+                        </div>
+                    ) : (
+                        <table className={`w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`} style={{ minWidth: '640px', width: '100%' }}>
+                            <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
+                                <tr>
+                                    <th 
+                                        className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                        onClick={() => {
+                                            if (sortField === 'name') {
+                                                setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                                            } else {
+                                                setSortField('name');
+                                                setSortDirection('asc');
+                                            }
+                                        }}
+                                    >
+                                        <div className="flex items-center">
+                                            Group Name
+                                            {sortField === 'name' && (
+                                                <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
+                                            )}
+                                        </div>
+                                    </th>
+                                    <th 
+                                        className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                        onClick={() => {
+                                            if (sortField === 'industry') {
+                                                setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                                            } else {
+                                                setSortField('industry');
+                                                setSortDirection('asc');
+                                            }
+                                        }}
+                                    >
+                                        <div className="flex items-center">
+                                            Industry
+                                            {sortField === 'industry' && (
+                                                <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
+                                            )}
+                                        </div>
+                                    </th>
+                                    <th 
+                                        className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                        onClick={() => {
+                                            if (sortField === 'members') {
+                                                setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                                            } else {
+                                                setSortField('members');
+                                                setSortDirection('asc');
+                                            }
+                                        }}
+                                    >
+                                        <div className="flex items-center">
+                                            Members
+                                            {sortField === 'members' && (
+                                                <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
+                                            )}
+                                        </div>
+                                    </th>
+                                    <th className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
+                                        Actions
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
+                                {paginatedGroups.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="4" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                            <i className={`fas fa-inbox text-3xl ${isDark ? 'text-gray-600' : 'text-gray-300'} mb-2`}></i>
+                                            <p>No groups found</p>
+                                            <button
+                                                onClick={handleCreateGroup}
+                                                className={`mt-4 px-4 py-2 rounded-lg text-sm font-medium ${
+                                                    isDark 
+                                                        ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                                                        : 'bg-blue-600 hover:bg-blue-700 text-white'
+                                                }`}
+                                            >
+                                                <i className="fas fa-plus mr-2"></i>
+                                                Create Your First Group
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    paginatedGroups.map(group => {
+                                        const memberCount = (group._count?.childCompanies || 0) + (group._count?.groupChildren || 0);
+                                        return (
+                                            <tr 
+                                                key={group.id}
+                                                className={`${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'} transition`}
+                                            >
+                                                <td className="px-6 py-2 whitespace-nowrap">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? 'bg-blue-700 text-blue-200' : 'bg-blue-100 text-blue-700'}`}>
+                                                            <i className="fas fa-layer-group"></i>
+                                                        </div>
+                                                        <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{group.name}</div>
+                                                    </div>
+                                                </td>
+                                                <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
+                                                    {group.industry || 'Other'}
+                                                </td>
+                                                <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
+                                                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                                        isDark 
+                                                            ? 'bg-blue-900 text-blue-200' 
+                                                            : 'bg-blue-100 text-blue-800'
+                                                    }`}>
+                                                        {memberCount} {memberCount === 1 ? 'member' : 'members'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-2 whitespace-nowrap">
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleEditGroup(group);
+                                                            }}
+                                                            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                                                                isDark 
+                                                                    ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' 
+                                                                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                                                            }`}
+                                                            title="Edit group"
+                                                        >
+                                                            <i className="fas fa-edit"></i>
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleDeleteGroup(group.id);
+                                                            }}
+                                                            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                                                                isDark 
+                                                                    ? 'bg-red-900 hover:bg-red-800 text-red-200' 
+                                                                    : 'bg-red-100 hover:bg-red-200 text-red-700'
+                                                            }`}
+                                                            title="Delete group"
+                                                        >
+                                                            <i className="fas fa-trash"></i>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+                {/* Pagination Controls */}
+                {sortedGroups.length > 0 && (
+                    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t px-6 py-4 flex items-center justify-between pr-32 flex-shrink-0`}>
+                        <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            Showing {groupsStartIndex + 1} to {Math.min(groupsEndIndex, sortedGroups.length)} of {sortedGroups.length} groups
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setGroupsPage(groupsPage - 1)}
+                                disabled={groupsPage === 1}
+                                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                            >
+                                <i className="fas fa-chevron-left mr-1"></i>
+                                Previous
+                            </button>
+                            <span className={`px-4 py-2 text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                Page {groupsPage} of {totalGroupsPages}
+                            </span>
+                            <button
+                                onClick={() => setGroupsPage(groupsPage + 1)}
+                                disabled={groupsPage === totalGroupsPages}
+                                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                            >
+                                Next
+                                <i className="fas fa-chevron-right ml-1"></i>
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     const PipelineView = React.memo(({
         items,
@@ -6398,7 +6629,7 @@ const Clients = React.memo(() => {
                     }`}
                 >
                     <i className="fas fa-layer-group mr-2"></i>
-                    <span className="hidden sm:inline">Groups ({totalGroupedClientsCount})</span>
+                    <span className="hidden sm:inline">Groups ({groups.length})</span>
                     <span className="sm:hidden">Groups</span>
                 </button>
                 <button
@@ -6586,7 +6817,7 @@ const Clients = React.memo(() => {
                                         {viewMode === 'leads' 
                                             ? `Showing ${filteredLeads.length} of ${leads.length} leads${searchTerm ? ` matching "${searchTerm}"` : ''}`
                                             : viewMode === 'groups'
-                                            ? `Showing ${filteredGroups.length} of ${clients.length} grouped clients${searchTerm ? ` matching "${searchTerm}"` : ''}`
+                                            ? `Showing ${filteredGroups.length} of ${groups.length} groups${searchTerm ? ` matching "${searchTerm}"` : ''}`
                                             : `Showing ${filteredClients.length} of ${clients.length} clients${searchTerm ? ` matching "${searchTerm}"` : ''}`
                                         }
                                     </span>
