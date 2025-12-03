@@ -4467,13 +4467,15 @@ const Clients = React.memo(() => {
 
     // Calculate total grouped clients count (before filters)
     // Load groups from API
+    const isLoadingGroupsRef = useRef(false);
     const loadGroups = useCallback(async (forceRefresh = false) => {
-        if (isLoadingGroups) {
+        if (isLoadingGroupsRef.current) {
             console.log('⏸️ loadGroups already in progress, skipping...');
             return;
         }
         
         try {
+            isLoadingGroupsRef.current = true;
             setIsLoadingGroups(true);
             const token = window.storage?.getToken?.();
             if (!token) {
@@ -4517,16 +4519,23 @@ const Clients = React.memo(() => {
             // Set empty array on error to show empty state
             setGroups([]);
         } finally {
+            isLoadingGroupsRef.current = false;
             setIsLoadingGroups(false);
         }
-    }, [isLoadingGroups]);
+    }, []); // Empty deps - function is stable and uses refs for state
 
     // Load groups when Groups tab is active
+    // Use ref to track last loaded viewMode to prevent infinite loops
+    const lastLoadedViewModeRef = useRef(null);
     useEffect(() => {
-        if (viewMode === 'groups') {
+        if (viewMode === 'groups' && lastLoadedViewModeRef.current !== 'groups') {
+            lastLoadedViewModeRef.current = 'groups';
             loadGroups(true);
+        } else if (viewMode !== 'groups') {
+            lastLoadedViewModeRef.current = null;
         }
-    }, [viewMode, loadGroups]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [viewMode]); // Only depend on viewMode, not loadGroups to prevent infinite loops
 
     // Filter groups (actual group entities, not clients with groups)
     const filteredGroups = useMemo(() => {
@@ -6866,10 +6875,7 @@ const Clients = React.memo(() => {
 
             {/* Content based on view mode */}
             <div className="flex-1 overflow-hidden pr-2 sm:pr-4 pb-5 sm:pb-6 pt-2 min-h-0">
-            {viewMode === 'groups' && (() => {
-                console.log('Rendering GroupsListView, viewMode:', viewMode);
-                return <GroupsListView />;
-            })()}
+            {viewMode === 'groups' && <GroupsListView />}
             {viewMode === 'clients' && <ClientsListView />}
             {viewMode === 'leads' && <LeadsListView />}
             {viewMode === 'pipeline' && (
