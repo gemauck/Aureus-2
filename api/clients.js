@@ -79,6 +79,24 @@ async function handler(req, res) {
           }
         }
         
+        // Check if ClientCompanyGroup table exists before trying to include it
+        let hasGroupMembershipsTable = true
+        try {
+          const tableCheck = await prisma.$queryRaw`
+            SELECT EXISTS (
+              SELECT FROM information_schema.tables 
+              WHERE table_name = 'ClientCompanyGroup'
+            ) as exists
+          `
+          hasGroupMembershipsTable = tableCheck && tableCheck[0] && tableCheck[0].exists === true
+          if (!hasGroupMembershipsTable) {
+            console.warn('⚠️ ClientCompanyGroup table does not exist, skipping groupMemberships relation')
+          }
+        } catch (tableCheckError) {
+          console.warn('⚠️ Failed to check for ClientCompanyGroup table, assuming it exists:', tableCheckError.message)
+          hasGroupMembershipsTable = true // Assume it exists if check fails
+        }
+        
         // Try query with type filter first, fallback to all clients if type column doesn't exist
         let rawClients
         try {
@@ -102,32 +120,7 @@ async function handler(req, res) {
                     }
                   }
                 } : {}),
-                groupMemberships: {
-                  include: {
-                    group: {
-                      select: {
-                        id: true,
-                        name: true,
-                        type: true,
-                        industry: true
-                      }
-                    }
-                  }
-                }
-              },
-              orderBy: {
-                createdAt: 'desc'
-              }
-            })
-          } catch (relationError) {
-            // If relations fail, try query with minimal relations (still include groupMemberships)
-            console.warn('⚠️ Query with relations failed, trying with minimal relations:', relationError.message)
-            try {
-              rawClients = await prisma.client.findMany({
-                where: {
-                  type: 'client'
-                },
-                include: {
+                ...(hasGroupMembershipsTable ? {
                   groupMemberships: {
                     include: {
                       group: {
@@ -140,27 +133,96 @@ async function handler(req, res) {
                       }
                     }
                   }
-                },
-                orderBy: {
-                  createdAt: 'desc'
-                }
-              })
-            } catch (minimalRelationError) {
-              // Last resort: query without relations but log the error
-              console.error('❌ Minimal relations query also failed, using query without relations:', minimalRelationError.message)
-              rawClients = await prisma.client.findMany({
-                where: {
-                  type: 'client'
-                },
-                orderBy: {
-                  createdAt: 'desc'
-                }
-              })
-              // Manually set empty groupMemberships for all clients
+                } : {})
+              },
+              orderBy: {
+                createdAt: 'desc'
+              }
+            })
+            
+            // If table doesn't exist, manually set empty groupMemberships
+            if (!hasGroupMembershipsTable) {
               rawClients = rawClients.map(client => ({
                 ...client,
                 groupMemberships: []
               }))
+            }
+          } catch (relationError) {
+            // If relations fail, try query with minimal relations (still include groupMemberships)
+            console.warn('⚠️ Query with relations failed:', {
+              message: relationError.message,
+              code: relationError.code,
+              meta: relationError.meta
+            })
+            console.warn('⚠️ Trying with minimal relations...')
+            try {
+              rawClients = await prisma.client.findMany({
+                where: {
+                  type: 'client'
+                },
+                include: {
+                  ...(hasGroupMembershipsTable ? {
+                    groupMemberships: {
+                      include: {
+                        group: {
+                          select: {
+                            id: true,
+                            name: true,
+                            type: true,
+                            industry: true
+                          }
+                        }
+                      }
+                    }
+                  } : {})
+                },
+                orderBy: {
+                  createdAt: 'desc'
+                }
+              })
+              
+              // If table doesn't exist, manually set empty groupMemberships
+              if (!hasGroupMembershipsTable) {
+                rawClients = rawClients.map(client => ({
+                  ...client,
+                  groupMemberships: []
+                }))
+              }
+            } catch (minimalRelationError) {
+              // Last resort: query without relations but log the error
+              console.error('❌ Minimal relations query also failed:', {
+                message: minimalRelationError.message,
+                code: minimalRelationError.code,
+                meta: minimalRelationError.meta,
+                stack: minimalRelationError.stack?.substring(0, 500)
+              })
+              
+              try {
+                rawClients = await prisma.client.findMany({
+                  where: {
+                    type: 'client'
+                  },
+                  orderBy: {
+                    createdAt: 'desc'
+                  }
+                })
+                // Manually set empty groupMemberships for all clients
+                rawClients = rawClients.map(client => ({
+                  ...client,
+                  groupMemberships: []
+                }))
+              } catch (basicQueryError) {
+                // Even the basic query failed - log full error and re-throw
+                console.error('❌ Basic query failed (no relations):', {
+                  message: basicQueryError.message,
+                  code: basicQueryError.code,
+                  meta: basicQueryError.meta,
+                  stack: basicQueryError.stack?.substring(0, 500),
+                  url: req.url,
+                  method: req.method
+                })
+                throw basicQueryError // Re-throw to be caught by outer catch block
+              }
             }
           }
         } catch (typeError) {
@@ -701,23 +763,39 @@ async function handler(req, res) {
       message: e.message,
       name: e.name,
       code: e.code,
+      meta: e.meta,
       stack: e.stack?.substring(0, 1000),
       url: req.url,
-      method: req.method
+      method: req.method,
+      user: req.user?.sub || 'none'
     })
     
     // Check for database connection errors
     const isConnectionError = e.message?.includes("Can't reach database server") ||
                              e.code === 'P1001' ||
+                             e.code === 'P1002' ||
+                             e.code === 'P1008' ||
+                             e.code === 'P1017' ||
                              e.code === 'ETIMEDOUT' ||
                              e.code === 'ECONNREFUSED' ||
-                             e.code === 'ENOTFOUND'
+                             e.code === 'ENOTFOUND' ||
+                             e.name === 'PrismaClientInitializationError'
     
     if (isConnectionError) {
       return serverError(res, 'Database connection failed', `Unable to connect to database: ${e.message}`)
     }
     
-    return serverError(res, 'Client handler failed', e.message)
+    // Check for Prisma schema errors (table/column missing)
+    if (e.code === 'P2001' || e.code === 'P2025' || e.message?.includes('does not exist') || e.message?.toLowerCase().includes('relation') || e.message?.toLowerCase().includes('column')) {
+      return serverError(res, 'Database schema error', `Schema issue detected: ${e.message}. Please check server logs.`)
+    }
+    
+    // Return detailed error in development, generic in production
+    const errorMessage = process.env.NODE_ENV === 'development' 
+      ? `Client handler failed: ${e.message}` 
+      : 'Failed to process request'
+    
+    return serverError(res, errorMessage, e.message)
   }
 }
 

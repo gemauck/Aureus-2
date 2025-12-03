@@ -147,13 +147,39 @@ async function handler(req, res) {
         console.log('✅ Standalone group created:', newGroup)
         return created(res, { group: newGroup })
       } catch (error) {
-        console.error('Error creating standalone group:', error)
+        // Log full error details for debugging
+        console.error('❌ Error creating standalone group:', {
+          message: error.message,
+          name: error.name,
+          code: error.code,
+          meta: error.meta,
+          stack: error.stack?.substring(0, 500),
+          body: body,
+          url: req.url,
+          method: req.method
+        })
         
+        // Handle specific Prisma errors
         if (error.code === 'P2002') {
           return badRequest(res, 'A group with this name already exists')
         }
         
-        return serverError(res, 'Failed to create group')
+        // Handle validation errors
+        if (error.code === 'P2003' || error.code === 'P2011') {
+          return badRequest(res, 'Invalid data provided for group creation', error.message)
+        }
+        
+        // Handle database connection errors
+        if (error.code === 'P1001' || error.code === 'P1002' || error.code === 'P1008' || error.code === 'P1017') {
+          return serverError(res, 'Database connection failed', error.message)
+        }
+        
+        // Return detailed error message in development, generic in production
+        const errorMessage = process.env.NODE_ENV === 'development' 
+          ? `Failed to create group: ${error.message}` 
+          : 'Failed to create group'
+        
+        return serverError(res, errorMessage, error.message)
       }
     }
     
@@ -426,14 +452,41 @@ async function handler(req, res) {
         
         return created(res, { membership, groupCreated: !groupId })
       } catch (error) {
-        console.error('Error adding client to group:', error)
+        // Log full error details for debugging
+        console.error('❌ Error adding client to group:', {
+          message: error.message,
+          name: error.name,
+          code: error.code,
+          meta: error.meta,
+          stack: error.stack?.substring(0, 500),
+          clientId,
+          groupId: finalGroupId,
+          body: body,
+          url: req.url,
+          method: req.method
+        })
         
         // Handle unique constraint violation
         if (error.code === 'P2002') {
           return badRequest(res, 'Client is already a member of this group')
         }
         
-        return serverError(res, 'Failed to add client to group')
+        // Handle validation errors
+        if (error.code === 'P2003' || error.code === 'P2011') {
+          return badRequest(res, 'Invalid data provided', error.message)
+        }
+        
+        // Handle database connection errors
+        if (error.code === 'P1001' || error.code === 'P1002' || error.code === 'P1008' || error.code === 'P1017') {
+          return serverError(res, 'Database connection failed', error.message)
+        }
+        
+        // Return detailed error message in development, generic in production
+        const errorMessage = process.env.NODE_ENV === 'development' 
+          ? `Failed to add client to group: ${error.message}` 
+          : 'Failed to add client to group'
+        
+        return serverError(res, errorMessage, error.message)
       }
     }
     

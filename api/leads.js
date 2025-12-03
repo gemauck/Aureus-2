@@ -147,6 +147,24 @@ async function handler(req, res) {
           hasExternalAgentId = false
         }
         
+        // Check if ClientCompanyGroup table exists before trying to include it
+        let hasGroupMembershipsTable = true
+        try {
+          const tableCheck = await prisma.$queryRaw`
+            SELECT EXISTS (
+              SELECT FROM information_schema.tables 
+              WHERE table_name = 'ClientCompanyGroup'
+            ) as exists
+          `
+          hasGroupMembershipsTable = tableCheck && tableCheck[0] && tableCheck[0].exists === true
+          if (!hasGroupMembershipsTable) {
+            console.warn('⚠️ ClientCompanyGroup table does not exist, skipping groupMemberships relation')
+          }
+        } catch (tableCheckError) {
+          console.warn('⚠️ Failed to check for ClientCompanyGroup table, assuming it exists:', tableCheckError.message)
+          hasGroupMembershipsTable = true // Assume it exists if check fails
+        }
+        
         let leads = []
         try {
           // IMPORTANT: Return ALL leads regardless of ownerId - all users should see all leads
@@ -168,20 +186,24 @@ async function handler(req, res) {
                   }
                 }
               } : {}),
-              // Include group memberships (same as clients)
-              groupMemberships: {
-                include: {
-                  group: {
-                    select: {
-                      id: true,
-                      name: true,
-                      type: true,
-                      industry: true
+              // Include group memberships only if table exists
+              ...(hasGroupMembershipsTable ? {
+                groupMemberships: {
+                  include: {
+                    group: {
+                      select: {
+                        id: true,
+                        name: true,
+                        type: true,
+                        industry: true
+                      }
                     }
                   }
                 }
-              }
+              } : {})
             }
+            
+            // If table doesn't exist, we'll set empty groupMemberships after query
             
             leads = await prisma.client.findMany({ 
               where: { 
@@ -191,6 +213,14 @@ async function handler(req, res) {
               include: includeObj,
               orderBy: { createdAt: 'desc' } 
             })
+            
+            // If table doesn't exist, manually set empty groupMemberships
+            if (!hasGroupMembershipsTable) {
+              leads = leads.map(lead => ({
+                ...lead,
+                groupMemberships: []
+              }))
+            }
           } catch (relationError) {
             // Check if it's the externalAgentId column missing error
             const isMissingColumnError = relationError.code === 'P2022' && 
@@ -217,24 +247,30 @@ async function handler(req, res) {
                         }
                       }
                     } : {}),
-                    // Include group memberships
-                    groupMemberships: {
-                      include: {
-                        group: {
-                          select: {
-                            id: true,
-                            name: true,
-                            type: true,
-                            industry: true
+                    // Include group memberships only if table exists
+                    ...(hasGroupMembershipsTable ? {
+                      groupMemberships: {
+                        include: {
+                          group: {
+                            select: {
+                              id: true,
+                              name: true,
+                              type: true,
+                              industry: true
+                            }
                           }
                         }
                       }
-                    }
+                    } : {})
                   },
                   orderBy: { createdAt: 'desc' } 
                 })
-                // Add null externalAgent to each lead
-                leads = leads.map(l => ({ ...l, externalAgent: null }))
+                // Add null externalAgent and empty groupMemberships to each lead
+                leads = leads.map(l => ({ 
+                  ...l, 
+                  externalAgent: null,
+                  ...(!hasGroupMembershipsTable ? { groupMemberships: [] } : {})
+                }))
               } catch (fallbackError) {
                 // If that also fails, try minimal query
                 console.warn('⚠️ Query with tags failed, trying minimal query:', fallbackError.message)
@@ -244,8 +280,12 @@ async function handler(req, res) {
                   },
                   orderBy: { createdAt: 'desc' } 
                 })
-                // Add null externalAgent to each lead
-                leads = leads.map(l => ({ ...l, externalAgent: null }))
+                // Add null externalAgent and empty groupMemberships to each lead
+                leads = leads.map(l => ({ 
+                  ...l, 
+                  externalAgent: null,
+                  groupMemberships: []
+                }))
               }
             } else {
               // Other relation errors - try query without relations
@@ -824,23 +864,39 @@ async function handler(req, res) {
       message: e.message,
       name: e.name,
       code: e.code,
+      meta: e.meta,
       stack: e.stack?.substring(0, 1000),
       url: req.url,
-      method: req.method
+      method: req.method,
+      user: req.user?.sub || 'none'
     })
     
     // Check for database connection errors
     const isConnectionError = e.message?.includes("Can't reach database server") ||
                              e.code === 'P1001' ||
+                             e.code === 'P1002' ||
+                             e.code === 'P1008' ||
+                             e.code === 'P1017' ||
                              e.code === 'ETIMEDOUT' ||
                              e.code === 'ECONNREFUSED' ||
-                             e.code === 'ENOTFOUND'
+                             e.code === 'ENOTFOUND' ||
+                             e.name === 'PrismaClientInitializationError'
     
     if (isConnectionError) {
       return serverError(res, 'Database connection failed', `Unable to connect to database: ${e.message}`)
     }
     
-    return serverError(res, 'Lead handler failed', e.message)
+    // Check for Prisma schema errors (table/column missing)
+    if (e.code === 'P2001' || e.code === 'P2025' || e.message?.includes('does not exist') || e.message?.toLowerCase().includes('relation') || e.message?.toLowerCase().includes('column')) {
+      return serverError(res, 'Database schema error', `Schema issue detected: ${e.message}. Please check server logs.`)
+    }
+    
+    // Return detailed error in development, generic in production
+    const errorMessage = process.env.NODE_ENV === 'development' 
+      ? `Lead handler failed: ${e.message}` 
+      : 'Failed to process request'
+    
+    return serverError(res, errorMessage, e.message)
   }
 }
 

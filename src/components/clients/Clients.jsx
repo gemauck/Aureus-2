@@ -5442,6 +5442,7 @@ const Clients = React.memo(() => {
     const [editingGroupId, setEditingGroupId] = useState(null);
     const [showGroupModal, setShowGroupModal] = useState(false);
     const [groupFormData, setGroupFormData] = useState({ name: '', industry: 'Other', notes: '' });
+    const isSavingGroupRef = useRef(false); // Prevent duplicate save requests
 
     const handleCreateGroup = () => {
         setGroupFormData({ name: '', industry: 'Other', notes: '' });
@@ -5460,10 +5461,18 @@ const Clients = React.memo(() => {
     };
 
     const handleSaveGroup = async () => {
+        // Prevent duplicate requests
+        if (isSavingGroupRef.current) {
+            console.warn('⚠️ Save group request already in progress, skipping duplicate call');
+            return;
+        }
+
         if (!groupFormData.name || !groupFormData.name.trim()) {
             alert('Please enter a group name');
             return;
         }
+
+        isSavingGroupRef.current = true;
 
         try {
             const token = window.storage?.getToken?.();
@@ -5472,8 +5481,15 @@ const Clients = React.memo(() => {
                 return;
             }
 
+            const requestBody = {
+                name: groupFormData.name.trim(),
+                industry: groupFormData.industry,
+                notes: groupFormData.notes || ''
+            };
+
             if (editingGroupId) {
                 // Update existing group - use client update API
+                console.log('🔄 Updating group:', editingGroupId, requestBody);
                 const response = await fetch(`/api/clients/${editingGroupId}`, {
                     method: 'PATCH',
                     headers: {
@@ -5481,11 +5497,7 @@ const Clients = React.memo(() => {
                         'Content-Type': 'application/json'
                     },
                     credentials: 'include',
-                    body: JSON.stringify({
-                        name: groupFormData.name.trim(),
-                        industry: groupFormData.industry,
-                        notes: groupFormData.notes || ''
-                    })
+                    body: JSON.stringify(requestBody)
                 });
 
                 if (response.ok) {
@@ -5494,10 +5506,17 @@ const Clients = React.memo(() => {
                     setEditingGroupId(null);
                 } else {
                     const errorData = await response.json().catch(() => ({}));
-                    alert(errorData?.error || 'Failed to update group');
+                    const errorMessage = errorData?.error?.message || errorData?.error || 'Failed to update group';
+                    console.error('❌ Failed to update group:', {
+                        status: response.status,
+                        statusText: response.statusText,
+                        error: errorData
+                    });
+                    alert(errorMessage);
                 }
             } else {
                 // Create new group
+                console.log('🔄 Creating new group:', requestBody);
                 const response = await fetch('/api/clients/groups', {
                     method: 'POST',
                     headers: {
@@ -5505,25 +5524,39 @@ const Clients = React.memo(() => {
                         'Content-Type': 'application/json'
                     },
                     credentials: 'include',
-                    body: JSON.stringify({
-                        name: groupFormData.name.trim(),
-                        industry: groupFormData.industry,
-                        notes: groupFormData.notes || ''
-                    })
+                    body: JSON.stringify(requestBody)
                 });
 
                 if (response.ok) {
+                    const responseData = await response.json().catch(() => ({}));
+                    console.log('✅ Group created successfully:', responseData);
                     await loadGroups(true);
                     setShowGroupModal(false);
                     setGroupFormData({ name: '', industry: 'Other', notes: '' });
                 } else {
                     const errorData = await response.json().catch(() => ({}));
-                    alert(errorData?.error || 'Failed to create group');
+                    const errorMessage = errorData?.error?.message || errorData?.error || 'Failed to create group';
+                    const errorDetails = errorData?.error?.details || '';
+                    
+                    console.error('❌ Failed to create group:', {
+                        status: response.status,
+                        statusText: response.statusText,
+                        error: errorData,
+                        requestBody: requestBody
+                    });
+                    
+                    alert(errorDetails ? `${errorMessage}\n\n${errorDetails}` : errorMessage);
                 }
             }
         } catch (error) {
-            console.error('Error saving group:', error);
+            console.error('❌ Error saving group:', {
+                message: error.message,
+                stack: error.stack,
+                name: error.name
+            });
             alert('Error saving group: ' + error.message);
+        } finally {
+            isSavingGroupRef.current = false;
         }
     };
 
@@ -5867,28 +5900,204 @@ const Clients = React.memo(() => {
     };
 
     // Group Detail View - Shows all clients and leads in a group
-    const GroupDetailView = ({ group, members, isLoading, onBack, onClientClick, onLeadClick }) => {
+    const GroupDetailView = ({ group, members, isLoading, onBack, onClientClick, onLeadClick, onRefreshMembers }) => {
+        const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+        
+        // Debug log to verify component is rendering
+        useEffect(() => {
+            console.log('✅ GroupDetailView rendered for group:', group?.name);
+        }, [group]);
+        const [searchTerm, setSearchTerm] = useState('');
+        const [selectedType, setSelectedType] = useState('all'); // 'all', 'client', 'lead'
+        const [availableItems, setAvailableItems] = useState([]);
+        const [isLoadingItems, setIsLoadingItems] = useState(false);
+        const [selectedItems, setSelectedItems] = useState(new Set());
+        const [isAdding, setIsAdding] = useState(false);
+        
         const groupClients = members.filter(m => m.type === 'client' || !m.type);
         const groupLeads = members.filter(m => m.type === 'lead');
+        
+        // Get member IDs to exclude from selection
+        const memberIds = useMemo(() => new Set(members.map(m => m.id)), [members]);
+        
+        // Load available clients and leads when modal opens
+        useEffect(() => {
+            if (showAddMemberModal) {
+                loadAvailableItems();
+            }
+        }, [showAddMemberModal]);
+        
+        const loadAvailableItems = async () => {
+            setIsLoadingItems(true);
+            try {
+                const token = window.storage?.getToken?.();
+                if (!token) {
+                    console.warn('⚠️ No token available');
+                    setAvailableItems([]);
+                    setIsLoadingItems(false);
+                    return;
+                }
+                
+                // Fetch all clients and leads (API returns both)
+                const response = await fetch('/api/clients', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text().catch(() => 'Unknown error');
+                    console.error(`❌ Failed to fetch clients and leads: ${response.status} ${response.statusText}`, errorText);
+                    
+                    // Show user-friendly error message
+                    if (response.status === 500) {
+                        console.warn('⚠️ Server error - this may be a temporary issue. Please try again later.');
+                    }
+                    
+                    setAvailableItems([]);
+                    setIsLoadingItems(false);
+                    return;
+                }
+                
+                const data = await response.json();
+                const allItems = data?.data?.clients || data?.clients || [];
+                
+                if (!Array.isArray(allItems)) {
+                    console.warn('⚠️ API returned invalid data format');
+                    setAvailableItems([]);
+                    setIsLoadingItems(false);
+                    return;
+                }
+                
+                // Filter out items that are already members, groups, and the current group itself
+                const filtered = allItems.filter(item => {
+                    // Exclude if already a member
+                    if (memberIds.has(item.id)) return false;
+                    // Exclude if it's the group itself
+                    if (item.id === group.id) return false;
+                    // Exclude other groups (only include actual clients and leads)
+                    if (item.type === 'group') return false;
+                    // Only include clients and leads
+                    return item.type === 'client' || item.type === 'lead' || !item.type;
+                });
+                
+                setAvailableItems(filtered);
+            } catch (error) {
+                console.error('❌ Error loading available items:', error);
+                setAvailableItems([]);
+            } finally {
+                setIsLoadingItems(false);
+            }
+        };
+        
+        const filteredItems = useMemo(() => {
+            let filtered = availableItems;
+            
+            // Filter by type
+            if (selectedType === 'client') {
+                filtered = filtered.filter(item => item.type === 'client' || !item.type);
+            } else if (selectedType === 'lead') {
+                filtered = filtered.filter(item => item.type === 'lead');
+            }
+            
+            // Filter by search term
+            if (searchTerm.trim()) {
+                const searchLower = searchTerm.toLowerCase();
+                filtered = filtered.filter(item => 
+                    item.name?.toLowerCase().includes(searchLower) ||
+                    item.industry?.toLowerCase().includes(searchLower)
+                );
+            }
+            
+            return filtered;
+        }, [availableItems, selectedType, searchTerm]);
+        
+        const handleToggleSelection = (itemId) => {
+            setSelectedItems(prev => {
+                const newSet = new Set(prev);
+                if (newSet.has(itemId)) {
+                    newSet.delete(itemId);
+                } else {
+                    newSet.add(itemId);
+                }
+                return newSet;
+            });
+        };
+        
+        const handleAddSelected = async () => {
+            if (selectedItems.size === 0) {
+                alert('Please select at least one client or lead to add');
+                return;
+            }
+            
+            setIsAdding(true);
+            try {
+                const token = window.storage?.getToken?.();
+                if (!token) {
+                    alert('Authentication required');
+                    return;
+                }
+                
+                const addPromises = Array.from(selectedItems).map(async (itemId) => {
+                    const response = await fetch(`/api/clients/${itemId}/groups`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({ groupId: group.id, role: 'member' })
+                    });
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(errorData.error || `Failed to add item ${itemId}`);
+                    }
+                    
+                    return response.json();
+                });
+                
+                await Promise.all(addPromises);
+                
+                // Refresh group members
+                if (onRefreshMembers) {
+                    onRefreshMembers();
+                }
+                
+                // Close modal and reset
+                setShowAddMemberModal(false);
+                setSelectedItems(new Set());
+                setSearchTerm('');
+                setSelectedType('all');
+            } catch (error) {
+                console.error('❌ Error adding members:', error);
+                alert('Failed to add some members: ' + error.message);
+            } finally {
+                setIsAdding(false);
+            }
+        };
         
         return (
             <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border flex flex-col h-full w-full`}>
                 {/* Header with Back button */}
-                <div className={`${isDark ? 'bg-gray-750 border-gray-700' : 'bg-gray-50 border-gray-200'} border-b px-6 py-4 flex items-center justify-between`}>
-                    <div className="flex items-center gap-4">
+                <div className={`${isDark ? 'bg-gray-750 border-gray-700' : 'bg-gray-50 border-gray-200'} border-b px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4`}>
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
                         <button
                             onClick={onBack}
-                            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex-shrink-0 ${
                                 isDark 
                                     ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' 
                                     : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
                             }`}
                         >
                             <i className="fas fa-arrow-left mr-2"></i>
-                            Back to Groups
+                            <span className="hidden sm:inline">Back to Groups</span>
+                            <span className="sm:hidden">Back</span>
                         </button>
-                        <div>
-                            <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                        <div className="min-w-0 flex-1">
+                            <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'} truncate`}>
                                 {group.name}
                             </h3>
                             <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -5898,6 +6107,21 @@ const Clients = React.memo(() => {
                             </p>
                         </div>
                     </div>
+                    <button
+                        onClick={() => {
+                            console.log('✅ Add Member button clicked for group:', group?.name);
+                            setShowAddMemberModal(true);
+                        }}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex-shrink-0 whitespace-nowrap shadow-md ${
+                            isDark 
+                                ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                                : 'bg-blue-600 hover:bg-blue-700 text-white'
+                        }`}
+                        title="Add clients or leads to this group"
+                    >
+                        <i className="fas fa-plus mr-2"></i>
+                        Add Member
+                    </button>
                 </div>
 
                 {/* Content */}
@@ -6010,6 +6234,198 @@ const Clients = React.memo(() => {
                         </div>
                     )}
                 </div>
+                
+                {/* Add Member Modal */}
+                {showAddMemberModal && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-xl border max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col`}>
+                            {/* Modal Header */}
+                            <div className={`${isDark ? 'bg-gray-750 border-gray-700' : 'bg-gray-50 border-gray-200'} border-b px-6 py-4 flex items-center justify-between`}>
+                                <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                    Add Members to {group.name}
+                                </h3>
+                                <button
+                                    onClick={() => {
+                                        setShowAddMemberModal(false);
+                                        setSelectedItems(new Set());
+                                        setSearchTerm('');
+                                        setSelectedType('all');
+                                    }}
+                                    className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                                        isDark 
+                                            ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' 
+                                            : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                                    }`}
+                                >
+                                    <i className="fas fa-times"></i>
+                                </button>
+                            </div>
+                            
+                            {/* Modal Content */}
+                            <div className="flex-1 overflow-hidden flex flex-col p-6">
+                                {/* Search and Filter */}
+                                <div className="space-y-4 mb-4">
+                                    <div className="flex gap-3">
+                                        <div className="flex-1">
+                                            <input
+                                                type="text"
+                                                placeholder="Search by name or industry..."
+                                                value={searchTerm}
+                                                onChange={(e) => setSearchTerm(e.target.value)}
+                                                className={`w-full px-4 py-2 rounded-lg border ${
+                                                    isDark 
+                                                        ? 'bg-gray-700 border-gray-600 text-gray-100' 
+                                                        : 'bg-white border-gray-300 text-gray-900'
+                                                } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                                            />
+                                        </div>
+                                        <select
+                                            value={selectedType}
+                                            onChange={(e) => setSelectedType(e.target.value)}
+                                            className={`px-4 py-2 rounded-lg border ${
+                                                isDark 
+                                                    ? 'bg-gray-700 border-gray-600 text-gray-100' 
+                                                    : 'bg-white border-gray-300 text-gray-900'
+                                            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                                        >
+                                            <option value="all">All Types</option>
+                                            <option value="client">Clients Only</option>
+                                            <option value="lead">Leads Only</option>
+                                        </select>
+                                    </div>
+                                    {selectedItems.size > 0 && (
+                                        <div className={`px-3 py-2 rounded-lg ${
+                                            isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-50 text-blue-800'
+                                        }`}>
+                                            <span className="text-sm font-medium">
+                                                {selectedItems.size} {selectedItems.size === 1 ? 'item' : 'items'} selected
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                {/* Items List */}
+                                <div className="flex-1 overflow-y-auto border rounded-lg">
+                                    {isLoadingItems ? (
+                                        <div className="flex items-center justify-center py-12">
+                                            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                <i className="fas fa-spinner fa-spin mr-2"></i>
+                                                Loading...
+                                            </div>
+                                        </div>
+                                    ) : filteredItems.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center py-12">
+                                            <i className={`fas fa-inbox text-4xl ${isDark ? 'text-gray-600' : 'text-gray-300'} mb-4`}></i>
+                                            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                {searchTerm || selectedType !== 'all' 
+                                                    ? 'No matching clients or leads found' 
+                                                    : 'No available clients or leads to add'}
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="divide-y">
+                                            {filteredItems.map(item => {
+                                                const isSelected = selectedItems.has(item.id);
+                                                const isClient = item.type === 'client' || !item.type;
+                                                
+                                                return (
+                                                    <div
+                                                        key={item.id}
+                                                        onClick={() => handleToggleSelection(item.id)}
+                                                        className={`p-4 cursor-pointer transition ${
+                                                            isSelected
+                                                                ? isDark ? 'bg-blue-900' : 'bg-blue-50'
+                                                                : isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center gap-3">
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={isSelected}
+                                                                onChange={() => handleToggleSelection(item.id)}
+                                                                className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            />
+                                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold ${
+                                                                isClient
+                                                                    ? isDark ? 'bg-blue-700 text-blue-200' : 'bg-blue-100 text-blue-700'
+                                                                    : isDark ? 'bg-yellow-700 text-yellow-200' : 'bg-yellow-100 text-yellow-700'
+                                                            }`}>
+                                                                {item.name?.charAt(0)?.toUpperCase() || '?'}
+                                                            </div>
+                                                            <div className="flex-1">
+                                                                <div className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                                    {item.name}
+                                                                    {isClient ? (
+                                                                        <span className={`ml-2 px-2 py-0.5 text-xs rounded ${
+                                                                            isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-700'
+                                                                        }`}>
+                                                                            Client
+                                                                        </span>
+                                                                    ) : (
+                                                                        <span className={`ml-2 px-2 py-0.5 text-xs rounded ${
+                                                                            isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-700'
+                                                                        }`}>
+                                                                            Lead
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                                    {item.industry || 'Other'} • {item.status || 'Active'}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            {/* Modal Footer */}
+                            <div className={`${isDark ? 'bg-gray-750 border-gray-700' : 'bg-gray-50 border-gray-200'} border-t px-6 py-4 flex items-center justify-end gap-3`}>
+                                <button
+                                    onClick={() => {
+                                        setShowAddMemberModal(false);
+                                        setSelectedItems(new Set());
+                                        setSearchTerm('');
+                                        setSelectedType('all');
+                                    }}
+                                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                        isDark 
+                                            ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' 
+                                            : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                                    }`}
+                                    disabled={isAdding}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleAddSelected}
+                                    disabled={selectedItems.size === 0 || isAdding}
+                                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                        isDark 
+                                            ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                                            : 'bg-blue-600 hover:bg-blue-700 text-white'
+                                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                                >
+                                    {isAdding ? (
+                                        <>
+                                            <i className="fas fa-spinner fa-spin mr-2"></i>
+                                            Adding...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="fas fa-plus mr-2"></i>
+                                            Add Selected ({selectedItems.size})
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         );
     };
@@ -7075,6 +7491,11 @@ const Clients = React.memo(() => {
                         }}
                         onLeadClick={(lead) => {
                             handleOpenLead(lead);
+                        }}
+                        onRefreshMembers={() => {
+                            if (selectedGroup?.id) {
+                                loadGroupMembers(selectedGroup.id);
+                            }
                         }}
                     />
                 ) : (
