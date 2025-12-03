@@ -998,26 +998,26 @@ const Clients = React.memo(() => {
                 // CRITICAL: Use prevClients to preserve restored groupMemberships
                 setClients(prevClients => {
                     const updatedClients = prevClients.map((client) => {
-                        if (!client?.id) {
-                            return client;
-                        }
+                    if (!client?.id) {
+                        return client;
+                    }
 
-                        const apiOpps = opportunitiesByClient[client.id] || [];
-                        const signature = buildOpportunitiesSignature(apiOpps);
-                        pipelineOpportunitiesLoadedRef.current.set(client.id, { signature });
+                    const apiOpps = opportunitiesByClient[client.id] || [];
+                    const signature = buildOpportunitiesSignature(apiOpps);
+                    pipelineOpportunitiesLoadedRef.current.set(client.id, { signature });
 
                         // CRITICAL: Always create new object reference and preserve ALL group data
-                        return {
-                            ...client,
+                    return {
+                        ...client,
                             opportunities: apiOpps,
                             // CRITICAL: Preserve group data from current state (which may have been restored)
                             parentGroup: client.parentGroup || null,
                             parentGroupId: client.parentGroupId || null,
                             parentGroupName: client.parentGroupName || null,
                             groupMemberships: Array.isArray(client.groupMemberships) ? [...client.groupMemberships] : []
-                        };
-                    });
-                    safeStorage.setClients(updatedClients);
+                    };
+                });
+                safeStorage.setClients(updatedClients);
                     return updatedClients;
                 });
             } catch (error) {
@@ -1374,7 +1374,7 @@ const Clients = React.memo(() => {
                                     const opps = opportunitiesByClient[client.id] || client.opportunities || [];
                                     // CRITICAL: Always create new object reference and preserve ALL group data
                                     return {
-                                        ...client,
+                                ...client,
                                         opportunities: opps,
                                         // CRITICAL: Preserve groupMemberships from current state (which may have been restored)
                                         parentGroup: client.parentGroup || null,
@@ -1383,7 +1383,7 @@ const Clients = React.memo(() => {
                                         groupMemberships: Array.isArray(client.groupMemberships) ? [...client.groupMemberships] : []
                                     };
                                 });
-                                safeStorage.setClients(updated);
+                            safeStorage.setClients(updated);
                                 return updated;
                             });
                         })
@@ -1486,17 +1486,17 @@ const Clients = React.memo(() => {
                                 const updated = prevClients.map(client => {
                                     const opps = opportunitiesByClient[client.id] || client.opportunities || [];
                                     // CRITICAL: Always create new object reference and preserve ALL group data
-                                    return {
-                                        ...client,
+                                return {
+                                    ...client,
                                         opportunities: opps,
                                         // CRITICAL: Preserve ALL group data from current state (which may have been restored)
-                                        parentGroup: client.parentGroup || null,
-                                        parentGroupId: client.parentGroupId || null,
-                                        parentGroupName: client.parentGroupName || null,
+                                    parentGroup: client.parentGroup || null,
+                                    parentGroupId: client.parentGroupId || null,
+                                    parentGroupName: client.parentGroupName || null,
                                         groupMemberships: Array.isArray(client.groupMemberships) ? [...client.groupMemberships] : []
-                                    };
-                                });
-                                safeStorage.setClients(updated);
+                                };
+                            });
+                            safeStorage.setClients(updated);
                                 return updated;
                             });
                         })
@@ -1701,69 +1701,79 @@ const Clients = React.memo(() => {
                 // CRITICAL: Use prevClients to preserve restored groupMemberships
                 // This ensures groups restored by useEffect are NOT overwritten by API response
                 setClients(prevClients => {
-                    const verifiedClients = finalClients.map(client => {
+                const verifiedClients = finalClients.map(client => {
                         // CRITICAL: Always find prevClient FIRST to preserve any restored groups
                         const prevClient = prevClients.find(c => c && c.id === client.id);
                         
-                        // ALWAYS check raw API response first - it's the source of truth
-                        let apiClient = null;
-                        let foundInRawApi = false;
+                    // ALWAYS check raw API response first - it's the source of truth
+                    let apiClient = null;
+                    let foundInRawApi = false;
                         let groupMembershipsFromApi = null;
+                    
+                    if (latestApiClientsRef.current && Array.isArray(latestApiClientsRef.current)) {
+                        apiClient = latestApiClientsRef.current.find(c => c && c.id === client.id);
+                        foundInRawApi = !!apiClient;
                         
-                        if (latestApiClientsRef.current && Array.isArray(latestApiClientsRef.current)) {
-                            apiClient = latestApiClientsRef.current.find(c => c && c.id === client.id);
-                            foundInRawApi = !!apiClient;
+                        if (apiClient) {
+                            // Check for groupMemberships in various possible structures
+                            let groupMemberships = apiClient.groupMemberships;
                             
-                            if (apiClient) {
-                                // Check for groupMemberships in various possible structures
-                                let groupMemberships = apiClient.groupMemberships;
-                                
-                                // If it's a string (from JSON serialization), parse it
-                                if (typeof groupMemberships === 'string') {
-                                    try {
-                                        groupMemberships = JSON.parse(groupMemberships);
-                                    } catch (e) {
-                                        console.warn('⚠️ Failed to parse groupMemberships string for', client.name, e);
-                                    }
-                                }
-                                
-                                if (groupMemberships && Array.isArray(groupMemberships) && groupMemberships.length > 0) {
-                                    groupMembershipsFromApi = groupMemberships;
+                            // If it's a string (from JSON serialization), parse it
+                            if (typeof groupMemberships === 'string') {
+                                try {
+                                    groupMemberships = JSON.parse(groupMemberships);
+                                } catch (e) {
+                                    console.warn('⚠️ Failed to parse groupMemberships string for', client.name, e);
                                 }
                             }
+                            
+                            if (groupMemberships && Array.isArray(groupMemberships) && groupMemberships.length > 0) {
+                                    groupMembershipsFromApi = groupMemberships;
+                            }
                         }
-                        
-                        // If not in raw API, try processedClients (from API after processing)
+                    }
+                    
+                    // If not in raw API, try processedClients (from API after processing)
                         if (!groupMembershipsFromApi) {
-                            apiClient = processedClients.find(c => c && c.id === client.id);
-                            if (apiClient) {
-                                let groupMemberships = apiClient.groupMemberships;
-                                
-                                // If it's a string, parse it
-                                if (typeof groupMemberships === 'string') {
-                                    try {
-                                        groupMemberships = JSON.parse(groupMemberships);
-                                    } catch (e) {
-                                        // Ignore parse errors
-                                    }
+                        apiClient = processedClients.find(c => c && c.id === client.id);
+                        if (apiClient) {
+                            let groupMemberships = apiClient.groupMemberships;
+                            
+                            // If it's a string, parse it
+                            if (typeof groupMemberships === 'string') {
+                                try {
+                                    groupMemberships = JSON.parse(groupMemberships);
+                                } catch (e) {
+                                    // Ignore parse errors
                                 }
-                                
-                                if (groupMemberships && Array.isArray(groupMemberships) && groupMemberships.length > 0) {
+                            }
+                            
+                            if (groupMemberships && Array.isArray(groupMemberships) && groupMemberships.length > 0) {
                                     groupMembershipsFromApi = groupMemberships;
                                 }
                             }
                         }
                         
                         // CRITICAL: Priority order:
-                        // 1. API data (if available) - source of truth
-                        // 2. prevClient.groupMemberships (if restored by useEffect) - NEVER clear once set!
-                        // 3. restoredGroupMembershipsRef (if useEffect restored but prevClient is stale) - NEVER clear once set!
+                        // 1. restoredGroupMembershipsRef (if useEffect restored) - HIGHEST PRIORITY! NEVER clear once set!
+                        // 2. API data (if available) - source of truth, but only if ref doesn't have restored groups
+                        // 3. prevClient.groupMemberships (if restored by useEffect) - NEVER clear once set!
                         // 4. Empty array (only if neither exists AND prevClient never had groups)
                         
                         let finalGroupMemberships = [];
                         
-                        if (groupMembershipsFromApi && Array.isArray(groupMembershipsFromApi) && groupMembershipsFromApi.length > 0) {
-                            // Use API data (highest priority)
+                        // CRITICAL: Check ref FIRST - if groups were restored by useEffect, ALWAYS preserve them
+                        // This prevents API handler from overwriting groups even if API response is missing them
+                        if (restoredGroupMembershipsRef.current.has(client.id)) {
+                            const restoredGroups = restoredGroupMembershipsRef.current.get(client.id);
+                            if (restoredGroups && Array.isArray(restoredGroups) && restoredGroups.length > 0) {
+                                finalGroupMemberships = [...restoredGroups];
+                                if (client.name && client.name.toLowerCase().includes('exxaro')) {
+                                    console.log('✅ Preserving restored groupMemberships from REF (HIGHEST PRIORITY) for:', client.name, 'Count:', finalGroupMemberships.length);
+                                }
+                            }
+                        } else if (groupMembershipsFromApi && Array.isArray(groupMembershipsFromApi) && groupMembershipsFromApi.length > 0) {
+                            // Use API data (only if ref doesn't have restored groups)
                             finalGroupMemberships = groupMembershipsFromApi;
                             if (client.name && client.name.toLowerCase().includes('exxaro')) {
                                 console.log('✅ Using API groupMemberships for:', client.name, 'Count:', finalGroupMemberships.length);
@@ -1777,16 +1787,6 @@ const Clients = React.memo(() => {
                             finalGroupMemberships = [...prevClient.groupMemberships];
                             if (client.name && client.name.toLowerCase().includes('exxaro')) {
                                 console.log('✅ Preserving restored groupMemberships from prevClient for:', client.name, 'Count:', finalGroupMemberships.length);
-                            }
-                        } else if (restoredGroupMembershipsRef.current.has(client.id)) {
-                            // CRITICAL: Check ref for restored groups even if prevClient is stale (React state updates are async)
-                            // This prevents API handler from overwriting groups restored by useEffect
-                            const restoredGroups = restoredGroupMembershipsRef.current.get(client.id);
-                            if (restoredGroups && Array.isArray(restoredGroups) && restoredGroups.length > 0) {
-                                finalGroupMemberships = [...restoredGroups];
-                                if (client.name && client.name.toLowerCase().includes('exxaro')) {
-                                    console.log('✅ Preserving restored groupMemberships from REF for:', client.name, 'Count:', finalGroupMemberships.length);
-                                }
                             }
                         } else if (prevClient && 
                                    prevClient.groupMemberships && 
@@ -1822,8 +1822,8 @@ const Clients = React.memo(() => {
                             ...client,
                             groupMemberships: finalGroupMemberships
                         };
-                    });
-                    
+                });
+                
                     return verifiedClients;
                 });
                 
@@ -1891,20 +1891,20 @@ const Clients = React.memo(() => {
                                     const opps = opportunitiesByClient[client.id] || client.opportunities || [];
                                     // CRITICAL: Always create new object reference and preserve ALL group data from current state
                                     return {
-                                        ...client,
+                                ...client,
                                         opportunities: opps,
                                         // CRITICAL: Preserve group data from current state (which may have been restored by useEffect)
-                                        parentGroup: client.parentGroup || null,
-                                        parentGroupId: client.parentGroupId || null,
-                                        parentGroupName: client.parentGroupName || null,
+                                parentGroup: client.parentGroup || null,
+                                parentGroupId: client.parentGroupId || null,
+                                parentGroupName: client.parentGroupName || null,
                                         groupMemberships: Array.isArray(client.groupMemberships) ? [...client.groupMemberships] : []
                                     };
                                 });
-                                
-                                const totalOpps = updated.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                                if (totalOpps > 0) {
-                                }
-                                safeStorage.setClients(updated);
+                            
+                            const totalOpps = updated.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                            if (totalOpps > 0) {
+                            }
+                            safeStorage.setClients(updated);
                                 return updated;
                             });
                         })
@@ -3039,10 +3039,10 @@ const Clients = React.memo(() => {
                                 Array.isArray(apiClient.groupMemberships) && 
                                 apiClient.groupMemberships.length > 0) {
                                 // Always update with API data if available (don't check if client already has it)
-                                console.log(`✅ Restoring groupMemberships for ${client.name}:`, apiClient.groupMemberships.length, 'groups');
+                                    console.log(`✅ Restoring groupMemberships for ${client.name}:`, apiClient.groupMemberships.length, 'groups');
                                 // Create new client object with groupMemberships
-                                return {
-                                    ...client,
+                                    return {
+                                        ...client,
                                     groupMemberships: [...apiClient.groupMemberships] // Create new array reference
                                 };
                             }
