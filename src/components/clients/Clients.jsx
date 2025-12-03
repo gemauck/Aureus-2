@@ -2275,7 +2275,7 @@ const Clients = React.memo(() => {
                         }
                         
                         return {
-                            ...client,
+                        ...client,
                             isStarred: resolveStarredState(client),
                             // CRITICAL: Preserve restored groups from ref if available
                             groupMemberships: finalGroupMemberships
@@ -4980,15 +4980,32 @@ const Clients = React.memo(() => {
                                     </td>
                                     <td className={`px-6 py-2 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
                                         {(() => {
-                                            // Simple: just get group names from groupMemberships
-                                            const memberships = Array.isArray(client.groupMemberships) ? client.groupMemberships : [];
+                                            // CRITICAL: Check ref FIRST as fallback if state doesn't have groups
+                                            // This ensures groups are displayed even if state is cleared
+                                            let memberships = [];
+                                            
+                                            // Priority 1: Check ref (restored groups that should never be cleared)
+                                            if (restoredGroupMembershipsRef.current.has(client.id)) {
+                                                const restoredGroups = restoredGroupMembershipsRef.current.get(client.id);
+                                                if (restoredGroups && Array.isArray(restoredGroups) && restoredGroups.length > 0) {
+                                                    memberships = restoredGroups;
+                                                }
+                                            }
+                                            
+                                            // Priority 2: Use state if ref doesn't have groups
+                                            if (memberships.length === 0 && Array.isArray(client.groupMemberships) && client.groupMemberships.length > 0) {
+                                                memberships = client.groupMemberships;
+                                            }
                                             
                                             // Debug: log for Exxaro clients
                                             if (client.name && client.name.toLowerCase().includes('exxaro')) {
                                                 console.log(`🔍 Rendering ${client.name}:`, {
                                                     hasGroupMemberships: !!client.groupMemberships,
                                                     isArray: Array.isArray(client.groupMemberships),
-                                                    length: memberships.length,
+                                                    stateLength: Array.isArray(client.groupMemberships) ? client.groupMemberships.length : 0,
+                                                    refHasGroups: restoredGroupMembershipsRef.current.has(client.id),
+                                                    refLength: restoredGroupMembershipsRef.current.has(client.id) ? restoredGroupMembershipsRef.current.get(client.id).length : 0,
+                                                    finalLength: memberships.length,
                                                     firstItem: memberships[0],
                                                     allItems: memberships
                                                 });
