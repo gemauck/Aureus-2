@@ -913,32 +913,70 @@ const ManagementMeetingNotes = () => {
 
     // Get weeks for selected month
     const weeks = useMemo(() => {
-        if (!currentMonthlyNotes || !currentMonthlyNotes.weeklyNotes) {
-            console.log('⚠️ No weekly notes found:', {
-                hasCurrentMonthlyNotes: !!currentMonthlyNotes,
-                hasWeeklyNotes: !!currentMonthlyNotes?.weeklyNotes,
-                weeklyNotesType: typeof currentMonthlyNotes?.weeklyNotes,
-                weeklyNotesIsArray: Array.isArray(currentMonthlyNotes?.weeklyNotes),
-                weeklyNotesValue: currentMonthlyNotes?.weeklyNotes
-            });
+        if (!currentMonthlyNotes) {
+            console.log('⚠️ No currentMonthlyNotes found');
             return [];
         }
         
-        const weeklyNotesArray = Array.isArray(currentMonthlyNotes.weeklyNotes) 
-            ? currentMonthlyNotes.weeklyNotes 
-            : [];
+        // Check for weeklyNotes in various possible locations
+        let weeklyNotesArray = [];
+        
+        if (currentMonthlyNotes.weeklyNotes) {
+            if (Array.isArray(currentMonthlyNotes.weeklyNotes)) {
+                weeklyNotesArray = currentMonthlyNotes.weeklyNotes;
+            } else if (typeof currentMonthlyNotes.weeklyNotes === 'object') {
+                // If it's an object, try to convert it to an array
+                weeklyNotesArray = Object.values(currentMonthlyNotes.weeklyNotes);
+            }
+        }
+        
+        // Also check if weeks are stored directly on the monthly notes object
+        if (weeklyNotesArray.length === 0 && currentMonthlyNotes.weeks && Array.isArray(currentMonthlyNotes.weeks)) {
+            weeklyNotesArray = currentMonthlyNotes.weeks;
+        }
         
         console.log('📅 Processing weekly notes:', {
-            count: weeklyNotesArray.length,
-            weekKeys: weeklyNotesArray.map(w => w?.weekKey || w?.id),
-            weekStarts: weeklyNotesArray.map(w => w?.weekStart),
-            rawWeeklyNotes: currentMonthlyNotes.weeklyNotes
+            hasCurrentMonthlyNotes: !!currentMonthlyNotes,
+            hasWeeklyNotes: !!currentMonthlyNotes?.weeklyNotes,
+            weeklyNotesType: typeof currentMonthlyNotes?.weeklyNotes,
+            weeklyNotesIsArray: Array.isArray(currentMonthlyNotes?.weeklyNotes),
+            weeklyNotesCount: weeklyNotesArray.length,
+            weekKeys: weeklyNotesArray.map(w => w?.weekKey || w?.id || w?.week_key),
+            weekStarts: weeklyNotesArray.map(w => w?.weekStart || w?.week_start),
+            rawWeeklyNotes: currentMonthlyNotes.weeklyNotes,
+            fullCurrentMonthlyNotes: currentMonthlyNotes
         });
         
-        const sorted = [...weeklyNotesArray].sort((a, b) => {
+        if (weeklyNotesArray.length === 0) {
+            return [];
+        }
+        
+        // Filter out any null/undefined weeks and ensure they have required fields
+        const validWeeks = weeklyNotesArray.filter(week => {
+            if (!week) return false;
+            // A week is valid if it has either weekKey, id, or week_key
+            return !!(week.weekKey || week.id || week.week_key);
+        });
+        
+        // Normalize week data structure
+        const normalizedWeeks = validWeeks.map(week => ({
+            ...week,
+            weekKey: week.weekKey || week.week_key || week.id,
+            weekStart: week.weekStart || week.week_start,
+            weekEnd: week.weekEnd || week.week_end,
+            departmentNotes: week.departmentNotes || week.department_notes || []
+        }));
+        
+        const sorted = [...normalizedWeeks].sort((a, b) => {
             const dateA = a.weekStart ? new Date(a.weekStart) : new Date(0);
             const dateB = b.weekStart ? new Date(b.weekStart) : new Date(0);
             return dateB - dateA;
+        });
+        
+        console.log('✅ Final processed weeks:', {
+            count: sorted.length,
+            weekKeys: sorted.map(w => w.weekKey),
+            weekStarts: sorted.map(w => w.weekStart)
         });
         
         return sorted;
@@ -1261,7 +1299,11 @@ const ManagementMeetingNotes = () => {
                     if (typeof alert === 'function') {
                         console.error('Monthly notes already exist but could not load automatically.');
                     }
+                    // Return null to prevent unhandled promise rejection
+                    return null;
                 }
+                // If we get here, loading failed but we didn't return, so return null
+                return null;
             } else if (typeof alert === 'function') {
                 console.error('Failed to create monthly notes');
             }
@@ -1473,11 +1515,44 @@ const ManagementMeetingNotes = () => {
                 : monthlyNotesList.find(note => note?.monthKey === weekDetails.monthKey) || null;
 
         if (!targetMonth) {
-            const createdMonth = await handleCreateMonth(weekDetails.monthKey);
-            if (!createdMonth) {
-                return null;
+            try {
+                const createdMonth = await handleCreateMonth(weekDetails.monthKey);
+                if (!createdMonth) {
+                    return null;
+                }
+                targetMonth = createdMonth;
+            } catch (error) {
+                console.error('Error creating month in handleCreateWeek:', error);
+                // Try to load existing month notes if creation failed
+                try {
+                    const monthResponse = await window.DatabaseAPI.getMeetingNotes(weekDetails.monthKey);
+                    const existingMonth = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes || null;
+                    if (existingMonth) {
+                        targetMonth = existingMonth;
+                        setCurrentMonthlyNotes(existingMonth);
+                        setMonthlyNotesList(prev => {
+                            const list = Array.isArray(prev) ? [...prev] : [];
+                            const existingIndex = list.findIndex(note => {
+                                if (!note) return false;
+                                return (note.id && existingMonth.id && note.id === existingMonth.id) ||
+                                       (note.monthKey && existingMonth.monthKey && note.monthKey === existingMonth.monthKey);
+                            });
+                            if (existingIndex >= 0) {
+                                list[existingIndex] = existingMonth;
+                                return list;
+                            }
+                            list.push(existingMonth);
+                            return list;
+                        });
+                        setSelectedMonth(existingMonth.monthKey);
+                    } else {
+                        return null;
+                    }
+                } catch (loadError) {
+                    console.error('Failed to load existing monthly notes:', loadError);
+                    return null;
+                }
             }
-            targetMonth = createdMonth;
         }
 
         if (!targetMonth?.weeklyNotes) {
@@ -3166,10 +3241,15 @@ const ManagementMeetingNotes = () => {
                                 type="month"
                                 value={newMonthKey}
                                 onChange={(e) => setNewMonthKey(e.target.value)}
-                                onKeyDown={(e) => {
+                                onKeyDown={async (e) => {
                                     if (e.key === 'Enter') {
                                         e.preventDefault();
-                                        handleCreateMonth(e.currentTarget.value);
+                                        try {
+                                            await handleCreateMonth(e.currentTarget.value);
+                                        } catch (error) {
+                                            console.error('Error creating month from input:', error);
+                                            // Error is already logged, silently handle
+                                        }
                                     }
                                 }}
                                 aria-label="Create month"
@@ -3178,10 +3258,15 @@ const ManagementMeetingNotes = () => {
                             />
                             <button
                                 type="button"
-                                onClick={(e) => {
+                                onClick={async (e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    handleCreateMonth();
+                                    try {
+                                        await handleCreateMonth();
+                                    } catch (error) {
+                                        console.error('Error creating month from button:', error);
+                                        // Error is already logged, silently handle
+                                    }
                                 }}
                                 className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition shadow-sm hover:shadow-md font-medium"
                             >
@@ -3272,10 +3357,15 @@ const ManagementMeetingNotes = () => {
                                 type="date"
                                 value={newWeekStartInput}
                                 onChange={(e) => setNewWeekStartInput(e.target.value)}
-                                onKeyDown={(e) => {
+                                onKeyDown={async (e) => {
                                     if (e.key === 'Enter') {
                                         e.preventDefault();
-                                        handleCreateWeek(e.currentTarget.value);
+                                        try {
+                                            await handleCreateWeek(e.currentTarget.value);
+                                        } catch (error) {
+                                            console.error('Error creating week from input:', error);
+                                            // Error is already logged, silently handle
+                                        }
                                     }
                                 }}
                                 placeholder="YYYY-MM-DD"
@@ -3285,10 +3375,15 @@ const ManagementMeetingNotes = () => {
                             />
                             <button
                                 type="button"
-                                onClick={(e) => {
+                                onClick={async (e) => {
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    handleCreateWeek();
+                                    try {
+                                        await handleCreateWeek();
+                                    } catch (error) {
+                                        console.error('Error creating week from button:', error);
+                                        // Error is already logged, silently handle
+                                    }
                                 }}
                                 className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-sm hover:shadow-md font-medium"
                             >
@@ -4083,7 +4178,7 @@ const ManagementMeetingNotes = () => {
                 </div>
             )}
 
-            {/* Empty State */}
+            {/* Empty State - No monthly notes */}
             {selectedMonth && !currentMonthlyNotes && (
                 <div className={`rounded-lg border p-8 text-center ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                     <i className={`fas fa-clipboard-list text-4xl mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}></i>
@@ -4092,15 +4187,33 @@ const ManagementMeetingNotes = () => {
                     </p>
                     <button
                         type="button"
-                        onClick={(e) => {
+                        onClick={async (e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            handleCreateMonth();
+                            try {
+                                await handleCreateMonth();
+                            } catch (error) {
+                                console.error('Error creating month from empty state button:', error);
+                                // Error is already logged, silently handle
+                            }
                         }}
                         className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-xs"
                     >
                         Create Month Notes
                     </button>
+                </div>
+            )}
+
+            {/* Empty State - Monthly notes exist but no weeks */}
+            {selectedMonth && currentMonthlyNotes && weeks.length === 0 && (
+                <div className={`rounded-lg border p-8 text-center ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                    <i className={`fas fa-calendar-week text-4xl mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}></i>
+                    <p className={`text-sm mb-4 ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                        No weeks created for {formatMonth(selectedMonth)} yet.
+                    </p>
+                    <p className={`text-xs mb-4 ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+                        Use the controls above to add a week or generate a month.
+                    </p>
                 </div>
             )}
 

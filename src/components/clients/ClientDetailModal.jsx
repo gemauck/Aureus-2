@@ -109,6 +109,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
     const [showDeleteGroupModal, setShowDeleteGroupModal] = useState(false);
     const [groupToDelete, setGroupToDelete] = useState(null);
+    const [groupToEdit, setGroupToEdit] = useState(null);
     const [standaloneGroupName, setStandaloneGroupName] = useState('');
     const [standaloneGroupIndustry, setStandaloneGroupIndustry] = useState('Other');
     
@@ -1832,10 +1833,16 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 if (groupsListResponse.ok) {
                     const groupsListData = await groupsListResponse.json();
                     const groups = groupsListData?.data?.groups || groupsListData?.groups || [];
-                    // Filter out current client and map to expected format
+                    // Filter out current client and map to expected format, preserving _count for member counts
                     const availableGroups = groups
                         .filter(g => g.id !== client.id)
-                        .map(g => ({ id: g.id, name: g.name, type: g.type || 'client', industry: g.industry || 'Other' }));
+                        .map(g => ({ 
+                            id: g.id, 
+                            name: g.name, 
+                            type: g.type || 'client', 
+                            industry: g.industry || 'Other',
+                            _count: g._count || { childCompanies: 0, groupChildren: 0 }
+                        }));
                     setAllGroups(availableGroups);
                 } else {
                     // Fallback to clients endpoint if groups endpoint fails
@@ -2002,7 +2009,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         const groups = groupsListData?.data?.groups || groupsListData?.groups || [];
                         const availableGroups = groups
                             .filter(g => g.id !== client.id)
-                            .map(g => ({ id: g.id, name: g.name, type: g.type || 'client', industry: g.industry || 'Other' }));
+                            .map(g => ({ 
+                                id: g.id, 
+                                name: g.name, 
+                                type: g.type || 'client', 
+                                industry: g.industry || 'Other',
+                                _count: g._count || { childCompanies: 0, groupChildren: 0 }
+                            }));
                         setAllGroups(availableGroups);
                     } else {
                         // Fallback to clients endpoint
@@ -2074,6 +2087,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     const gData = groupsData?.data || groupsData;
                     setGroupMemberships(gData.groupMemberships || []);
                 }
+                // Reload all groups to update member counts
+                await loadGroupsData();
                 alert('✅ Successfully removed from group');
             } else {
                 alert('Failed to remove client from group. Please try again.');
@@ -2140,6 +2155,67 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         } catch (error) {
             console.error('Failed to create group:', error);
             alert('Failed to create group. Please try again.');
+        }
+    };
+
+    // Edit a group
+    const handleEditGroup = async () => {
+        if (!groupToEdit) return;
+        
+        if (!standaloneGroupName?.trim()) {
+            alert('Please enter a group name');
+            return;
+        }
+
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                alert('Please log in to edit groups');
+                return;
+            }
+
+            const requestBody = {
+                name: standaloneGroupName.trim(),
+                industry: standaloneGroupIndustry || 'Other'
+            };
+            
+            console.log('Updating group with data:', { groupId: groupToEdit.id, ...requestBody });
+
+            const response = await fetch(`/api/clients/${groupToEdit.id}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            const responseData = await response.json().catch(() => ({}));
+            const data = responseData?.data || responseData;
+
+            console.log('Update group response:', { status: response.status, statusText: response.statusText, responseData, data });
+
+            if (response.ok) {
+                alert('✅ Group updated successfully');
+                setShowCreateGroupModal(false);
+                setGroupToEdit(null);
+                setStandaloneGroupName('');
+                setStandaloneGroupIndustry('Other');
+                // Reload all groups
+                await loadGroupsData();
+            } else {
+                const errorMessage = responseData?.error?.message || 
+                                   responseData?.error || 
+                                   data?.error?.message || 
+                                   data?.error || 
+                                   data?.message || 
+                                   `Failed to update group (${response.status}). Please try again.`;
+                console.error('Failed to update group:', { status: response.status, error: errorMessage, responseData });
+                alert(errorMessage);
+            }
+        } catch (error) {
+            console.error('Failed to update group:', error);
+            alert('Failed to update group. Please try again.');
         }
     };
 
@@ -4369,6 +4445,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         e.preventDefault();
                                                         e.stopPropagation();
                                                         console.log('Create Group button clicked, setting showCreateGroupModal to true');
+                                                        setGroupToEdit(null);
+                                                        setStandaloneGroupName('');
+                                                        setStandaloneGroupIndustry('Other');
                                                         setShowCreateGroupModal(true);
                                                     }}
                                                     className={`px-3 py-1 text-sm rounded-md transition-colors ${
@@ -4385,7 +4464,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     {allGroups
                                                         .filter(g => g.type === 'group')
                                                         .map((group) => {
-                                                            const memberCount = (group._count?.childCompanies || 0) + (group._count?.groupChildren || 0);
+                                                            // Calculate member count - ensure we're using the correct count fields
+                                                            const childCount = group._count?.childCompanies || 0;
+                                                            const groupChildrenCount = group._count?.groupChildren || 0;
+                                                            const memberCount = childCount + groupChildrenCount;
                                                             return (
                                                                 <div
                                                                     key={group.id}
@@ -4404,21 +4486,40 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                             • {memberCount} member{memberCount !== 1 ? 's' : ''}
                                                                         </span>
                                                                     </div>
-                                                                    <button
-                                                                        type="button"
-                                                                        onClick={() => {
-                                                                            setGroupToDelete(group);
-                                                                            setShowDeleteGroupModal(true);
-                                                                        }}
-                                                                        className={`px-2 py-1 text-xs rounded transition-colors ${
-                                                                            isDark
-                                                                                ? 'bg-red-600 hover:bg-red-700 text-white'
-                                                                                : 'bg-red-500 hover:bg-red-600 text-white'
-                                                                        }`}
-                                                                    >
-                                                                        <i className="fas fa-trash mr-1"></i>
-                                                                        Delete
-                                                                    </button>
+                                                                    <div className="flex gap-2">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                setGroupToEdit(group);
+                                                                                setStandaloneGroupName(group.name || '');
+                                                                                setStandaloneGroupIndustry(group.industry || 'Other');
+                                                                                setShowCreateGroupModal(true);
+                                                                            }}
+                                                                            className={`px-2 py-1 text-xs rounded transition-colors ${
+                                                                                isDark
+                                                                                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                                                                                    : 'bg-blue-500 hover:bg-blue-600 text-white'
+                                                                            }`}
+                                                                        >
+                                                                            <i className="fas fa-edit mr-1"></i>
+                                                                            Edit
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                setGroupToDelete(group);
+                                                                                setShowDeleteGroupModal(true);
+                                                                            }}
+                                                                            className={`px-2 py-1 text-xs rounded transition-colors ${
+                                                                                isDark
+                                                                                    ? 'bg-red-600 hover:bg-red-700 text-white'
+                                                                                    : 'bg-red-500 hover:bg-red-600 text-white'
+                                                                            }`}
+                                                                        >
+                                                                            <i className="fas fa-trash mr-1"></i>
+                                                                            Delete
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
                                                             );
                                                         })}
@@ -4684,6 +4785,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         onClick={() => {
                                             console.log('Modal backdrop clicked, closing modal');
                                             setShowCreateGroupModal(false);
+                                            setGroupToEdit(null);
                                             setStandaloneGroupName('');
                                             setStandaloneGroupIndustry('Other');
                                         }}
@@ -4696,12 +4798,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         >
                                             <div className="flex justify-between items-center mb-4">
                                                 <h3 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                                    Create New Group
+                                                    {groupToEdit ? 'Edit Group' : 'Create New Group'}
                                                 </h3>
                                                 <button
                                                     type="button"
                                                     onClick={() => {
                                                         setShowCreateGroupModal(false);
+                                                        setGroupToEdit(null);
                                                         setStandaloneGroupName('');
                                                         setStandaloneGroupIndustry('Other');
                                                     }}
@@ -4750,6 +4853,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         type="button"
                                                         onClick={() => {
                                                             setShowCreateGroupModal(false);
+                                                            setGroupToEdit(null);
                                                             setStandaloneGroupName('');
                                                             setStandaloneGroupIndustry('Other');
                                                         }}
@@ -4763,7 +4867,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     </button>
                                                     <button
                                                         type="button"
-                                                        onClick={handleCreateStandaloneGroup}
+                                                        onClick={groupToEdit ? handleEditGroup : handleCreateStandaloneGroup}
                                                         disabled={!standaloneGroupName?.trim()}
                                                         className={`px-4 py-2 rounded-md transition-colors ${
                                                             !standaloneGroupName?.trim()
@@ -4773,7 +4877,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                     : 'bg-green-500 hover:bg-green-600 text-white'
                                                         }`}
                                                     >
-                                                        Create Group
+                                                        {groupToEdit ? 'Update Group' : 'Create Group'}
                                                     </button>
                                                 </div>
                                             </div>
