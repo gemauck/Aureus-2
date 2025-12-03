@@ -4830,8 +4830,23 @@ const Clients = React.memo(() => {
                                         {(() => {
                                             // Simple: just get group names from groupMemberships
                                             const memberships = Array.isArray(client.groupMemberships) ? client.groupMemberships : [];
+                                            
+                                            // Debug: log for Exxaro clients
+                                            if (client.name && client.name.toLowerCase().includes('exxaro')) {
+                                                console.log(`🔍 Rendering ${client.name}:`, {
+                                                    hasGroupMemberships: !!client.groupMemberships,
+                                                    isArray: Array.isArray(client.groupMemberships),
+                                                    length: memberships.length,
+                                                    firstItem: memberships[0],
+                                                    allItems: memberships
+                                                });
+                                            }
+                                            
                                             const groupNames = memberships
-                                                .map(m => m?.group?.name || m?.name)
+                                                .map(m => {
+                                                    // Try multiple possible structures
+                                                    return m?.group?.name || m?.name || (typeof m === 'string' ? m : null);
+                                                })
                                                 .filter(Boolean);
                                             
                                             return groupNames.length > 0 
