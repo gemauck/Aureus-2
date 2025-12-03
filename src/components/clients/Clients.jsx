@@ -2937,7 +2937,7 @@ const Clients = React.memo(() => {
                     
                     // Update all clients with their groupMemberships in a single state update
                     setClients(prevClients => {
-                        let hasChanges = false;
+                        // Always create a new array to ensure React detects the change
                         const updated = prevClients.map(client => {
                             const apiClient = apiClientsMap.get(client.id);
                             if (apiClient && 
@@ -2949,17 +2949,18 @@ const Clients = React.memo(() => {
                                     !Array.isArray(client.groupMemberships) || 
                                     client.groupMemberships.length === 0) {
                                     console.log(`✅ Restoring groupMemberships for ${client.name}:`, apiClient.groupMemberships.length, 'groups');
-                                    hasChanges = true;
+                                    // Create new client object with groupMemberships
                                     return {
                                         ...client,
-                                        groupMemberships: apiClient.groupMemberships
+                                        groupMemberships: [...apiClient.groupMemberships] // Create new array reference
                                     };
                                 }
                             }
-                            return client;
+                            // Always return a new object reference to ensure React detects changes
+                            return { ...client };
                         });
-                        // Force new array reference even if no changes to ensure re-render
-                        return hasChanges ? updated : [...updated];
+                        // Always return new array reference
+                        return updated;
                     });
                 } else {
                     console.log('ℹ️ No clients found with groupMemberships in API response');
