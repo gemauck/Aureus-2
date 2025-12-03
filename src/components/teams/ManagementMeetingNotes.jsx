@@ -1302,26 +1302,37 @@ const ManagementMeetingNotes = () => {
 
             try {
                 setLoading(true);
+                console.log('📝 Attempting to create monthly notes for:', monthKey);
                 const response = await window.DatabaseAPI.createMonthlyNotes(monthKey, '').catch(async (createError) => {
                     // If createMonthlyNotes throws "already exist", try to load existing notes
                     const errorMessage = (createError?.message || '').toLowerCase();
-                    if (errorMessage.includes('already exist')) {
+                    console.log('⚠️ createMonthlyNotes error caught:', errorMessage, createError);
+                    if (errorMessage.includes('already exist') || createError.needsManualLoad) {
+                        console.log('🔄 Attempting to load existing notes manually...');
                         try {
                             const monthResponse = await window.DatabaseAPI.getMeetingNotes(monthKey);
+                            console.log('📦 getMeetingNotes response:', monthResponse);
                             const duplicateNotes = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes;
                             if (duplicateNotes) {
+                                console.log('✅ Found existing notes:', duplicateNotes.id, duplicateNotes.monthKey);
                                 // Return the existing notes as if they were just created
                                 return { data: { monthlyNotes: duplicateNotes }, monthlyNotes: duplicateNotes };
+                            } else {
+                                console.warn('⚠️ getMeetingNotes returned but no monthlyNotes found');
                             }
                         } catch (loadError) {
-                            console.error('Failed to load existing monthly notes after duplicate warning:', loadError);
+                            console.error('❌ Failed to load existing monthly notes after duplicate warning:', loadError);
+                            // Re-throw with more context
+                            throw new Error(`Could not load existing notes: ${loadError.message}`);
                         }
                     }
                     // Re-throw if we couldn't handle it
                     throw createError;
                 });
-                const newNotes = response.data?.monthlyNotes || response.monthlyNotes;
+                console.log('📦 createMonthlyNotes response:', response);
+                const newNotes = response?.data?.monthlyNotes || response?.monthlyNotes || response?.data;
                 if (newNotes) {
+                    console.log('✅ Successfully got notes (new or existing):', newNotes.id, newNotes.monthKey);
                     setCurrentMonthlyNotes(newNotes);
                     setMonthlyNotesList(prev => {
                         const list = Array.isArray(prev) ? [...prev] : [];
@@ -1341,9 +1352,73 @@ const ManagementMeetingNotes = () => {
                     setSelectedWeek(null);
                     setNewMonthKey('');
                     return newNotes;
+                } else {
+                    console.warn('⚠️ createMonthlyNotes returned but no notes found in response. Response structure:', {
+                        hasData: !!response?.data,
+                        hasMonthlyNotes: !!response?.monthlyNotes,
+                        dataKeys: response?.data ? Object.keys(response.data) : [],
+                        topLevelKeys: response ? Object.keys(response) : [],
+                        response: response
+                    });
+                    // Try to extract notes from any structure
+                    if (response?.data && typeof response.data === 'object') {
+                        const possibleNotes = response.data.monthlyNotes || response.data;
+                        if (possibleNotes && possibleNotes.monthKey) {
+                            console.log('✅ Found notes in alternative structure');
+                            setCurrentMonthlyNotes(possibleNotes);
+                            setMonthlyNotesList(prev => {
+                                const list = Array.isArray(prev) ? [...prev] : [];
+                                const existingIndex = list.findIndex(note => {
+                                    if (!note) return false;
+                                    return (note.id && possibleNotes.id && note.id === possibleNotes.id) ||
+                                           (note.monthKey && possibleNotes.monthKey && note.monthKey === possibleNotes.monthKey);
+                                });
+                                if (existingIndex >= 0) {
+                                    list[existingIndex] = possibleNotes;
+                                    return list;
+                                }
+                                list.push(possibleNotes);
+                                return list;
+                            });
+                            setSelectedMonth(possibleNotes.monthKey || monthKey);
+                            setSelectedWeek(null);
+                            setNewMonthKey('');
+                            return possibleNotes;
+                        }
+                    }
+                    // If we still don't have notes, try to load them manually
+                    console.log('🔄 Attempting to load notes manually as fallback...');
+                    try {
+                        const monthResponse = await window.DatabaseAPI.getMeetingNotes(monthKey);
+                        const fallbackNotes = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes;
+                        if (fallbackNotes) {
+                            console.log('✅ Successfully loaded notes via fallback');
+                            setCurrentMonthlyNotes(fallbackNotes);
+                            setMonthlyNotesList(prev => {
+                                const list = Array.isArray(prev) ? [...prev] : [];
+                                const existingIndex = list.findIndex(note => {
+                                    if (!note) return false;
+                                    return (note.id && fallbackNotes.id && note.id === fallbackNotes.id) ||
+                                           (note.monthKey && fallbackNotes.monthKey && note.monthKey === fallbackNotes.monthKey);
+                                });
+                                if (existingIndex >= 0) {
+                                    list[existingIndex] = fallbackNotes;
+                                    return list;
+                                }
+                                list.push(fallbackNotes);
+                                return list;
+                            });
+                            setSelectedMonth(fallbackNotes.monthKey || monthKey);
+                            setSelectedWeek(null);
+                            setNewMonthKey('');
+                            return fallbackNotes;
+                        }
+                    } catch (fallbackError) {
+                        console.error('❌ Fallback load also failed:', fallbackError);
+                    }
                 }
             } catch (error) {
-                console.error('Error creating monthly notes:', error);
+                console.error('❌ Error creating monthly notes:', error);
                 const errorMessage = (error?.message || '').toLowerCase();
                 if (errorMessage.includes('already exist')) {
                     try {

@@ -2047,12 +2047,26 @@ const DatabaseAPI = {
                 console.warn('⚠️ Monthly meeting notes already exist. Returning existing notes instead of throwing.');
                 try {
                     const existing = await this.getMeetingNotes(monthKey);
-                    if (existing?.data) {
-                        existing.data.duplicate = true;
+                    if (existing?.data || existing?.monthlyNotes) {
+                        // Mark as duplicate so caller knows it's an existing record
+                        if (existing.data) {
+                            existing.data.duplicate = true;
+                        }
+                        console.log('✅ Successfully loaded existing monthly notes for:', monthKey);
+                        return existing;
+                    } else {
+                        console.warn('⚠️ getMeetingNotes returned but no data found for:', monthKey);
+                        // Still return the response even if structure is unexpected
+                        return existing;
                     }
-                    return existing;
                 } catch (fetchError) {
                     console.error('❌ Failed to load existing monthly notes after duplicate detection:', fetchError);
+                    // Don't throw - return a rejected promise that the caller can handle
+                    // But wrap it so caller knows it's a "needs to load manually" case
+                    const loadError = new Error(`Meeting notes already exist but could not be loaded: ${fetchError.message}`);
+                    loadError.originalError = fetchError;
+                    loadError.needsManualLoad = true;
+                    throw loadError;
                 }
             }
             throw error;
