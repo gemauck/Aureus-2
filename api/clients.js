@@ -217,13 +217,6 @@ async function handler(req, res) {
             console.error('❌ Fallback query with relations failed, trying minimal query:', fallbackError.message)
             rawClients = await prisma.client.findMany({
               include: {
-                parentGroup: {
-                  select: {
-                    id: true,
-                    name: true,
-                    type: true
-                  }
-                },
                 groupMemberships: {
                   include: {
                     group: {
