@@ -29,20 +29,6 @@ async function handler(req, res) {
         const client = await prisma.client.findUnique({ 
           where: { id },
           include: {
-            parentGroup: {
-              select: {
-                id: true,
-                name: true,
-                type: true
-              }
-            },
-            childCompanies: {
-              select: {
-                id: true,
-                name: true,
-                type: true
-              }
-            },
             groupMemberships: {
               include: {
                 group: {
@@ -140,36 +126,7 @@ async function handler(req, res) {
         contracts: Array.isArray(body.contracts) ? JSON.stringify(body.contracts) : undefined,
         activityLog: Array.isArray(body.activityLog) ? JSON.stringify(body.activityLog) : undefined,
         services: Array.isArray(body.services) ? JSON.stringify(body.services) : (body.services ? JSON.stringify(body.services) : undefined),
-        billingTerms: typeof body.billingTerms === 'object' ? JSON.stringify(body.billingTerms) : undefined,
-        ...(body.parentGroupId !== undefined ? { parentGroupId: body.parentGroupId || null } : {})
-      }
-
-      // Validate parentGroupId doesn't create circular reference
-      if (updateData.parentGroupId) {
-        try {
-          let currentId = updateData.parentGroupId
-          const visited = new Set()
-          
-          while (currentId) {
-            if (currentId === id) {
-              return badRequest(res, 'Cannot set parent group to a descendant of this client (circular reference)')
-            }
-            if (visited.has(currentId)) {
-              return badRequest(res, 'Circular reference detected in parent group hierarchy')
-            }
-            visited.add(currentId)
-            
-            const parent = await prisma.client.findUnique({
-              where: { id: currentId },
-              select: { parentGroupId: true }
-            })
-            
-            if (!parent || !parent.parentGroupId) break
-            currentId = parent.parentGroupId
-          }
-        } catch (validationError) {
-          console.error('Error validating parentGroupId:', validationError)
-        }
+        billingTerms: typeof body.billingTerms === 'object' ? JSON.stringify(body.billingTerms) : undefined
       }
 
       // Remove undefined values
