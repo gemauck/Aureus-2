@@ -1606,18 +1606,21 @@ const ManagementMeetingNotes = () => {
                     : monthlyNotesList.find(note => note?.monthKey === weekDetails.monthKey) || null;
 
             if (!targetMonth) {
+                console.log('📅 No target month found, creating month:', weekDetails.monthKey);
                 try {
                     const createdMonth = await handleCreateMonth(weekDetails.monthKey).catch(error => {
                         // handleCreateMonth should never throw, but catch just in case
-                        console.error('Error creating month in handleCreateWeek (from handleCreateMonth):', error);
+                        console.error('❌ Error creating month in handleCreateWeek (from handleCreateMonth):', error);
                         return null;
                     });
                     if (!createdMonth) {
+                        console.log('⚠️ Month creation returned null, trying to load existing month...');
                         // Try to load existing month notes if creation failed
                         try {
                             const monthResponse = await window.DatabaseAPI.getMeetingNotes(weekDetails.monthKey);
                             const existingMonth = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes || null;
                             if (existingMonth) {
+                                console.log('✅ Loaded existing month:', existingMonth.id, existingMonth.monthKey);
                                 targetMonth = existingMonth;
                                 setCurrentMonthlyNotes(existingMonth);
                                 setMonthlyNotesList(prev => {
@@ -1636,14 +1639,20 @@ const ManagementMeetingNotes = () => {
                                 });
                                 setSelectedMonth(existingMonth.monthKey);
                             } else {
+                                console.error('❌ Could not load existing month either. monthKey:', weekDetails.monthKey);
                                 return null;
                             }
                         } catch (loadError) {
-                            console.error('Failed to load existing monthly notes:', loadError);
+                            console.error('❌ Failed to load existing monthly notes:', loadError);
                             return null;
                         }
                     } else {
+                        console.log('✅ Month created successfully:', createdMonth.id, createdMonth.monthKey);
                         targetMonth = createdMonth;
+                        // Ensure targetMonth has all necessary properties
+                        if (!targetMonth.id && createdMonth.id) {
+                            targetMonth = { ...targetMonth, id: createdMonth.id };
+                        }
                     }
                 } catch (error) {
                     console.error('Error creating month in handleCreateWeek:', error);
@@ -1680,10 +1689,12 @@ const ManagementMeetingNotes = () => {
             }
 
         if (!targetMonth?.weeklyNotes) {
+            console.log('🔄 Refreshing month data to get weeklyNotes. Current targetMonth.id:', targetMonth?.id);
             try {
                 const monthResponse = await window.DatabaseAPI.getMeetingNotes(targetMonth.monthKey || weekDetails.monthKey);
                 const refreshedMonth = monthResponse?.data?.monthlyNotes || monthResponse?.monthlyNotes || null;
                 if (refreshedMonth) {
+                    console.log('✅ Refreshed month data. New id:', refreshedMonth.id, 'Has weeklyNotes:', !!refreshedMonth.weeklyNotes);
                     targetMonth = refreshedMonth;
                     setCurrentMonthlyNotes(refreshedMonth);
                     setMonthlyNotesList(prev => {
@@ -1701,10 +1712,25 @@ const ManagementMeetingNotes = () => {
                         return list;
                     });
                     setSelectedMonth(refreshedMonth.monthKey);
+                } else {
+                    console.warn('⚠️ Refreshed month response was null');
                 }
             } catch (monthLoadError) {
-                console.error('Error refreshing monthly notes before creating week:', monthLoadError);
+                console.error('❌ Error refreshing monthly notes before creating week:', monthLoadError);
             }
+        }
+
+        // Final check: ensure targetMonth has an id before proceeding
+        if (!targetMonth?.id) {
+            console.error('❌ targetMonth still missing id after all attempts. targetMonth:', {
+                monthKey: targetMonth?.monthKey,
+                hasId: !!targetMonth?.id,
+                id: targetMonth?.id
+            });
+            if (typeof alert === 'function') {
+                alert('Unable to get monthly notes ID. Please try refreshing the page.');
+            }
+            return null;
         }
 
         if (!targetMonth) {
