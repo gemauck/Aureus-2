@@ -6168,7 +6168,30 @@ const Clients = React.memo(() => {
                                                                 {client.name}
                                                             </div>
                                                             <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                                {client.industry || 'Other'} • {client.status || 'Active'}
+                                                                {(() => {
+                                                                    // Parse sites from JSON string or use array directly
+                                                                    let sites = [];
+                                                                    if (client.sites) {
+                                                                        if (typeof client.sites === 'string') {
+                                                                            try {
+                                                                                sites = JSON.parse(client.sites);
+                                                                            } catch (e) {
+                                                                                sites = [];
+                                                                            }
+                                                                        } else if (Array.isArray(client.sites)) {
+                                                                            sites = client.sites;
+                                                                        }
+                                                                    }
+                                                                    
+                                                                    if (sites.length > 0) {
+                                                                        const siteNames = sites
+                                                                            .filter(site => site && site.name)
+                                                                            .map(site => site.name)
+                                                                            .slice(0, 3); // Limit to 3 sites
+                                                                        return `Sites: ${siteNames.join(', ')}${sites.length > 3 ? '...' : ''}`;
+                                                                    }
+                                                                    return 'Sites: None';
+                                                                })()}
                                                             </div>
                                                         </div>
                                                     </div>
