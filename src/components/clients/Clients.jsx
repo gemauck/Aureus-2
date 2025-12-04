@@ -6184,11 +6184,30 @@ const Clients = React.memo(() => {
                                                                     }
                                                                     
                                                                     if (sites.length > 0) {
+                                                                        // Handle both string sites and object sites
                                                                         const siteNames = sites
-                                                                            .filter(site => site && site.name)
-                                                                            .map(site => site.name)
+                                                                            .filter(site => site) // Filter out null/undefined
+                                                                            .map(site => {
+                                                                                // If site is a string, use it directly
+                                                                                if (typeof site === 'string') {
+                                                                                    return site;
+                                                                                }
+                                                                                // If site is an object with a name property, use it
+                                                                                if (site && typeof site === 'object' && site.name) {
+                                                                                    return site.name;
+                                                                                }
+                                                                                // If site is an object with other properties, try to find a name-like field
+                                                                                if (site && typeof site === 'object') {
+                                                                                    return site.name || site.location || site.address || JSON.stringify(site);
+                                                                                }
+                                                                                return null;
+                                                                            })
+                                                                            .filter(name => name) // Remove null/undefined names
                                                                             .slice(0, 3); // Limit to 3 sites
-                                                                        return `Sites: ${siteNames.join(', ')}${sites.length > 3 ? '...' : ''}`;
+                                                                        
+                                                                        if (siteNames.length > 0) {
+                                                                            return `Sites: ${siteNames.join(', ')}${sites.length > 3 ? '...' : ''}`;
+                                                                        }
                                                                     }
                                                                     return 'Sites: None';
                                                                 })()}
@@ -6236,7 +6255,60 @@ const Clients = React.memo(() => {
                                                                 {lead.name}
                                                             </div>
                                                             <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                                {lead.industry || 'Other'} • {lead.status || 'New'}
+                                                                {(() => {
+                                                                    const parts = [];
+                                                                    if (lead.industry && lead.industry !== 'Other') {
+                                                                        parts.push(lead.industry);
+                                                                    }
+                                                                    if (lead.status && lead.status !== 'New') {
+                                                                        parts.push(lead.status);
+                                                                    }
+                                                                    
+                                                                    // Parse and display sites for leads
+                                                                    let sites = [];
+                                                                    if (lead.sites) {
+                                                                        if (typeof lead.sites === 'string') {
+                                                                            try {
+                                                                                sites = JSON.parse(lead.sites);
+                                                                            } catch (e) {
+                                                                                sites = [];
+                                                                            }
+                                                                        } else if (Array.isArray(lead.sites)) {
+                                                                            sites = lead.sites;
+                                                                        }
+                                                                    }
+                                                                    
+                                                                    if (sites.length > 0) {
+                                                                        // Handle both string sites and object sites
+                                                                        const siteNames = sites
+                                                                            .filter(site => site)
+                                                                            .map(site => {
+                                                                                if (typeof site === 'string') {
+                                                                                    return site;
+                                                                                }
+                                                                                if (site && typeof site === 'object' && site.name) {
+                                                                                    return site.name;
+                                                                                }
+                                                                                if (site && typeof site === 'object') {
+                                                                                    return site.name || site.location || site.address || JSON.stringify(site);
+                                                                                }
+                                                                                return null;
+                                                                            })
+                                                                            .filter(name => name)
+                                                                            .slice(0, 2); // Limit to 2 sites for leads
+                                                                        
+                                                                        if (siteNames.length > 0) {
+                                                                            parts.push(`Sites: ${siteNames.join(', ')}${sites.length > 2 ? '...' : ''}`);
+                                                                        }
+                                                                    }
+                                                                    
+                                                                    // Fallback if no parts
+                                                                    if (parts.length === 0) {
+                                                                        return (lead.industry || 'Other') + ' • ' + (lead.status || 'New');
+                                                                    }
+                                                                    
+                                                                    return parts.join(' • ');
+                                                                })()}
                                                             </div>
                                                         </div>
                                                     </div>
