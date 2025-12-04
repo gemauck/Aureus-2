@@ -159,6 +159,74 @@ async function handler(req, res) {
             
             let notification = null;
             
+            // Ensure link is valid - construct from metadata if missing
+            let validLink = link || '';
+            if (!validLink || validLink.trim() === '') {
+                // Try to construct link from metadata
+                try {
+                    const metadataObj = typeof metadata === 'string' ? JSON.parse(metadata) : (metadata || {});
+                    
+                    // Check for entity IDs in metadata
+                    if (metadataObj.projectId) {
+                        validLink = `/projects/${metadataObj.projectId}`;
+                        if (metadataObj.tab) validLink += `?tab=${metadataObj.tab}`;
+                    } else if (metadataObj.taskId) {
+                        if (metadataObj.projectId) {
+                            validLink = `/projects/${metadataObj.projectId}/tasks/${metadataObj.taskId}`;
+                        } else {
+                            validLink = `/tasks/${metadataObj.taskId}`;
+                        }
+                        if (metadataObj.tab) validLink += (validLink.includes('?') ? '&' : '?') + `tab=${metadataObj.tab}`;
+                    } else if (metadataObj.clientId) {
+                        validLink = `/clients/${metadataObj.clientId}`;
+                        if (metadataObj.tab) validLink += `?tab=${metadataObj.tab}`;
+                    } else if (metadataObj.leadId) {
+                        validLink = `/clients/${metadataObj.leadId}`;
+                        if (metadataObj.tab) validLink += `?tab=${metadataObj.tab}`;
+                    } else if (metadataObj.opportunityId) {
+                        validLink = `/clients/${metadataObj.opportunityId}`;
+                        if (metadataObj.tab) validLink += `?tab=${metadataObj.tab}`;
+                    } else if (metadataObj.invoiceId) {
+                        validLink = `/clients/${metadataObj.clientId || metadataObj.invoiceId}`;
+                        if (metadataObj.tab) validLink += `?tab=${metadataObj.tab}`;
+                    } else if (metadataObj.userId) {
+                        validLink = `/users/${metadataObj.userId}`;
+                    } else if (metadataObj.teamId) {
+                        validLink = `/teams/${metadataObj.teamId}`;
+                        if (metadataObj.tab) validLink += `?tab=${metadataObj.tab}`;
+                    } else if (metadataObj.jobcardId) {
+                        validLink = `/service-maintenance/${metadataObj.jobcardId}`;
+                    } else if (metadataObj.vehicleId) {
+                        validLink = `/service-maintenance?tab=vehicles&vehicleId=${metadataObj.vehicleId}`;
+                    } else if (metadataObj.productionorderId) {
+                        validLink = `/manufacturing/${metadataObj.productionorderId}`;
+                    } else if (metadataObj.bomId) {
+                        validLink = `/manufacturing?tab=boms&bomId=${metadataObj.bomId}`;
+                    } else if (metadataObj.inventoryitemId) {
+                        validLink = `/manufacturing?tab=inventory&itemId=${metadataObj.inventoryitemId}`;
+                    } else if (metadataObj.leaveapplicationId) {
+                        validLink = `/leave-platform/${metadataObj.leaveapplicationId}`;
+                    } else if (metadataObj.timeentryId) {
+                        validLink = `/time-tracking/${metadataObj.timeentryId}`;
+                    } else if (metadataObj.component || metadataObj.page) {
+                        const componentName = metadataObj.component || metadataObj.page;
+                        validLink = `/${componentName}`;
+                        if (metadataObj.tab) validLink += `?tab=${metadataObj.tab}`;
+                    } else {
+                        // Default to dashboard if no entity info found
+                        validLink = '/dashboard';
+                    }
+                } catch (parseError) {
+                    console.warn('Failed to parse metadata for link construction:', parseError);
+                    validLink = '/dashboard';
+                }
+            }
+            
+            // Ensure link starts with / (for hash-based routing)
+            if (validLink && !validLink.startsWith('/') && !validLink.startsWith('#')) {
+                validLink = '/' + validLink;
+            }
+            
             // Only create in-app notification if user has enabled it for this type
             if (shouldCreateInAppNotification) {
                 try {
@@ -168,7 +236,7 @@ async function handler(req, res) {
                             type,
                             title,
                             message,
-                            link: link || '',
+                            link: validLink || '/dashboard',
                             metadata: metadata ? JSON.stringify(metadata) : '{}',
                             read: false
                         }

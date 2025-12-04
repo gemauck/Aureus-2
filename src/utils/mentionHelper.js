@@ -199,12 +199,20 @@ const MentionHelper = {
                 }
             }
             
+            // Ensure URL is valid using NotificationUrlHelper if available
+            if (window.NotificationUrlHelper && typeof window.NotificationUrlHelper.ensureUrl === 'function') {
+                entityUrl = window.NotificationUrlHelper.ensureUrl(entityUrl || contextLink, metadata);
+            } else if (!entityUrl || entityUrl.trim() === '') {
+                // Fallback: use contextLink or default to dashboard
+                entityUrl = contextLink || '/dashboard';
+            }
+            
             const notificationPayload = {
                 userId: mentionedUserId,
                 type: 'mention',
                 title: `${mentionedByName} mentioned you`,
                 message: `${mentionedByName} mentioned you in ${contextTitle}: "${previewText}"`,
-                link: entityUrl || contextLink,
+                link: entityUrl,
                 metadata: metadata
             };
             

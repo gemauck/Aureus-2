@@ -14,6 +14,7 @@ import './utils/mobileTableConverter.js';
 import './utils/debug.js';
 import './utils/routeState.js';
 import './utils/entityUrl.js';
+import './utils/notificationUrlHelper.js';
 
 // Core services and utilities that must exist before providers render
 import './utils/api.js';
