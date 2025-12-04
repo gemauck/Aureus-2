@@ -175,19 +175,68 @@ function toHandlerPath(urlPath) {
 }
 
 async function loadHandler(handlerPath) {
-  try {
-    const module = await import(`file://${handlerPath}`)
-    return module.default
-  } catch (error) {
-    console.error(`Failed to load handler ${handlerPath}:`, error)
-    // Return a fallback handler that returns 500 error
-    return (req, res) => {
-      console.error(`Handler execution failed for ${req.method} ${req.url}`)
-      res.status(500).json({ 
-        error: 'Handler failed to load', 
-        path: req.url,
-        timestamp: new Date().toISOString()
+  // Retry logic for handler loading (handles transient import failures)
+  const MAX_RETRIES = 2
+  const RETRY_DELAY = 100 // 100ms delay between retries
+  
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const module = await import(`file://${handlerPath}`)
+      
+      if (!module.default) {
+        console.error(`❌ Handler ${handlerPath} does not have a default export`)
+        throw new Error(`Handler ${handlerPath} does not have a default export`)
+      }
+      
+      return module.default
+    } catch (error) {
+      const isLastAttempt = attempt === MAX_RETRIES
+      
+      // Enhanced error logging with full details
+      console.error(`❌ Failed to load handler ${handlerPath} (attempt ${attempt}/${MAX_RETRIES}):`, {
+        message: error.message,
+        name: error.name,
+        code: error.code,
+        cause: error.cause?.message || error.cause,
+        stack: error.stack?.split('\n').slice(0, 10).join('\n'), // First 10 lines of stack
+        handlerPath: handlerPath,
+        fileExists: fs.existsSync(handlerPath)
       })
+      
+      // If this is the last attempt, return fallback handler
+      if (isLastAttempt) {
+        // Log the full error for debugging
+        console.error(`❌ Handler ${handlerPath} failed to load after ${MAX_RETRIES} attempts. Full error:`, {
+          message: error.message,
+          name: error.name,
+          code: error.code,
+          stack: error.stack
+        })
+        
+        // Return a fallback handler that returns 500 error
+        return (req, res) => {
+          console.error(`❌ Handler execution failed for ${req.method} ${req.url} (handler: ${handlerPath})`)
+          if (!res.headersSent) {
+            res.status(500).json({ 
+              error: 'Handler failed to load', 
+              path: req.url,
+              handlerPath: handlerPath,
+              timestamp: new Date().toISOString(),
+              // Include error details in development
+              ...(process.env.NODE_ENV === 'development' ? {
+                errorDetails: {
+                  message: error.message,
+                  name: error.name,
+                  code: error.code
+                }
+              } : {})
+            })
+          }
+        }
+      }
+      
+      // Wait before retrying (exponential backoff)
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * attempt))
     }
   }
 }

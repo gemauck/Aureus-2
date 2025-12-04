@@ -1,92 +1,118 @@
 import { PrismaClient } from '@prisma/client'
 
-let prismaGlobal
+let prismaGlobal = null
+let initializationError = null
 
-// Force recreate Prisma client to avoid stale connections
-if (global.__prisma) {
+// Lazy initialization function - only called when Prisma is first accessed
+// This allows handlers to load even if Prisma initialization would fail
+function initializePrisma() {
+  // If already initialized, return the existing client
+  if (prismaGlobal) {
+    return prismaGlobal
+  }
+  
+  // If there was a previous initialization error, throw it
+  if (initializationError) {
+    throw initializationError
+  }
+  
   try {
-    global.__prisma.$disconnect().catch(() => {})
-  } catch (e) {
-    // Ignore disconnect errors
-  }
-  delete global.__prisma
-}
-
-try {
-  
-  if (!process.env.DATABASE_URL) {
-    console.error('❌ DATABASE_URL is not set')
-    throw new Error('DATABASE_URL environment variable is required')
-  }
-  
-  // Log the DATABASE_URL immediately for debugging
-  const dbUrlForLog = process.env.DATABASE_URL.replace(/:([^:@]+)@/, ':***@')
-  
-  // Prohibit local database connections
-  const dbUrl = process.env.DATABASE_URL.toLowerCase()
-  const isLocalDatabase = 
-    dbUrl.includes('localhost') ||
-    dbUrl.includes('127.0.0.1') ||
-    dbUrl.includes('::1') ||
-    dbUrl.includes('0.0.0.0') ||
-    (dbUrl.startsWith('postgresql://') && !dbUrl.includes('ondigitalocean.com'))
-  
-  if (isLocalDatabase) {
-    console.error('❌ SECURITY ERROR: Local database connections are prohibited!')
-    console.error('   Detected DATABASE_URL:', process.env.DATABASE_URL.substring(0, 100) + '...')
-    console.error('   This application must connect to the Digital Ocean production database.')
-    throw new Error('Local database connections are prohibited. Use the Digital Ocean production database.')
-  }
-  
-  // Force use of process.env.DATABASE_URL - ensure it's the correct one
-  const databaseUrl = process.env.DATABASE_URL
-  
-  // Check for valid database hostname (allow multiple valid hostnames)
-  const validHostnames = [
-    'nov-3-backup5-do-user-28031752-0',
-    'dbaas-db-6934625-do-user-28031752-0',
-    'ondigitalocean.com'
-  ]
-  
-  const hasValidHostname = validHostnames.some(hostname => databaseUrl && databaseUrl.includes(hostname))
-  
-  if (!databaseUrl || !hasValidHostname) {
-    console.error('❌ ERROR: DATABASE_URL does not contain valid hostname!')
-    console.error('   Current DATABASE_URL:', databaseUrl ? databaseUrl.replace(/:([^:@]+)@/, ':***@') : 'NOT SET')
-    console.error('   Expected hostnames:', validHostnames.join(', '))
-    console.error('   Full DATABASE_URL (masked):', databaseUrl ? databaseUrl.replace(/:([^:@]+)@/, ':***@') : 'NOT SET')
-    // In production, still throw error but with better message
-    // In development, allow connection to proceed with warning
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error(`DATABASE_URL must contain one of these hostnames: ${validHostnames.join(', ')}`)
-    } else {
-      console.warn('⚠️ WARNING: DATABASE_URL hostname check failed, but allowing connection in development mode')
-    }
-  }
-  
-  
-  global.__prisma = new PrismaClient({
-    log: ['error', 'warn'],
-    errorFormat: 'pretty',
-    datasources: {
-      db: {
-        url: databaseUrl  // Use explicit variable
+    // Force recreate Prisma client to avoid stale connections
+    if (global.__prisma) {
+      try {
+        // Disconnect synchronously (fire and forget)
+        global.__prisma.$disconnect().catch(() => {})
+      } catch (e) {
+        // Ignore disconnect errors
       }
-    },
-    // Reduce connection pool to prevent connection exhaustion
-    __internal: {
-      engine: {
-        connectTimeout: 10000,
-        poolTimeout: 10
+      delete global.__prisma
+    }
+    
+    if (!process.env.DATABASE_URL) {
+      const error = new Error('DATABASE_URL environment variable is required')
+      console.error('❌ DATABASE_URL is not set')
+      initializationError = error
+      throw error
+    }
+    
+    // Log the DATABASE_URL immediately for debugging
+    const dbUrlForLog = process.env.DATABASE_URL.replace(/:([^:@]+)@/, ':***@')
+    
+    // Prohibit local database connections
+    const dbUrl = process.env.DATABASE_URL.toLowerCase()
+    const isLocalDatabase = 
+      dbUrl.includes('localhost') ||
+      dbUrl.includes('127.0.0.1') ||
+      dbUrl.includes('::1') ||
+      dbUrl.includes('0.0.0.0') ||
+      (dbUrl.startsWith('postgresql://') && !dbUrl.includes('ondigitalocean.com'))
+    
+    if (isLocalDatabase) {
+      const error = new Error('Local database connections are prohibited. Use the Digital Ocean production database.')
+      console.error('❌ SECURITY ERROR: Local database connections are prohibited!')
+      console.error('   Detected DATABASE_URL:', process.env.DATABASE_URL.substring(0, 100) + '...')
+      console.error('   This application must connect to the Digital Ocean production database.')
+      initializationError = error
+      throw error
+    }
+    
+    // Force use of process.env.DATABASE_URL - ensure it's the correct one
+    const databaseUrl = process.env.DATABASE_URL
+    
+    // Check for valid database hostname (allow multiple valid hostnames)
+    const validHostnames = [
+      'nov-3-backup5-do-user-28031752-0',
+      'dbaas-db-6934625-do-user-28031752-0',
+      'ondigitalocean.com'
+    ]
+    
+    const hasValidHostname = validHostnames.some(hostname => databaseUrl && databaseUrl.includes(hostname))
+    
+    if (!databaseUrl || !hasValidHostname) {
+      console.error('❌ ERROR: DATABASE_URL does not contain valid hostname!')
+      console.error('   Current DATABASE_URL:', databaseUrl ? databaseUrl.replace(/:([^:@]+)@/, ':***@') : 'NOT SET')
+      console.error('   Expected hostnames:', validHostnames.join(', '))
+      console.error('   Full DATABASE_URL (masked):', databaseUrl ? databaseUrl.replace(/:([^:@]+)@/, ':***@') : 'NOT SET')
+      // In production, still throw error but with better message
+      // In development, allow connection to proceed with warning
+      if (process.env.NODE_ENV === 'production') {
+        const error = new Error(`DATABASE_URL must contain one of these hostnames: ${validHostnames.join(', ')}`)
+        initializationError = error
+        throw error
+      } else {
+        console.warn('⚠️ WARNING: DATABASE_URL hostname check failed, but allowing connection in development mode')
       }
     }
-  })
-} catch (error) {
-  console.error('❌ Failed to create Prisma client:', error)
-  throw error
+    
+    global.__prisma = new PrismaClient({
+      log: ['error', 'warn'],
+      errorFormat: 'pretty',
+      datasources: {
+        db: {
+          url: databaseUrl  // Use explicit variable
+        }
+      },
+      // Reduce connection pool to prevent connection exhaustion
+      __internal: {
+        engine: {
+          connectTimeout: 10000,
+          poolTimeout: 10
+        }
+      }
+    })
+    
+    prismaGlobal = global.__prisma
+    return prismaGlobal
+  } catch (error) {
+    console.error('❌ Failed to create Prisma client:', error)
+    initializationError = error
+    throw error
+  }
 }
 
-prismaGlobal = global.__prisma
+// Don't initialize during module load - let it happen lazily on first access
+// This ensures the module always exports successfully, even if Prisma initialization would fail
+// Initialization will happen when Prisma is first accessed via the proxy
 
 // Connection state tracking
 let connectionAttempted = false
@@ -99,6 +125,15 @@ const RETRY_DELAY = 1000 // 1 second
 
 // Ensure connection with retry logic
 async function ensureConnected() {
+  // Ensure Prisma is initialized first
+  if (!prismaGlobal) {
+    try {
+      initializePrisma()
+    } catch (error) {
+      throw initializationError || error
+    }
+  }
+  
   // If already connected, return immediately
   if (isConnected) {
     return true
@@ -140,11 +175,13 @@ async function ensureConnected() {
   return connectionPromise
 }
 
-// Attempt initial connection (non-blocking)
-ensureConnected().catch((error) => {
-  console.error('❌ Prisma initial connection attempt failed:', error.message)
-  // Connection will be retried on first query
-})
+// Attempt initial connection (non-blocking) - only if Prisma is initialized
+if (prismaGlobal) {
+  ensureConnected().catch((error) => {
+    console.error('❌ Prisma initial connection attempt failed:', error.message)
+    // Connection will be retried on first query
+  })
+}
 
 // Helper to retry database operations
 async function withRetry(operation, operationName = 'database operation') {
@@ -192,9 +229,20 @@ async function withRetry(operation, operationName = 'database operation') {
 }
 
 // Create a proxy to wrap Prisma model operations with retry logic
-const prismaProxy = new Proxy(prismaGlobal, {
+// This proxy handles lazy initialization - Prisma is only initialized when first accessed
+const prismaProxy = new Proxy({}, {
   get(target, prop) {
-    const value = target[prop]
+    // Ensure Prisma is initialized before accessing
+    if (!prismaGlobal) {
+      try {
+        initializePrisma()
+      } catch (error) {
+        // If initialization failed, throw the stored error
+        throw initializationError || error
+      }
+    }
+    
+    const value = prismaGlobal[prop]
     
     // Only wrap Prisma model objects (notification, calendarNote, user, etc.)
     // Skip Prisma internal methods and properties
