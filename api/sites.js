@@ -22,16 +22,16 @@ async function handler(req, res) {
       if (!clientId) return badRequest(res, 'clientId required')
       
       try {
-        const client = await prisma.client.findUnique({
-          where: { id: clientId },
-          select: { sites: true }
-        })
+        // Use raw SQL to bypass Prisma relation resolution
+        const result = await prisma.$queryRaw`
+          SELECT sites FROM "Client" WHERE id = ${clientId}
+        `
         
-        if (!client) return notFound(res)
+        if (!result || !result[0]) return notFound(res)
         
-        const sites = typeof client.sites === 'string' 
-          ? JSON.parse(client.sites) 
-          : (Array.isArray(client.sites) ? client.sites : [])
+        const sites = typeof result[0].sites === 'string' 
+          ? JSON.parse(result[0].sites) 
+          : (Array.isArray(result[0].sites) ? result[0].sites : [])
         
         return ok(res, { sites })
       } catch (dbError) {
@@ -51,17 +51,16 @@ async function handler(req, res) {
       if (!body.name) return badRequest(res, 'site name required')
       
       try {
-        // Get current sites
-        const client = await prisma.client.findUnique({
-          where: { id: clientId },
-          select: { sites: true }
-        })
+        // Get current sites using raw SQL
+        const result = await prisma.$queryRaw`
+          SELECT sites FROM "Client" WHERE id = ${clientId}
+        `
         
-        if (!client) return notFound(res)
+        if (!result || !result[0]) return notFound(res)
         
-        const existingSites = typeof client.sites === 'string' 
-          ? JSON.parse(client.sites) 
-          : (Array.isArray(client.sites) ? client.sites : [])
+        const existingSites = typeof result[0].sites === 'string' 
+          ? JSON.parse(result[0].sites) 
+          : (Array.isArray(result[0].sites) ? result[0].sites : [])
         
         // Create new site
         const newSite = {
@@ -77,11 +76,10 @@ async function handler(req, res) {
         // Add to array
         const updatedSites = [...existingSites, newSite]
         
-        // Save back to database
-        const updatedClient = await prisma.client.update({
-          where: { id: clientId },
-          data: { sites: JSON.stringify(updatedSites) }
-        })
+        // Save back to database using raw SQL
+        await prisma.$executeRaw`
+          UPDATE "Client" SET sites = ${JSON.stringify(updatedSites)}::text WHERE id = ${clientId}
+        `
         
         return created(res, { site: newSite, sites: updatedSites })
       } catch (dbError) {
@@ -118,16 +116,16 @@ async function handler(req, res) {
       const body = req.body || {}
       
       try {
-        const client = await prisma.client.findUnique({
-          where: { id: clientId },
-          select: { sites: true }
-        })
+        // Get current sites using raw SQL
+        const result = await prisma.$queryRaw`
+          SELECT sites FROM "Client" WHERE id = ${clientId}
+        `
         
-        if (!client) return notFound(res)
+        if (!result || !result[0]) return notFound(res)
         
-        const sites = typeof client.sites === 'string' 
-          ? JSON.parse(client.sites) 
-          : (Array.isArray(client.sites) ? client.sites : [])
+        const sites = typeof result[0].sites === 'string' 
+          ? JSON.parse(result[0].sites) 
+          : (Array.isArray(result[0].sites) ? result[0].sites : [])
         
         // Find and update the site
         const siteIndex = sites.findIndex(s => s.id === siteId)
@@ -139,11 +137,10 @@ async function handler(req, res) {
           id: siteId // Don't allow changing the ID
         }
         
-        // Save back to database
-        await prisma.client.update({
-          where: { id: clientId },
-          data: { sites: JSON.stringify(sites) }
-        })
+        // Save back to database using raw SQL
+        await prisma.$executeRaw`
+          UPDATE "Client" SET sites = ${JSON.stringify(sites)}::text WHERE id = ${clientId}
+        `
         
         return ok(res, { site: sites[siteIndex], sites })
       } catch (dbError) {
@@ -160,25 +157,24 @@ async function handler(req, res) {
       if (!clientId || !siteId) return badRequest(res, 'clientId and siteId required')
       
       try {
-        const client = await prisma.client.findUnique({
-          where: { id: clientId },
-          select: { sites: true }
-        })
+        // Get current sites using raw SQL
+        const result = await prisma.$queryRaw`
+          SELECT sites FROM "Client" WHERE id = ${clientId}
+        `
         
-        if (!client) return notFound(res)
+        if (!result || !result[0]) return notFound(res)
         
-        const sites = typeof client.sites === 'string' 
-          ? JSON.parse(client.sites) 
-          : (Array.isArray(client.sites) ? client.sites : [])
+        const sites = typeof result[0].sites === 'string' 
+          ? JSON.parse(result[0].sites) 
+          : (Array.isArray(result[0].sites) ? result[0].sites : [])
         
         // Remove the site
         const updatedSites = sites.filter(s => s.id !== siteId)
         
-        // Save back to database
-        await prisma.client.update({
-          where: { id: clientId },
-          data: { sites: JSON.stringify(updatedSites) }
-        })
+        // Save back to database using raw SQL
+        await prisma.$executeRaw`
+          UPDATE "Client" SET sites = ${JSON.stringify(updatedSites)}::text WHERE id = ${clientId}
+        `
         
         return ok(res, { deleted: true, sites: updatedSites })
       } catch (dbError) {
