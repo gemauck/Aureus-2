@@ -26,60 +26,61 @@ async function handler(req, res) {
     // Get Single Client (GET /api/clients/[id])
     if (req.method === 'GET') {
       try {
-        // Always query client basic first to avoid any relation issues
-        // Use select to explicitly choose fields and avoid any relation resolution
+        // Use raw SQL query to completely bypass Prisma's relation resolution
+        // This avoids the parentGroupId schema mismatch error
         let clientBasic
         try {
-          clientBasic = await prisma.client.findUnique({ 
-            where: { id },
-            select: {
-              id: true,
-              name: true,
-              type: true,
-              industry: true,
-              status: true,
-              stage: true,
-              revenue: true,
-              value: true,
-              probability: true,
-              lastContact: true,
-              address: true,
-              website: true,
-              notes: true,
-              contacts: true,
-              followUps: true,
-              projectIds: true,
-              comments: true,
-              sites: true,
-              contracts: true,
-              activityLog: true,
-              billingTerms: true,
-              proposals: true,
-              services: true,
-              ownerId: true,
-              externalAgentId: true,
-              createdAt: true,
-              updatedAt: true,
-              thumbnail: true,
-              rssSubscribed: true
-            }
-          })
-        } catch (queryError) {
-          // If basic query fails due to schema mismatch, try raw query
-          if (queryError.message && queryError.message.includes('parentGroupId')) {
-            console.warn(`⚠️ Schema mismatch detected for client ${id}, using raw query`)
-            const rawResult = await prisma.$queryRaw`
-              SELECT id, name, type, industry, status, stage, revenue, value, probability, 
-                     "lastContact", address, website, notes, contacts, "followUps", 
-                     "projectIds", comments, sites, contracts, "activityLog", "billingTerms", 
-                     proposals, services, "ownerId", "externalAgentId", "createdAt", "updatedAt", 
-                     thumbnail, "rssSubscribed"
-              FROM "Client"
-              WHERE id = ${id}
-            `
-            clientBasic = rawResult && rawResult[0] ? rawResult[0] : null
-          } else {
-            throw queryError
+          const rawResult = await prisma.$queryRaw`
+            SELECT id, name, type, industry, status, stage, revenue, value, probability, 
+                   "lastContact", address, website, notes, contacts, "followUps", 
+                   "projectIds", comments, sites, contracts, "activityLog", "billingTerms", 
+                   proposals, services, "ownerId", "externalAgentId", "createdAt", "updatedAt", 
+                   thumbnail, "rssSubscribed"
+            FROM "Client"
+            WHERE id = ${id}
+          `
+          clientBasic = rawResult && rawResult[0] ? rawResult[0] : null
+        } catch (rawQueryError) {
+          console.error(`❌ Raw SQL query failed for client ${id}:`, rawQueryError.message)
+          // Fallback to Prisma with explicit select (but this might still fail)
+          try {
+            clientBasic = await prisma.client.findUnique({ 
+              where: { id },
+              select: {
+                id: true,
+                name: true,
+                type: true,
+                industry: true,
+                status: true,
+                stage: true,
+                revenue: true,
+                value: true,
+                probability: true,
+                lastContact: true,
+                address: true,
+                website: true,
+                notes: true,
+                contacts: true,
+                followUps: true,
+                projectIds: true,
+                comments: true,
+                sites: true,
+                contracts: true,
+                activityLog: true,
+                billingTerms: true,
+                proposals: true,
+                services: true,
+                ownerId: true,
+                externalAgentId: true,
+                createdAt: true,
+                updatedAt: true,
+                thumbnail: true,
+                rssSubscribed: true
+              }
+            })
+          } catch (prismaError) {
+            console.error(`❌ Both raw SQL and Prisma queries failed for client ${id}`)
+            throw prismaError
           }
         }
         
@@ -87,37 +88,29 @@ async function handler(req, res) {
           return notFound(res)
         }
 
-        // Get group memberships separately with defensive handling
+        // Get group memberships separately using raw SQL to avoid Prisma relation issues
         let groupMemberships = []
         try {
-          // Query memberships first without group relation to avoid schema issues
-          const membershipRecords = await prisma.clientCompanyGroup.findMany({
-            where: { clientId: id },
-            select: {
-              id: true,
-              clientId: true,
-              groupId: true,
-              role: true,
-              createdAt: true
-            }
-          })
+          // Query memberships using raw SQL
+          const membershipRecords = await prisma.$queryRaw`
+            SELECT id, "clientId", "groupId", role, "createdAt"
+            FROM "ClientCompanyGroup"
+            WHERE "clientId" = ${id}
+          `
 
-          // Then fetch groups separately for each membership
+          // Then fetch groups separately using raw SQL for each membership
           const membershipsWithGroups = await Promise.all(
             membershipRecords.map(async (membership) => {
               try {
-                const group = await prisma.client.findUnique({
-                  where: { id: membership.groupId },
-                  select: {
-                    id: true,
-                    name: true,
-                    type: true,
-                    industry: true
-                  }
-                })
+                const groupResult = await prisma.$queryRaw`
+                  SELECT id, name, type, industry
+                  FROM "Client"
+                  WHERE id = ${membership.groupId}
+                `
+                const group = groupResult && groupResult[0] ? groupResult[0] : null
                 return {
                   ...membership,
-                  group: group || null
+                  group: group
                 }
               } catch (groupError) {
                 // Group doesn't exist or query failed
@@ -130,20 +123,18 @@ async function handler(req, res) {
             })
           )
 
-          const memberships = membershipsWithGroups
-
           // Filter out orphaned memberships (where group is null) and auto-cleanup
-          const validMemberships = memberships.filter(m => m.group !== null)
-          const orphanedMemberships = memberships.filter(m => m.group === null)
+          const validMemberships = membershipsWithGroups.filter(m => m.group !== null)
+          const orphanedMemberships = membershipsWithGroups.filter(m => m.group === null)
           const orphanedCount = orphanedMemberships.length
 
           groupMemberships = validMemberships
 
-          // Auto-cleanup orphaned memberships in background
+          // Auto-cleanup orphaned memberships in background using raw SQL
           if (orphanedCount > 0) {
             console.warn(`⚠️ Found ${orphanedCount} orphaned group memberships for client ${id} - cleaning up...`)
             Promise.all(orphanedMemberships.map(m => 
-              prisma.clientCompanyGroup.delete({ where: { id: m.id } }).catch(err => 
+              prisma.$executeRaw`DELETE FROM "ClientCompanyGroup" WHERE id = ${m.id}`.catch(err => 
                 console.error(`Failed to delete orphaned membership ${m.id}:`, err.message)
               )
             )).then(() => {
