@@ -77,8 +77,9 @@ async function handler(req, res) {
         const updatedSites = [...existingSites, newSite]
         
         // Save back to database using raw SQL
+        const sitesJson = JSON.stringify(updatedSites)
         await prisma.$executeRaw`
-          UPDATE "Client" SET sites = ${JSON.stringify(updatedSites)}::text WHERE id = ${clientId}
+          UPDATE "Client" SET sites = ${sitesJson} WHERE id = ${clientId}
         `
         
         return created(res, { site: newSite, sites: updatedSites })
@@ -172,8 +173,9 @@ async function handler(req, res) {
         const updatedSites = sites.filter(s => s.id !== siteId)
         
         // Save back to database using raw SQL
+        const sitesJson = JSON.stringify(updatedSites)
         await prisma.$executeRaw`
-          UPDATE "Client" SET sites = ${JSON.stringify(updatedSites)}::text WHERE id = ${clientId}
+          UPDATE "Client" SET sites = ${sitesJson} WHERE id = ${clientId}
         `
         
         return ok(res, { deleted: true, sites: updatedSites })
