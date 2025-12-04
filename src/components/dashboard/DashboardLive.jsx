@@ -74,6 +74,12 @@ const DashboardLive = () => {
     const [availableWidgets, setAvailableWidgets] = useState([]);
     const [selectedWidgets, setSelectedWidgets] = useState([]);
     const [savingWidgets, setSavingWidgets] = useState(false);
+    const [widgetLayouts, setWidgetLayouts] = useState({}); // { widgetId: { x, y, w, h } }
+    const [draggedWidget, setDraggedWidget] = useState(null);
+    const [dragOverWidget, setDragOverWidget] = useState(null);
+    const [isResizing, setIsResizing] = useState(null); // widgetId being resized
+    const [resizeStart, setResizeStart] = useState(null); // { x, y, w, h }
+    const [editMode, setEditMode] = useState(false);
 
     // Optimized real-time data loading with immediate localStorage display
     const loadDashboardData = useCallback(async (showLoading = true) => {
@@ -580,6 +586,53 @@ const DashboardLive = () => {
         } catch (_) {}
     };
 
+    // Helper function to persist widget layouts
+    const persistWidgetLayouts = (layouts) => {
+        const userId = window.storage?.getUser?.()?.id || 'anon';
+        const key = `dashboard.widgetLayouts.${userId}`;
+        try {
+            window.localStorage.setItem(key, JSON.stringify(layouts));
+        } catch (_) {}
+    };
+
+    // Load widget layouts from localStorage
+    const loadWidgetLayouts = () => {
+        const userId = window.storage?.getUser?.()?.id || 'anon';
+        const key = `dashboard.widgetLayouts.${userId}`;
+        try {
+            const stored = window.localStorage.getItem(key);
+            if (stored) {
+                return JSON.parse(stored);
+            }
+        } catch (_) {}
+        return {};
+    };
+
+    // Get default layout for a widget
+    const getDefaultLayout = (widgetId, index) => {
+        const existing = widgetLayouts[widgetId];
+        if (existing) return existing;
+        
+        // Default sizes: 1x1 (small), 2x1 (medium), 2x2 (large)
+        // Most widgets start as 1x1, calendar and tasks can be larger
+        const defaultSizes = {
+            'calendar': { w: 2, h: 2 },
+            'my-project-tasks': { w: 2, h: 1 },
+            'sales-overview': { w: 1, h: 1 },
+            'projects-overview': { w: 1, h: 1 },
+            'time-overview': { w: 1, h: 1 },
+            'leads-by-stage': { w: 1, h: 1 },
+            'recent-activity': { w: 1, h: 1 }
+        };
+        
+        const size = defaultSizes[widgetId] || { w: 1, h: 1 };
+        return {
+            ...size,
+            order: index
+        };
+    };
+
+
     // Load and persist selected widgets
     useEffect(() => {
         const userId = window.storage?.getUser?.()?.id || 'anon';
@@ -601,9 +654,14 @@ const DashboardLive = () => {
                 const validDefaults = defaults.filter(id => widgetRegistry.some(w => w.id === id));
                 setSelectedWidgets(validDefaults);
             }
+            
+            // Load widget layouts
+            const layouts = loadWidgetLayouts();
+            setWidgetLayouts(layouts);
         } catch (_) {
             setAvailableWidgets(widgetRegistry);
             setSelectedWidgets(['sales-overview', 'projects-overview', 'my-project-tasks', 'time-overview', 'calendar']);
+            setWidgetLayouts({});
         }
     }, [widgetRegistry]);
 
@@ -611,6 +669,17 @@ const DashboardLive = () => {
         setSelectedWidgets(prev => {
             const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
             persistWidgets(next);
+            
+            // Remove layout if widget is removed
+            if (!next.includes(id)) {
+                setWidgetLayouts(prevLayouts => {
+                    const newLayouts = { ...prevLayouts };
+                    delete newLayouts[id];
+                    persistWidgetLayouts(newLayouts);
+                    return newLayouts;
+                });
+            }
+            
             return next;
         });
     };
@@ -619,7 +688,152 @@ const DashboardLive = () => {
         const defaults = ['sales-overview', 'projects-overview', 'my-project-tasks', 'time-overview', 'calendar'];
         setSelectedWidgets(defaults);
         persistWidgets(defaults);
+        setWidgetLayouts({});
+        persistWidgetLayouts({});
     };
+
+    // Drag and drop handlers
+    const handleDragStart = (e, widgetId) => {
+        if (!editMode) return;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', widgetId);
+        setDraggedWidget(widgetId);
+        e.currentTarget.style.opacity = '0.5';
+    };
+
+    const handleDragEnd = (e) => {
+        e.currentTarget.style.opacity = '1';
+        setDraggedWidget(null);
+        setDragOverWidget(null);
+    };
+
+    const handleDragOver = (e, targetWidgetId) => {
+        if (!editMode || !draggedWidget || draggedWidget === targetWidgetId) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setDragOverWidget(targetWidgetId);
+    };
+
+    const handleDrop = (e, targetWidgetId) => {
+        if (!editMode || !draggedWidget || draggedWidget === targetWidgetId) return;
+        e.preventDefault();
+        
+        // Swap order instead of exact positions
+        const draggedIndex = selectedWidgets.indexOf(draggedWidget);
+        const targetIndex = selectedWidgets.indexOf(targetWidgetId);
+        
+        setWidgetLayouts(prev => {
+            const draggedLayout = prev[draggedWidget] || getDefaultLayout(draggedWidget, draggedIndex);
+            const targetLayout = prev[targetWidgetId] || getDefaultLayout(targetWidgetId, targetIndex);
+            
+            const newLayouts = {
+                ...prev,
+                [draggedWidget]: { ...draggedLayout, order: targetIndex },
+                [targetWidgetId]: { ...targetLayout, order: draggedIndex }
+            };
+            persistWidgetLayouts(newLayouts);
+            return newLayouts;
+        });
+        
+        // Also swap in selectedWidgets array
+        setSelectedWidgets(prev => {
+            const newWidgets = [...prev];
+            [newWidgets[draggedIndex], newWidgets[targetIndex]] = [newWidgets[targetIndex], newWidgets[draggedIndex]];
+            return newWidgets;
+        });
+        
+        setDraggedWidget(null);
+        setDragOverWidget(null);
+    };
+
+    const handleDragLeave = () => {
+        setDragOverWidget(null);
+    };
+
+    // Resize handlers
+    const handleResizeStart = (e, widgetId, direction) => {
+        if (!editMode) return;
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const layout = widgetLayouts[widgetId] || getDefaultLayout(widgetId, selectedWidgets.indexOf(widgetId));
+        setIsResizing({ widgetId, direction });
+        setResizeStart({
+            x: e.clientX,
+            y: e.clientY,
+            w: layout.w || 1,
+            h: layout.h || 1
+        });
+    };
+
+    useEffect(() => {
+        if (!isResizing) return;
+
+        const handleMouseMove = (e) => {
+            if (!isResizing || !resizeStart) return;
+            
+            const deltaX = e.clientX - resizeStart.x;
+            const deltaY = e.clientY - resizeStart.y;
+            
+            // Calculate grid units based on viewport - more responsive
+            // Assuming each grid column is roughly 1/3 of viewport width minus gaps
+            const viewportWidth = window.innerWidth;
+            const gridUnitWidth = (viewportWidth - 64) / 3; // Account for padding and gaps
+            const gridUnitHeight = 200; // Base height unit
+            
+            const deltaW = Math.round(deltaX / gridUnitWidth);
+            const deltaH = Math.round(deltaY / gridUnitHeight);
+            
+            setWidgetLayouts(prev => {
+                const layout = prev[isResizing.widgetId] || getDefaultLayout(isResizing.widgetId, selectedWidgets.indexOf(isResizing.widgetId));
+                let newW = resizeStart.w;
+                let newH = resizeStart.h;
+                
+                if (isResizing.direction.includes('e')) {
+                    newW = Math.max(1, Math.min(3, resizeStart.w + deltaW));
+                }
+                if (isResizing.direction.includes('s')) {
+                    newH = Math.max(1, Math.min(3, resizeStart.h + deltaH));
+                }
+                
+                // Only update if changed
+                if (newW === layout.w && newH === layout.h) {
+                    return prev;
+                }
+                
+                const newLayouts = {
+                    ...prev,
+                    [isResizing.widgetId]: { 
+                        ...layout, 
+                        w: newW, 
+                        h: newH,
+                        order: layout.order !== undefined ? layout.order : selectedWidgets.indexOf(isResizing.widgetId)
+                    }
+                };
+                persistWidgetLayouts(newLayouts);
+                return newLayouts;
+            });
+        };
+
+        const handleMouseUp = () => {
+            setIsResizing(null);
+            setResizeStart(null);
+        };
+
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+        
+        // Prevent text selection while resizing
+        document.body.style.userSelect = 'none';
+        document.body.style.cursor = 'se-resize';
+
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            document.body.style.userSelect = '';
+            document.body.style.cursor = '';
+        };
+    }, [isResizing, resizeStart, selectedWidgets, widgetLayouts]);
 
     // Live data sync integration
     useEffect(() => {
@@ -844,6 +1058,12 @@ const DashboardLive = () => {
                 </div>
                 <div className="flex items-center gap-2">
                     <button
+                        onClick={() => setEditMode(!editMode)}
+                        className={`px-3 py-2 text-sm rounded-md border ${editMode ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 hover:bg-gray-50'}`}
+                    >
+                        {editMode ? 'Exit Edit Mode' : 'Edit Layout'}
+                    </button>
+                    <button
                         onClick={() => setManageOpen(true)}
                         className="px-3 py-2 text-sm rounded-md border border-gray-300 hover:bg-gray-50"
                     >
@@ -863,25 +1083,89 @@ const DashboardLive = () => {
                 <span className={`${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Connection: {connectionStatus}</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {selectedWidgets.map(id => {
-                    const def = availableWidgets.find(w => w.id === id);
-                    if (!def) return null;
-                    return (
-                        <div key={id} className="relative">
-                            <div className="absolute right-2 top-2 z-10">
-                                <button
-                                    onClick={() => handleToggleWidget(id)}
-                                    title="Remove widget"
-                                    className="h-8 w-8 rounded-full bg-gray-900/40 hover:bg-gray-900/60 text-white flex items-center justify-center"
-                                >
-                                    <i className="fas fa-times text-xs"></i>
-                                </button>
+            <div 
+                className="grid gap-4"
+                style={{
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gridAutoRows: 'minmax(200px, auto)'
+                }}
+            >
+                {selectedWidgets
+                    .map((id, index) => {
+                        const layout = widgetLayouts[id] || getDefaultLayout(id, index);
+                        return { id, index, order: layout.order !== undefined ? layout.order : index };
+                    })
+                    .sort((a, b) => a.order - b.order)
+                    .map(({ id, index }) => {
+                        const def = availableWidgets.find(w => w.id === id);
+                        if (!def) return null;
+                        
+                        const layout = widgetLayouts[id] || getDefaultLayout(id, index);
+                        const isDragging = draggedWidget === id;
+                        const isDragOver = dragOverWidget === id;
+                        const w = Math.max(1, Math.min(3, layout.w || 1));
+                        const h = Math.max(1, Math.min(3, layout.h || 1));
+                        
+                        return (
+                            <div
+                                key={id}
+                                draggable={editMode}
+                                onDragStart={(e) => handleDragStart(e, id)}
+                                onDragEnd={handleDragEnd}
+                                onDragOver={(e) => handleDragOver(e, id)}
+                                onDrop={(e) => handleDrop(e, id)}
+                                onDragLeave={handleDragLeave}
+                                className={`relative transition-all ${editMode ? 'cursor-move' : ''} ${isDragging ? 'opacity-50' : ''} ${isDragOver ? 'ring-2 ring-blue-500 ring-offset-2' : ''}`}
+                                style={{
+                                    gridColumn: `span ${w}`,
+                                    gridRow: `span ${h}`
+                                }}
+                            >
+                                {editMode && (
+                                    <>
+                                        {/* Remove button */}
+                                        <div className="absolute right-2 top-2 z-20">
+                                            <button
+                                                onClick={() => handleToggleWidget(id)}
+                                                title="Remove widget"
+                                                className="h-8 w-8 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center justify-center shadow-lg"
+                                            >
+                                                <i className="fas fa-times text-xs"></i>
+                                            </button>
+                                        </div>
+                                        
+                                        {/* Resize handles */}
+                                        <div
+                                            className="absolute right-0 bottom-0 w-6 h-6 bg-blue-600 hover:bg-blue-700 cursor-se-resize z-20 rounded-tl-lg flex items-center justify-center"
+                                            onMouseDown={(e) => handleResizeStart(e, id, 'se')}
+                                            title="Resize widget"
+                                        >
+                                            <div className="w-3 h-3 border-r-2 border-b-2 border-white"></div>
+                                        </div>
+                                        
+                                        {/* Size indicator */}
+                                        <div className="absolute left-2 top-2 z-20">
+                                            <div className="px-2 py-1 rounded bg-blue-600 text-white text-xs font-semibold shadow-lg">
+                                                {w}×{h}
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Drag handle indicator */}
+                                        <div className="absolute left-2 bottom-2 z-20">
+                                            <div className="px-2 py-1 rounded bg-gray-700 text-white text-xs">
+                                                <i className="fas fa-grip-vertical mr-1"></i>
+                                                Drag
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                                
+                                <div className="h-full w-full">
+                                    {def.render(dashboardData)}
+                                </div>
                             </div>
-                            {def.render(dashboardData)}
-                        </div>
-                    );
-                })}
+                        );
+                    })}
             </div>
 
             {manageOpen ? (
@@ -918,12 +1202,18 @@ const DashboardLive = () => {
                             </div>
                         </div>
                         <div className={`p-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'} flex items-center justify-between`}>
-                            <button
-                                className="text-sm px-3 py-2 rounded-md border border-gray-300 hover:bg-gray-50"
-                                onClick={handleResetWidgets}
-                            >
-                                Reset to defaults
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    className="text-sm px-3 py-2 rounded-md border border-gray-300 hover:bg-gray-50"
+                                    onClick={handleResetWidgets}
+                                >
+                                    Reset to defaults
+                                </button>
+                                <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    <i className="fas fa-info-circle mr-1"></i>
+                                    Use "Edit Layout" to drag, resize, and rearrange widgets
+                                </div>
+                            </div>
                             <div className="flex items-center gap-2">
                                 <button
                                     className="text-sm px-3 py-2 rounded-md"
