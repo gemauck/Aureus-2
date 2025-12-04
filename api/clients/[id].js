@@ -39,19 +39,47 @@ async function handler(req, res) {
         // Get group memberships separately with defensive handling
         let groupMemberships = []
         try {
-          const memberships = await prisma.clientCompanyGroup.findMany({
+          // Query memberships first without group relation to avoid schema issues
+          const membershipRecords = await prisma.clientCompanyGroup.findMany({
             where: { clientId: id },
-            include: {
-              group: {
-                select: {
-                  id: true,
-                  name: true,
-                  type: true,
-                  industry: true
-                }
-              }
+            select: {
+              id: true,
+              clientId: true,
+              groupId: true,
+              role: true,
+              createdAt: true
             }
           })
+
+          // Then fetch groups separately for each membership
+          const membershipsWithGroups = await Promise.all(
+            membershipRecords.map(async (membership) => {
+              try {
+                const group = await prisma.client.findUnique({
+                  where: { id: membership.groupId },
+                  select: {
+                    id: true,
+                    name: true,
+                    type: true,
+                    industry: true
+                  }
+                })
+                return {
+                  ...membership,
+                  group: group || null
+                }
+              } catch (groupError) {
+                // Group doesn't exist or query failed
+                console.warn(`⚠️ Failed to load group ${membership.groupId} for membership ${membership.id}:`, groupError.message)
+                return {
+                  ...membership,
+                  group: null
+                }
+              }
+            })
+          )
+
+          const memberships = membershipsWithGroups
 
           // Filter out orphaned memberships (where group is null) and auto-cleanup
           const validMemberships = memberships.filter(m => m.group !== null)
