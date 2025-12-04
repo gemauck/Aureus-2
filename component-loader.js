@@ -293,6 +293,11 @@
                 applyDynamicCacheBust('jobcards-mobile-toggle-v20251111');
             }
 
+            // Force cache-bust for DashboardLive widget drag-drop and resize features
+            if (path.includes('components/dashboard/DashboardLive.jsx')) {
+                applyDynamicCacheBust('dashboard-widgets-drag-resize-v20251204-' + Date.now());
+            }
+
             if (!dynamicCacheBust && cacheBustTag) {
                 currentScriptSrc = buildScriptSrc(cacheBustTag);
             }
