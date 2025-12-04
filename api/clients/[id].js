@@ -260,17 +260,16 @@ async function handler(req, res) {
       }
       
       try {
-        // Check if name is being updated - fetch current client first
+        // Check if name is being updated - fetch current client first using raw SQL
         let oldName = null
         let oldWebsite = null
         if (updateData.name !== undefined) {
-          const existingClient = await prisma.client.findUnique({
-            where: { id },
-            select: { name: true, website: true }
-          })
-          if (existingClient) {
-            oldName = existingClient.name
-            oldWebsite = existingClient.website
+          const existingResult = await prisma.$queryRaw`
+            SELECT name, website FROM "Client" WHERE id = ${id}
+          `
+          if (existingResult && existingResult[0]) {
+            oldName = existingResult[0].name
+            oldWebsite = existingResult[0].website
           }
         }
         
@@ -311,10 +310,139 @@ async function handler(req, res) {
           }
         }
         
-        const client = await prisma.client.update({
-          where: { id },
-          data: updateData
-        })
+        // Build UPDATE query using raw SQL to bypass Prisma relation resolution
+        const setClauses = []
+        const values = []
+        let paramIndex = 1
+        
+        // Handle each field that needs updating
+        if (updateData.name !== undefined) {
+          setClauses.push(`name = $${paramIndex}`)
+          values.push(updateData.name)
+          paramIndex++
+        }
+        if (updateData.industry !== undefined) {
+          setClauses.push(`industry = $${paramIndex}`)
+          values.push(updateData.industry)
+          paramIndex++
+        }
+        if (updateData.status !== undefined) {
+          setClauses.push(`status = $${paramIndex}`)
+          values.push(updateData.status)
+          paramIndex++
+        }
+        if (updateData.revenue !== undefined) {
+          setClauses.push(`revenue = $${paramIndex}`)
+          values.push(updateData.revenue)
+          paramIndex++
+        }
+        if (updateData.lastContact !== undefined) {
+          setClauses.push(`"lastContact" = $${paramIndex}`)
+          values.push(updateData.lastContact)
+          paramIndex++
+        }
+        if (updateData.address !== undefined) {
+          setClauses.push(`address = $${paramIndex}`)
+          values.push(updateData.address)
+          paramIndex++
+        }
+        if (updateData.website !== undefined) {
+          setClauses.push(`website = $${paramIndex}`)
+          values.push(updateData.website)
+          paramIndex++
+        }
+        if (updateData.notes !== undefined) {
+          setClauses.push(`notes = $${paramIndex}`)
+          values.push(updateData.notes)
+          paramIndex++
+        }
+        if (updateData.contacts !== undefined) {
+          setClauses.push(`contacts = $${paramIndex}`)
+          values.push(updateData.contacts)
+          paramIndex++
+        }
+        if (updateData.followUps !== undefined) {
+          setClauses.push(`"followUps" = $${paramIndex}`)
+          values.push(updateData.followUps)
+          paramIndex++
+        }
+        if (updateData.projectIds !== undefined) {
+          setClauses.push(`"projectIds" = $${paramIndex}`)
+          values.push(updateData.projectIds)
+          paramIndex++
+        }
+        if (updateData.comments !== undefined) {
+          setClauses.push(`comments = $${paramIndex}`)
+          values.push(updateData.comments)
+          paramIndex++
+        }
+        if (updateData.sites !== undefined) {
+          setClauses.push(`sites = $${paramIndex}`)
+          values.push(updateData.sites)
+          paramIndex++
+        }
+        if (updateData.contracts !== undefined) {
+          setClauses.push(`contracts = $${paramIndex}`)
+          values.push(updateData.contracts)
+          paramIndex++
+        }
+        if (updateData.activityLog !== undefined) {
+          setClauses.push(`"activityLog" = $${paramIndex}`)
+          values.push(updateData.activityLog)
+          paramIndex++
+        }
+        if (updateData.services !== undefined) {
+          setClauses.push(`services = $${paramIndex}`)
+          values.push(updateData.services)
+          paramIndex++
+        }
+        if (updateData.billingTerms !== undefined) {
+          setClauses.push(`"billingTerms" = $${paramIndex}`)
+          values.push(updateData.billingTerms)
+          paramIndex++
+        }
+        
+        // Add updatedAt
+        setClauses.push(`"updatedAt" = NOW()`)
+        
+        if (setClauses.length === 0) {
+          // No fields to update, just fetch and return current client
+          const currentResult = await prisma.$queryRaw`
+            SELECT * FROM "Client" WHERE id = ${id}
+          `
+          if (!currentResult || !currentResult[0]) {
+            return notFound(res)
+          }
+          const client = currentResult[0]
+          
+          // Parse JSON fields
+          const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
+          const parsedClient = { ...client }
+          for (const field of jsonFields) {
+            const value = parsedClient[field]
+            if (typeof value === 'string' && value) {
+              try {
+                parsedClient[field] = JSON.parse(value)
+              } catch (e) {
+                parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
+              }
+            } else if (!value) {
+              parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
+            }
+          }
+          return ok(res, { client: parsedClient })
+        }
+        
+        // Execute update using raw SQL
+        const updateQuery = `UPDATE "Client" SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING *`
+        values.push(id)
+        
+        const result = await prisma.$queryRawUnsafe(updateQuery, ...values)
+        const client = result && result[0] ? result[0] : null
+        
+        if (!client) {
+          return notFound(res)
+        }
         
         // Log to file
         const fs = await import('fs')
