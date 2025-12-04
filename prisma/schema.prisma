@@ -131,10 +131,7 @@ model Client {
   salesOrders   SalesOrder[]
   starredBy     StarredClient[]
   
-  // Company Group fields (Hybrid: Primary parent + multiple group memberships)
-  parentGroupId       String?
-  parentGroup         Client?                @relation("PrimaryParent", fields: [parentGroupId], references: [id])
-  childCompanies      Client[]               @relation("PrimaryParent")
+  // Company Group fields (Multiple group memberships)
   groupMemberships    ClientCompanyGroup[]   @relation("ClientGroups")
   groupChildren       ClientCompanyGroup[]   @relation("GroupMembers")
 
@@ -143,7 +140,6 @@ model Client {
   @@index([status])
   @@index([ownerId])
   @@index([externalAgentId])
-  @@index([parentGroupId])
 }
 
 model ClientCompanyGroup {

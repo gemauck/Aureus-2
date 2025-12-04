@@ -333,50 +333,45 @@ const DataProvider = ({ children }) => {
                     return;
                 }
 
-                // Load essential data in parallel with timeout - ensure we always complete even if DB is down
-                const loadPromise = Promise.allSettled([
-                    fetchData('clients').catch(err => {
-                        const errorMessage = err?.message || String(err);
-                        const isDatabaseError = errorMessage.includes('Database connection failed') ||
-                                              errorMessage.includes('unreachable');
-                        if (!isDatabaseError) {
-                            console.error('❌ Error fetching clients:', err);
-                        }
-                        return null;
-                    }),
-                    fetchData('leads').catch(err => {
-                        const errorMessage = err?.message || String(err);
-                        const isDatabaseError = errorMessage.includes('Database connection failed') ||
-                                              errorMessage.includes('unreachable');
-                        if (!isDatabaseError) {
-                            console.error('❌ Error fetching leads:', err);
-                        }
-                        return null;
-                    }),
-                    fetchData('projects').catch(err => {
-                        const errorMessage = err?.message || String(err);
-                        const isDatabaseError = errorMessage.includes('Database connection failed') ||
-                                              errorMessage.includes('unreachable');
-                        if (!isDatabaseError) {
-                            console.error('❌ Error fetching projects:', err);
-                        }
-                        return null;
-                    }),
-                    fetchData('users').catch(err => {
-                        const errorMessage = err?.message || String(err);
-                        const isDatabaseError = errorMessage.includes('Database connection failed') ||
-                                              errorMessage.includes('unreachable');
-                        if (!isDatabaseError) {
-                            console.error('❌ Error fetching users:', err);
-                        }
-                        return null;
-                    }),
-                ]);
+                // Load essential data sequentially to prevent rate limiting
+                // Stagger requests with delays to respect rate limits
+                const dataTypes = [
+                    { key: 'clients', priority: 1 },
+                    { key: 'leads', priority: 2 },
+                    { key: 'projects', priority: 3 },
+                    { key: 'users', priority: 4 }
+                ];
                 
-                // Add timeout to ensure we always complete loading (max 10 seconds)
-                const timeoutPromise = new Promise(resolve => setTimeout(resolve, 10000));
-                
-                await Promise.race([loadPromise, timeoutPromise]);
+                // Load data sequentially with delays between requests
+                for (let i = 0; i < dataTypes.length; i++) {
+                    const dataType = dataTypes[i];
+                    try {
+                        // Add delay between requests (except first one) to prevent rate limiting
+                        if (i > 0) {
+                            await new Promise(resolve => setTimeout(resolve, 600)); // 600ms delay between requests
+                        }
+                        
+                        await fetchData(dataType.key).catch(err => {
+                            const errorMessage = err?.message || String(err);
+                            const isDatabaseError = errorMessage.includes('Database connection failed') ||
+                                                  errorMessage.includes('unreachable');
+                            const isRateLimitError = err?.status === 429 || err?.code === 'RATE_LIMIT_EXCEEDED';
+                            
+                            // Don't log rate limit errors (they're handled by RateLimitManager)
+                            if (!isDatabaseError && !isRateLimitError) {
+                                console.error(`❌ Error fetching ${dataType.key}:`, err);
+                            }
+                            return null;
+                        });
+                    } catch (error) {
+                        // Continue with next data type even if one fails
+                        const errorMessage = error?.message || String(error);
+                        const isRateLimitError = error?.status === 429 || error?.code === 'RATE_LIMIT_EXCEEDED';
+                        if (!isRateLimitError) {
+                            console.error(`❌ Error loading ${dataType.key}:`, error);
+                        }
+                    }
+                }
                 
             } catch (error) {
                 console.error('❌ Initial load error:', error);

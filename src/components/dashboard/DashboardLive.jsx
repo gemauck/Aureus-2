@@ -41,6 +41,12 @@ const calculateStats = (clients, leads, projects, timeEntries) => {
 };
 
 const DashboardLive = () => {
+    // Version indicator - logged to console for verification
+    React.useEffect(() => {
+        console.log('%c✨✨✨ DashboardLive v2.0 LOADED ✨✨✨', 'color: #10b981; font-size: 16px; font-weight: bold;');
+        console.log('📍 Look for the blue "Edit Layout" button in the top-right corner');
+        console.log('🎨 Click it to enable drag, drop, and resize features!');
+    }, []);
     const [dashboardData, setDashboardData] = useState({
         clients: [],
         leads: [],
@@ -1058,9 +1064,14 @@ const DashboardLive = () => {
                 </div>
                 <div className="flex items-center gap-2">
                     <button
-                        onClick={() => setEditMode(!editMode)}
-                        className={`px-3 py-2 text-sm rounded-md border ${editMode ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 hover:bg-gray-50'}`}
+                        onClick={() => {
+                            setEditMode(!editMode);
+                            console.log('🎨 Edit Mode:', !editMode ? 'ENABLED' : 'DISABLED');
+                        }}
+                        className={`px-3 py-2 text-sm font-medium rounded-md border ${editMode ? 'bg-blue-600 text-white border-blue-600' : 'bg-blue-500 text-white border-blue-500 hover:bg-blue-600'}`}
+                        title={editMode ? 'Exit edit mode to hide controls' : 'Click to enable drag, drop, and resize'}
                     >
+                        <i className={`fas ${editMode ? 'fa-times' : 'fa-edit'} mr-1`}></i>
                         {editMode ? 'Exit Edit Mode' : 'Edit Layout'}
                     </button>
                     <button

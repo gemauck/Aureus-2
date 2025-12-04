@@ -530,16 +530,10 @@ const DatabaseAPI = {
                     const retryAfterHeader = response.headers.get('Retry-After');
                     let retryDelay = this._parseRetryAfter(retryAfterHeader);
                     
-                    // If no Retry-After header, use exponential backoff with longer delays
+                    // If no Retry-After header, use default (15 minutes)
                     if (!retryDelay || retryDelay <= 0) {
-                        // Start with longer base delay and increase exponentially
-                        // Also factor in consecutive rate limit errors
-                        const baseDelayMultiplier = Math.min(this._rateLimitCount, 5); // Cap at 5x
-                        retryDelay = baseDelay * Math.pow(2, attempt) * (1 + baseDelayMultiplier * 0.5);
+                        retryDelay = 900000; // 15 minutes default
                     }
-                    
-                    // Cap retry delay to 60 seconds (increased from 15s) to respect rate limits better
-                    retryDelay = Math.min(retryDelay, 60000);
                     
                     // Set global rate limit resume time to prevent other requests
                     this._rateLimitResumeAt = Date.now() + retryDelay;
@@ -547,23 +541,23 @@ const DatabaseAPI = {
                     const errorMessage = await this._readErrorMessage(response);
                     const finalMessage = errorMessage || 'Rate limit exceeded. Please try again shortly.';
                     const retrySeconds = Math.round(retryDelay / 1000);
+                    const retryMinutes = Math.round(retrySeconds / 60);
                     
-                    // Only log first rate limit error to reduce noise - use debug log for subsequent ones
+                    // Don't retry on rate limit errors - fail fast and let the caller handle it
+                    // Rate limits should be respected, not retried
                     const log = window.debug?.log || (() => {});
                     if (this._rateLimitCount === 1 || attempt === 0) {
-                        console.warn(`⏳ Rate limit encountered on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}, consecutive: ${this._rateLimitCount}). Retrying in ${retrySeconds}s...`, finalMessage);
+                        console.warn(`🚫 Rate limit encountered on ${endpoint}. Waiting ${retryMinutes} minute(s) before allowing new requests.`, finalMessage);
                     } else {
-                        log(`⏳ Rate limit encountered on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}, consecutive: ${this._rateLimitCount}). Retrying in ${retrySeconds}s...`);
+                        log(`🚫 Rate limit encountered on ${endpoint}. Waiting ${retryMinutes} minute(s) before allowing new requests.`);
                     }
                     
-                    if (attempt < maxRetries) {
-                        await this._sleep(retryDelay);
-                        continue;
-                    }
-                    
-                    // Reset rate limit count after max retries
-                    this._rateLimitCount = 0;
-                    throw new Error(finalMessage);
+                    // Create error with rate limit info
+                    const rateLimitError = new Error(finalMessage);
+                    rateLimitError.status = 429;
+                    rateLimitError.code = 'RATE_LIMIT_EXCEEDED';
+                    rateLimitError.retryAfter = retrySeconds;
+                    throw rateLimitError;
                 }
                 
                 // Reset rate limit count and restore normal limits on successful request

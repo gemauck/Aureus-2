@@ -90,118 +90,55 @@ async function handler(req, res) {
           }
         }
         
+        // Use raw SQL query first to avoid Prisma relation resolution issues
         let lead
         try {
-          console.log(`🔍 [LEADS ID] Attempting to query lead with ID: ${id}`)
-          console.log(`🔍 [LEADS ID] Include object:`, JSON.stringify(Object.keys(includeObj)))
-          lead = await prisma.client.findFirst({ 
-            where: { id, type: 'lead' },
-            include: includeObj
-          })
-          console.log(`🔍 [LEADS ID] Query result: ${lead ? 'Found' : 'Not found'}`)
-        } catch (relationError) {
-          console.error(`❌ [LEADS ID] Initial query failed with error:`, relationError.message)
-          console.error(`❌ [LEADS ID] Error code:`, relationError.code)
-          console.error(`❌ [LEADS ID] Error name:`, relationError.name)
+          console.log(`🔍 [LEADS ID] Attempting to query lead with ID: ${id} using raw SQL`)
+          // Use raw SQL to completely bypass Prisma's relation resolution
+          const rawResult = await prisma.$queryRaw`
+            SELECT id, name, type, industry, status, stage, revenue, value, probability, 
+                   "lastContact", address, website, notes, contacts, "followUps", 
+                   "projectIds", comments, sites, contracts, "activityLog", "billingTerms", 
+                   proposals, services, "ownerId", "externalAgentId", "createdAt", "updatedAt", 
+                   thumbnail, "rssSubscribed"
+            FROM "Client"
+            WHERE id = ${id} AND type = 'lead'
+          `
+          lead = rawResult && rawResult[0] ? rawResult[0] : null
           
-          // Check for missing relation errors (externalAgent, etc.)
-          const isMissingColumnError = relationError.code === 'P2022' || 
-                                     relationError.code === 'P2019' ||
-                                     relationError.message?.includes('externalAgentId') ||
-                                     relationError.message?.includes('does not exist') ||
-                                     relationError.message?.includes('Unknown argument')
-          
-          if (isMissingColumnError) {
-            // Try query without problematic relations (externalAgent)
-            console.warn(`⚠️ Relation error detected for lead ${id}, trying without externalAgent relation`)
-            console.warn(`⚠️ Error details: ${relationError.message}`)
-            try {
-              // Try with only starredBy (if user is valid) and no externalAgent
-              const fallbackInclude = {
-                ...(validUserId ? {
-                  starredBy: {
-                    where: {
-                      userId: validUserId
-                    },
-                    select: {
-                      id: true,
-                      userId: true
-                    }
-                  }
-                } : {})
-              }
-              
-              lead = await prisma.client.findFirst({ 
-                where: { id, type: 'lead' },
-                include: fallbackInclude
-              })
-              if (lead) {
-                // Manually set null externalAgent
-                lead.externalAgent = null
-                if (!lead.starredBy) {
-                  lead.starredBy = []
-                }
-              }
-            } catch (fallbackError) {
-              // Try without any relations as last resort
-              console.warn(`⚠️ Fallback query failed for lead ${id}, trying minimal query:`, fallbackError.message)
-              try {
-                lead = await prisma.client.findFirst({ 
-                  where: { id, type: 'lead' }
-                })
-                if (lead) {
-                  // Manually set empty/null relations
-                  lead.externalAgent = null
-                  lead.starredBy = []
-                }
-              } catch (minimalError) {
-                // Re-throw the original error if all fallbacks fail
-                console.error(`❌ [LEADS ID] All query fallbacks failed for lead ${id}`)
-                console.error(`❌ [LEADS ID] Minimal query error:`, {
-                  message: minimalError.message,
-                  code: minimalError.code,
-                  name: minimalError.name,
-                  stack: minimalError.stack
-                })
-                console.error(`❌ [LEADS ID] Original relation error:`, {
-                  message: relationError.message,
-                  code: relationError.code,
-                  name: relationError.name
-                })
-                throw relationError
-              }
-            }
+          if (lead) {
+            // Manually set relations to null/empty to match expected structure
+            lead.externalAgent = null
+            lead.starredBy = validUserId ? [] : []
+            console.log(`✅ [LEADS ID] Successfully retrieved lead ${id} using raw SQL`)
           } else {
-            // For other relation errors, try without relations as fallback
-            console.warn(`⚠️ [LEADS ID] Query with relations failed for lead ${id}, trying without relations:`, relationError.message)
-            try {
-              lead = await prisma.client.findFirst({ 
-                where: { id, type: 'lead' }
-              })
-              if (lead) {
-                // Manually set empty/null relations
-                lead.externalAgent = null
-                lead.starredBy = []
-                console.log(`✅ [LEADS ID] Successfully retrieved lead ${id} without relations`)
-              } else {
-                console.warn(`⚠️ [LEADS ID] Lead ${id} not found even without relations`)
-              }
-            } catch (fallbackError) {
-              // Re-throw the original error if fallback also fails
-              console.error(`❌ [LEADS ID] Fallback query failed for lead ${id}:`, fallbackError.message)
-              console.error(`❌ [LEADS ID] Fallback error details:`, {
-                message: fallbackError.message,
-                code: fallbackError.code,
-                name: fallbackError.name,
-                stack: fallbackError.stack
-              })
-              console.error(`❌ [LEADS ID] Original relation error:`, {
-                message: relationError.message,
-                code: relationError.code,
-                name: relationError.name
-              })
-              throw relationError
+            console.log(`⚠️ [LEADS ID] Lead ${id} not found using raw SQL`)
+          }
+        } catch (rawError) {
+          console.warn(`⚠️ [LEADS ID] Raw SQL query failed, trying Prisma without relations:`, rawError.message)
+          // If raw SQL fails, try Prisma without relations as fallback
+          try {
+            lead = await prisma.client.findFirst({ 
+              where: { id, type: 'lead' }
+            })
+            if (lead) {
+              // Manually set empty/null relations
+              lead.externalAgent = null
+              lead.starredBy = []
+              console.log(`✅ [LEADS ID] Successfully retrieved lead ${id} without relations`)
+            } else {
+              console.warn(`⚠️ [LEADS ID] Lead ${id} not found even without relations`)
             }
+          } catch (fallbackError) {
+            // Re-throw the original error if fallback also fails
+            console.error(`❌ [LEADS ID] All query fallbacks failed for lead ${id}:`, fallbackError.message)
+            console.error(`❌ [LEADS ID] Fallback error details:`, {
+              message: fallbackError.message,
+              code: fallbackError.code,
+              name: fallbackError.name,
+              stack: fallbackError.stack
+            })
+            throw fallbackError
           }
         }
         

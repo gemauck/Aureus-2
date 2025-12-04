@@ -38,22 +38,136 @@ class LiveDataSync {
         
         const getLog = () => window.debug?.log || (() => {});
         const log = getLog();
+        
+        // Check rate limit before starting - if active, delay start
+        if (window.RateLimitManager && window.RateLimitManager.isRateLimited()) {
+            const waitSeconds = window.RateLimitManager.getWaitTimeRemaining();
+            const waitMinutes = Math.round(waitSeconds / 60);
+            log(`⏸️ Rate limit active, delaying LiveDataSync start. Waiting ${waitMinutes} minute(s)...`);
+            
+            // Schedule start after rate limit clears
+            const checkRateLimit = setInterval(() => {
+                if (!window.RateLimitManager || !window.RateLimitManager.isRateLimited()) {
+                    clearInterval(checkRateLimit);
+                    if (!this.isRunning) {
+                        log('✅ Rate limit cleared, starting LiveDataSync...');
+                        this._delayedStart();
+                    }
+                }
+            }, 2000); // Check every 2 seconds
+            // Clear interval after max wait time
+            setTimeout(() => clearInterval(checkRateLimit), waitSeconds * 1000 + 10000);
+            return; // Don't start yet
+        }
+        
         log('🔄 Starting live data synchronization...');
         this.isRunning = true;
         this.connectionStatus = 'connecting';
         
-        // Initial sync
-        this.sync();
+        // Delay initial sync to let initial page loads complete (5 seconds)
+        // This prevents rate limiting from competing with DataContext initial load
+        setTimeout(() => {
+            if (this.isRunning && !this.isPaused) {
+                // Check rate limit again before initial sync
+                if (window.RateLimitManager && window.RateLimitManager.isRateLimited()) {
+                    const waitSeconds = window.RateLimitManager.getWaitTimeRemaining();
+                    const waitMinutes = Math.round(waitSeconds / 60);
+                    log(`⏸️ Rate limit active, delaying initial sync. Waiting ${waitMinutes} minute(s)...`);
+                    // Schedule sync after rate limit clears
+                    const checkRateLimit = setInterval(() => {
+                        if (!window.RateLimitManager || !window.RateLimitManager.isRateLimited()) {
+                            clearInterval(checkRateLimit);
+                            if (this.isRunning && !this.isPaused) {
+                                log('✅ Rate limit cleared, starting initial sync...');
+                                this.sync();
+                            }
+                        }
+                    }, 2000); // Check every 2 seconds
+                    // Clear interval if component unmounts
+                    setTimeout(() => clearInterval(checkRateLimit), waitSeconds * 1000 + 5000);
+                } else {
+                    this.sync();
+                }
+            }
+        }, 5000); // 5 second delay to let initial loads complete
         
         // Set up interval
         this.intervalId = setInterval(() => {
             // Double-check isRunning before each interval sync
             if (this.isRunning && !this.isPaused) {
+                // Check rate limit before each sync
+                if (window.RateLimitManager && window.RateLimitManager.isRateLimited()) {
+                    const waitSeconds = window.RateLimitManager.getWaitTimeRemaining();
+                    const waitMinutes = Math.round(waitSeconds / 60);
+                    log(`⏸️ Rate limit active, skipping scheduled sync. Waiting ${waitMinutes} minute(s)...`);
+                    return;
+                }
                 this.sync();
             }
         }, this.refreshInterval);
         
         // Listen for visibility changes to sync when tab becomes active
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && this.isRunning && !this.isPaused) {
+                log('👁️ Tab became visible, syncing data...');
+                this.sync();
+            }
+        });
+        
+        // Listen for online/offline events
+        window.addEventListener('online', () => {
+            if (this.isRunning && !this.isPaused) {
+                log('🌐 Network online, syncing data...');
+                this.sync();
+            }
+        });
+        
+        window.addEventListener('offline', () => {
+            log('📴 Network offline');
+            this.connectionStatus = 'offline';
+            this.notifySubscribers({ type: 'connection', status: 'offline' });
+        });
+    }
+    
+    // Internal method for delayed start (called after rate limit clears)
+    _delayedStart() {
+        if (this.isRunning) {
+            return;
+        }
+        
+        const getLog = () => window.debug?.log || (() => {});
+        const log = getLog();
+        log('🔄 Starting live data synchronization (delayed start)...');
+        this.isRunning = true;
+        this.connectionStatus = 'connecting';
+        
+        // Delay initial sync to let initial page loads complete (5 seconds)
+        setTimeout(() => {
+            if (this.isRunning && !this.isPaused) {
+                if (window.RateLimitManager && window.RateLimitManager.isRateLimited()) {
+                    const waitSeconds = window.RateLimitManager.getWaitTimeRemaining();
+                    const waitMinutes = Math.round(waitSeconds / 60);
+                    log(`⏸️ Rate limit still active, delaying initial sync. Waiting ${waitMinutes} minute(s)...`);
+                    return;
+                }
+                this.sync();
+            }
+        }, 5000); // 5 second delay
+        
+        // Set up interval
+        this.intervalId = setInterval(() => {
+            if (this.isRunning && !this.isPaused) {
+                if (window.RateLimitManager && window.RateLimitManager.isRateLimited()) {
+                    const waitSeconds = window.RateLimitManager.getWaitTimeRemaining();
+                    const waitMinutes = Math.round(waitSeconds / 60);
+                    log(`⏸️ Rate limit active, skipping scheduled sync. Waiting ${waitMinutes} minute(s)...`);
+                    return;
+                }
+                this.sync();
+            }
+        }, this.refreshInterval);
+        
+        // Listen for visibility changes
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden && this.isRunning && !this.isPaused) {
                 log('👁️ Tab became visible, syncing data...');
@@ -219,6 +333,14 @@ class LiveDataSync {
             this._rateLimitBackoffEnd = null;
         }
         
+        // Check RateLimitManager before starting sync
+        if (window.RateLimitManager && window.RateLimitManager.isRateLimited()) {
+            const waitSeconds = window.RateLimitManager.getWaitTimeRemaining();
+            const waitMinutes = Math.round(waitSeconds / 60);
+            log(`⏸️ Rate limit active (RateLimitManager), skipping sync. Waiting ${waitMinutes} minute(s)...`);
+            return;
+        }
+        
         this.syncInProgress = true;
         this.connectionStatus = 'syncing';
         
@@ -257,7 +379,7 @@ class LiveDataSync {
             // Execute calls with delays between them
             for (let i = 0; i < syncCalls.length; i++) {
                 const call = syncCalls[i];
-                const delay = i * 500; // 500ms delay between each call (increased from 200ms to reduce load)
+                const delay = i * 1000; // 1000ms (1 second) delay between each call (increased from 500ms to prevent rate limiting)
                 const promise = new Promise(resolve => {
                     setTimeout(async () => {
                         // Check if stopped or paused before making API call
@@ -268,6 +390,14 @@ class LiveDataSync {
                         }
                         if (this.isPaused) {
                             log(`⏸️ Sync paused, skipping ${call.type} API call`);
+                            resolve({ dataType: call.type, success: false, skipped: true });
+                            return;
+                        }
+                        // Check for rate limits before making API call
+                        if (window.RateLimitManager && window.RateLimitManager.isRateLimited()) {
+                            const waitSeconds = window.RateLimitManager.getWaitTimeRemaining();
+                            const waitMinutes = Math.round(waitSeconds / 60);
+                            log(`⏸️ Rate limit active, skipping ${call.type} API call. Waiting ${waitMinutes} minute(s)...`);
                             resolve({ dataType: call.type, success: false, skipped: true });
                             return;
                         }
@@ -287,7 +417,7 @@ class LiveDataSync {
                 const role = window.storage?.getUser?.()?.role?.toLowerCase?.();
                 if (role === 'admin') {
                     // Add users sync with delay after other calls
-                    const usersDelay = syncCalls.length * 500; // After all other calls (increased from 200ms)
+                    const usersDelay = syncCalls.length * 1000; // After all other calls (increased from 500ms to 1000ms)
                     const usersPromise = new Promise(resolve => {
                         setTimeout(async () => {
                             // Check if stopped or paused before making API call
@@ -298,6 +428,14 @@ class LiveDataSync {
                             }
                             if (this.isPaused) {
                                 log('⏸️ Sync paused, skipping users API call');
+                                resolve({ dataType: 'users', success: false, skipped: true });
+                                return;
+                            }
+                            // Check for rate limits before making API call
+                            if (window.RateLimitManager && window.RateLimitManager.isRateLimited()) {
+                                const waitSeconds = window.RateLimitManager.getWaitTimeRemaining();
+                                const waitMinutes = Math.round(waitSeconds / 60);
+                                log(`⏸️ Rate limit active, skipping users API call. Waiting ${waitMinutes} minute(s)...`);
                                 resolve({ dataType: 'users', success: false, skipped: true });
                                 return;
                             }

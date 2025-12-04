@@ -321,15 +321,29 @@ const AuthProvider = ({ children }) => {
             return;
         }
 
-        // Send initial heartbeat
-        window.api.heartbeat();
+        // Send initial heartbeat after a delay to avoid immediate requests on page load
+        setTimeout(() => {
+            if (user && window.storage?.getToken?.()) {
+                // Check for global rate limits before sending heartbeat
+                if (!window.RateLimitManager || !window.RateLimitManager.isRateLimited()) {
+                    window.api.heartbeat();
+                }
+            }
+        }, 60000); // Wait 1 minute before first heartbeat
 
-        // Set up interval to send heartbeats every 3 minutes (180000ms) - increased to reduce API load
+        // Set up interval to send heartbeats every 5 minutes (300000ms) - increased to reduce API load and rate limiting
         const heartbeatInterval = setInterval(() => {
             if (user && window.storage?.getToken?.()) {
+                // Check rate limit before sending heartbeat
+                if (window.RateLimitManager && window.RateLimitManager.isRateLimited()) {
+                    const waitSeconds = window.RateLimitManager.getWaitTimeRemaining();
+                    const waitMinutes = Math.round(waitSeconds / 60);
+                    // Silently skip heartbeat if rate limited (don't log to reduce noise)
+                    return;
+                }
                 window.api.heartbeat();
             }
-        }, 180000); // 3 minutes (increased from 2 minutes)
+        }, 300000); // 5 minutes (increased from 3 minutes to reduce rate limiting)
 
         // Cleanup
         return () => {

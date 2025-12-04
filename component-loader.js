@@ -294,8 +294,12 @@
             }
 
             // Force cache-bust for DashboardLive widget drag-drop and resize features
-            if (path.includes('components/dashboard/DashboardLive.jsx')) {
-                applyDynamicCacheBust('dashboard-widgets-drag-resize-v20251204-' + Date.now());
+            // Using timestamp ensures every page load gets a fresh version
+            if (path.includes('components/dashboard/DashboardLive.jsx') || path.includes('dashboard/DashboardLive')) {
+                const timestamp = Date.now();
+                const cacheTag = 'dashboard-widgets-v20251204-' + timestamp;
+                applyDynamicCacheBust(cacheTag);
+                console.log('🔄 DashboardLive: Loading with cache-bust tag:', cacheTag);
             }
 
             if (!dynamicCacheBust && cacheBustTag) {

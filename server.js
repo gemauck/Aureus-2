@@ -275,7 +275,7 @@ app.use(helmet({
 // General API rate limiting
 const apiLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 100, // Limit each IP to 100 requests per minute
+  max: 150, // Limit each IP to 150 requests per minute (increased from 100 to handle initial loads)
   message: 'Too many requests, please slow down.',
   standardHeaders: true,
   legacyHeaders: false,

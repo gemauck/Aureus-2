@@ -11,7 +11,7 @@ const NotificationCenter = () => {
     const consecutiveFailuresRef = useRef(0);
     const pollingIntervalRef = useRef(null);
     const isPollingPausedRef = useRef(false);
-    const pollingDelayRef = useRef(60000); // Start with 60 seconds, will increase on rate limits
+    const pollingDelayRef = useRef(120000); // Start with 120 seconds (2 minutes), will increase on rate limits
     
     // Helper function to restart polling - will be defined after loadNotifications
     const restartPollingRef = useRef(null);
@@ -85,6 +85,22 @@ const NotificationCenter = () => {
             return;
         }
         
+        // Check for global rate limits before making request
+        if (window.RateLimitManager && window.RateLimitManager.isRateLimited()) {
+            const waitSeconds = window.RateLimitManager.getWaitTimeRemaining();
+            const waitMinutes = Math.round(waitSeconds / 60);
+            console.warn(`⏸️ NotificationCenter: Global rate limit active. Pausing polling for ${waitMinutes} minute(s).`);
+            isPollingPausedRef.current = true;
+            // Schedule restart after rate limit expires
+            const waitTime = waitSeconds * 1000;
+            setTimeout(() => {
+                isPollingPausedRef.current = false;
+                pollingDelayRef.current = 120000; // Reset to 2 minutes
+                if (restartPollingRef.current) restartPollingRef.current();
+            }, waitTime);
+            return;
+        }
+        
         try {
             setLoading(true);
             
@@ -95,6 +111,17 @@ const NotificationCenter = () => {
                 if (consecutiveFailuresRef.current >= 3) {
                     isPollingPausedRef.current = true;
                 }
+                return;
+            }
+            
+            // Check rate limit before making request
+            if (window.RateLimitManager && window.RateLimitManager.isRateLimited()) {
+                const waitSeconds = window.RateLimitManager.getWaitTimeRemaining();
+                const waitMinutes = Math.round(waitSeconds / 60);
+                console.warn(`⏸️ NotificationCenter: Rate limit active, skipping load. Waiting ${waitMinutes} minute(s)...`);
+                // Increase polling delay and restart
+                pollingDelayRef.current = Math.max(pollingDelayRef.current, waitSeconds * 1000);
+                if (restartPollingRef.current) restartPollingRef.current();
                 return;
             }
             
@@ -111,14 +138,14 @@ const NotificationCenter = () => {
                 // Reset failure counter on success
                 if (consecutiveFailuresRef.current > 0) {
                     consecutiveFailuresRef.current = 0;
-                    // Reset polling delay to normal (60 seconds)
-                    pollingDelayRef.current = 60000;
+                    // Reset polling delay to normal (120 seconds / 2 minutes)
+                    pollingDelayRef.current = 120000;
                     // Resume polling if it was paused
                     if (isPollingPausedRef.current) {
                         isPollingPausedRef.current = false;
                         // Restart polling with normal delay
                         if (restartPollingRef.current) restartPollingRef.current();
-                    } else if (pollingDelayRef.current !== 60000) {
+                    } else if (pollingDelayRef.current !== 120000) {
                         // If delay was increased due to rate limiting, restart with normal delay
                         if (restartPollingRef.current) restartPollingRef.current();
                     }
@@ -130,15 +157,24 @@ const NotificationCenter = () => {
                 
                 if (isRateLimit) {
                     consecutiveFailuresRef.current++;
-                    // Exponential backoff for rate limits: 60s -> 120s -> 240s -> 480s (max 8 minutes)
-                    const backoffDelays = [120000, 240000, 480000];
-                    const backoffIndex = Math.min(consecutiveFailuresRef.current - 1, backoffDelays.length - 1);
-                    pollingDelayRef.current = backoffDelays[backoffIndex] || 480000;
+                    // Check for global rate limit state
+                    const retryAfter = error?.retryAfter || 900; // Default 15 minutes
+                    const waitSeconds = retryAfter;
+                    const waitMinutes = Math.round(waitSeconds / 60);
                     
-                    console.warn(`⚠️ NotificationCenter: Rate limit hit. Increasing polling delay to ${pollingDelayRef.current / 1000}s`);
+                    // Pause polling completely until rate limit expires
+                    isPollingPausedRef.current = true;
+                    pollingDelayRef.current = Math.max(waitSeconds * 1000, 300000); // At least 5 minutes
                     
-                    // Restart polling with increased delay
-                    if (restartPollingRef.current) restartPollingRef.current();
+                    console.warn(`⏸️ NotificationCenter: Rate limit hit. Pausing polling for ${waitMinutes} minute(s).`);
+                    
+                    // Schedule restart after rate limit expires
+                    setTimeout(() => {
+                        isPollingPausedRef.current = false;
+                        pollingDelayRef.current = 120000; // Reset to 2 minutes
+                        consecutiveFailuresRef.current = 0; // Reset failure counter
+                        if (restartPollingRef.current) restartPollingRef.current();
+                    }, waitSeconds * 1000);
                     
                     // Re-throw to be caught by outer catch
                     throw error;
@@ -194,15 +230,25 @@ const NotificationCenter = () => {
             if (!isPollingPausedRef.current) {
                 pollingIntervalRef.current = setInterval(() => {
                     if (!isPollingPausedRef.current) {
+                        // Check rate limit before polling
+                        if (window.RateLimitManager && window.RateLimitManager.isRateLimited()) {
+                            const waitSeconds = window.RateLimitManager.getWaitTimeRemaining();
+                            const waitMinutes = Math.round(waitSeconds / 60);
+                            console.warn(`⏸️ NotificationCenter: Rate limit active, skipping poll. Waiting ${waitMinutes} minute(s)...`);
+                            return;
+                        }
                         loadNotifications();
                     }
                 }, pollingDelayRef.current);
             }
         };
         
-        // Load notifications immediately, then start polling
-        loadNotifications();
-        restartPollingRef.current();
+        // Load notifications after initial delay (2 minutes), then start polling
+        // This prevents immediate requests on page load which can contribute to rate limiting
+        setTimeout(() => {
+            loadNotifications();
+            restartPollingRef.current();
+        }, 120000); // Wait 2 minutes before first load
         
         return () => {
             if (pollingIntervalRef.current) {
