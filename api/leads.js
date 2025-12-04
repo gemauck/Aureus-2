@@ -495,15 +495,16 @@ async function handler(req, res) {
                   const allRecords = await prisma.client.findMany({
                     orderBy: { createdAt: 'desc' }
                   })
-                // Filter to only leads and add empty tags
-                leads = allRecords
-                  .filter(record => {
-                    if (record.type !== null && record.type !== undefined && record.type !== '') {
-                      return record.type === 'lead'
-                    }
-                    return false
-                  })
-                  .map(l => ({ ...l, tags: [], externalAgent: null }))
+                  // Filter to only leads and add empty tags
+                  leads = allRecords
+                    .filter(record => {
+                      if (record.type !== null && record.type !== undefined && record.type !== '') {
+                        return record.type === 'lead'
+                      }
+                      return false
+                    })
+                    .map(l => ({ ...l, tags: [], externalAgent: null }))
+                }
               }
             }
           } catch (fallbackError) {
