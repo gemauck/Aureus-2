@@ -6557,9 +6557,10 @@ const Clients = React.memo(() => {
                                                                     if (lead.industry && lead.industry !== 'Other') {
                                                                         parts.push(lead.industry);
                                                                     }
-                                                                    if (lead.status && lead.status !== 'New') {
-                                                                        parts.push(lead.status);
-                                                                    }
+                                                                    // Don't display status for leads (removed Active status display)
+                                                                    // if (lead.status && lead.status !== 'New') {
+                                                                    //     parts.push(lead.status);
+                                                                    // }
                                                                     
                                                                     // Parse and display sites for leads
                                                                     let sites = [];
@@ -6599,9 +6600,9 @@ const Clients = React.memo(() => {
                                                                         }
                                                                     }
                                                                     
-                                                                    // Fallback if no parts
+                                                                    // Fallback if no parts (don't show status)
                                                                     if (parts.length === 0) {
-                                                                        return (lead.industry || 'Other') + ' • ' + (lead.status || 'New');
+                                                                        return lead.industry || 'Other';
                                                                     }
                                                                     
                                                                     return parts.join(' • ');
