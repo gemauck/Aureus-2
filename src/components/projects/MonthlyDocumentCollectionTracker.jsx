@@ -1343,7 +1343,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 return section;
             });
             
-            // Log status change for debugging
+            // Immediately update the ref to prevent race conditions with auto-save
+            const updatedSectionsByYear = {
+                ...sectionsRef.current,
+                [selectedYear]: updated
+            };
+            sectionsRef.current = updatedSectionsByYear;
             
             return updated;
         });
