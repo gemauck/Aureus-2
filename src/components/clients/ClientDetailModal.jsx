@@ -787,43 +787,73 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             }
             
             isLoadingClientRef.current = true;
-            const response = await window.api.getClient(clientId);
-            const dbClient = response?.data?.client;
             
-            if (dbClient) {
+            try {
+                const response = await window.api.getClient(clientId);
                 
-                // Parse JSON strings
-                const parsedClient = {
-                    ...dbClient,
-                    contacts: typeof dbClient.contacts === 'string' ? JSON.parse(dbClient.contacts || '[]') : (dbClient.contacts || []),
-                    followUps: typeof dbClient.followUps === 'string' ? JSON.parse(dbClient.followUps || '[]') : (dbClient.followUps || []),
-                    projectIds: typeof dbClient.projectIds === 'string' ? JSON.parse(dbClient.projectIds || '[]') : (dbClient.projectIds || []),
-                    comments: typeof dbClient.comments === 'string' ? JSON.parse(dbClient.comments || '[]') : (dbClient.comments || []),
-                    sites: typeof dbClient.sites === 'string' ? JSON.parse(dbClient.sites || '[]') : (dbClient.sites || []),
-                    contracts: typeof dbClient.contracts === 'string' ? JSON.parse(dbClient.contracts || '[]') : (dbClient.contracts || []),
-                    activityLog: typeof dbClient.activityLog === 'string' ? JSON.parse(dbClient.activityLog || '[]') : (dbClient.activityLog || []),
-                    billingTerms: typeof dbClient.billingTerms === 'string' ? JSON.parse(dbClient.billingTerms || '{}') : (dbClient.billingTerms || {})
-                };
+                // Check if response indicates an error
+                if (response?.error || response?.status === 'error') {
+                    const errorMessage = response?.error?.message || response?.error || 'Failed to load client data';
+                    console.error('❌ API returned error:', errorMessage);
+                    // Don't show alert for 500 errors - they're likely database issues
+                    // Just log and continue with existing form data
+                    return;
+                }
                 
+                const dbClient = response?.data?.client;
                 
-                // Update formData with the fresh data from database
-                // IMPORTANT: Only update comments, followUps, activityLog, contracts
-                // DO NOT update contacts or sites - those are managed separately
-                setFormData(prevFormData => {
-                    const updated = {
-                        ...prevFormData,
-                        comments: parsedClient.comments,
-                        followUps: parsedClient.followUps,
-                        activityLog: parsedClient.activityLog,
-                        contracts: parsedClient.contracts
-                        // Explicitly preserve contacts and sites from current state
+                if (dbClient) {
+                    
+                    // Parse JSON strings
+                    const parsedClient = {
+                        ...dbClient,
+                        contacts: typeof dbClient.contacts === 'string' ? JSON.parse(dbClient.contacts || '[]') : (dbClient.contacts || []),
+                        followUps: typeof dbClient.followUps === 'string' ? JSON.parse(dbClient.followUps || '[]') : (dbClient.followUps || []),
+                        projectIds: typeof dbClient.projectIds === 'string' ? JSON.parse(dbClient.projectIds || '[]') : (dbClient.projectIds || []),
+                        comments: typeof dbClient.comments === 'string' ? JSON.parse(dbClient.comments || '[]') : (dbClient.comments || []),
+                        sites: typeof dbClient.sites === 'string' ? JSON.parse(dbClient.sites || '[]') : (dbClient.sites || []),
+                        contracts: typeof dbClient.contracts === 'string' ? JSON.parse(dbClient.contracts || '[]') : (dbClient.contracts || []),
+                        activityLog: typeof dbClient.activityLog === 'string' ? JSON.parse(dbClient.activityLog || '[]') : (dbClient.activityLog || []),
+                        billingTerms: typeof dbClient.billingTerms === 'string' ? JSON.parse(dbClient.billingTerms || '{}') : (dbClient.billingTerms || {})
                     };
-                    return updated;
+                    
+                    
+                    // Update formData with the fresh data from database
+                    // IMPORTANT: Only update comments, followUps, activityLog, contracts
+                    // DO NOT update contacts or sites - those are managed separately
+                    setFormData(prevFormData => {
+                        const updated = {
+                            ...prevFormData,
+                            comments: parsedClient.comments,
+                            followUps: parsedClient.followUps,
+                            activityLog: parsedClient.activityLog,
+                            contracts: parsedClient.contracts
+                            // Explicitly preserve contacts and sites from current state
+                        };
+                        return updated;
+                    });
+                    
+                }
+            } catch (apiError) {
+                // Handle API errors gracefully
+                const errorMessage = apiError?.message || 'Unknown error';
+                const isServerError = errorMessage.includes('500') || errorMessage.includes('Internal Server Error') || errorMessage.includes('Failed to get client');
+                
+                console.error('❌ Error loading client from database:', {
+                    error: errorMessage,
+                    clientId: clientId,
+                    isServerError: isServerError
                 });
                 
+                // For server errors (500), don't show alert - likely database issue
+                // Continue with existing form data instead of breaking the UI
+                if (!isServerError) {
+                    // Only show alert for non-server errors (network, auth, etc.)
+                    console.warn('⚠️ Client data load failed, continuing with existing data');
+                }
             }
         } catch (error) {
-            console.error('❌ Error loading client from database:', error);
+            console.error('❌ Unexpected error in loadClientFromDatabase:', error);
         } finally {
             isLoadingClientRef.current = false;
         }
@@ -904,18 +934,32 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             
             // Load client's current group memberships if client exists
             if (client?.id) {
-                const membershipsResponse = await fetch(`/api/clients/${client.id}/groups`, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    credentials: 'include'
-                });
-                
-                if (membershipsResponse.ok) {
-                    const membershipsData = await membershipsResponse.json();
-                    const memberships = membershipsData?.data?.groupMemberships || membershipsData?.groupMemberships || [];
-                    setClientGroupMemberships(memberships);
+                try {
+                    const membershipsResponse = await fetch(`/api/clients/${client.id}/groups`, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        credentials: 'include'
+                    });
+                    
+                    if (membershipsResponse.ok) {
+                        const membershipsData = await membershipsResponse.json();
+                        const memberships = membershipsData?.data?.groupMemberships || membershipsData?.groupMemberships || [];
+                        setClientGroupMemberships(memberships);
+                    } else if (membershipsResponse.status === 500) {
+                        // Server error - likely database issue with this client
+                        console.warn(`⚠️ Failed to load groups for client ${client.id} (500 error). Continuing without group data.`);
+                        setClientGroupMemberships([]);
+                    } else {
+                        // Other errors (404, 403, etc.)
+                        console.warn(`⚠️ Failed to load groups for client ${client.id}: ${membershipsResponse.status}`);
+                        setClientGroupMemberships([]);
+                    }
+                } catch (groupError) {
+                    console.error('❌ Error loading client groups:', groupError);
+                    // Continue without group data rather than breaking the UI
+                    setClientGroupMemberships([]);
                 }
             }
         } catch (error) {
@@ -1577,7 +1621,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             }
         } catch (error) {
             console.error('❌ Error creating site:', error);
-            alert('❌ Error saving site to database: ' + error.message);
+            const errorMessage = error?.message || 'Unknown error';
+            const isServerError = errorMessage.includes('500') || errorMessage.includes('Internal Server Error') || errorMessage.includes('Failed to add site');
+            
+            if (isServerError) {
+                alert('❌ Server error: Unable to save site. This may be due to a database issue with this client. Please contact support if this persists.');
+            } else {
+                alert('❌ Error saving site to database: ' + errorMessage);
+            }
         }
     };
 

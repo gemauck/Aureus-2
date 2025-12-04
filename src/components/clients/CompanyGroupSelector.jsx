@@ -3,16 +3,12 @@ const { useState, useEffect, useCallback } = React;
 
 const CompanyGroupSelector = ({ 
     clientId, 
-    currentParentGroupId, 
     currentGroupMemberships = [], 
-    onParentGroupChange, 
     onGroupMembershipsChange,
     isDark = false 
 }) => {
     const [allGroups, setAllGroups] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [primaryParentGroups, setPrimaryParentGroups] = useState([]);
-    const [selectedParentGroupId, setSelectedParentGroupId] = useState(currentParentGroupId || '');
     const [groupMemberships, setGroupMemberships] = useState(currentGroupMemberships || []);
     const [showAddGroupModal, setShowAddGroupModal] = useState(false);
     const [availableGroups, setAvailableGroups] = useState([]);
@@ -27,12 +23,11 @@ const CompanyGroupSelector = ({
                 const response = await window.api?.get?.('/clients') || await fetch('/api/clients').then(r => r.json());
                 const clients = response?.data?.clients || response?.clients || [];
                 
-                // Filter to exclude current client and get potential group parents
+                // Filter to exclude current client and get potential groups
                 const potentialGroups = clients
-                    .filter(c => c.id !== clientId && c.type === 'client')
+                    .filter(c => c.id !== clientId && c.type === 'group')
                     .map(c => ({ id: c.id, name: c.name, type: c.type, industry: c.industry }));
                 
-                setPrimaryParentGroups(potentialGroups);
                 setAvailableGroups(potentialGroups.filter(g => !groupMemberships.some(gm => gm.groupId === g.id)));
                 setAllGroups(potentialGroups);
             } catch (error) {
@@ -54,16 +49,18 @@ const CompanyGroupSelector = ({
             
             try {
                 const response = await window.api?.get?.(`/clients/${clientId}/groups`) || 
-                                await fetch(`/api/clients/${clientId}/groups`).then(r => r.json());
+                                await fetch(`/api/clients/${clientId}/groups`).then(r => {
+                                    if (!r.ok) {
+                                        if (r.status === 500) {
+                                            console.warn(`⚠️ Server error loading groups for client ${clientId}. Continuing without group data.`);
+                                            return { data: { groupMemberships: [] } };
+                                        }
+                                        throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+                                    }
+                                    return r.json();
+                                });
                 
                 const data = response?.data || response || {};
-                
-                if (data.primaryParent) {
-                    setSelectedParentGroupId(data.primaryParent.id);
-                    if (onParentGroupChange) {
-                        onParentGroupChange(data.primaryParent.id);
-                    }
-                }
                 
                 if (data.groupMemberships) {
                     setGroupMemberships(data.groupMemberships);
@@ -72,36 +69,15 @@ const CompanyGroupSelector = ({
                     }
                 }
             } catch (error) {
-                console.error('Failed to fetch client groups:', error);
+                console.error('❌ Failed to fetch client groups:', error);
+                // Continue with empty groups rather than breaking the UI
+                setGroupMemberships([]);
             }
         };
 
         fetchClientGroups();
     }, [clientId]);
 
-    const handleParentGroupChange = async (groupId) => {
-        if (!clientId) return;
-        
-        const newParentId = groupId === '' ? null : groupId;
-        setSelectedParentGroupId(newParentId || '');
-        
-        try {
-            // Update via API
-            const response = await window.api?.updateClient?.(clientId, { parentGroupId: newParentId }) ||
-                            await fetch(`/api/clients/${clientId}`, {
-                                method: 'PATCH',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ parentGroupId: newParentId })
-                            }).then(r => r.json());
-            
-            if (onParentGroupChange) {
-                onParentGroupChange(newParentId);
-            }
-        } catch (error) {
-            console.error('Failed to update parent group:', error);
-            alert('Failed to update parent group. Please try again.');
-        }
-    };
 
     const handleAddToGroup = async (groupId) => {
         if (!clientId || !groupId) return;
@@ -131,15 +107,21 @@ const CompanyGroupSelector = ({
                 setShowAddGroupModal(false);
                 
                 // Refresh available groups
-                const available = primaryParentGroups.filter(g => 
-                    g.id !== selectedParentGroupId && 
+                const available = allGroups.filter(g => 
                     !updated.some(gm => gm.groupId === g.id)
                 );
                 setAvailableGroups(available);
             }
         } catch (error) {
-            console.error('Failed to add client to group:', error);
-            alert(error.message || 'Failed to add client to group. Please try again.');
+            console.error('❌ Failed to add client to group:', error);
+            const errorMessage = error?.message || 'Unknown error';
+            const isServerError = errorMessage.includes('500') || errorMessage.includes('Internal Server Error');
+            
+            if (isServerError) {
+                alert('❌ Server error: Unable to add client to group. This may be due to a database issue. Please contact support if this persists.');
+            } else {
+                alert(`❌ Failed to add client to group: ${errorMessage}`);
+            }
         }
     };
 
@@ -161,14 +143,20 @@ const CompanyGroupSelector = ({
             }
             
             // Refresh available groups
-            const available = primaryParentGroups.filter(g => 
-                g.id !== selectedParentGroupId && 
+            const available = allGroups.filter(g => 
                 !updated.some(gm => gm.groupId === g.id)
             );
             setAvailableGroups(available);
         } catch (error) {
-            console.error('Failed to remove client from group:', error);
-            alert('Failed to remove client from group. Please try again.');
+            console.error('❌ Failed to remove client from group:', error);
+            const errorMessage = error?.message || 'Unknown error';
+            const isServerError = errorMessage.includes('500') || errorMessage.includes('Internal Server Error');
+            
+            if (isServerError) {
+                alert('❌ Server error: Unable to remove client from group. This may be due to a database issue. Please contact support if this persists.');
+            } else {
+                alert(`❌ Failed to remove client from group: ${errorMessage}`);
+            }
         }
     };
 
@@ -182,35 +170,7 @@ const CompanyGroupSelector = ({
 
     return (
         <div className={`space-y-4 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-            {/* Primary Parent Group */}
-            <div>
-                <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                    Primary Parent Company
-                </label>
-                <select
-                    value={selectedParentGroupId}
-                    onChange={(e) => handleParentGroupChange(e.target.value)}
-                    className={`w-full px-3 py-2 rounded-md border ${
-                        isDark 
-                            ? 'bg-gray-700 border-gray-600 text-gray-100' 
-                            : 'bg-white border-gray-300 text-gray-900'
-                    } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                >
-                    <option value="">None (Standalone Company)</option>
-                    {primaryParentGroups
-                        .filter(g => g.id !== clientId)
-                        .map((group) => (
-                            <option key={group.id} value={group.id}>
-                                {group.name}
-                            </option>
-                        ))}
-                </select>
-                <p className={`mt-1 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Select the primary parent company for this client (ownership hierarchy)
-                </p>
-            </div>
-
-            {/* Additional Group Memberships */}
+            {/* Group Memberships */}
             <div>
                 <div className="flex justify-between items-center mb-2">
                     <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
@@ -293,7 +253,7 @@ const CompanyGroupSelector = ({
                                 >
                                     <option value="">Select a group...</option>
                                     {availableGroups
-                                        .filter(g => g.id !== selectedParentGroupId && g.id !== clientId)
+                                        .filter(g => g.id !== clientId)
                                         .map((group) => (
                                             <option key={group.id} value={group.id}>
                                                 {group.name}

@@ -268,40 +268,95 @@ async function handler(req, res) {
       console.log('GET /api/clients/:id/groups - clientId:', clientId, 'from req.params:', req.params?.id, 'from pathSegments:', pathSegments[1])
       
       try {
-        const client = await prisma.client.findUnique({
+        // First, try to get the client without includes to verify it exists
+        const clientExists = await prisma.client.findUnique({
           where: { id: clientId },
-          include: {
-            groupMemberships: {
-              include: {
-                group: {
-                  select: {
-                    id: true,
-                    name: true,
-                    type: true,
-                    industry: true
-                  }
+          select: { id: true, name: true }
+        })
+        
+        if (!clientExists) {
+          return notFound(res, 'Client not found')
+        }
+
+        // Get group memberships with defensive handling - query separately to avoid join issues
+        let memberships = []
+        try {
+          memberships = await prisma.clientCompanyGroup.findMany({
+            where: { clientId },
+            include: {
+              group: {
+                select: {
+                  id: true,
+                  name: true,
+                  type: true,
+                  industry: true
                 }
               }
             }
-          }
-        })
-        
-        if (!client) {
-          return notFound(res, 'Client not found')
+          })
+        } catch (membershipError) {
+          console.warn(`⚠️ Failed to query group memberships for client ${clientId}:`, membershipError.message)
+          // Return empty array if query fails
+          return ok(res, {
+            clientId: clientId,
+            groupMemberships: []
+          })
+        }
+
+        // Filter out orphaned memberships (where group is null) and auto-cleanup
+        const validMemberships = memberships.filter(m => m.group !== null)
+        const orphanedMemberships = memberships.filter(m => m.group === null)
+        const orphanedCount = orphanedMemberships.length
+
+        // Auto-cleanup orphaned memberships in background (don't block response)
+        if (orphanedCount > 0) {
+          console.warn(`⚠️ Found ${orphanedCount} orphaned group memberships for client ${clientId} - cleaning up...`)
+          
+          // Cleanup in background (fire and forget)
+          Promise.all(orphanedMemberships.map(m => 
+            prisma.clientCompanyGroup.delete({ where: { id: m.id } }).catch(err => 
+              console.error(`Failed to delete orphaned membership ${m.id}:`, err.message)
+            )
+          )).then(() => {
+            console.log(`✅ Cleaned up ${orphanedCount} orphaned memberships for client ${clientId}`)
+          }).catch(err => {
+            console.error(`❌ Error during orphaned membership cleanup:`, err.message)
+          })
         }
         
         return ok(res, {
-          clientId: client.id,
-          groupMemberships: client.groupMemberships.map(m => ({
+          clientId: clientId,
+          groupMemberships: validMemberships.map(m => ({
             id: m.id,
             group: m.group,
             role: m.role,
             createdAt: m.createdAt
-          }))
+          })),
+          ...(orphanedCount > 0 ? { 
+            warning: `${orphanedCount} orphaned membership(s) were filtered out and will be cleaned up`,
+            cleanedUp: orphanedCount 
+          } : {})
         })
       } catch (error) {
-        console.error('Error fetching client groups:', error)
-        return serverError(res, 'Failed to fetch client groups')
+        console.error('❌ Error fetching client groups:', {
+          clientId: clientId,
+          errorCode: error.code,
+          errorName: error.name,
+          errorMessage: error.message,
+          errorMeta: error.meta,
+          stack: error.stack?.substring(0, 500)
+        })
+        
+        // Check for specific Prisma errors
+        if (error.code === 'P2025') {
+          return notFound(res, 'Client not found')
+        }
+        
+        if (error.code === 'P2002' || error.code === 'P2003') {
+          return serverError(res, 'Database constraint error', `The client data may be corrupted. Error: ${error.message}`)
+        }
+        
+        return serverError(res, 'Failed to fetch client groups', error.message || 'Unknown database error')
       }
     }
     

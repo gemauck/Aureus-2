@@ -644,6 +644,7 @@ const Clients = React.memo(() => {
     const [selectedGroup, setSelectedGroup] = useState(null);
     const [groupMembers, setGroupMembers] = useState([]);
     const [isLoadingGroupMembers, setIsLoadingGroupMembers] = useState(false);
+    const [groupMembersError, setGroupMembersError] = useState(null); // Track errors loading group members
     const clientsRef = useRef(clients); // Ref to track current clients for LiveDataSync
     const leadsRef = useRef(leads);
     const viewModeRef = useRef(viewMode); // Ref to track current viewMode for LiveDataSync
@@ -4455,32 +4456,57 @@ const Clients = React.memo(() => {
             }
             
             console.log('🔄 Fetching groups from API...');
-            const response = await fetch('/api/clients/groups', {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                credentials: 'include'
-            });
             
-            console.log('📡 Groups API response status:', response.status);
+            // Use RateLimitManager to throttle the request
+            const fetchGroups = async () => {
+                const response = await fetch('/api/clients/groups', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include'
+                });
+                
+                console.log('📡 Groups API response status:', response.status);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('📦 Groups API response data:', data);
+                    // Response structure: { data: { groups: [...] } } or { groups: [...] }
+                    const groupsList = data?.data?.groups || data?.groups || [];
+                    console.log(`✅ Loaded ${groupsList.length} groups from API:`, groupsList.map(g => ({ id: g.id, name: g.name, type: g.type, members: (g._count?.childCompanies || 0) + (g._count?.groupChildren || 0) })));
+                    setGroups(groupsList); // Always set groups, even if empty
+                    console.log(`✅ Groups state updated: ${groupsList.length} groups`);
+                    groupsLoadedRef.current = true;
+                } else {
+                    const errorText = await response.text().catch(() => 'Unknown error');
+                    
+                    // Handle rate limit errors gracefully
+                    if (response.status === 429) {
+                        const retryAfter = response.headers.get('Retry-After') || '60';
+                        const waitSeconds = parseInt(retryAfter, 10);
+                        const waitMinutes = Math.round(waitSeconds / 60);
+                        console.warn(`⏸️ Rate limit active. Please wait ${waitMinutes} minute(s) before trying again.`);
+                        
+                        // Update RateLimitManager if available
+                        if (window.RateLimitManager) {
+                            window.RateLimitManager.setRateLimit(waitSeconds);
+                        }
+                    } else {
+                        console.error('❌ Failed to load groups:', response.status, response.statusText, errorText);
+                    }
+                    // Set empty array on error to show empty state
+                    setGroups([]);
+                    groupsLoadedRef.current = true; // Mark as loaded even on error to prevent retry loops
+                }
+            };
             
-            if (response.ok) {
-                const data = await response.json();
-                console.log('📦 Groups API response data:', data);
-                // Response structure: { data: { groups: [...] } } or { groups: [...] }
-                const groupsList = data?.data?.groups || data?.groups || [];
-                console.log(`✅ Loaded ${groupsList.length} groups from API:`, groupsList.map(g => ({ id: g.id, name: g.name, type: g.type, members: (g._count?.childCompanies || 0) + (g._count?.groupChildren || 0) })));
-                setGroups(groupsList); // Always set groups, even if empty
-                console.log(`✅ Groups state updated: ${groupsList.length} groups`);
-                groupsLoadedRef.current = true;
+            // Use RateLimitManager to throttle the request
+            if (window.RateLimitManager) {
+                await window.RateLimitManager.throttleRequest(fetchGroups, 2); // Priority 2 for background loads
             } else {
-                const errorText = await response.text().catch(() => 'Unknown error');
-                console.error('❌ Failed to load groups:', response.status, response.statusText, errorText);
-                // Set empty array on error to show empty state
-                setGroups([]);
-                groupsLoadedRef.current = true; // Mark as loaded even on error to prevent retry loops
+                await fetchGroups();
             }
         } catch (error) {
             console.error('❌ Error loading groups:', error);
@@ -4495,52 +4521,133 @@ const Clients = React.memo(() => {
 
     // Load group members for a specific group
     const isLoadingGroupMembersRef = useRef(false);
+    const lastGroupMembersRequestRef = useRef(null); // Track last request to prevent duplicates
+    const loadGroupMembersDebounceRef = useRef(null); // Debounce ref
     const loadGroupMembers = useCallback(async (groupId) => {
-        if (isLoadingGroupMembersRef.current) {
-            console.log('⏸️ loadGroupMembers already in progress, skipping...');
-            return;
+        // Debounce rapid clicks - cancel previous request if clicking again within 500ms
+        if (loadGroupMembersDebounceRef.current) {
+            clearTimeout(loadGroupMembersDebounceRef.current);
         }
         
-        try {
-            isLoadingGroupMembersRef.current = true;
-            setIsLoadingGroupMembers(true);
-            const token = window.storage?.getToken?.();
-            if (!token) {
-                console.warn('⚠️ No token available for fetching group members');
-                isLoadingGroupMembersRef.current = false;
-                setIsLoadingGroupMembers(false);
-                return;
-            }
-            
-            console.log('🔄 Fetching members for group:', groupId);
-            const response = await fetch(`/api/clients/groups/${groupId}/members`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                credentials: 'include'
-            });
-            
-            console.log('📡 Group members API response status:', response.status);
-            
-            if (response.ok) {
-                const data = await response.json();
-                const members = data?.data?.members || data?.members || [];
-                console.log(`✅ Loaded ${members.length} members for group`);
-                setGroupMembers(members);
-            } else {
-                const errorText = await response.text().catch(() => 'Unknown error');
-                console.error('❌ Failed to load group members:', response.status, response.statusText, errorText);
-                setGroupMembers([]);
-            }
-        } catch (error) {
-            console.error('❌ Error loading group members:', error);
-            setGroupMembers([]);
-        } finally {
-            isLoadingGroupMembersRef.current = false;
-            setIsLoadingGroupMembers(false);
-        }
+        return new Promise((resolve) => {
+            loadGroupMembersDebounceRef.current = setTimeout(async () => {
+                // Check if this is the same group we just loaded
+                if (lastGroupMembersRequestRef.current === groupId && isLoadingGroupMembersRef.current) {
+                    console.log('⏸️ Already loading members for this group, skipping...');
+                    resolve();
+                    return;
+                }
+                
+                if (isLoadingGroupMembersRef.current) {
+                    console.log('⏸️ loadGroupMembers already in progress, skipping...');
+                    resolve();
+                    return;
+                }
+                
+                try {
+                    isLoadingGroupMembersRef.current = true;
+                    lastGroupMembersRequestRef.current = groupId;
+                    setIsLoadingGroupMembers(true);
+                    setGroupMembersError(null); // Clear previous errors
+                    const token = window.storage?.getToken?.();
+                    if (!token) {
+                        console.warn('⚠️ No token available for fetching group members');
+                        const error = { message: 'Authentication required', type: 'auth' };
+                        setGroupMembersError(error);
+                        isLoadingGroupMembersRef.current = false;
+                        setIsLoadingGroupMembers(false);
+                        resolve();
+                        return;
+                    }
+                    
+                    console.log('🔄 Fetching members for group:', groupId);
+                    
+                    // Use RateLimitManager to throttle the request
+                    const fetchMembers = async () => {
+                        const response = await fetch(`/api/clients/groups/${groupId}/members`, {
+                            method: 'GET',
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            credentials: 'include'
+                        });
+                        
+                        console.log('📡 Group members API response status:', response.status);
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            console.log('📦 Group members API response data:', data);
+                            const members = data?.data?.members || data?.members || [];
+                            console.log(`✅ Loaded ${members.length} members for group ${groupId}:`, members);
+                            setGroupMembers(members);
+                            setGroupMembersError(null); // Clear any previous errors
+                        } else {
+                            const errorText = await response.text().catch(() => 'Unknown error');
+                            
+                            // Handle rate limit errors gracefully
+                            if (response.status === 429) {
+                                const retryAfter = response.headers.get('Retry-After') || '60';
+                                const waitSeconds = parseInt(retryAfter, 10);
+                                const waitMinutes = Math.round(waitSeconds / 60);
+                                console.warn(`⏸️ Rate limit active. Please wait ${waitMinutes} minute(s) before trying again.`);
+                                
+                                // Update RateLimitManager if available
+                                if (window.RateLimitManager) {
+                                    window.RateLimitManager.setRateLimit(waitSeconds);
+                                }
+                                
+                                // Set error state for UI
+                                setGroupMembersError({
+                                    message: `Rate limit exceeded. Please wait ${waitMinutes} minute(s) before trying again.`,
+                                    type: 'rate_limit',
+                                    retryAfter: waitSeconds,
+                                    retryAfterMinutes: waitMinutes
+                                });
+                            } else {
+                                console.error('❌ Failed to load group members:', response.status, response.statusText, errorText);
+                                setGroupMembersError({
+                                    message: `Failed to load group members: ${response.statusText || 'Unknown error'}`,
+                                    type: 'error',
+                                    status: response.status
+                                });
+                            }
+                            setGroupMembers([]);
+                        }
+                    };
+                    
+                    // Use RateLimitManager to throttle the request
+                    if (window.RateLimitManager) {
+                        await window.RateLimitManager.throttleRequest(fetchMembers, 1); // Priority 1 for user-initiated actions
+                    } else {
+                        await fetchMembers();
+                    }
+                } catch (error) {
+                    // Handle rate limit errors from RateLimitManager
+                    if (error.status === 429 || error.code === 'RATE_LIMIT_EXCEEDED') {
+                        const waitSeconds = error.retryAfter || 60;
+                        const waitMinutes = Math.round(waitSeconds / 60);
+                        setGroupMembersError({
+                            message: `Rate limit exceeded. Please wait ${waitMinutes} minute(s) before trying again.`,
+                            type: 'rate_limit',
+                            retryAfter: waitSeconds,
+                            retryAfterMinutes: waitMinutes
+                        });
+                    } else {
+                        console.error('❌ Error loading group members:', error);
+                        setGroupMembersError({
+                            message: error.message || 'Failed to load group members',
+                            type: 'error'
+                        });
+                    }
+                    setGroupMembers([]);
+                } finally {
+                    isLoadingGroupMembersRef.current = false;
+                    setIsLoadingGroupMembers(false);
+                    resolve();
+                }
+            }, 300); // 300ms debounce to prevent rapid clicks
+        });
     }, []); // Empty deps - function is stable and uses refs for state
 
     // Load groups when Groups tab is active OR on initial mount to show count
@@ -5900,7 +6007,7 @@ const Clients = React.memo(() => {
     };
 
     // Group Detail View - Shows all clients and leads in a group
-    const GroupDetailView = ({ group, members, isLoading, onBack, onClientClick, onLeadClick, onRefreshMembers }) => {
+    const GroupDetailView = ({ group, members, isLoading, error, onBack, onClientClick, onLeadClick, onRefreshMembers }) => {
         const [showAddMemberModal, setShowAddMemberModal] = useState(false);
         
         // Debug log to verify component is rendering
@@ -5914,8 +6021,33 @@ const Clients = React.memo(() => {
         const [selectedItems, setSelectedItems] = useState(new Set());
         const [isAdding, setIsAdding] = useState(false);
         
-        const groupClients = members.filter(m => m.type === 'client' || !m.type);
-        const groupLeads = members.filter(m => m.type === 'lead');
+        // Debug: Log members structure
+        useEffect(() => {
+            console.log('🔍 GroupDetailView - members received:', {
+                totalMembers: members.length,
+                members: members,
+                memberTypes: members.map(m => ({ id: m.id, name: m.name, type: m.type }))
+            });
+        }, [members]);
+        
+        // Filter members - be more lenient with type checking
+        const groupClients = members.filter(m => {
+            const type = m?.type;
+            // Include if type is 'client', null, undefined, empty string, or not 'lead'
+            return type === 'client' || !type || type === '' || (type !== 'lead' && type !== 'group');
+        });
+        const groupLeads = members.filter(m => m?.type === 'lead');
+        
+        // Debug: Log filtered results
+        useEffect(() => {
+            console.log('🔍 GroupDetailView - filtered members:', {
+                totalMembers: members.length,
+                groupClients: groupClients.length,
+                groupLeads: groupLeads.length,
+                groupClientsData: groupClients,
+                groupLeadsData: groupLeads
+            });
+        }, [members, groupClients, groupLeads]);
         
         // Get member IDs to exclude from selection
         const memberIds = useMemo(() => new Set(members.map(m => m.id)), [members]);
@@ -6041,25 +6173,46 @@ const Clients = React.memo(() => {
                 }
                 
                 const addPromises = Array.from(selectedItems).map(async (itemId) => {
-                    const response = await fetch(`/api/clients/${itemId}/groups`, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        },
-                        credentials: 'include',
-                        body: JSON.stringify({ groupId: group.id, role: 'member' })
-                    });
-                    
-                    if (!response.ok) {
-                        const errorData = await response.json().catch(() => ({}));
-                        throw new Error(errorData.error || `Failed to add item ${itemId}`);
+                    try {
+                        const response = await fetch(`/api/clients/${itemId}/groups`, {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            credentials: 'include',
+                            body: JSON.stringify({ groupId: group.id, role: 'member' })
+                        });
+                        
+                        if (!response.ok) {
+                            const errorData = await response.json().catch(() => ({}));
+                            const errorMessage = errorData.error || errorData.error?.message || `Failed to add item ${itemId}`;
+                            
+                            // For 500 errors, log but don't throw - allow other items to be added
+                            if (response.status === 500) {
+                                console.warn(`⚠️ Server error adding item ${itemId} to group. Skipping this item.`);
+                                return null; // Return null to indicate failure but don't break the batch
+                            }
+                            
+                            throw new Error(errorMessage);
+                        }
+                        
+                        return response.json();
+                    } catch (error) {
+                        // For server errors, return null instead of throwing
+                        if (error.message.includes('500') || error.message.includes('Internal Server Error')) {
+                            console.warn(`⚠️ Server error adding item ${itemId} to group:`, error.message);
+                            return null;
+                        }
+                        throw error;
                     }
-                    
-                    return response.json();
                 });
                 
-                await Promise.all(addPromises);
+                const results = await Promise.allSettled(addPromises);
+                
+                // Count successes and failures
+                const successful = results.filter(r => r.status === 'fulfilled' && r.value !== null).length;
+                const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value === null)).length;
                 
                 // Refresh group members
                 if (onRefreshMembers) {
@@ -6071,9 +6224,20 @@ const Clients = React.memo(() => {
                 setSelectedItems(new Set());
                 setSearchTerm('');
                 setSelectedType('all');
+                
+                // Show summary message
+                if (failed > 0) {
+                    if (successful > 0) {
+                        alert(`⚠️ Added ${successful} member(s) successfully. ${failed} member(s) failed due to server errors.`);
+                    } else {
+                        alert('❌ Failed to add members. This may be due to database issues with some clients. Please contact support if this persists.');
+                    }
+                } else if (successful > 0) {
+                    alert(`✅ Successfully added ${successful} member(s) to the group.`);
+                }
             } catch (error) {
                 console.error('❌ Error adding members:', error);
-                alert('Failed to add some members: ' + error.message);
+                alert('❌ Failed to add members: ' + (error.message || 'Unknown error'));
             } finally {
                 setIsAdding(false);
             }
@@ -6133,6 +6297,34 @@ const Clients = React.memo(() => {
                                 Loading group members...
                             </div>
                         </div>
+                    ) : error ? (
+                        <div className="flex flex-col items-center justify-center py-12 px-4">
+                            <i className={`fas fa-exclamation-triangle text-4xl ${isDark ? 'text-yellow-500' : 'text-yellow-600'} mb-4`}></i>
+                            <p className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2 text-center`}>
+                                {error.message}
+                            </p>
+                            {error.type === 'rate_limit' && (
+                                <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'} mb-4 text-center`}>
+                                    The server is temporarily limiting requests. Please wait before retrying.
+                                </p>
+                            )}
+                            <button
+                                onClick={() => {
+                                    if (onRefreshMembers) {
+                                        onRefreshMembers();
+                                    }
+                                }}
+                                disabled={error.type === 'rate_limit' && window.RateLimitManager?.isRateLimited()}
+                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                    error.type === 'rate_limit' && window.RateLimitManager?.isRateLimited()
+                                        ? `${isDark ? 'bg-gray-700 text-gray-500' : 'bg-gray-200 text-gray-400'} cursor-not-allowed`
+                                        : `${isDark ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`
+                                }`}
+                            >
+                                <i className="fas fa-redo mr-2"></i>
+                                Retry
+                            </button>
+                        </div>
                     ) : members.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-12">
                             <i className={`fas fa-inbox text-4xl ${isDark ? 'text-gray-600' : 'text-gray-300'} mb-4`}></i>
@@ -6142,6 +6334,16 @@ const Clients = React.memo(() => {
                         </div>
                     ) : (
                         <div className="space-y-6 py-4">
+                            {/* Debug: Show all members if filtered arrays are empty but members exist */}
+                            {members.length > 0 && groupClients.length === 0 && groupLeads.length === 0 && (
+                                <div className={`${isDark ? 'bg-yellow-900 border-yellow-700' : 'bg-yellow-50 border-yellow-200'} border rounded-lg p-4 mb-4`}>
+                                    <p className={`text-sm ${isDark ? 'text-yellow-200' : 'text-yellow-800'}`}>
+                                        <i className="fas fa-info-circle mr-2"></i>
+                                        Found {members.length} member(s) but they couldn't be categorized. Showing all members:
+                                    </p>
+                                </div>
+                            )}
+                            
                             {/* Clients Section */}
                             {groupClients.length > 0 && (
                                 <div>
@@ -6229,6 +6431,50 @@ const Clients = React.memo(() => {
                                 </div>
                             )}
 
+                            {/* Fallback: Show all members if filtering resulted in empty arrays */}
+                            {members.length > 0 && groupClients.length === 0 && groupLeads.length === 0 && (
+                                <div>
+                                    <h4 className={`text-md font-semibold mb-3 px-6 ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                                        <i className="fas fa-users mr-2"></i>
+                                        Members ({members.length})
+                                    </h4>
+                                    <div className="space-y-2">
+                                        {members.map(member => (
+                                            <div
+                                                key={member.id}
+                                                onClick={() => {
+                                                    if (member.type === 'lead') {
+                                                        onLeadClick(member);
+                                                    } else {
+                                                        onClientClick(member);
+                                                    }
+                                                }}
+                                                className={`${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-50 hover:bg-gray-100'} rounded-lg p-4 cursor-pointer transition`}
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold ${
+                                                            isDark ? 'bg-blue-700 text-blue-200' : 'bg-blue-100 text-blue-700'
+                                                        }`}>
+                                                            {member.name?.charAt(0)?.toUpperCase() || '?'}
+                                                        </div>
+                                                        <div>
+                                                            <div className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                                {member.name || 'Unnamed'}
+                                                            </div>
+                                                            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                                Type: {member.type || 'not set'} • ID: {member.id}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <i className={`fas fa-chevron-right ${isDark ? 'text-gray-400' : 'text-gray-500'}`}></i>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            
                             {/* Leads Section */}
                             {groupLeads.length > 0 && (
                                 <div>
@@ -7577,9 +7823,11 @@ const Clients = React.memo(() => {
                         group={selectedGroup}
                         members={groupMembers}
                         isLoading={isLoadingGroupMembers}
+                        error={groupMembersError}
                         onBack={() => {
                             setSelectedGroup(null);
                             setGroupMembers([]);
+                            setGroupMembersError(null);
                         }}
                         onClientClick={(client) => {
                             handleOpenClient(client);

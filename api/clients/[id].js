@@ -26,10 +26,41 @@ async function handler(req, res) {
     // Get Single Client (GET /api/clients/[id])
     if (req.method === 'GET') {
       try {
-        const client = await prisma.client.findUnique({ 
-          where: { id },
-          include: {
-            groupMemberships: {
+        let client
+        try {
+          client = await prisma.client.findUnique({ 
+            where: { id },
+            include: {
+              groupMemberships: {
+                include: {
+                  group: {
+                    select: {
+                      id: true,
+                      name: true,
+                      type: true,
+                      industry: true
+                    }
+                  }
+                }
+              }
+            }
+          })
+        } catch (includeError) {
+          // If include fails (possibly due to orphaned group memberships), try without it
+          console.warn(`⚠️ Failed to include groupMemberships for client ${id}, trying without include:`, includeError.message)
+          
+          const clientBasic = await prisma.client.findUnique({ 
+            where: { id }
+          })
+          
+          if (!clientBasic) {
+            return notFound(res)
+          }
+
+          // Try to get group memberships separately with defensive handling
+          try {
+            const memberships = await prisma.clientCompanyGroup.findMany({
+              where: { clientId: id },
               include: {
                 group: {
                   select: {
@@ -40,9 +71,41 @@ async function handler(req, res) {
                   }
                 }
               }
+            })
+
+            // Filter out orphaned memberships and auto-cleanup
+            const validMemberships = memberships.filter(m => m.group !== null)
+            const orphanedMemberships = memberships.filter(m => m.group === null)
+            const orphanedCount = orphanedMemberships.length
+
+            client = {
+              ...clientBasic,
+              groupMemberships: validMemberships
+            }
+
+            // Auto-cleanup orphaned memberships in background
+            if (orphanedCount > 0) {
+              console.warn(`⚠️ Found ${orphanedCount} orphaned group memberships for client ${id} - cleaning up...`)
+              Promise.all(orphanedMemberships.map(m => 
+                prisma.clientCompanyGroup.delete({ where: { id: m.id } }).catch(err => 
+                  console.error(`Failed to delete orphaned membership ${m.id}:`, err.message)
+                )
+              )).then(() => {
+                console.log(`✅ Cleaned up ${orphanedCount} orphaned memberships for client ${id}`)
+              }).catch(err => {
+                console.error(`❌ Error during orphaned membership cleanup:`, err.message)
+              })
+            }
+          } catch (membershipError) {
+            // If even separate query fails, return client without group memberships
+            console.warn(`⚠️ Failed to load group memberships separately for client ${id}:`, membershipError.message)
+            client = {
+              ...clientBasic,
+              groupMemberships: []
             }
           }
-        })
+        }
+        
         if (!client) return notFound(res)
         
         // Parse JSON fields (proposals, contacts, etc.)
@@ -80,7 +143,9 @@ async function handler(req, res) {
         console.error('❌ Error details for client ID:', id)
         console.error('❌ Error code:', dbError.code)
         console.error('❌ Error name:', dbError.name)
+        console.error('❌ Error message:', dbError.message)
         console.error('❌ Error meta:', dbError.meta)
+        console.error('❌ Full error stack:', dbError.stack?.substring(0, 500))
         
         if (isConnError) {
           return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
@@ -90,6 +155,12 @@ async function handler(req, res) {
         if (dbError.code === 'P2025') {
           // Record not found
           return notFound(res)
+        }
+        
+        // Check for constraint violations or data corruption
+        if (dbError.code === 'P2002' || dbError.code === 'P2003') {
+          console.error('❌ Database constraint violation for client:', id)
+          return serverError(res, 'Database constraint error', `The client data may be corrupted or have invalid relationships. Error: ${dbError.message}`)
         }
         
         // Provide more detailed error message

@@ -85,11 +85,29 @@ async function handler(req, res) {
         
         return created(res, { site: newSite, sites: updatedSites })
       } catch (dbError) {
-        console.error('❌ Database error adding site:', dbError)
+        console.error('❌ Database error adding site:', {
+          clientId: clientId,
+          errorCode: dbError.code,
+          errorName: dbError.name,
+          errorMessage: dbError.message,
+          errorMeta: dbError.meta,
+          stack: dbError.stack?.substring(0, 500)
+        })
+        
         if (isConnectionError(dbError)) {
           return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
         }
-        return serverError(res, 'Failed to add site', dbError.message)
+        
+        // Check for specific Prisma errors
+        if (dbError.code === 'P2025') {
+          return notFound(res, 'Client not found')
+        }
+        
+        if (dbError.code === 'P2002' || dbError.code === 'P2003') {
+          return serverError(res, 'Database constraint error', `The client data may be corrupted or have invalid relationships. Error: ${dbError.message}`)
+        }
+        
+        return serverError(res, 'Failed to add site', dbError.message || 'Unknown database error')
       }
     }
     
