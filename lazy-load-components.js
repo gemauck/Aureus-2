@@ -580,12 +580,14 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                 const elapsed = Date.now() - startTime;
                 const criticalLoaded = window.LeadDetailModal && window.ClientDetailModal;
                 
-                if (criticalLoaded || elapsed >= maxWait) {
+                // Reduced max wait time from 3000ms to 1500ms for faster startup
+                if (criticalLoaded || elapsed >= 1500) {
                     clearInterval(checkInterval);
                     
                     // Now start loading lazy components
                     // Increased batch size from 3 to 8 for better performance
-                    const batchSize = 8;
+                    // Further increased to 12 for faster initial load
+                    const batchSize = 12;
                     let index = 0;
                     
                     function loadBatch() {
@@ -689,8 +691,8 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                             }
                             
                             index += batchSize;
-                            // Reduced delay between batches from 100ms to 50ms for faster loading
-                            const nextBatchDelay = index < componentFiles.length ? 50 : 0;
+                            // Reduced delay between batches for faster loading (50ms -> 25ms)
+                            const nextBatchDelay = index < componentFiles.length ? 25 : 0;
                             
                             if (typeof requestIdleCallback !== 'undefined') {
                                 requestIdleCallback(loadBatch, { timeout: 200 });
@@ -702,11 +704,11 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                     
                     loadBatch();
                 }
-            }, 100); // Check every 100ms
+            }, 50); // Check every 50ms for faster detection
         };
         
-        // Start checking after reduced initial delay (500ms -> 200ms)
-        setTimeout(waitForCriticalComponents, 200);
+        // Start checking after minimal initial delay for faster loading
+        setTimeout(waitForCriticalComponents, 100);
     }
     
     // BULLETPROOF: Global fallback loader for ProjectDetail

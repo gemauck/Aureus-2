@@ -18,12 +18,11 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-          crossorigin=""/>
+    <!-- Leaflet CSS - Defer (only needed for maps) -->
+    <link rel="preload" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" as="style" crossorigin="anonymous" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""></noscript>
     
-    <!-- Tailwind CSS - Production Build -->
+    <!-- Tailwind CSS - Production Build (Critical - load immediately) -->
     <!-- CACHE BUST: 20251203-leads-groups-column -->
     <link rel="preload" href="/dist/styles.css?v=20251203-leads-groups-column" as="style">
     <link rel="stylesheet" href="/dist/styles.css?v=20251203-leads-groups-column">
@@ -33,6 +32,12 @@
     <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
     <link rel="preconnect" href="https://unpkg.com" crossorigin>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    
+    <!-- Async CSS loader for better performance -->
+    <script>
+        /*! loadCSS. [c]2017 Filament Group, Inc. MIT License */
+        (function(w){"use strict";var loadCSS=function(href,before,media){var doc=w.document;var ss=doc.createElement("link");var ref;if(before){ref=before}else{var refs=(doc.body||doc.getElementsByTagName("head")[0]).childNodes;ref=refs[refs.length-1]}var sheets=doc.styleSheets;ss.rel="stylesheet";ss.href=href;ss.media="only x";function ready(cb){if(doc.body){return cb()}setTimeout(function(){ready(cb)})}ready(function(){ref.parentNode.insertBefore(ss,before?ref:ref.nextSibling)});var onloadcssdefined=function(cb){var resolvedHref=ss.href;var i=sheets.length;while(i--){if(sheets[i].href===resolvedHref){return cb()}}setTimeout(function(){onloadcssdefined(cb)})};function onloadcss(){if(ss.addEventListener){ss.removeEventListener("load",onloadcss)}ss.media=media||"all"}if(ss.addEventListener){ss.addEventListener("load",onloadcss)}ss.onloadcssdefined=onloadcssdefined;onloadcssdefined(onloadcss);return ss};if(typeof exports!=="undefined"){exports.loadCSS=loadCSS}else{w.loadCSS=loadCSS}}(typeof global!=="undefined"?global:this));
+    </script>
     
     <!-- Early theme boot: CRITICAL - Never apply dark mode when user wants light mode -->
     <script>
@@ -117,20 +122,24 @@
         })();
     </script>
     
-    <!-- Mobile Responsive CSS - Single clean mobile stylesheet -->
-    <link rel="stylesheet" href="/mobile-responsive.css?v=20251203-groups-persist-navigation">
+    <!-- Mobile Responsive CSS - Defer non-critical CSS -->
+    <link rel="preload" href="/mobile-responsive.css?v=20251203-groups-persist-navigation" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="/mobile-responsive.css?v=20251203-groups-persist-navigation"></noscript>
     
     <!-- Mobile Helper JavaScript - Dynamic mobile enhancements -->
     <script defer src="/mobile-helper.js?v=20251203-groups-persist-navigation"></script>
     
-    <!-- Dark Mode Fixes CSS -->
-    <link rel="stylesheet" href="/dark-mode-fixes.css?v=20251203-groups-persist-navigation">
+    <!-- Dark Mode Fixes CSS - Defer -->
+    <link rel="preload" href="/dark-mode-fixes.css?v=20251203-groups-persist-navigation" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="/dark-mode-fixes.css?v=20251203-groups-persist-navigation"></noscript>
     
-    <!-- Public Job Card Mobile Overrides -->
-    <link rel="stylesheet" href="/job-card-public-mobile.css?v=20251203-groups-persist-navigation">
+    <!-- Public Job Card Mobile Overrides - Defer -->
+    <link rel="preload" href="/job-card-public-mobile.css?v=20251203-groups-persist-navigation" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="/job-card-public-mobile.css?v=20251203-groups-persist-navigation"></noscript>
     
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Font Awesome - Defer non-critical CSS -->
+    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></noscript>
     
     
     <!-- Custom Primary Colors -->
@@ -399,11 +408,23 @@
     </div>
 
     <!-- React Production Builds - Much faster than development -->
+    <!-- Preconnect to CDNs for faster loading -->
     <link rel="preconnect" href="https://unpkg.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.sheetjs.com" crossorigin>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="dns-prefetch" href="https://unpkg.com">
+    <link rel="dns-prefetch" href="https://cdn.sheetjs.com">
+    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+    
+    <!-- Preload critical React libraries for faster loading -->
+    <link rel="preload" href="https://unpkg.com/react@18/umd/react.production.min.js" as="script" crossorigin>
+    <link rel="preload" href="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" as="script" crossorigin>
+    
+    <!-- React - Must load before dependent scripts, but preload helps -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; console.log('✅ React loaded'); }" onerror="console.error('❌ Failed to load React from CDN');"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; } if(typeof ReactDOM !== 'undefined') { window.ReactDOM = ReactDOM; window.BabelReady = true; window.dispatchEvent(new Event('babelready')); console.log('✅ ReactDOM loaded'); }" onerror="console.error('❌ Failed to load ReactDOM from CDN');"></script>
-    <!-- XLSX library for Excel export - Loaded globally -->
-    <script crossorigin src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js" onload="if(typeof XLSX !== 'undefined') { window.XLSX = XLSX; console.log('✅ XLSX library loaded'); }" onerror="console.error('❌ Failed to load XLSX from CDN');"></script>
+    <!-- XLSX library for Excel export - Defer loading (not needed immediately) -->
+    <script defer crossorigin src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js" onload="if(typeof XLSX !== 'undefined') { window.XLSX = XLSX; console.log('✅ XLSX library loaded'); }" onerror="console.error('❌ Failed to load XLSX from CDN');"></script>
     
     <!-- Verify React loaded and expose globally (fallback) -->
     <script>
@@ -763,8 +784,9 @@
         };
     </script>
     
-    <!-- Core bundle: critical modules -->
+    <!-- Core bundle: critical modules - Preload for faster loading -->
     <!-- CACHE BUST: 20251203-groups-persist-navigation -->
+    <link rel="preload" href="/dist/core-bundle.js?v=20251203-leads-groups-column" as="script">
     <script defer src="/dist/core-bundle.js?v=20251203-leads-groups-column"></script>
 
     <script>
@@ -1017,6 +1039,8 @@
     </script>
     
     <!-- Lazy loader - CACHE BUST 20251203-groups-persist-navigation -->
+    <!-- Prefetch for faster lazy loading -->
+    <link rel="prefetch" href="/lazy-load-components.js?v=20251203-groups-persist-navigation" as="script">
     <script defer src="/lazy-load-components.js?v=20251203-groups-persist-navigation"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
@@ -1216,6 +1240,7 @@
         // Verify App loaded with retry mechanism (handles network delays)
         let appCheckAttempts = 0;
         let appCheckStopped = false;
+        let appCheckTimeoutId = null;
         const maxAppCheckAttempts = 20; // 10 seconds total (20 * 500ms)
         function checkAppLoaded() {
             // Stop if already checked max attempts
@@ -1227,6 +1252,10 @@
             if (window.App) {
                 console.log('✅ App component loaded');
                 appCheckStopped = true;
+                if (appCheckTimeoutId) {
+                    clearTimeout(appCheckTimeoutId);
+                    appCheckTimeoutId = null;
+                }
                 return true;
             }
             if (appCheckAttempts >= maxAppCheckAttempts) {
@@ -1234,16 +1263,21 @@
                 console.warn('If you see network errors above, the server may be experiencing connectivity issues');
                 console.warn('The fast-loader will continue trying to mount the app...');
                 appCheckStopped = true;
+                if (appCheckTimeoutId) {
+                    clearTimeout(appCheckTimeoutId);
+                    appCheckTimeoutId = null;
+                }
                 return false;
             }
-            setTimeout(checkAppLoaded, 500);
+            appCheckTimeoutId = setTimeout(checkAppLoaded, 500);
             return false;
         }
-        setTimeout(checkAppLoaded, 1000); // Start checking after 1 second
+        appCheckTimeoutId = setTimeout(checkAppLoaded, 1000); // Start checking after 1 second
     </script>
     
     
     <!-- Mount App - Fast loader for immediate mounting -->
+    <link rel="preload" href="/fast-loader.js" as="script">
     <script defer src="/fast-loader.js"></script>
     
     <!-- Simple fallback mount - only if fast-loader didn't mount -->

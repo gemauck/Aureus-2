@@ -138,7 +138,7 @@
                 }, 250);
             }, { once: true });
             
-            // Fallback: start checking after a delay
+            // Fallback: start checking after a shorter delay for faster startup
             setTimeout(() => {
                 if (!mounted) {
                     console.log('⏳ Fallback: Starting checks without babelready event');
@@ -148,18 +148,18 @@
                         }
                     }, 250);
                 }
-            }, 500);
+            }, 200);
         }
     }
     
-    // Start after DOM is ready
+    // Start after DOM is ready - reduced delay for faster startup
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
             console.log('✅ DOM loaded');
-            setTimeout(startChecking, 500);
+            setTimeout(startChecking, 100);
         });
     } else {
         console.log('✅ DOM already ready');
-        setTimeout(startChecking, 500);
+        setTimeout(startChecking, 100);
     }
 })();
