@@ -26,87 +26,64 @@ async function handler(req, res) {
     // Get Single Client (GET /api/clients/[id])
     if (req.method === 'GET') {
       try {
-        let client
-        try {
-          client = await prisma.client.findUnique({ 
-            where: { id },
-            include: {
-              groupMemberships: {
-                include: {
-                  group: {
-                    select: {
-                      id: true,
-                      name: true,
-                      type: true,
-                      industry: true
-                    }
-                  }
-                }
-              }
-            }
-          })
-        } catch (includeError) {
-          // If include fails (possibly due to orphaned group memberships), try without it
-          console.warn(`⚠️ Failed to include groupMemberships for client ${id}, trying without include:`, includeError.message)
-          
-          const clientBasic = await prisma.client.findUnique({ 
-            where: { id }
-          })
-          
-          if (!clientBasic) {
-            return notFound(res)
-          }
-
-          // Try to get group memberships separately with defensive handling
-          try {
-            const memberships = await prisma.clientCompanyGroup.findMany({
-              where: { clientId: id },
-              include: {
-                group: {
-                  select: {
-                    id: true,
-                    name: true,
-                    type: true,
-                    industry: true
-                  }
-                }
-              }
-            })
-
-            // Filter out orphaned memberships and auto-cleanup
-            const validMemberships = memberships.filter(m => m.group !== null)
-            const orphanedMemberships = memberships.filter(m => m.group === null)
-            const orphanedCount = orphanedMemberships.length
-
-            client = {
-              ...clientBasic,
-              groupMemberships: validMemberships
-            }
-
-            // Auto-cleanup orphaned memberships in background
-            if (orphanedCount > 0) {
-              console.warn(`⚠️ Found ${orphanedCount} orphaned group memberships for client ${id} - cleaning up...`)
-              Promise.all(orphanedMemberships.map(m => 
-                prisma.clientCompanyGroup.delete({ where: { id: m.id } }).catch(err => 
-                  console.error(`Failed to delete orphaned membership ${m.id}:`, err.message)
-                )
-              )).then(() => {
-                console.log(`✅ Cleaned up ${orphanedCount} orphaned memberships for client ${id}`)
-              }).catch(err => {
-                console.error(`❌ Error during orphaned membership cleanup:`, err.message)
-              })
-            }
-          } catch (membershipError) {
-            // If even separate query fails, return client without group memberships
-            console.warn(`⚠️ Failed to load group memberships separately for client ${id}:`, membershipError.message)
-            client = {
-              ...clientBasic,
-              groupMemberships: []
-            }
-          }
-        }
+        // Always query client basic first to avoid any relation issues
+        const clientBasic = await prisma.client.findUnique({ 
+          where: { id },
+          // Don't include any relations initially to avoid schema mismatches
+        })
         
-        if (!client) return notFound(res)
+        if (!clientBasic) {
+          return notFound(res)
+        }
+
+        // Get group memberships separately with defensive handling
+        let groupMemberships = []
+        try {
+          const memberships = await prisma.clientCompanyGroup.findMany({
+            where: { clientId: id },
+            include: {
+              group: {
+                select: {
+                  id: true,
+                  name: true,
+                  type: true,
+                  industry: true
+                }
+              }
+            }
+          })
+
+          // Filter out orphaned memberships (where group is null) and auto-cleanup
+          const validMemberships = memberships.filter(m => m.group !== null)
+          const orphanedMemberships = memberships.filter(m => m.group === null)
+          const orphanedCount = orphanedMemberships.length
+
+          groupMemberships = validMemberships
+
+          // Auto-cleanup orphaned memberships in background
+          if (orphanedCount > 0) {
+            console.warn(`⚠️ Found ${orphanedCount} orphaned group memberships for client ${id} - cleaning up...`)
+            Promise.all(orphanedMemberships.map(m => 
+              prisma.clientCompanyGroup.delete({ where: { id: m.id } }).catch(err => 
+                console.error(`Failed to delete orphaned membership ${m.id}:`, err.message)
+              )
+            )).then(() => {
+              console.log(`✅ Cleaned up ${orphanedCount} orphaned memberships for client ${id}`)
+            }).catch(err => {
+              console.error(`❌ Error during orphaned membership cleanup:`, err.message)
+            })
+          }
+        } catch (membershipError) {
+          // If query fails, log but continue without group memberships
+          console.warn(`⚠️ Failed to load group memberships for client ${id}:`, membershipError.message)
+          groupMemberships = []
+        }
+
+        // Combine client data with group memberships
+        const client = {
+          ...clientBasic,
+          groupMemberships
+        }
         
         // Parse JSON fields (proposals, contacts, etc.)
         const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
