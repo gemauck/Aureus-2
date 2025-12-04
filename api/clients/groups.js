@@ -269,10 +269,24 @@ async function handler(req, res) {
       
       try {
         // First, try to get the client without includes to verify it exists
-        const clientExists = await prisma.client.findUnique({
-          where: { id: clientId },
-          select: { id: true, name: true }
-        })
+        let clientExists
+        try {
+          clientExists = await prisma.client.findUnique({
+            where: { id: clientId },
+            select: { id: true, name: true }
+          })
+        } catch (clientError) {
+          // If query fails due to schema mismatch, try raw query
+          if (clientError.message && clientError.message.includes('parentGroupId')) {
+            console.warn(`⚠️ Schema mismatch detected for client ${clientId}, using raw query`)
+            const rawResult = await prisma.$queryRaw`
+              SELECT id, name FROM "Client" WHERE id = ${clientId}
+            `
+            clientExists = rawResult && rawResult[0] ? rawResult[0] : null
+          } else {
+            throw clientError
+          }
+        }
         
         if (!clientExists) {
           return notFound(res, 'Client not found')
@@ -281,19 +295,47 @@ async function handler(req, res) {
         // Get group memberships with defensive handling - query separately to avoid join issues
         let memberships = []
         try {
-          memberships = await prisma.clientCompanyGroup.findMany({
+          // Query memberships first without group relation
+          const membershipRecords = await prisma.clientCompanyGroup.findMany({
             where: { clientId },
-            include: {
-              group: {
-                select: {
-                  id: true,
-                  name: true,
-                  type: true,
-                  industry: true
-                }
-              }
+            select: {
+              id: true,
+              clientId: true,
+              groupId: true,
+              role: true,
+              createdAt: true
             }
           })
+
+          // Then fetch groups separately for each membership
+          const membershipsWithGroups = await Promise.all(
+            membershipRecords.map(async (membership) => {
+              try {
+                const group = await prisma.client.findUnique({
+                  where: { id: membership.groupId },
+                  select: {
+                    id: true,
+                    name: true,
+                    type: true,
+                    industry: true
+                  }
+                })
+                return {
+                  ...membership,
+                  group: group || null
+                }
+              } catch (groupError) {
+                // Group doesn't exist or query failed
+                console.warn(`⚠️ Failed to load group ${membership.groupId} for membership ${membership.id}:`, groupError.message)
+                return {
+                  ...membership,
+                  group: null
+                }
+              }
+            })
+          )
+
+          memberships = membershipsWithGroups
         } catch (membershipError) {
           console.warn(`⚠️ Failed to query group memberships for client ${clientId}:`, membershipError.message)
           // Return empty array if query fails

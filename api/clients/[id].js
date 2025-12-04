@@ -27,10 +27,61 @@ async function handler(req, res) {
     if (req.method === 'GET') {
       try {
         // Always query client basic first to avoid any relation issues
-        const clientBasic = await prisma.client.findUnique({ 
-          where: { id },
-          // Don't include any relations initially to avoid schema mismatches
-        })
+        // Use select to explicitly choose fields and avoid any relation resolution
+        let clientBasic
+        try {
+          clientBasic = await prisma.client.findUnique({ 
+            where: { id },
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              industry: true,
+              status: true,
+              stage: true,
+              revenue: true,
+              value: true,
+              probability: true,
+              lastContact: true,
+              address: true,
+              website: true,
+              notes: true,
+              contacts: true,
+              followUps: true,
+              projectIds: true,
+              comments: true,
+              sites: true,
+              contracts: true,
+              activityLog: true,
+              billingTerms: true,
+              proposals: true,
+              services: true,
+              ownerId: true,
+              externalAgentId: true,
+              createdAt: true,
+              updatedAt: true,
+              thumbnail: true,
+              rssSubscribed: true
+            }
+          })
+        } catch (queryError) {
+          // If basic query fails due to schema mismatch, try raw query
+          if (queryError.message && queryError.message.includes('parentGroupId')) {
+            console.warn(`⚠️ Schema mismatch detected for client ${id}, using raw query`)
+            const rawResult = await prisma.$queryRaw`
+              SELECT id, name, type, industry, status, stage, revenue, value, probability, 
+                     "lastContact", address, website, notes, contacts, "followUps", 
+                     "projectIds", comments, sites, contracts, "activityLog", "billingTerms", 
+                     proposals, services, "ownerId", "externalAgentId", "createdAt", "updatedAt", 
+                     thumbnail, "rssSubscribed"
+              FROM "Client"
+              WHERE id = ${id}
+            `
+            clientBasic = rawResult && rawResult[0] ? rawResult[0] : null
+          } else {
+            throw queryError
+          }
+        }
         
         if (!clientBasic) {
           return notFound(res)
