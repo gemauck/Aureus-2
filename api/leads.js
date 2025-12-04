@@ -369,11 +369,7 @@ async function handler(req, res) {
             try {
               const allRecords = await prisma.client.findMany({
                 include: {
-                  tags: {
-                    include: {
-                      tag: true
-                    }
-                  },
+                  // Skip tags relation (doesn't exist on Client model)
                   // Skip externalAgent relation in fallback (column may not exist)
                   ...(validUserId ? {
                     starredBy: {
@@ -416,11 +412,7 @@ async function handler(req, res) {
                 try {
                   const allRecords = await prisma.client.findMany({
                     include: {
-                      tags: {
-                        include: {
-                          tag: true
-                        }
-                      },
+                      // Skip tags relation (doesn't exist on Client model)
                       // Skip externalAgent relation
                       ...(validUserId ? {
                         starredBy: {
