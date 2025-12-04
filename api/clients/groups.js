@@ -656,6 +656,7 @@ async function handler(req, res) {
                 revenue: true,
                 value: true,
                 website: true,
+                sites: true,
                 createdAt: true
               }
             }
@@ -667,13 +668,33 @@ async function handler(req, res) {
           }
         })
         
-        // Combine group members
-        const allMembers = groupMembers.map(m => ({
-          ...m.client,
-          relationship: 'Group Member',
-          membershipId: m.id,
-          role: m.role
-        }))
+        // Combine group members and parse JSON fields (like sites)
+        const allMembers = groupMembers.map(m => {
+          const client = { ...m.client }
+          
+          // Parse sites if it's a JSON string
+          if (client.sites) {
+            if (typeof client.sites === 'string') {
+              try {
+                client.sites = JSON.parse(client.sites)
+              } catch (e) {
+                console.warn(`⚠️ Failed to parse sites for client ${client.id}:`, e.message)
+                client.sites = []
+              }
+            } else if (!Array.isArray(client.sites)) {
+              client.sites = []
+            }
+          } else {
+            client.sites = []
+          }
+          
+          return {
+            ...client,
+            relationship: 'Group Member',
+            membershipId: m.id,
+            role: m.role
+          }
+        })
         
         // Separate clients and leads
         const clients = allMembers.filter(m => m.type === 'client' || !m.type)
