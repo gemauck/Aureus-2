@@ -311,101 +311,88 @@ async function handler(req, res) {
         }
         
         // Build UPDATE query using raw SQL to bypass Prisma relation resolution
-        const setClauses = []
-        const values = []
-        let paramIndex = 1
+        // Use Prisma's template literal syntax for parameterized queries
+        const updateFields = []
         
-        // Handle each field that needs updating
+        // Build the update query dynamically using Prisma's tagged template
+        let updateQuery = prisma.$queryRaw`
+          UPDATE "Client" SET 
+        `
+        
+        // Build SET clauses - we'll use a simpler approach with Prisma's executeRaw
+        const setParts = []
+        const params = []
+        
         if (updateData.name !== undefined) {
-          setClauses.push(`name = $${paramIndex}`)
-          values.push(updateData.name)
-          paramIndex++
+          setParts.push(`name = $${params.length + 1}`)
+          params.push(updateData.name)
         }
         if (updateData.industry !== undefined) {
-          setClauses.push(`industry = $${paramIndex}`)
-          values.push(updateData.industry)
-          paramIndex++
+          setParts.push(`industry = $${params.length + 1}`)
+          params.push(updateData.industry)
         }
         if (updateData.status !== undefined) {
-          setClauses.push(`status = $${paramIndex}`)
-          values.push(updateData.status)
-          paramIndex++
+          setParts.push(`status = $${params.length + 1}`)
+          params.push(updateData.status)
         }
         if (updateData.revenue !== undefined) {
-          setClauses.push(`revenue = $${paramIndex}`)
-          values.push(updateData.revenue)
-          paramIndex++
+          setParts.push(`revenue = $${params.length + 1}`)
+          params.push(updateData.revenue)
         }
         if (updateData.lastContact !== undefined) {
-          setClauses.push(`"lastContact" = $${paramIndex}`)
-          values.push(updateData.lastContact)
-          paramIndex++
+          setParts.push(`"lastContact" = $${params.length + 1}`)
+          params.push(updateData.lastContact)
         }
         if (updateData.address !== undefined) {
-          setClauses.push(`address = $${paramIndex}`)
-          values.push(updateData.address)
-          paramIndex++
+          setParts.push(`address = $${params.length + 1}`)
+          params.push(updateData.address)
         }
         if (updateData.website !== undefined) {
-          setClauses.push(`website = $${paramIndex}`)
-          values.push(updateData.website)
-          paramIndex++
+          setParts.push(`website = $${params.length + 1}`)
+          params.push(updateData.website)
         }
         if (updateData.notes !== undefined) {
-          setClauses.push(`notes = $${paramIndex}`)
-          values.push(updateData.notes)
-          paramIndex++
+          setParts.push(`notes = $${params.length + 1}`)
+          params.push(updateData.notes)
         }
         if (updateData.contacts !== undefined) {
-          setClauses.push(`contacts = $${paramIndex}`)
-          values.push(updateData.contacts)
-          paramIndex++
+          setParts.push(`contacts = $${params.length + 1}`)
+          params.push(updateData.contacts)
         }
         if (updateData.followUps !== undefined) {
-          setClauses.push(`"followUps" = $${paramIndex}`)
-          values.push(updateData.followUps)
-          paramIndex++
+          setParts.push(`"followUps" = $${params.length + 1}`)
+          params.push(updateData.followUps)
         }
         if (updateData.projectIds !== undefined) {
-          setClauses.push(`"projectIds" = $${paramIndex}`)
-          values.push(updateData.projectIds)
-          paramIndex++
+          setParts.push(`"projectIds" = $${params.length + 1}`)
+          params.push(updateData.projectIds)
         }
         if (updateData.comments !== undefined) {
-          setClauses.push(`comments = $${paramIndex}`)
-          values.push(updateData.comments)
-          paramIndex++
+          setParts.push(`comments = $${params.length + 1}`)
+          params.push(updateData.comments)
         }
         if (updateData.sites !== undefined) {
-          setClauses.push(`sites = $${paramIndex}`)
-          values.push(updateData.sites)
-          paramIndex++
+          setParts.push(`sites = $${params.length + 1}`)
+          params.push(updateData.sites)
         }
         if (updateData.contracts !== undefined) {
-          setClauses.push(`contracts = $${paramIndex}`)
-          values.push(updateData.contracts)
-          paramIndex++
+          setParts.push(`contracts = $${params.length + 1}`)
+          params.push(updateData.contracts)
         }
         if (updateData.activityLog !== undefined) {
-          setClauses.push(`"activityLog" = $${paramIndex}`)
-          values.push(updateData.activityLog)
-          paramIndex++
+          setParts.push(`"activityLog" = $${params.length + 1}`)
+          params.push(updateData.activityLog)
         }
         if (updateData.services !== undefined) {
-          setClauses.push(`services = $${paramIndex}`)
-          values.push(updateData.services)
-          paramIndex++
+          setParts.push(`services = $${params.length + 1}`)
+          params.push(updateData.services)
         }
         if (updateData.billingTerms !== undefined) {
-          setClauses.push(`"billingTerms" = $${paramIndex}`)
-          values.push(updateData.billingTerms)
-          paramIndex++
+          setParts.push(`"billingTerms" = $${params.length + 1}`)
+          params.push(updateData.billingTerms)
         }
         
-        // Add updatedAt
-        setClauses.push(`"updatedAt" = NOW()`)
-        
-        if (setClauses.length === 0) {
+        if (setParts.length === 0) {
           // No fields to update, just fetch and return current client
           const currentResult = await prisma.$queryRaw`
             SELECT * FROM "Client" WHERE id = ${id}
@@ -433,11 +420,14 @@ async function handler(req, res) {
           return ok(res, { client: parsedClient })
         }
         
-        // Execute update using raw SQL
-        const updateQuery = `UPDATE "Client" SET ${setClauses.join(', ')} WHERE id = $${paramIndex} RETURNING *`
-        values.push(id)
+        // Add updatedAt
+        setParts.push(`"updatedAt" = NOW()`)
         
-        const result = await prisma.$queryRawUnsafe(updateQuery, ...values)
+        // Execute update using Prisma's executeRaw with parameterized query
+        params.push(id)
+        const updateSql = `UPDATE "Client" SET ${setParts.join(', ')} WHERE id = $${params.length} RETURNING *`
+        
+        const result = await prisma.$queryRawUnsafe(updateSql, ...params)
         const client = result && result[0] ? result[0] : null
         
         if (!client) {
