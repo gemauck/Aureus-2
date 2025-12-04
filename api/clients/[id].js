@@ -310,90 +310,10 @@ async function handler(req, res) {
           }
         }
         
-        // Build UPDATE query using raw SQL to bypass Prisma relation resolution
-        // Use Prisma's template literal syntax for parameterized queries
-        const updateFields = []
-        
-        // Build the update query dynamically using Prisma's tagged template
-        let updateQuery = prisma.$queryRaw`
-          UPDATE "Client" SET 
-        `
-        
-        // Build SET clauses - we'll use a simpler approach with Prisma's executeRaw
-        const setParts = []
-        const params = []
-        
-        if (updateData.name !== undefined) {
-          setParts.push(`name = $${params.length + 1}`)
-          params.push(updateData.name)
-        }
-        if (updateData.industry !== undefined) {
-          setParts.push(`industry = $${params.length + 1}`)
-          params.push(updateData.industry)
-        }
-        if (updateData.status !== undefined) {
-          setParts.push(`status = $${params.length + 1}`)
-          params.push(updateData.status)
-        }
-        if (updateData.revenue !== undefined) {
-          setParts.push(`revenue = $${params.length + 1}`)
-          params.push(updateData.revenue)
-        }
-        if (updateData.lastContact !== undefined) {
-          setParts.push(`"lastContact" = $${params.length + 1}`)
-          params.push(updateData.lastContact)
-        }
-        if (updateData.address !== undefined) {
-          setParts.push(`address = $${params.length + 1}`)
-          params.push(updateData.address)
-        }
-        if (updateData.website !== undefined) {
-          setParts.push(`website = $${params.length + 1}`)
-          params.push(updateData.website)
-        }
-        if (updateData.notes !== undefined) {
-          setParts.push(`notes = $${params.length + 1}`)
-          params.push(updateData.notes)
-        }
-        if (updateData.contacts !== undefined) {
-          setParts.push(`contacts = $${params.length + 1}`)
-          params.push(updateData.contacts)
-        }
-        if (updateData.followUps !== undefined) {
-          setParts.push(`"followUps" = $${params.length + 1}`)
-          params.push(updateData.followUps)
-        }
-        if (updateData.projectIds !== undefined) {
-          setParts.push(`"projectIds" = $${params.length + 1}`)
-          params.push(updateData.projectIds)
-        }
-        if (updateData.comments !== undefined) {
-          setParts.push(`comments = $${params.length + 1}`)
-          params.push(updateData.comments)
-        }
-        if (updateData.sites !== undefined) {
-          setParts.push(`sites = $${params.length + 1}`)
-          params.push(updateData.sites)
-        }
-        if (updateData.contracts !== undefined) {
-          setParts.push(`contracts = $${params.length + 1}`)
-          params.push(updateData.contracts)
-        }
-        if (updateData.activityLog !== undefined) {
-          setParts.push(`"activityLog" = $${params.length + 1}`)
-          params.push(updateData.activityLog)
-        }
-        if (updateData.services !== undefined) {
-          setParts.push(`services = $${params.length + 1}`)
-          params.push(updateData.services)
-        }
-        if (updateData.billingTerms !== undefined) {
-          setParts.push(`"billingTerms" = $${params.length + 1}`)
-          params.push(updateData.billingTerms)
-        }
-        
-        if (setParts.length === 0) {
-          // No fields to update, just fetch and return current client
+        // Use Prisma's update method with explicit select to avoid relation resolution issues
+        // First check if there are any fields to update
+        if (Object.keys(updateData).length === 0) {
+          // No fields to update, just fetch and return current client using raw SQL
           const currentResult = await prisma.$queryRaw`
             SELECT * FROM "Client" WHERE id = ${id}
           `
@@ -420,19 +340,43 @@ async function handler(req, res) {
           return ok(res, { client: parsedClient })
         }
         
-        // Add updatedAt
-        setParts.push(`"updatedAt" = NOW()`)
-        
-        // Execute update using Prisma's executeRaw with parameterized query
-        params.push(id)
-        const updateSql = `UPDATE "Client" SET ${setParts.join(', ')} WHERE id = $${params.length} RETURNING *`
-        
-        const result = await prisma.$queryRawUnsafe(updateSql, ...params)
-        const client = result && result[0] ? result[0] : null
-        
-        if (!client) {
-          return notFound(res)
-        }
+        // Use Prisma's update method with explicit select to avoid relation issues
+        // This is safer than raw SQL and handles type conversion automatically
+        const client = await prisma.client.update({
+          where: { id },
+          data: updateData,
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            industry: true,
+            status: true,
+            stage: true,
+            revenue: true,
+            value: true,
+            probability: true,
+            lastContact: true,
+            address: true,
+            website: true,
+            notes: true,
+            contacts: true,
+            followUps: true,
+            projectIds: true,
+            comments: true,
+            sites: true,
+            contracts: true,
+            activityLog: true,
+            billingTerms: true,
+            proposals: true,
+            services: true,
+            ownerId: true,
+            externalAgentId: true,
+            createdAt: true,
+            updatedAt: true,
+            thumbnail: true,
+            rssSubscribed: true
+          }
+        })
         
         // Log to file
         const fs = await import('fs')
@@ -482,54 +426,243 @@ async function handler(req, res) {
     // Delete Client (DELETE /api/clients/[id])
     if (req.method === 'DELETE') {
       try {
-        // First, delete all related records to avoid foreign key constraints
+        // First check if client exists
+        const clientExists = await prisma.$queryRaw`
+          SELECT id FROM "Client" WHERE id = ${id} LIMIT 1
+        `
         
-        // Delete opportunities
-        const opportunitiesDeleted = await prisma.opportunity.deleteMany({
-          where: { clientId: id }
-        })
-        
-        // Delete invoices
-        const invoicesDeleted = await prisma.invoice.deleteMany({
-          where: { clientId: id }
-        })
-        
-        // Delete sales orders
-        const salesOrdersDeleted = await prisma.salesOrder.deleteMany({
-          where: { clientId: id }
-        })
-        
-        // Update projects to remove client reference (set clientId to null)
-        const projectsUpdated = await prisma.project.updateMany({
-          where: { clientId: id },
-          data: { clientId: null }
-        })
-        
-        // Update service calls to remove client reference (set clientId to null) if ServiceCall model exists
-        let serviceCallsUpdated = { count: 0 }
-        try {
-          serviceCallsUpdated = await prisma.serviceCall.updateMany({
-            where: { clientId: id },
-            data: { clientId: null }
-          })
-        } catch (error) {
-          // ServiceCall model might not exist, ignore error
+        if (!clientExists || clientExists.length === 0) {
+          return notFound(res)
         }
         
-        // ClientNews, ClientTag, and StarredClient have onDelete: Cascade, so they'll be deleted automatically
-        // Now delete the client
-        await prisma.client.delete({ where: { id } })
+        // Use a transaction to ensure atomicity
+        console.log(`🗑️ Starting client deletion for ID: ${id}`)
+        const result = await prisma.$transaction(async (tx) => {
+          const counts = {
+            opportunities: 0,
+            invoices: 0,
+            salesOrders: 0,
+            projects: 0,
+            serviceCalls: 0,
+            jobCards: 0,
+            productionOrders: 0,
+            userTasks: 0,
+            groupMemberships: 0
+          }
+          
+          try {
+            // Delete opportunities
+            console.log(`  → Deleting opportunities for client ${id}`)
+            counts.opportunities = await tx.opportunity.deleteMany({
+              where: { clientId: id }
+            }).then(r => r.count)
+            console.log(`  ✅ Deleted ${counts.opportunities} opportunities`)
+          } catch (error) {
+            console.error('❌ Error deleting opportunities:', error)
+            console.error('❌ Error details:', {
+              message: error.message,
+              code: error.code,
+              name: error.name,
+              meta: error.meta,
+              stack: error.stack?.substring(0, 500)
+            })
+            // Preserve the original error with its code
+            const newError = new Error(`Failed to delete opportunities: ${error.message}`)
+            newError.code = error.code
+            newError.meta = error.meta
+            throw newError
+          }
+          
+          try {
+            // Delete invoices
+            console.log(`  → Deleting invoices for client ${id}`)
+            counts.invoices = await tx.invoice.deleteMany({
+              where: { clientId: id }
+            }).then(r => r.count)
+            console.log(`  ✅ Deleted ${counts.invoices} invoices`)
+          } catch (error) {
+            console.error('❌ Error deleting invoices:', error)
+            const newError = new Error(`Failed to delete invoices: ${error.message}`)
+            newError.code = error.code
+            newError.meta = error.meta
+            throw newError
+          }
+          
+          try {
+            // Delete sales orders
+            console.log(`  → Deleting sales orders for client ${id}`)
+            counts.salesOrders = await tx.salesOrder.deleteMany({
+              where: { clientId: id }
+            }).then(r => r.count)
+            console.log(`  ✅ Deleted ${counts.salesOrders} sales orders`)
+          } catch (error) {
+            console.error('❌ Error deleting sales orders:', error)
+            const newError = new Error(`Failed to delete sales orders: ${error.message}`)
+            newError.code = error.code
+            newError.meta = error.meta
+            throw newError
+          }
+          
+          try {
+            // Update projects to remove client reference (set clientId to null)
+            console.log(`  → Updating projects for client ${id}`)
+            counts.projects = await tx.project.updateMany({
+              where: { clientId: id },
+              data: { clientId: null }
+            }).then(r => r.count)
+            console.log(`  ✅ Updated ${counts.projects} projects`)
+          } catch (error) {
+            console.error('❌ Error updating projects:', error)
+            const newError = new Error(`Failed to update projects: ${error.message}`)
+            newError.code = error.code
+            newError.meta = error.meta
+            throw newError
+          }
+          
+          // Update service calls to remove client reference (set clientId to null) if ServiceCall model exists
+          try {
+            counts.serviceCalls = await tx.serviceCall.updateMany({
+              where: { clientId: id },
+              data: { clientId: null }
+            }).then(r => r.count)
+          } catch (error) {
+            // ServiceCall model might not exist, ignore error
+            console.warn('⚠️ ServiceCall model may not exist:', error.message)
+          }
+          
+          // Update JobCards to remove client reference (set clientId to null)
+          try {
+            counts.jobCards = await tx.jobCard.updateMany({
+              where: { clientId: id },
+              data: { clientId: null }
+            }).then(r => r.count)
+          } catch (error) {
+            console.warn('⚠️ Error updating job cards:', error.message)
+            // Continue with deletion even if job cards update fails
+          }
+          
+          // Update ProductionOrders to remove client reference (set clientId to null)
+          try {
+            counts.productionOrders = await tx.productionOrder.updateMany({
+              where: { clientId: id },
+              data: { clientId: null }
+            }).then(r => r.count)
+          } catch (error) {
+            console.warn('⚠️ Error updating production orders:', error.message)
+            // Continue with deletion even if production orders update fails
+          }
+          
+          // Update UserTasks to remove client reference (set clientId to null)
+          try {
+            counts.userTasks = await tx.userTask.updateMany({
+              where: { clientId: id },
+              data: { clientId: null }
+            }).then(r => r.count)
+          } catch (error) {
+            console.warn('⚠️ Error updating user tasks:', error.message)
+            // Continue with deletion even if user tasks update fails
+          }
+          
+          // Delete ClientCompanyGroup records where this client is a member (clientId) or a group (groupId)
+          // This must be done before deleting the client to avoid foreign key constraint errors
+          // Use raw SQL to avoid Prisma relation resolution issues
+          try {
+            console.log(`  → Deleting group memberships for client ${id}`)
+            // Delete where client is a member using raw SQL
+            const asMemberResult = await tx.$executeRaw`
+              DELETE FROM "ClientCompanyGroup" WHERE "clientId" = ${id}
+            `
+            // Delete where client is a group using raw SQL
+            const asGroupResult = await tx.$executeRaw`
+              DELETE FROM "ClientCompanyGroup" WHERE "groupId" = ${id}
+            `
+            // Note: $executeRaw returns the number of affected rows
+            counts.groupMemberships = (asMemberResult || 0) + (asGroupResult || 0)
+            console.log(`  ✅ Deleted ${counts.groupMemberships} group memberships`)
+          } catch (groupError) {
+            console.error('❌ Error deleting group memberships:', groupError)
+            console.error('❌ Group error details:', {
+              message: groupError.message,
+              code: groupError.code,
+              name: groupError.name,
+              meta: groupError.meta
+            })
+            // Try to continue - if the records don't exist, that's fine
+            // But if there's a real constraint issue, the client delete will fail anyway
+            console.warn('⚠️ Continuing with client deletion despite group membership deletion error')
+          }
+          
+          // ClientNews, StarredClient have onDelete: Cascade, so they'll be deleted automatically
+          // Now delete the client using raw SQL to avoid Prisma relation resolution issues
+          console.log(`  → Deleting client ${id}`)
+          const deleteResult = await tx.$executeRaw`
+            DELETE FROM "Client" WHERE id = ${id}
+          `
+          
+          if (deleteResult === 0) {
+            throw new Error('Client not found or already deleted')
+          }
+          console.log(`  ✅ Client deleted successfully`)
+          
+          return counts
+        }, {
+          timeout: 30000, // 30 second timeout for the transaction
+          maxWait: 10000  // 10 second max wait to acquire lock
+        })
+        
+        console.log(`✅ Client deletion completed successfully for ID: ${id}`)
         return ok(res, { 
-          message: `Client deleted successfully. Also deleted ${opportunitiesDeleted.count} opportunities, ${invoicesDeleted.count} invoices, ${salesOrdersDeleted.count} sales orders, and updated ${projectsUpdated.count} projects.`
+          message: `Client deleted successfully. Also deleted ${result.opportunities} opportunities, ${result.invoices} invoices, ${result.salesOrders} sales orders, ${result.groupMemberships} group memberships, and updated ${result.projects} projects, ${result.jobCards} job cards, ${result.productionOrders} production orders, and ${result.userTasks} user tasks.`,
+          details: result
         })
       } catch (dbError) {
         const isConnError = logDatabaseError(dbError, 'deleting client')
         if (isConnError) {
           return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
         }
+        
+        // Enhanced error logging - log everything to help debug
         console.error('❌ Database error deleting client:', dbError)
-        console.error('❌ Full error details:', JSON.stringify(dbError, null, 2))
-        return serverError(res, 'Failed to delete client', dbError.message)
+        console.error('❌ Error details:', {
+          message: dbError.message,
+          code: dbError.code,
+          name: dbError.name,
+          meta: dbError.meta,
+          stack: dbError.stack?.substring(0, 1000),
+          clientId: id
+        })
+        
+        // Check for specific error codes
+        if (dbError.code === 'P2025') {
+          // Record not found
+          return notFound(res)
+        }
+        
+        if (dbError.code === 'P2003') {
+          // Foreign key constraint failed
+          console.error('❌ Foreign key constraint violation - client may have remaining references')
+          return serverError(res, 'Cannot delete client', 'This client is still referenced by other records. Please remove all related data first.')
+        }
+        
+        // Check for transaction timeout
+        if (dbError.message && dbError.message.includes('timeout')) {
+          console.error('❌ Transaction timed out during client deletion')
+          return serverError(res, 'Delete operation timed out', 'The deletion took too long. Please try again or contact support if the problem persists.')
+        }
+        
+        // Provide detailed error message to help with debugging
+        const errorMessage = dbError.message || 'Unknown error occurred while deleting client'
+        const errorDetails = {
+          error: errorMessage,
+          code: dbError.code || 'UNKNOWN',
+          clientId: id,
+          timestamp: new Date().toISOString()
+        }
+        
+        // Log full error for server-side debugging
+        console.error('❌ Full error object:', JSON.stringify(errorDetails, null, 2))
+        
+        return serverError(res, 'Failed to delete client', errorMessage)
       }
     }
 
