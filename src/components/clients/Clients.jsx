@@ -1,5 +1,5 @@
 // Get dependencies from window
-const { useState, useEffect, useMemo, useCallback, useRef } = React;
+const { useState, useEffect, useMemo, useCallback, useRef, startTransition } = React;
 const SectionCommentWidget = window.SectionCommentWidget;
 // Don't capture window.storage at module load; resolve at call time to avoid stale reference
 // Safe storage helper functions
@@ -4040,22 +4040,73 @@ const Clients = React.memo(() => {
 
     const handleDeleteClient = async (clientId) => {
         try {
-            // Try to delete from database first
+            // Optimistically update UI first for smooth removal
+            const updatedClients = clients.filter(c => c.id !== clientId);
+            
+            // Temporarily pause LiveDataSync to prevent conflicts
+            const wasLiveDataSyncRunning = window.LiveDataSync?.isRunning;
+            if (wasLiveDataSyncRunning && window.LiveDataSync?.stop) {
+                window.LiveDataSync.stop();
+            }
+            
+            // Use React's startTransition for smooth, non-blocking UI update
+            const updateState = () => {
+                setClients(updatedClients);
+                safeStorage.setClients(updatedClients);
+            };
+            
+            if (typeof startTransition === 'function') {
+                startTransition(updateState);
+            } else {
+                // Fallback for older React versions
+                updateState();
+            }
+            
+            // Delete from database in background
             const token = window.storage?.getToken?.();
             if (token && window.api?.deleteClient) {
                 try {
                     await window.api.deleteClient(clientId);
+                    
+                    // Give a moment for the deletion to settle before resuming LiveDataSync
+                    setTimeout(() => {
+                        if (wasLiveDataSyncRunning && window.LiveDataSync?.start && !window.LiveDataSync?.isRunning) {
+                            window.LiveDataSync.start();
+                        }
+                    }, 1500); // 1.5 second delay to prevent shimmer from LiveDataSync refresh
                 } catch (error) {
                     console.warn('⚠️ Failed to delete client from database:', error);
+                    // On error, restore the client and show error
+                    const restoreState = () => {
+                        setClients(clients);
+                        safeStorage.setClients(clients);
+                    };
+                    
+                    if (typeof startTransition === 'function') {
+                        startTransition(restoreState);
+                    } else {
+                        restoreState();
+                    }
+                    
+                    alert('Failed to delete client: ' + (error.message || 'Unknown error'));
+                    
+                    // Resume LiveDataSync on error
+                    if (wasLiveDataSyncRunning && window.LiveDataSync?.start && !window.LiveDataSync?.isRunning) {
+                        window.LiveDataSync.start();
+                    }
+                    return;
+                }
+            } else {
+                // If no API, resume LiveDataSync after a short delay
+                if (wasLiveDataSyncRunning && window.LiveDataSync?.start && !window.LiveDataSync?.isRunning) {
+                    setTimeout(() => {
+                        window.LiveDataSync.start();
+                    }, 500);
                 }
             }
-            
-            // Update local state and localStorage
-            const updatedClients = clients.filter(c => c.id !== clientId);
-            setClients(updatedClients);
-            safeStorage.setClients(updatedClients);
         } catch (error) {
             console.error('❌ Error deleting client:', error);
+            alert('Failed to delete client: ' + (error.message || 'Unknown error'));
         }
     };
 
