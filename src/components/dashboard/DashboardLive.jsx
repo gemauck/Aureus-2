@@ -183,7 +183,7 @@ const DashboardLive = () => {
     // Version indicator - logged to console for verification
     React.useEffect(() => {
         console.log('%c✨✨✨ DashboardLive v2.0 LOADED ✨✨✨', 'color: #10b981; font-size: 20px; font-weight: bold; padding: 10px; background: #10b981; color: white;');
-        console.log('%c📍 Look for the BLUE BANNER at the top with "Edit Layout" button', 'color: #3b82f6; font-size: 14px; font-weight: bold;');
+        console.log('%c📍 Look for the "Edit Layout" button at the bottom of the dashboard', 'color: #3b82f6; font-size: 14px; font-weight: bold;');
         console.log('%c🎨 Click "Edit Layout" to enable drag, drop, and resize features!', 'color: #8b5cf6; font-size: 14px; font-weight: bold;');
         // Set a flag so we can verify it loaded
         window.__DASHBOARD_LIVE_V2_LOADED__ = true;
@@ -786,14 +786,26 @@ const DashboardLive = () => {
             const deltaX = e.clientX - resizeStart.x;
             const deltaY = e.clientY - resizeStart.y;
             
-            // Calculate grid units based on viewport - more responsive
-            // Assuming each grid column is roughly 1/3 of viewport width minus gaps
-            const viewportWidth = window.innerWidth;
-            const gridUnitWidth = (viewportWidth - 64) / 3; // Account for padding and gaps
-            const gridUnitHeight = 200; // Base height unit
+            // Calculate grid units - use actual grid container dimensions
+            const gridContainer = document.querySelector('.grid.gap-4[style*="gridTemplateColumns"]');
+            let cellWidth = 300; // Default fallback
+            let cellHeight = 200; // Default fallback
             
-            const deltaW = Math.round(deltaX / gridUnitWidth);
-            const deltaH = Math.round(deltaY / gridUnitHeight);
+            if (gridContainer) {
+                const containerWidth = gridContainer.offsetWidth;
+                const gap = 16; // 1rem = 16px (gap-4)
+                cellWidth = (containerWidth - (gap * 2)) / 3;
+                
+                // Get first widget to estimate cell height
+                const firstWidget = gridContainer.querySelector('[style*="gridColumn"]');
+                if (firstWidget) {
+                    cellHeight = firstWidget.offsetHeight || 200;
+                }
+            }
+            
+            // Calculate size changes based on actual cell dimensions
+            const deltaW = Math.round(deltaX / cellWidth);
+            const deltaH = Math.round(deltaY / cellHeight);
             
             setWidgetLayouts(prev => {
                 const layout = prev[isResizing.widgetId] || getDefaultLayout(isResizing.widgetId, selectedWidgets.indexOf(isResizing.widgetId));
@@ -801,15 +813,12 @@ const DashboardLive = () => {
                 let newH = resizeStart.h;
                 
                 if (isResizing.direction.includes('e')) {
+                    // Width: positive deltaX = larger, negative = smaller
                     newW = Math.max(1, Math.min(3, resizeStart.w + deltaW));
                 }
                 if (isResizing.direction.includes('s')) {
+                    // Height: positive deltaY = larger, negative = smaller
                     newH = Math.max(1, Math.min(3, resizeStart.h + deltaH));
-                }
-                
-                // Only update if changed
-                if (newW === layout.w && newH === layout.h) {
-                    return prev;
                 }
                 
                 const newLayouts = {
@@ -1062,42 +1071,12 @@ const DashboardLive = () => {
     // Customizable widgets UI
     return (
         <div className="space-y-4">
-            {/* Version indicator banner - visible on page */}
-            <div className={`${isDark ? 'bg-blue-900 border-blue-700' : 'bg-blue-50 border-blue-200'} border rounded-lg p-3 mb-4`}>
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <i className="fas fa-check-circle text-blue-600"></i>
-                        <span className={`text-sm font-medium ${isDark ? 'text-blue-200' : 'text-blue-800'}`}>
-                            Dashboard v2.0 - Drag, Drop & Resize Enabled!
-                        </span>
-                    </div>
-                    <button
-                        onClick={() => setEditMode(!editMode)}
-                        className={`px-4 py-2 text-sm font-semibold rounded-md ${editMode ? 'bg-blue-600 text-white' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
-                    >
-                        <i className={`fas ${editMode ? 'fa-times' : 'fa-edit'} mr-2`}></i>
-                        {editMode ? 'Exit Edit Mode' : 'Edit Layout'}
-                    </button>
-                </div>
-            </div>
-            
             <div className="flex items-center justify-between">
                 <div>
                     <h2 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>Welcome, {userName}</h2>
                     <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Last updated: {lastUpdated ? new Date(lastUpdated).toLocaleString() : '—'}</div>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => {
-                            setEditMode(!editMode);
-                            console.log('🎨 Edit Mode:', !editMode ? 'ENABLED' : 'DISABLED');
-                        }}
-                        className={`px-3 py-2 text-sm font-medium rounded-md border ${editMode ? 'bg-blue-600 text-white border-blue-600' : 'bg-blue-500 text-white border-blue-500 hover:bg-blue-600'}`}
-                        title={editMode ? 'Exit edit mode to hide controls' : 'Click to enable drag, drop, and resize'}
-                    >
-                        <i className={`fas ${editMode ? 'fa-times' : 'fa-edit'} mr-1`}></i>
-                        {editMode ? 'Exit Edit Mode' : 'Edit Layout'}
-                    </button>
                     <button
                         onClick={() => setManageOpen(true)}
                         className="px-3 py-2 text-sm rounded-md border border-gray-300 hover:bg-gray-50"
@@ -1201,6 +1180,21 @@ const DashboardLive = () => {
                             </div>
                         );
                     })}
+            </div>
+
+            {/* Edit Layout Button at Bottom */}
+            <div className="flex justify-center pt-4 border-t border-gray-200 dark:border-gray-700">
+                <button
+                    onClick={() => {
+                        setEditMode(!editMode);
+                        console.log('🎨 Edit Mode:', !editMode ? 'ENABLED' : 'DISABLED');
+                    }}
+                    className={`px-6 py-3 text-sm font-semibold rounded-md ${editMode ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-blue-500 text-white hover:bg-blue-600'} shadow-lg transition-all`}
+                    title={editMode ? 'Exit edit mode to hide controls' : 'Click to enable drag, drop, and resize'}
+                >
+                    <i className={`fas ${editMode ? 'fa-times' : 'fa-edit'} mr-2`}></i>
+                    {editMode ? 'Exit Edit Mode' : 'Edit Layout'}
+                </button>
             </div>
 
             {manageOpen ? (

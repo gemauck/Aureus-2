@@ -3990,20 +3990,6 @@ const ManagementMeetingNotes = () => {
                                                     </button>
                                                 </div>
                                             </div>
-                                            <div className="grid grid-cols-3 gap-3">
-                                                <div className={`rounded-lg border p-3 transition hover:scale-105 ${isDark ? 'border-slate-600 bg-slate-900/40 text-slate-200' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
-                                                    <p className="text-[10px] uppercase tracking-wide font-medium mb-1">Departments</p>
-                                                    <p className="text-lg font-bold">{summary.departmentCount}</p>
-                                                </div>
-                                                <div className={`rounded-lg border p-3 transition hover:scale-105 ${isDark ? 'border-slate-600 bg-slate-900/40 text-slate-200' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
-                                                    <p className="text-[10px] uppercase tracking-wide font-medium mb-1">Action Items</p>
-                                                    <p className="text-lg font-bold">{summary.totalActionItems}</p>
-                                                </div>
-                                                <div className={`rounded-lg border p-3 transition hover:scale-105 ${isDark ? 'border-slate-600 bg-slate-900/40 text-slate-200' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
-                                                    <p className="text-[10px] uppercase tracking-wide font-medium mb-1">Comments</p>
-                                                    <p className="text-lg font-bold">{summary.totalComments}</p>
-                                                </div>
-                                            </div>
                                     </div>
                                 );
                             })}
