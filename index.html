@@ -424,7 +424,7 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; console.log('✅ React loaded'); }" onerror="console.error('❌ Failed to load React from CDN');"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; } if(typeof ReactDOM !== 'undefined') { window.ReactDOM = ReactDOM; window.BabelReady = true; window.dispatchEvent(new Event('babelready')); console.log('✅ ReactDOM loaded'); }" onerror="console.error('❌ Failed to load ReactDOM from CDN');"></script>
     <!-- XLSX library for Excel export - Defer loading (not needed immediately) -->
-    <script defer crossorigin src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js" onload="if(typeof XLSX !== 'undefined') { window.XLSX = XLSX; console.log('✅ XLSX library loaded'); }" onerror="console.error('❌ Failed to load XLSX from CDN');"></script>
+    <script defer crossorigin src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js" onload="if(typeof XLSX !== 'undefined') { window.XLSX = XLSX; console.log('✅ XLSX library loaded'); }" onerror="console.warn('⚠️ XLSX CDN load failed - will retry when needed (components handle this automatically)');"></script>
     
     <!-- Verify React loaded and expose globally (fallback) -->
     <script>
@@ -447,11 +447,22 @@
             } else {
                 console.error('❌ ReactDOM not loaded - check CDN connection');
             }
+            // XLSX is deferred and not critical for initial load - check with longer timeout
+            // Components that use XLSX have their own retry logic, so we don't need to error here
             if (typeof XLSX !== 'undefined') {
                 window.XLSX = XLSX;
                 console.log('✅ XLSX verified');
             } else {
-                console.error('❌ XLSX not loaded - check CDN connection');
+                // XLSX is lazy-loaded and not critical - retry check after longer delay since it's deferred
+                setTimeout(() => {
+                    if (typeof XLSX !== 'undefined') {
+                        window.XLSX = XLSX;
+                        console.log('✅ XLSX loaded (delayed)');
+                    } else {
+                        // Only warn if still not loaded after retry - not critical since components handle it
+                        console.warn('⚠️ XLSX not yet loaded - will be available when needed (Excel export features will wait for library)');
+                    }
+                }, 3000); // Additional 3 seconds for deferred scripts
             }
         }, 1000);
     </script>
