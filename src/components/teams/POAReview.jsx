@@ -84,27 +84,31 @@ const POAReview = () => {
 
             const uploadResult = await uploadResponse.json();
             console.log('POA Review - Upload result:', uploadResult);
+            
+            // Validate upload result
+            if (!uploadResult || !uploadResult.url) {
+                throw new Error(`Upload failed: Invalid response. Expected 'url' field, got: ${JSON.stringify(uploadResult)}`);
+            }
+            
             setProcessingProgress('Processing data...');
 
             // Process the file
             // uploadResult.url is the public URL path like "/uploads/poa-review-inputs/file.xlsx"
+            const processPayload = {
+                filePath: uploadResult.url, // This should be "/uploads/poa-review-inputs/filename.xlsx"
+                fileName: uploadedFile.name,
+                sources: sources || ['Inmine: Daily Diesel Issues']
+            };
+            
+            console.log('POA Review - Process request payload:', processPayload);
+            
             const processResponse = await fetch('/api/poa-review/process', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${window.storage?.getToken?.() || ''}`
                 },
-                body: JSON.stringify({
-                    filePath: uploadResult.url, // This should be "/uploads/poa-review-inputs/filename.xlsx"
-                    fileName: uploadedFile.name,
-                    sources: sources
-                })
-            });
-            
-            console.log('POA Review - Process request sent:', {
-                filePath: uploadResult.url,
-                fileName: uploadedFile.name,
-                sources: sources
+                body: JSON.stringify(processPayload)
             });
 
             if (!processResponse.ok) {
