@@ -23,8 +23,15 @@ async function handler(req, res) {
             return badRequest(res, 'Method not allowed');
         }
 
-        const payload = await parseJsonBody(req);
-        const { filePath, fileName, sources } = payload;
+        let payload;
+        try {
+            payload = await parseJsonBody(req);
+        } catch (parseError) {
+            console.error('POA Review API - JSON parse error:', parseError);
+            return badRequest(res, `Invalid JSON payload: ${parseError.message}`);
+        }
+
+        const { filePath, fileName, sources } = payload || {};
 
         console.log('POA Review API - Received payload:', { filePath, fileName, sources });
 
