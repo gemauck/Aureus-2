@@ -140,17 +140,23 @@ const POAReview = () => {
                     const errorData = await processResponse.json();
                     console.error('POA Review API Error Response:', errorData);
                     
-                    // Handle different error response formats
-                    if (typeof errorData === 'string') {
-                        errorMessage = errorData;
-                    } else if (errorData.error) {
-                        errorMessage = typeof errorData.error === 'string' 
-                            ? errorData.error 
-                            : errorData.error.message || JSON.stringify(errorData.error);
+                    // The API wraps errors in { error: { code, message, details } }
+                    // Prefer details (most specific), then message, then code
+                    if (errorData.error) {
+                        if (typeof errorData.error === 'string') {
+                            errorMessage = errorData.error;
+                        } else {
+                            errorMessage = errorData.error.details || errorData.error.message || errorData.error.code || errorMessage;
+                        }
                     } else if (errorData.message) {
                         errorMessage = errorData.message;
+                    } else if (errorData.data?.error) {
+                        // Sometimes errors are nested in data
+                        errorMessage = errorData.data.error.details || errorData.data.error.message || errorMessage;
+                    } else if (typeof errorData === 'string') {
+                        errorMessage = errorData;
                     } else {
-                        errorMessage = `Server returned ${processResponse.status}: ${JSON.stringify(errorData)}`;
+                        errorMessage = `Server error: ${JSON.stringify(errorData)}`;
                     }
                 } catch (parseError) {
                     const text = await processResponse.text();
