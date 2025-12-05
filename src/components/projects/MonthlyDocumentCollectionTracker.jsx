@@ -432,9 +432,15 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 
                 // Update if:
                 // 1. No unsaved local changes (safe to update), OR
-                // 2. Database matches what we last saved (database hasn't changed, safe to update), OR
+                // 2. Database matches what we last saved AND we're not currently saving (database hasn't changed, safe to update), OR
                 // 3. Force update requested
-                if (!hasUnsavedChanges || freshSnapshot === lastSavedSnapshotRef.current || forceUpdate) {
+                // CRITICAL: Don't update if we have unsaved changes AND a save is in progress, even if snapshots match
+                // This prevents overwriting local changes before they're saved to the database
+                const shouldUpdate = !hasUnsavedChanges || 
+                                    (freshSnapshot === lastSavedSnapshotRef.current && !isSavingRef.current) || 
+                                    forceUpdate;
+                
+                if (shouldUpdate) {
                     // Final check before updating state
                     if (!isDeletingRef.current || forceUpdate) {
                         setSectionsByYear(normalized);
@@ -446,6 +452,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         console.log('⏸️ State update skipped: deletion in progress');
                     }
                 } else {
+                    console.log('⏸️ Refresh skipped: unsaved local changes detected (will not overwrite)');
                 }
             } else {
                 // Data matches, update snapshot reference if needed
