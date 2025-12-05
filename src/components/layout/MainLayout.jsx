@@ -287,7 +287,8 @@ const MainLayout = () => {
 
     // Get components from window
     const Dashboard = React.useMemo(() => {
-        return window.DashboardSimple || window.DashboardFallback || window.DashboardDatabaseFirst || window.DashboardLive || window.Dashboard || (() => <div className="text-center py-12 text-gray-500">Dashboard loading...</div>);
+        // Prioritize DashboardLive for drag-drop and resize features
+        return window.DashboardLive || window.DashboardSimple || window.DashboardFallback || window.DashboardDatabaseFirst || window.Dashboard || (() => <div className="text-center py-12 text-gray-500">Dashboard loading...</div>);
     }, []);
     
     const ErrorBoundary = React.useMemo(() => {
