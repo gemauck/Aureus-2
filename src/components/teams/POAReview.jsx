@@ -163,12 +163,18 @@ const POAReview = () => {
             setProcessingProgress('Generating report...');
 
             const processResult = await processResponse.json();
+            console.log('POA Review - Process result:', processResult);
             
-            if (processResult.downloadUrl) {
-                setDownloadUrl(processResult.downloadUrl);
+            // The API wraps responses in { data: ... }
+            const resultData = processResult.data || processResult;
+            const downloadUrl = resultData.downloadUrl;
+            
+            if (downloadUrl) {
+                setDownloadUrl(downloadUrl);
                 setProcessingProgress('Complete!');
             } else {
-                throw new Error('No download URL received');
+                console.error('POA Review - Process result missing downloadUrl:', processResult);
+                throw new Error('No download URL received from server');
             }
 
         } catch (err) {
