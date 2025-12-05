@@ -26,30 +26,56 @@ async function handler(req, res) {
         const payload = await parseJsonBody(req);
         const { filePath, fileName, sources } = payload;
 
+        console.log('POA Review API - Received payload:', { filePath, fileName, sources });
+
         if (!filePath || !fileName) {
+            console.error('POA Review API - Missing required fields:', { filePath: !!filePath, fileName: !!fileName });
             return badRequest(res, 'filePath and fileName are required');
         }
 
-        // Get root directory
+        // Get root directory - same resolution as files.js
+        // files.js uses: path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
+        // Since we're in api/poa-review/, we need to go up two levels
         const rootDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../..');
+        console.log('POA Review API - Root directory:', rootDir);
+        console.log('POA Review API - Current file location:', new URL(import.meta.url).pathname);
         
         // Setup directories
         const inputDir = path.join(rootDir, 'uploads', 'poa-review-inputs');
         const outputDir = path.join(rootDir, 'uploads', 'poa-review-outputs');
         const scriptsDir = path.join(rootDir, 'scripts', 'poa-review');
         
+        console.log('POA Review API - Directories:', { inputDir, outputDir, scriptsDir });
+        
         // Ensure directories exist
         [inputDir, outputDir, scriptsDir].forEach(dir => {
             if (!fs.existsSync(dir)) {
                 fs.mkdirSync(dir, { recursive: true });
+                console.log('POA Review API - Created directory:', dir);
             }
         });
 
-        // Resolve file paths
-        const inputFilePath = path.join(rootDir, filePath.startsWith('/') ? filePath.slice(1) : filePath);
+        // Resolve file paths - handle both absolute and relative paths
+        let inputFilePath;
+        if (filePath.startsWith('/')) {
+            // Absolute path from root (e.g., /uploads/poa-review-inputs/file.xlsx)
+            inputFilePath = path.join(rootDir, filePath.slice(1));
+        } else {
+            // Relative path
+            inputFilePath = path.join(rootDir, filePath);
+        }
+        
+        console.log('POA Review API - Resolved input file path:', inputFilePath);
+        console.log('POA Review API - File exists:', fs.existsSync(inputFilePath));
         
         if (!fs.existsSync(inputFilePath)) {
-            return badRequest(res, 'Uploaded file not found');
+            console.error('POA Review API - File not found at:', inputFilePath);
+            // List files in the input directory for debugging
+            if (fs.existsSync(inputDir)) {
+                const files = fs.readdirSync(inputDir);
+                console.log('POA Review API - Files in input directory:', files);
+            }
+            return badRequest(res, `Uploaded file not found at: ${inputFilePath}`);
         }
 
         // Generate output filename
