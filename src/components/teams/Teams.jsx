@@ -1006,6 +1006,20 @@ const Teams = () => {
                                     <span className="sm:hidden">Notes</span>
                                 </button>
                             )}
+                            {selectedTeam?.id === 'data-analytics' && (
+                                <button
+                                    onClick={() => setActiveTab('poa-review')}
+                                    className={`px-3 py-2 sm:py-1.5 text-xs rounded-lg transition whitespace-nowrap min-h-[44px] sm:min-h-0 flex-shrink-0 ${
+                                        activeTab === 'poa-review'
+                                            ? 'bg-primary-600 text-white'
+											: isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    <i className="fas fa-file-excel mr-1"></i>
+                                    <span className="hidden sm:inline">POA Review</span>
+                                    <span className="sm:hidden">POA</span>
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -1565,6 +1579,30 @@ const Teams = () => {
                                         </div>
                                     );
                                 }
+                            }
+                            
+                            return (
+                                <div>
+                                    <ComponentToRender />
+                                </div>
+                            );
+                        })()}
+
+                        {activeTab === 'poa-review' && selectedTeam?.id === 'data-analytics' && (() => {
+                            const ComponentToRender = window.POAReview;
+                            
+                            if (!ComponentToRender) {
+                                return (
+                                    <div className="text-center py-12">
+                                        <i className={`fas fa-spinner fa-spin text-4xl mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}></i>
+                                        <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'} mb-2`}>
+                                            Loading POA Review component...
+                                        </p>
+                                        <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+                                            Please wait while the component loads.
+                                        </p>
+                                    </div>
+                                );
                             }
                             
                             return (

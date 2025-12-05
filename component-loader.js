@@ -151,6 +151,7 @@
         'components/teams/NoticeModal.jsx',
         'components/teams/WorkflowExecutionModal.jsx',
         'components/teams/ManagementMeetingNotes.jsx',
+        'components/teams/POAReview.jsx',
         'components/teams/TeamModals.jsx',
         'components/teams/TeamsEnhanced.jsx',
         'components/teams/Teams.jsx',
