@@ -99,8 +99,11 @@ const POAReview = () => {
                 throw new Error(`Upload failed: Empty response`);
             }
             
-            // The API returns { url, name, size, mimeType }
-            const filePath = uploadResult.url || uploadResult.path || uploadResult.filePath;
+            // The API returns { data: { url, name, size, mimeType } } or { url, name, size, mimeType }
+            // Handle both formats
+            const uploadData = uploadResult.data || uploadResult;
+            const filePath = uploadData.url || uploadData.path || uploadData.filePath;
+            
             if (!filePath) {
                 console.error('POA Review - Upload result missing url:', uploadResult);
                 throw new Error(`Upload failed: Missing 'url' in response. Got: ${JSON.stringify(uploadResult)}`);
