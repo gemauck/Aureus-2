@@ -83,9 +83,11 @@ const POAReview = () => {
             }
 
             const uploadResult = await uploadResponse.json();
+            console.log('POA Review - Upload result:', uploadResult);
             setProcessingProgress('Processing data...');
 
             // Process the file
+            // uploadResult.url is the public URL path like "/uploads/poa-review-inputs/file.xlsx"
             const processResponse = await fetch('/api/poa-review/process', {
                 method: 'POST',
                 headers: {
@@ -93,15 +95,30 @@ const POAReview = () => {
                     'Authorization': `Bearer ${window.storage?.getToken?.() || ''}`
                 },
                 body: JSON.stringify({
-                    filePath: uploadResult.url,
+                    filePath: uploadResult.url, // This should be "/uploads/poa-review-inputs/filename.xlsx"
                     fileName: uploadedFile.name,
                     sources: sources
                 })
             });
+            
+            console.log('POA Review - Process request sent:', {
+                filePath: uploadResult.url,
+                fileName: uploadedFile.name,
+                sources: sources
+            });
 
             if (!processResponse.ok) {
-                const errorData = await processResponse.json().catch(() => ({ message: 'Processing failed' }));
-                throw new Error(errorData.message || 'Failed to process file');
+                let errorMessage = 'Failed to process file';
+                try {
+                    const errorData = await processResponse.json();
+                    errorMessage = errorData.message || errorData.error || `Server returned ${processResponse.status}: ${processResponse.statusText}`;
+                    console.error('POA Review API Error:', errorData);
+                } catch (parseError) {
+                    const text = await processResponse.text();
+                    errorMessage = text || `Server returned ${processResponse.status}: ${processResponse.statusText}`;
+                    console.error('POA Review API Error (text):', text);
+                }
+                throw new Error(errorMessage);
             }
 
             setProcessingProgress('Generating report...');
