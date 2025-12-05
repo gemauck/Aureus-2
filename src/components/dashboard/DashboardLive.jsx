@@ -43,9 +43,11 @@ const calculateStats = (clients, leads, projects, timeEntries) => {
 const DashboardLive = () => {
     // Version indicator - logged to console for verification
     React.useEffect(() => {
-        console.log('%c✨✨✨ DashboardLive v2.0 LOADED ✨✨✨', 'color: #10b981; font-size: 16px; font-weight: bold;');
-        console.log('📍 Look for the blue "Edit Layout" button in the top-right corner');
-        console.log('🎨 Click it to enable drag, drop, and resize features!');
+        console.log('%c✨✨✨ DashboardLive v2.0 LOADED ✨✨✨', 'color: #10b981; font-size: 20px; font-weight: bold; padding: 10px; background: #10b981; color: white;');
+        console.log('%c📍 Look for the BLUE BANNER at the top with "Edit Layout" button', 'color: #3b82f6; font-size: 14px; font-weight: bold;');
+        console.log('%c🎨 Click "Edit Layout" to enable drag, drop, and resize features!', 'color: #8b5cf6; font-size: 14px; font-weight: bold;');
+        // Set a flag so we can verify it loaded
+        window.__DASHBOARD_LIVE_V2_LOADED__ = true;
     }, []);
     const [dashboardData, setDashboardData] = useState({
         clients: [],
@@ -1057,6 +1059,25 @@ const DashboardLive = () => {
     // Customizable widgets UI
     return (
         <div className="space-y-4">
+            {/* Version indicator banner - visible on page */}
+            <div className={`${isDark ? 'bg-blue-900 border-blue-700' : 'bg-blue-50 border-blue-200'} border rounded-lg p-3 mb-4`}>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <i className="fas fa-check-circle text-blue-600"></i>
+                        <span className={`text-sm font-medium ${isDark ? 'text-blue-200' : 'text-blue-800'}`}>
+                            Dashboard v2.0 - Drag, Drop & Resize Enabled!
+                        </span>
+                    </div>
+                    <button
+                        onClick={() => setEditMode(!editMode)}
+                        className={`px-4 py-2 text-sm font-semibold rounded-md ${editMode ? 'bg-blue-600 text-white' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                    >
+                        <i className={`fas ${editMode ? 'fa-times' : 'fa-edit'} mr-2`}></i>
+                        {editMode ? 'Exit Edit Mode' : 'Edit Layout'}
+                    </button>
+                </div>
+            </div>
+            
             <div className="flex items-center justify-between">
                 <div>
                     <h2 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>Welcome, {userName}</h2>
