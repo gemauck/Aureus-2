@@ -1148,13 +1148,17 @@ const DashboardLive = () => {
                                             </button>
                                         </div>
                                         
-                                        {/* Resize handles */}
+                                        {/* Resize handles - larger and more visible */}
                                         <div
-                                            className="absolute right-0 bottom-0 w-6 h-6 bg-blue-600 hover:bg-blue-700 cursor-se-resize z-20 rounded-tl-lg flex items-center justify-center"
-                                            onMouseDown={(e) => handleResizeStart(e, id, 'se')}
-                                            title="Resize widget"
+                                            className="absolute right-0 bottom-0 w-8 h-8 bg-blue-600 hover:bg-blue-700 cursor-se-resize z-20 rounded-tl-lg flex items-center justify-center shadow-lg"
+                                            onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                handleResizeStart(e, id, 'se');
+                                            }}
+                                            title="Drag to resize widget (bottom-right corner)"
                                         >
-                                            <div className="w-3 h-3 border-r-2 border-b-2 border-white"></div>
+                                            <div className="w-4 h-4 border-r-2 border-b-2 border-white"></div>
                                         </div>
                                         
                                         {/* Size indicator */}
