@@ -1323,35 +1323,38 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // ============================================================
     
     const handleUpdateStatus = useCallback((sectionId, documentId, month, status) => {
-        setSections(prev => {
-            // Use functional update to ensure we're working with latest state
-            const updated = prev.map(section => {
-                if (section.id === sectionId) {
-                    return {
-                        ...section,
-                        documents: section.documents.map(doc => {
-                            if (doc.id === documentId) {
-                                return {
-                                    ...doc,
-                                    collectionStatus: setStatusForYear(doc.collectionStatus || {}, month, status, selectedYear)
-                                };
-                            }
-                            return doc;
-                        })
-                    };
-                }
-                return section;
-            });
-            
-            // Immediately update the ref to prevent race conditions with auto-save
-            const updatedSectionsByYear = {
-                ...sectionsRef.current,
-                [selectedYear]: updated
-            };
-            sectionsRef.current = updatedSectionsByYear;
-            
-            return updated;
+        // Get current state from ref to ensure we have the latest
+        const currentSectionsByYear = sectionsRef.current || {};
+        const currentYearSections = currentSectionsByYear[selectedYear] || [];
+        
+        // Update the sections for the current year
+        const updated = currentYearSections.map(section => {
+            if (section.id === sectionId) {
+                return {
+                    ...section,
+                    documents: section.documents.map(doc => {
+                        if (doc.id === documentId) {
+                            return {
+                                ...doc,
+                                collectionStatus: setStatusForYear(doc.collectionStatus || {}, month, status, selectedYear)
+                            };
+                        }
+                        return doc;
+                    })
+                };
+            }
+            return section;
         });
+        
+        // Immediately update the ref FIRST to prevent race conditions with auto-save
+        const updatedSectionsByYear = {
+            ...currentSectionsByYear,
+            [selectedYear]: updated
+        };
+        sectionsRef.current = updatedSectionsByYear;
+        
+        // Then update React state (this will trigger re-render)
+        setSections(updated);
     }, [selectedYear]);
     
     const handleAddComment = async (sectionId, documentId, month, commentText) => {
