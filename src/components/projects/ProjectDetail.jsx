@@ -60,8 +60,8 @@
         if (missing.length === 0) {
             // All critical dependencies available
             if (optional.length > 0) {
-                console.warn(`⚠️ ProjectDetail: Optional dependencies missing: ${optional.join(', ')}`);
-                console.warn('⚠️ ProjectDetail will continue but may have limited functionality');
+                // Use debug level - these are optional and component will work fine
+                console.debug(`ℹ️ ProjectDetail: Optional dependencies not yet loaded: ${optional.join(', ')} (will load on demand)`);
             }
             initializeProjectDetail();
             return;
@@ -86,12 +86,11 @@
     const { missing, optional } = checkDependencies();
     if (missing.length === 0) {
         if (optional.length > 0) {
-            console.warn(`⚠️ ProjectDetail: Optional dependencies missing: ${optional.join(', ')}`);
+            // Use debug level - these are optional and component will work fine
+            console.debug(`ℹ️ ProjectDetail: Optional dependencies not yet loaded: ${optional.join(', ')} (will load on demand)`);
         }
         initializeProjectDetail();
     } else {
-        if (optional.length > 0) {
-        }
         waitForDependencies();
     }
     
