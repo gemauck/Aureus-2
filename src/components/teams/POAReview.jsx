@@ -374,3 +374,13 @@ const POAReview = () => {
 // Make available globally
 window.POAReview = POAReview;
 
+// Dispatch event to notify other components
+try {
+    window.dispatchEvent(new CustomEvent('componentLoaded', { 
+        detail: { component: 'POAReview' } 
+    }));
+    console.log('✅ POAReview component registered and event dispatched');
+} catch (error) {
+    console.warn('⚠️ Failed to dispatch componentLoaded event:', error);
+}
+

@@ -77,6 +77,7 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
         './src/components/teams/NoticeModal.jsx',
         './src/components/teams/WorkflowExecutionModal.jsx',
         './src/components/teams/ManagementMeetingNotes.jsx',
+        './src/components/teams/POAReview.jsx',
         './src/components/teams/JobCardModal.jsx',
         './src/components/teams/TeamModals.jsx',
         './src/components/teams/Teams.jsx',
