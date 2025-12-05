@@ -118,6 +118,8 @@ const POAReview = () => {
                 sources: sources || ['Inmine: Daily Diesel Issues']
             };
             
+            console.log('POA Review - Sending process request with payload:', JSON.stringify(processPayload, null, 2));
+            
             console.log('POA Review - Process request payload:', processPayload);
             
             const processResponse = await fetch('/api/poa-review/process', {
