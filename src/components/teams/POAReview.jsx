@@ -136,6 +136,8 @@ const POAReview = () => {
 
             if (!processResponse.ok) {
                 let errorMessage = 'Failed to process file';
+                // Clone the response so we can read it multiple times if needed
+                const responseClone = processResponse.clone();
                 try {
                     const errorData = await processResponse.json();
                     console.error('POA Review API Error Response:', errorData);
@@ -159,9 +161,16 @@ const POAReview = () => {
                         errorMessage = `Server error: ${JSON.stringify(errorData)}`;
                     }
                 } catch (parseError) {
-                    const text = await processResponse.text();
-                    errorMessage = text || `Server returned ${processResponse.status}: ${processResponse.statusText}`;
-                    console.error('POA Review API Error (text):', text);
+                    // If JSON parsing failed, try reading as text from the cloned response
+                    try {
+                        const text = await responseClone.text();
+                        errorMessage = text || `Server returned ${processResponse.status}: ${processResponse.statusText}`;
+                        console.error('POA Review API Error (text):', text);
+                    } catch (textError) {
+                        // If both fail, use status text
+                        errorMessage = `Server returned ${processResponse.status}: ${processResponse.statusText}`;
+                        console.error('POA Review API Error (both JSON and text failed):', textError);
+                    }
                 }
                 throw new Error(errorMessage);
             }
