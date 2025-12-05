@@ -173,10 +173,41 @@ except Exception as e:
             stderr = result.stderr;
         } catch (execError) {
             console.error('Python execution error:', execError);
+            // When Python script exits with non-zero code, execAsync throws an error
+            // The output is usually in execError.stdout (because we use 2>&1)
             stdout = execError.stdout || '';
-            stderr = execError.stderr || execError.message || '';
-            // If Python script failed, we need to see the error
-            throw new Error(`Python script execution failed: ${stderr || execError.message}`);
+            stderr = execError.stderr || '';
+            
+            // Combine stdout and stderr for error detection (2>&1 redirects stderr to stdout)
+            const combinedErrorOutput = (stdout || '') + (stderr || '');
+            
+            // Extract user-friendly error message
+            let errorMessage = 'Python script execution failed';
+            if (combinedErrorOutput.includes('KeyError')) {
+                const keyErrorMatch = combinedErrorOutput.match(/KeyError:\s*['"]([^'"]+)['"]/);
+                if (keyErrorMatch) {
+                    errorMessage = `Missing required column in Excel file: "${keyErrorMatch[1]}". Please ensure your file contains all required columns.`;
+                } else {
+                    errorMessage = 'Missing required column in Excel file. Please check the file structure.';
+                }
+            } else if (combinedErrorOutput.includes('Error:')) {
+                const errorMatch = combinedErrorOutput.match(/Error:\s*(.+?)(?:\n|Traceback|$)/s);
+                if (errorMatch) {
+                    errorMessage = errorMatch[1].trim();
+                }
+            } else if (execError.message) {
+                errorMessage = execError.message;
+            }
+            
+            // Log the full error for debugging
+            console.error('Python script error details:', {
+                stdout,
+                stderr,
+                message: execError.message,
+                code: execError.code
+            });
+            
+            throw new Error(errorMessage);
         }
 
         console.log('Python stdout:', stdout);
@@ -185,8 +216,33 @@ except Exception as e:
         }
         
         // Check if Python script exited with error
-        if (stderr && stderr.includes('Error:') || stderr.includes('Traceback')) {
-            throw new Error(`Python script error: ${stderr}`);
+        // Check both stdout and stderr for errors (Python errors can go to either)
+        const combinedOutput = (stdout || '') + (stderr || '');
+        if (combinedOutput.includes('Error:') || combinedOutput.includes('Traceback') || combinedOutput.includes('KeyError')) {
+            // Extract a more user-friendly error message
+            let errorMessage = 'Python script error occurred';
+            if (combinedOutput.includes('KeyError')) {
+                const keyErrorMatch = combinedOutput.match(/KeyError:\s*['"]([^'"]+)['"]/);
+                if (keyErrorMatch) {
+                    errorMessage = `Missing required column in Excel file: "${keyErrorMatch[1]}". Please ensure your file contains all required columns.`;
+                } else {
+                    errorMessage = 'Missing required column in Excel file. Please check the file structure.';
+                }
+            } else if (combinedOutput.includes('Error:')) {
+                const errorMatch = combinedOutput.match(/Error:\s*(.+?)(?:\n|Traceback)/);
+                if (errorMatch) {
+                    errorMessage = errorMatch[1].trim();
+                }
+            }
+            throw new Error(errorMessage);
+        }
+        
+        // Also check if stdout indicates failure
+        if (stdout && stdout.includes('Error:')) {
+            const errorMatch = stdout.match(/Error:\s*(.+?)(?:\n|$)/);
+            if (errorMatch) {
+                throw new Error(errorMatch[1].trim());
+            }
         }
 
         // Clean up temp script
