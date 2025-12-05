@@ -155,18 +155,38 @@ except Exception as e:
 
         fs.writeFileSync(tempProcessScript, pythonScript);
 
-        // Execute Python script
+        // Execute Python script using virtual environment
         console.log('Executing Python script...');
-        const pythonCommand = `python3 "${tempProcessScript}"`;
+        const venvPython = path.join(rootDir, 'venv-poareview', 'bin', 'python3');
+        const pythonCommand = `"${venvPython}" "${tempProcessScript}" 2>&1`;
+        console.log('Python command:', pythonCommand);
+        console.log('Working directory:', scriptsDir);
         
-        const { stdout, stderr } = await execAsync(pythonCommand, {
-            cwd: scriptsDir,
-            maxBuffer: 10 * 1024 * 1024 // 10MB buffer
-        });
+        let stdout, stderr;
+        try {
+            const result = await execAsync(pythonCommand, {
+                cwd: scriptsDir,
+                maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+                timeout: 300000 // 5 minute timeout
+            });
+            stdout = result.stdout;
+            stderr = result.stderr;
+        } catch (execError) {
+            console.error('Python execution error:', execError);
+            stdout = execError.stdout || '';
+            stderr = execError.stderr || execError.message || '';
+            // If Python script failed, we need to see the error
+            throw new Error(`Python script execution failed: ${stderr || execError.message}`);
+        }
 
         console.log('Python stdout:', stdout);
         if (stderr) {
             console.warn('Python stderr:', stderr);
+        }
+        
+        // Check if Python script exited with error
+        if (stderr && stderr.includes('Error:') || stderr.includes('Traceback')) {
+            throw new Error(`Python script error: ${stderr}`);
         }
 
         // Clean up temp script

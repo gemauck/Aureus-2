@@ -138,8 +138,20 @@ const POAReview = () => {
                 let errorMessage = 'Failed to process file';
                 try {
                     const errorData = await processResponse.json();
-                    errorMessage = errorData.message || errorData.error || `Server returned ${processResponse.status}: ${processResponse.statusText}`;
-                    console.error('POA Review API Error:', errorData);
+                    console.error('POA Review API Error Response:', errorData);
+                    
+                    // Handle different error response formats
+                    if (typeof errorData === 'string') {
+                        errorMessage = errorData;
+                    } else if (errorData.error) {
+                        errorMessage = typeof errorData.error === 'string' 
+                            ? errorData.error 
+                            : errorData.error.message || JSON.stringify(errorData.error);
+                    } else if (errorData.message) {
+                        errorMessage = errorData.message;
+                    } else {
+                        errorMessage = `Server returned ${processResponse.status}: ${JSON.stringify(errorData)}`;
+                    }
                 } catch (parseError) {
                     const text = await processResponse.text();
                     errorMessage = text || `Server returned ${processResponse.status}: ${processResponse.statusText}`;
