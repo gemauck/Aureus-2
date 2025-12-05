@@ -79,23 +79,41 @@ const POAReview = () => {
             });
 
             if (!uploadResponse.ok) {
-                throw new Error('Failed to upload file');
+                const errorText = await uploadResponse.text();
+                console.error('POA Review - Upload failed:', uploadResponse.status, errorText);
+                throw new Error(`Upload failed: ${uploadResponse.status} ${errorText}`);
             }
 
-            const uploadResult = await uploadResponse.json();
-            console.log('POA Review - Upload result:', uploadResult);
-            
-            // Validate upload result
-            if (!uploadResult || !uploadResult.url) {
-                throw new Error(`Upload failed: Invalid response. Expected 'url' field, got: ${JSON.stringify(uploadResult)}`);
+            let uploadResult;
+            try {
+                uploadResult = await uploadResponse.json();
+                console.log('POA Review - Upload result:', uploadResult);
+            } catch (parseError) {
+                const text = await uploadResponse.text();
+                console.error('POA Review - Failed to parse upload response:', text);
+                throw new Error(`Upload response parse error: ${parseError.message}`);
             }
+            
+            // Validate upload result - check for url property
+            if (!uploadResult) {
+                throw new Error(`Upload failed: Empty response`);
+            }
+            
+            // The API returns { url, name, size, mimeType }
+            const filePath = uploadResult.url || uploadResult.path || uploadResult.filePath;
+            if (!filePath) {
+                console.error('POA Review - Upload result missing url:', uploadResult);
+                throw new Error(`Upload failed: Missing 'url' in response. Got: ${JSON.stringify(uploadResult)}`);
+            }
+            
+            console.log('POA Review - Extracted filePath:', filePath);
             
             setProcessingProgress('Processing data...');
 
             // Process the file
-            // uploadResult.url is the public URL path like "/uploads/poa-review-inputs/file.xlsx"
+            // filePath is the public URL path like "/uploads/poa-review-inputs/file.xlsx"
             const processPayload = {
-                filePath: uploadResult.url, // This should be "/uploads/poa-review-inputs/filename.xlsx"
+                filePath: filePath, // This should be "/uploads/poa-review-inputs/filename.xlsx"
                 fileName: uploadedFile.name,
                 sources: sources || ['Inmine: Daily Diesel Issues']
             };
