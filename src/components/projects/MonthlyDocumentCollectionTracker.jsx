@@ -430,14 +430,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
             }
                 
+                // CRITICAL: Never update if we have unsaved local changes, regardless of snapshot matching
+                // This prevents overwriting local changes before they're saved to the database
+                // The only exception is forceUpdate, which should only be used after a successful save
+                if (hasUnsavedChanges && !forceUpdate) {
+                    console.log('⏸️ Refresh skipped: unsaved local changes detected (will not overwrite)', {
+                        hasUnsavedChanges: true,
+                        isSaving: isSavingRef.current,
+                        currentSnapshot: currentSnapshot.substring(0, 100),
+                        lastSavedSnapshot: lastSavedSnapshotRef.current.substring(0, 100)
+                    });
+                    return;
+                }
+                
                 // Update if:
                 // 1. No unsaved local changes (safe to update), OR
-                // 2. Database matches what we last saved AND we're not currently saving (database hasn't changed, safe to update), OR
-                // 3. Force update requested
-                // CRITICAL: Don't update if we have unsaved changes AND a save is in progress, even if snapshots match
-                // This prevents overwriting local changes before they're saved to the database
+                // 2. Database matches what we last saved (database hasn't changed, safe to update), OR
+                // 3. Force update requested (after successful save)
                 const shouldUpdate = !hasUnsavedChanges || 
-                                    (freshSnapshot === lastSavedSnapshotRef.current && !isSavingRef.current) || 
+                                    (freshSnapshot === lastSavedSnapshotRef.current) || 
                                     forceUpdate;
                 
                 if (shouldUpdate) {
@@ -451,8 +462,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     } else {
                         console.log('⏸️ State update skipped: deletion in progress');
                     }
-                } else {
-                    console.log('⏸️ Refresh skipped: unsaved local changes detected (will not overwrite)');
                 }
             } else {
                 // Data matches, update snapshot reference if needed
