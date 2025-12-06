@@ -640,17 +640,29 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             }
             
             refreshTimeoutRef.current = setTimeout(() => {
-                // Only refresh if no changes have been made in the last 2 seconds
+                // Check if there are unsaved changes or recent changes
                 const timeSinceLastChange = Date.now() - lastChangeTimestampRef.current;
-                if (timeSinceLastChange > 2000) {
+                const currentSnapshot = serializeSections(sectionsRef.current);
+                const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
+                
+                // Only refresh if:
+                // 1. No changes in last 5 seconds, AND
+                // 2. No unsaved changes (everything is saved)
+                if (timeSinceLastChange > 5000 && !hasUnsavedChanges) {
                     refreshFromDatabase(true);
                 } else {
-                    // User is still making changes, schedule refresh for later
+                    // User is still making changes or has unsaved changes
+                    // Schedule refresh for later when user stops making changes
                     refreshTimeoutRef.current = setTimeout(() => {
-                        refreshFromDatabase(true);
-                    }, 2000);
+                        const timeSinceLastChange2 = Date.now() - lastChangeTimestampRef.current;
+                        const currentSnapshot2 = serializeSections(sectionsRef.current);
+                        const hasUnsavedChanges2 = currentSnapshot2 !== lastSavedSnapshotRef.current;
+                        if (timeSinceLastChange2 > 5000 && !hasUnsavedChanges2) {
+                            refreshFromDatabase(true);
+                        }
+                    }, 5000);
                 }
-            }, 1500);
+            }, 2000);
         } catch (error) {
             console.error('❌ Error saving to database:', error);
             // Don't throw - allow user to continue working; auto‑save will retry on next change
