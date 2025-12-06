@@ -1857,8 +1857,29 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             }
                         }}
                         onMouseDown={(e) => {
-                            // Prevent cell click handler from firing when clicking the select
-                            e.stopPropagation();
+                            // Allow Ctrl/Cmd+Click to bubble up for multi-select
+                            // Only stop propagation for normal clicks
+                            if (!e.ctrlKey && !e.metaKey) {
+                                e.stopPropagation();
+                            }
+                        }}
+                        onClick={(e) => {
+                            // Handle Ctrl/Cmd+Click on the select itself for multi-select
+                            if (e.ctrlKey || e.metaKey) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                
+                                setSelectedCells(prev => {
+                                    const newSet = new Set(prev);
+                                    if (newSet.has(cellKey)) {
+                                        newSet.delete(cellKey);
+                                    } else {
+                                        newSet.add(cellKey);
+                                    }
+                                    selectedCellsRef.current = newSet;
+                                    return newSet;
+                                });
+                            }
                         }}
                         aria-label={`Status for ${document.name || 'document'} in ${month} ${selectedYear}`}
                         role="combobox"
