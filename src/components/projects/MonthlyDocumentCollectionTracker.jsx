@@ -1409,9 +1409,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             sectionsRef.current = updatedSectionsByYear;
             
             // Clear selection after applying status to multiple cells
+            // Use setTimeout to ensure React has updated the UI first
             if (applyToSelected && currentSelectedCells.size > 0) {
-                setSelectedCells(new Set());
-                selectedCellsRef.current = new Set();
+                setTimeout(() => {
+                    setSelectedCells(new Set());
+                    selectedCellsRef.current = new Set();
+                }, 100);
             }
             
             return updatedSectionsByYear;
