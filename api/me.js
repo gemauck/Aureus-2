@@ -36,8 +36,9 @@ async function handler(req, res) {
 
     let user
     try {
-      // Query user with all fields including permissions
-      const userQuery = await prisma.user.findUnique({ 
+      // Add timeout to database query to fail faster on connection issues
+      const DB_QUERY_TIMEOUT = 10000 // 10 seconds
+      const queryPromise = prisma.user.findUnique({ 
         where: { id: req.user.sub },
         select: {
           id: true,
@@ -55,6 +56,15 @@ async function handler(req, res) {
         }
       })
       
+      // Race the query against a timeout
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Database query timeout: The database server did not respond in time. This may indicate a connection issue.'))
+        }, DB_QUERY_TIMEOUT)
+      })
+      
+      const userQuery = await Promise.race([queryPromise, timeoutPromise])
+      
       // Use user query result directly, with fallback for permissions if null
       if (userQuery) {
         user = {
@@ -67,8 +77,16 @@ async function handler(req, res) {
       console.error('❌ Me endpoint: Error stack:', dbError.stack)
       
       // Check if it's a connection error using utility
-      if (isConnectionError(dbError)) {
-        return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+      if (isConnectionError(dbError) || dbError.message?.includes('timeout')) {
+        // Return 503 (Service Unavailable) instead of 500 for connection issues
+        // This is more semantically correct and can be handled differently by clients
+        return res.status(503).json({
+          error: 'Service Unavailable',
+          message: 'Database connection failed. The database server is unreachable.',
+          details: process.env.NODE_ENV === 'development' ? dbError.message : undefined,
+          code: 'DATABASE_CONNECTION_ERROR',
+          timestamp: new Date().toISOString()
+        })
       }
       
       // Return error instead of throwing to avoid double error handling

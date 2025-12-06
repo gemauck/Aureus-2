@@ -5492,8 +5492,9 @@ const Clients = React.memo(() => {
                                                 memberships = client.groupMemberships;
                                             }
                                             
-                                            // Debug: log for Exxaro clients
-                                            if (client.name && client.name.toLowerCase().includes('exxaro')) {
+                                            // Debug: log for Exxaro clients (only in development mode)
+                                            // Removed excessive logging in production to improve performance
+                                            if (process.env.NODE_ENV === 'development' && client.name && client.name.toLowerCase().includes('exxaro')) {
                                                 console.log(`🔍 Rendering ${client.name}:`, {
                                                     hasGroupMemberships: !!client.groupMemberships,
                                                     isArray: Array.isArray(client.groupMemberships),

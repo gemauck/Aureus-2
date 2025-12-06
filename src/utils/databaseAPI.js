@@ -695,13 +695,15 @@ const DatabaseAPI = {
 
                     // Check if this is a retry-able server error (500, 502, 503, 504)
                     // 500 errors are often temporary server issues and should be retried
+                    // 503 errors indicate service unavailable (often database connection issues) - fail fast
                     const isRetryableServerError = response.status === 500 || response.status === 502 || response.status === 503 || response.status === 504;
                     
-                    // For 502 errors, use fewer retries (0 instead of 2) to fail faster
-                    // 502 errors often indicate server is down, so quick failure is better
+                    // For 502 and 503 errors, use fewer retries (0 instead of 2) to fail faster
+                    // 502/503 errors often indicate server/database is down, so quick failure is better
                     // Circuit breaker will handle retries after cooldown period
                     const is502Error = response.status === 502;
-                    const effectiveMaxRetries = is502Error ? 0 : maxRetries; // No retries for 502 - circuit breaker handles it
+                    const is503Error = response.status === 503;
+                    const effectiveMaxRetries = (is502Error || is503Error) ? 0 : maxRetries; // No retries for 502/503 - circuit breaker handles it
                     
                     if (isRetryableServerError && attempt < effectiveMaxRetries) {
                         // Check circuit breaker before retrying - if open, fail fast
@@ -718,13 +720,19 @@ const DatabaseAPI = {
                         
                         // Use longer delays for server errors to reduce load
                         // Server errors need time to recover, so wait longer
-                        const retryBaseDelay = is502Error ? 5000 : baseDelay; // 5s for 502, 2s for others
+                        // 503 errors (database connection issues) should fail fast, not retry
+                        const retryBaseDelay = (is502Error || is503Error) ? 5000 : baseDelay; // 5s for 502/503, 2s for others
                         const delay = Math.min(retryBaseDelay * Math.pow(2, attempt), 30000); // Cap at 30 seconds
                         
-                        // Suppress all retry warnings for 502 errors - they're already aggregated
-                        // Only log warnings for 500/503/504 errors (and only on first attempt)
-                        if (attempt === 0 && response.status !== 500 && response.status !== 502) {
+                        // Suppress all retry warnings for 502/503 errors - they're already aggregated
+                        // Only log warnings for 500/504 errors (and only on first attempt)
+                        if (attempt === 0 && response.status !== 500 && response.status !== 502 && response.status !== 503) {
                             console.warn(`⚠️ Server error ${response.status} on ${endpoint} (attempt ${attempt + 1}/${effectiveMaxRetries + 1}). Retrying in ${delay}ms...`);
+                        }
+                        
+                        // For 503 errors, provide more helpful error message
+                        if (is503Error && attempt === 0) {
+                            console.error('🔌 Service unavailable (503) - Database connection issue detected. This may indicate the database server is unreachable.');
                         }
                         await new Promise(resolve => setTimeout(resolve, delay));
                         continue; // Retry the request
@@ -745,6 +753,28 @@ const DatabaseAPI = {
                             }
                         }
                         throw new Error(serverErrorMessage || 'Authentication expired or unauthorized.');
+                    }
+                    
+                    // Handle 503 Service Unavailable (database connection issues)
+                    if (response.status === 503) {
+                        // Record failure in circuit breaker
+                        this._recordFailure(endpoint);
+                        
+                        // Extract error message from response
+                        const errorMsg = serverErrorMessage || serverError?.message || 'Service unavailable - database connection issue';
+                        const errorCode = serverError?.code || 'DATABASE_CONNECTION_ERROR';
+                        
+                        // Log only on first attempt to avoid spam
+                        if (attempt === 0) {
+                            console.error(`🔌 Service Unavailable (503) on ${endpoint}: Database connection issue detected`);
+                        }
+                        
+                        // Create error with 503 status
+                        const dbError = new Error(`Database connection failed. The database server is unreachable. Please contact support if this issue persists.`);
+                        dbError.status = 503;
+                        dbError.code = errorCode;
+                        dbError.isDatabaseError = true;
+                        throw dbError;
                     }
                     
                     // Handle database connection errors with user-friendly messages

@@ -460,6 +460,14 @@ async function handler(req, res) {
             message: dbError.message,
             name: dbError.name
           })
+          // Return 503 (Service Unavailable) for database connection issues
+          return res.status(503).json({
+            error: 'Service Unavailable',
+            message: 'Database connection failed. The database server is unreachable.',
+            details: process.env.NODE_ENV === 'development' ? dbError.message : undefined,
+            code: 'DATABASE_CONNECTION_ERROR',
+            timestamp: new Date().toISOString()
+          })
         }
         
         // Return detailed error for debugging (include error code and message)

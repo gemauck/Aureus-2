@@ -582,7 +582,14 @@ async function handler(req, res) {
             : 'Database operation failed. Please check server logs for details.'
         
         if (isConnError) {
-          return serverError(res, 'Database connection failed', errorDetails)
+          // Return 503 (Service Unavailable) for database connection issues
+          return res.status(503).json({
+            error: 'Service Unavailable',
+            message: 'Database connection failed. The database server is unreachable.',
+            details: process.env.NODE_ENV === 'development' ? dbError.message : undefined,
+            code: 'DATABASE_CONNECTION_ERROR',
+            timestamp: new Date().toISOString()
+          })
         }
         return serverError(res, 'Failed to list leads', errorDetails)
       }

@@ -224,6 +224,31 @@ async function request(path, options = {}) {
 
     // Check for gateway errors (502, 503, 504) that return HTML
     if (!res.ok && (res.status === 502 || res.status === 503 || res.status === 504)) {
+      // For 503 errors, check if it's a database connection issue
+      if (res.status === 503) {
+        let errorMessage = 'Service unavailable - database connection issue';
+        let errorCode = 'DATABASE_CONNECTION_ERROR';
+        
+        // Try to parse error details from response
+        try {
+          if (text) {
+            const jsonData = JSON.parse(text);
+            if (jsonData.code === 'DATABASE_CONNECTION_ERROR') {
+              errorMessage = jsonData.message || errorMessage;
+              errorCode = jsonData.code;
+            }
+          }
+        } catch (_) {
+          // If parsing fails, use default message
+        }
+        
+        const dbError = new Error(errorMessage);
+        dbError.status = 503;
+        dbError.code = errorCode;
+        dbError.isDatabaseError = true;
+        throw dbError;
+      }
+      
       const gatewayError = new Error(`Server unavailable (${res.status}): The server is temporarily unavailable. Please try again later.`);
       gatewayError.status = res.status;
       throw gatewayError; // Throw immediately so it can be caught and handled

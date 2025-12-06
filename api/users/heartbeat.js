@@ -12,6 +12,11 @@ async function handler(req, res) {
   }
 
   try {
+    // Ensure response hasn't been sent
+    if (res.headersSent || res.writableEnded) {
+      return
+    }
+
     if (!req.user) {
       return unauthorized(res, 'Authentication required')
     }
@@ -23,15 +28,44 @@ async function handler(req, res) {
 
     // Update lastSeenAt timestamp
     // Use updateMany to avoid throwing error if user doesn't exist
-    const updateResult = await prisma.user.updateMany({
-      where: { id: userId },
-      data: { lastSeenAt: new Date() }
-    })
+    // Wrap in try-catch to handle database errors gracefully
+    let updateResult
+    try {
+      updateResult = await prisma.user.updateMany({
+        where: { id: userId },
+        data: { lastSeenAt: new Date() }
+      })
+    } catch (dbError) {
+      // Check if it's a database connection error
+      if (isConnectionError(dbError)) {
+        // Return 503 (Service Unavailable) for database connection issues
+        // Don't log as error since this is expected during DB outages
+        if (!res.headersSent && !res.writableEnded) {
+          return res.status(503).json({
+            error: 'Service Unavailable',
+            message: 'Database connection failed. The database server is unreachable.',
+            details: process.env.NODE_ENV === 'development' ? dbError.message : undefined,
+            code: 'DATABASE_CONNECTION_ERROR',
+            timestamp: new Date().toISOString()
+          })
+        }
+        return
+      }
+      // Re-throw other database errors to be handled below
+      throw dbError
+    }
 
     // If no rows were updated, user doesn't exist (token might be stale)
+    // This is not an error - just return success (heartbeat still processed)
+    // We don't want to fail heartbeat just because user record doesn't exist
     if (updateResult.count === 0) {
-      console.warn(`⚠️ Heartbeat: User ${userId} not found in database (token may be stale)`)
-      return notFound(res, 'User not found - token may be invalid')
+      // Silently succeed - user might have been deleted but token is still valid
+      // This prevents unnecessary 404 errors in logs
+      return ok(res, { 
+        success: true,
+        timestamp: new Date().toISOString(),
+        note: 'User record not found, but heartbeat processed'
+      })
     }
 
     return ok(res, { 
@@ -39,11 +73,22 @@ async function handler(req, res) {
       timestamp: new Date().toISOString()
     })
   } catch (error) {
-    console.error('Heartbeat error:', error)
-    
+    // Ensure response hasn't been sent before attempting to send error
+    if (res.headersSent || res.writableEnded) {
+      console.error('❌ Heartbeat: Error occurred but response already sent:', error.message)
+      return
+    }
+
     // Check if it's a database connection error using utility
     if (isConnectionError(error)) {
-      return serverError(res, `Database connection failed: ${error.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+      // Return 503 (Service Unavailable) for database connection issues
+      return res.status(503).json({
+        error: 'Service Unavailable',
+        message: 'Database connection failed. The database server is unreachable.',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+        code: 'DATABASE_CONNECTION_ERROR',
+        timestamp: new Date().toISOString()
+      })
     }
     
     // Check if it's a Prisma "record not found" error
@@ -55,17 +100,24 @@ async function handler(req, res) {
       errorMessage.includes('No User found')
     
     if (isRecordNotFound) {
-      console.warn(`⚠️ Heartbeat: User not found (${req.user?.sub || 'unknown'})`)
-      return notFound(res, 'User not found - token may be invalid')
+      // Return success instead of 404 - heartbeat should not fail for missing users
+      return ok(res, { 
+        success: true,
+        timestamp: new Date().toISOString(),
+        note: 'User record not found, but heartbeat processed'
+      })
     }
     
-    // For other errors, return 500 but log the full error
+    // For other unexpected errors, log but return a graceful error
     console.error('❌ Heartbeat: Unexpected error:', {
       name: error.name,
       message: errorMessage,
       code: errorCode,
-      stack: error.stack
+      userId: req.user?.sub || req.user?.id || 'unknown',
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     })
+    
+    // Return 500 only for truly unexpected errors
     return serverError(res, 'Failed to update heartbeat', errorMessage)
   }
 }

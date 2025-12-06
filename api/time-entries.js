@@ -26,7 +26,14 @@ async function handler(req, res) {
       } catch (dbError) {
         const isConnError = logDatabaseError(dbError, 'listing time entries')
         if (isConnError) {
-          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+          // Return 503 (Service Unavailable) for database connection issues
+          return res.status(503).json({
+            error: 'Service Unavailable',
+            message: 'Database connection failed. The database server is unreachable.',
+            details: process.env.NODE_ENV === 'development' ? dbError.message : undefined,
+            code: 'DATABASE_CONNECTION_ERROR',
+            timestamp: new Date().toISOString()
+          })
         }
         return serverError(res, 'Failed to list time entries', dbError.message)
       }

@@ -1066,7 +1066,12 @@ const TaskDetailModal = ({
                                         </div>
                                     ) : (
                                         comments.map(comment => (
-                                            <div key={comment.id} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                                            <div 
+                                                key={comment.id} 
+                                                data-comment-id={comment.id}
+                                                id={comment.id ? `comment-${comment.id}` : undefined}
+                                                className="bg-gray-50 rounded-lg p-3 border border-gray-200"
+                                            >
                                                 <div className="flex items-start justify-between mb-1.5">
                                                     <div className="flex items-center gap-1.5">
                                                         <div className="w-6 h-6 rounded-full bg-primary-600 flex items-center justify-center text-white font-semibold text-[10px]">

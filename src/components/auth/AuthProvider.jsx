@@ -155,6 +155,17 @@ const AuthProvider = ({ children }) => {
                             }
                         } catch (err) {
                             const errorMessage = err?.message || String(err);
+                            const errorStatus = err?.status || err?.response?.status;
+                            
+                            // Handle 503 Service Unavailable (database connection issues)
+                            if (errorStatus === 503 || errorMessage.includes('Service Unavailable') || errorMessage.includes('Database connection')) {
+                                console.error('🔌 Database connection issue detected - service unavailable');
+                                // Don't clear token on database connection errors - it's a server issue, not auth issue
+                                // Return null to indicate user couldn't be loaded, but don't force logout
+                                setUser(null);
+                                setLoading(false);
+                                return;
+                            }
                             
                             // Handle "User not found" error - means token is valid but user doesn't exist (orphaned token)
                             if (errorMessage.includes('User not found')) {

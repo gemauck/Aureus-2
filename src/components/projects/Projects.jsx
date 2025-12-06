@@ -321,6 +321,22 @@ const Projects = () => {
         };
     }, [selectedProject]);
     
+    // Listen for explicit navigation to projects list (e.g., clicking "Projects" in sidebar while already on projects page)
+    useEffect(() => {
+        const handleNavigateToProjectsList = (event) => {
+            // Clear the project detail view when explicitly navigating to projects list
+            if (viewingProject) {
+                setViewingProject(null);
+            }
+            if (selectedProject) {
+                setSelectedProject(null);
+            }
+        };
+        
+        window.addEventListener('navigateToProjectsList', handleNavigateToProjectsList);
+        return () => window.removeEventListener('navigateToProjectsList', handleNavigateToProjectsList);
+    }, [viewingProject, selectedProject]);
+    
     // Ensure storage is available
     useEffect(() => {
         if (!window.storage) {

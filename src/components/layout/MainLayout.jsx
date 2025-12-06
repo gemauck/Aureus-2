@@ -1004,6 +1004,15 @@ const MainLayout = () => {
                 // This ensures clicking "Projects" while viewing a project detail navigates back to projects list
                 // Even if already on the same page, navigate to clear any segments/subpaths
                 navigateToPage(item.id, { subpath: [] });
+                
+                // If clicking on Projects while already on projects page, dispatch event to clear project detail view
+                if (item.id === 'projects' && currentPage === 'projects') {
+                    // Dispatch a custom event that Projects component can listen to
+                    window.dispatchEvent(new CustomEvent('navigateToProjectsList', {
+                        detail: { clearProjectDetail: true }
+                    }));
+                }
+                
                 if (isMobile) {
                     setSidebarOpen(false);
                 }

@@ -276,6 +276,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 });
     const commentPopupContainerRef = useRef(null);
     
+    // Multi-select state: Set of cell keys (sectionId-documentId-month)
+    const [selectedCells, setSelectedCells] = useState(new Set());
+    
     // ============================================================
     // LOAD DATA FROM PROJECT PROP + REFRESH FROM DATABASE
     // ============================================================
@@ -1338,40 +1341,72 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // STATUS AND COMMENTS
     // ============================================================
     
-    const handleUpdateStatus = useCallback((sectionId, documentId, month, status) => {
-        // Get current state from ref to ensure we have the latest
-        const currentSectionsByYear = sectionsRef.current || {};
-        const currentYearSections = currentSectionsByYear[selectedYear] || [];
-        
-        // Update the sections for the current year
-        const updated = currentYearSections.map(section => {
-            if (section.id === sectionId) {
+    const handleUpdateStatus = useCallback((sectionId, documentId, month, status, applyToSelected = false) => {
+        // Use functional update to ensure we always work with the latest state
+        // This prevents race conditions when making rapid consecutive changes
+        setSectionsByYear(prev => {
+            const currentYearSections = prev[selectedYear] || [];
+            
+            // If applying to selected cells, get all selected cell keys
+            let cellsToUpdate = [];
+            if (applyToSelected && selectedCells.size > 0) {
+                // Parse all selected cell keys
+                cellsToUpdate = Array.from(selectedCells).map(cellKey => {
+                    const [secId, docId, mon] = cellKey.split('-');
+                    return { sectionId: secId, documentId: docId, month: mon };
+                });
+            } else {
+                // Just update the single cell
+                cellsToUpdate = [{ sectionId, documentId, month }];
+            }
+            
+            // Update the sections for the current year
+            const updated = currentYearSections.map(section => {
+                // Check if this section has any documents that need updating
+                const sectionUpdates = cellsToUpdate.filter(cell => String(section.id) === String(cell.sectionId));
+                if (sectionUpdates.length === 0) {
+                    return section;
+                }
+                
                 return {
                     ...section,
                     documents: section.documents.map(doc => {
-                        if (doc.id === documentId) {
-                            return {
-                                ...doc,
-                                collectionStatus: setStatusForYear(doc.collectionStatus || {}, month, status, selectedYear)
-                            };
+                        // Check if this document needs updating for any month
+                        const docUpdates = sectionUpdates.filter(cell => String(doc.id) === String(cell.documentId));
+                        if (docUpdates.length === 0) {
+                            return doc;
                         }
-                        return doc;
+                        
+                        // Apply status to all matching months for this document
+                        let updatedStatus = doc.collectionStatus || {};
+                        docUpdates.forEach(cell => {
+                            updatedStatus = setStatusForYear(updatedStatus, cell.month, status, selectedYear);
+                        });
+                        
+                        return {
+                            ...doc,
+                            collectionStatus: updatedStatus
+                        };
                     })
                 };
+            });
+            
+            const updatedSectionsByYear = {
+                ...prev,
+                [selectedYear]: updated
+            };
+            
+            // Update ref immediately to prevent race conditions with auto-save
+            sectionsRef.current = updatedSectionsByYear;
+            
+            // Clear selection after applying status to multiple cells
+            if (applyToSelected && selectedCells.size > 0) {
+                setSelectedCells(new Set());
             }
-            return section;
+            
+            return updatedSectionsByYear;
         });
-        
-        // Immediately update the ref FIRST to prevent race conditions with auto-save
-        const updatedSectionsByYear = {
-            ...currentSectionsByYear,
-            [selectedYear]: updated
-        };
-        sectionsRef.current = updatedSectionsByYear;
-        
-        // Then update React state (this will trigger re-render)
-        setSections(updated);
-    }, [selectedYear]);
+    }, [selectedYear, selectedCells]);
     
     const handleAddComment = async (sectionId, documentId, month, commentText) => {
         if (!commentText.trim()) return;
@@ -1635,16 +1670,28 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const handleClickOutside = (event) => {
             const isCommentButton = event.target.closest('[data-comment-cell]');
             const isInsidePopup = event.target.closest('.comment-popup');
+            const isStatusCell = event.target.closest('select[data-section-id]') || 
+                                 event.target.closest('td')?.querySelector('select[data-section-id]');
             
             if (hoverCommentCell && !isCommentButton && !isInsidePopup) {
                 setHoverCommentCell(null);
                 setQuickComment('');
             }
+            
+            // Clear selection when clicking outside status cells (unless Ctrl/Cmd is held)
+            // Don't clear if clicking on a status cell or its parent td
+            if (selectedCells.size > 0 && !isStatusCell && !event.ctrlKey && !event.metaKey) {
+                const clickedTd = event.target.closest('td');
+                // Only clear if not clicking on a td that contains a status select
+                if (!clickedTd || !clickedTd.querySelector('select[data-section-id]')) {
+                    setSelectedCells(new Set());
+                }
+            }
         };
         
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [hoverCommentCell]);
+    }, [hoverCommentCell, selectedCells]);
 
     // When opened via a deep-link (e.g. from an email notification), automatically
     // switch to the correct comment cell and open the popup so the user can
@@ -1657,6 +1704,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             const deepSectionId = params.get('docSectionId');
             const deepDocumentId = params.get('docDocumentId');
             const deepMonth = params.get('docMonth');
+            const deepCommentId = params.get('commentId');
             
             if (deepSectionId && deepDocumentId && deepMonth) {
                 const cellKey = `${deepSectionId}-${deepDocumentId}-${deepMonth}`;
@@ -1666,6 +1714,40 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     left: Math.max(window.innerWidth / 2 - 180, 20)
                 });
                 setHoverCommentCell(cellKey);
+                
+                // If a specific comment ID is provided, scroll to it after the popup opens
+                if (deepCommentId) {
+                    // Wait for the popup to render and comments to load
+                    setTimeout(() => {
+                        const commentElement = document.querySelector(`[data-comment-id="${deepCommentId}"]`) ||
+                                             document.querySelector(`#comment-${deepCommentId}`);
+                        if (commentElement && commentPopupContainerRef.current) {
+                            // Scroll the comment into view within the popup
+                            commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            // Also scroll the popup container to ensure visibility
+                            if (commentPopupContainerRef.current) {
+                                const containerRect = commentPopupContainerRef.current.getBoundingClientRect();
+                                const commentRect = commentElement.getBoundingClientRect();
+                                const scrollTop = commentPopupContainerRef.current.scrollTop;
+                                const commentOffset = commentRect.top - containerRect.top + scrollTop;
+                                commentPopupContainerRef.current.scrollTo({
+                                    top: commentOffset - 20, // 20px padding from top
+                                    behavior: 'smooth'
+                                });
+                            }
+                            // Highlight the comment briefly
+                            const originalBg = window.getComputedStyle(commentElement).backgroundColor;
+                            commentElement.style.transition = 'background-color 0.3s, box-shadow 0.3s';
+                            commentElement.style.backgroundColor = 'rgba(59, 130, 246, 0.15)';
+                            commentElement.style.boxShadow = '0 0 0 3px rgba(59, 130, 246, 0.3)';
+                            setTimeout(() => {
+                                commentElement.style.backgroundColor = originalBg;
+                                commentElement.style.boxShadow = '';
+                                commentElement.style.transition = '';
+                            }, 2000);
+                        }
+                    }, 500); // Wait 500ms for popup to render
+                }
             }
         } catch (error) {
             console.warn('⚠️ Failed to apply document collection deep-link:', error);
@@ -1683,18 +1765,53 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const hasComments = comments.length > 0;
         const cellKey = `${section.id}-${document.id}-${month}`;
         const isPopupOpen = hoverCommentCell === cellKey;
+        const isSelected = selectedCells.has(cellKey);
         
         const isWorkingMonth = workingMonths.includes(months.indexOf(month)) && selectedYear === currentYear;
-        const cellBackgroundClass = statusConfig 
+        let cellBackgroundClass = statusConfig 
             ? statusConfig.cellColor 
             : (isWorkingMonth ? 'bg-primary-50' : '');
+        
+        // Add selection styling (with higher priority)
+        if (isSelected) {
+            cellBackgroundClass = 'bg-blue-200 border-2 border-blue-500';
+        }
         
         const textColorClass = statusConfig && statusConfig.color 
             ? statusConfig.color.split(' ').find(cls => cls.startsWith('text-')) || 'text-gray-900'
             : 'text-gray-400';
         
+        const handleCellClick = (e) => {
+            // Check for Ctrl (Windows/Linux) or Cmd (Mac) modifier
+            const isMultiSelect = e.ctrlKey || e.metaKey;
+            
+            if (isMultiSelect) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                setSelectedCells(prev => {
+                    const newSet = new Set(prev);
+                    if (newSet.has(cellKey)) {
+                        newSet.delete(cellKey);
+                    } else {
+                        newSet.add(cellKey);
+                    }
+                    return newSet;
+                });
+            } else {
+                // Single click without modifier - clear selection if clicking on a different cell
+                if (selectedCells.size > 0 && !selectedCells.has(cellKey)) {
+                    setSelectedCells(new Set());
+                }
+            }
+        };
+        
         return (
-            <td className={`px-2 py-1 text-xs border-l border-gray-100 ${cellBackgroundClass} relative`}>
+            <td 
+                className={`px-2 py-1 text-xs border-l border-gray-100 ${cellBackgroundClass} relative ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
+                onClick={handleCellClick}
+                title={isSelected ? 'Selected (Ctrl/Cmd+Click to deselect)' : 'Ctrl/Cmd+Click to select multiple'}
+            >
                 <div className="min-w-[160px] relative">
                     <select
                         value={status || ''}
@@ -1702,14 +1819,21 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             e.preventDefault();
                             e.stopPropagation();
                             const newStatus = e.target.value;
-                            handleUpdateStatus(section.id, document.id, month, newStatus);
+                            // Apply to all selected cells if this cell is part of the selection, otherwise just this cell
+                            const applyToSelected = selectedCells.size > 0 && selectedCells.has(cellKey);
+                            handleUpdateStatus(section.id, document.id, month, newStatus, applyToSelected);
                         }}
                         onBlur={(e) => {
                             // Ensure state is saved on blur
                             const newStatus = e.target.value;
                             if (newStatus !== status) {
-                                handleUpdateStatus(section.id, document.id, month, newStatus);
+                                const applyToSelected = selectedCells.size > 0 && selectedCells.has(cellKey);
+                                handleUpdateStatus(section.id, document.id, month, newStatus, applyToSelected);
                             }
+                        }}
+                        onMouseDown={(e) => {
+                            // Prevent cell click handler from firing when clicking the select
+                            e.stopPropagation();
                         }}
                         aria-label={`Status for ${document.name || 'document'} in ${month} ${selectedYear}`}
                         role="combobox"
@@ -2387,7 +2511,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
                                 <div ref={commentPopupContainerRef} className="max-h-32 overflow-y-auto space-y-2 mb-2">
                                     {comments.map((comment, idx) => (
-                                        <div key={comment.id || idx} className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5 relative group">
+                                        <div 
+                                            key={comment.id || idx} 
+                                            data-comment-id={comment.id}
+                                            id={comment.id ? `comment-${comment.id}` : undefined}
+                                            className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5 relative group"
+                                        >
                                             <p
                                                 className="text-xs text-gray-700 whitespace-pre-wrap pr-6"
                                                 dangerouslySetInnerHTML={{
