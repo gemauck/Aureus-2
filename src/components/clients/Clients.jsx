@@ -1800,26 +1800,6 @@ const Clients = React.memo(() => {
                             }
                         }
                         
-                        // Only log for AccuFarm to reduce noise
-                        if (client.name && client.name.toLowerCase().includes('accufarm') && finalGroupMemberships.length === 0) {
-                            console.error('❌ AccuFarm MISSING groupMemberships!', {
-                                foundInRawApi,
-                                rawApiRefExists: !!latestApiClientsRef.current,
-                                hasPrevClient: !!prevClient,
-                                prevClientHasGroups: prevClient && prevClient.groupMemberships && Array.isArray(prevClient.groupMemberships) && prevClient.groupMemberships.length > 0,
-                                apiClient: apiClient ? {
-                                    id: apiClient.id,
-                                    name: apiClient.name,
-                                    hasGroupMemberships: !!apiClient.groupMemberships,
-                                    groupMembershipsType: typeof apiClient.groupMemberships,
-                                    groupMembershipsValue: apiClient.groupMemberships
-                                } : null,
-                                processedClient: processedClients.find(c => c.id === client.id) ? {
-                                    hasGroupMemberships: !!processedClients.find(c => c.id === client.id).groupMemberships
-                                } : null
-                            });
-                        }
-                        
                         return {
                             ...client,
                             groupMemberships: finalGroupMemberships
@@ -5106,12 +5086,23 @@ const Clients = React.memo(() => {
     }, [openLeadFromPipeline, openOpportunityFromPipeline]);
 
     const handleNavigateToProject = (projectId) => {
-        sessionStorage.setItem('openProjectId', projectId);
+        // Close client detail view
         setViewMode('clients');
         selectedClientRef.current = null;
-        window.dispatchEvent(new CustomEvent('navigateToPage', { 
-            detail: { page: 'projects', projectId } 
-        }));
+        
+        // Navigate directly to the project using hash URL
+        // This will trigger MainLayout's route handler which dispatches openEntityDetail event
+        if (window.RouteState) {
+            // Use RouteState API if available
+            window.RouteState.setPageSubpath('projects', [projectId], { 
+                replace: false, 
+                preserveSearch: false, 
+                preserveHash: false 
+            });
+        } else {
+            // Fallback to direct hash navigation
+            window.location.hash = `#/projects/${projectId}`;
+        }
     };
 
     const convertLeadToClient = (lead) => {
