@@ -341,11 +341,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return;
         }
         
-        // Don't refresh if user made changes recently (within last 2 seconds)
+        // Don't refresh if user made changes recently (within last 5 seconds)
         // This prevents overwriting rapid consecutive changes
         const timeSinceLastChange = Date.now() - lastChangeTimestampRef.current;
-        if (!forceUpdate && timeSinceLastChange < 2000) {
+        if (!forceUpdate && timeSinceLastChange < 5000) {
             console.log('⏸️ Refresh skipped: recent changes detected (will not overwrite)', {
+                timeSinceLastChange: `${timeSinceLastChange}ms`
+            });
+            return;
+        }
+        
+        // Also check if there are unsaved changes - don't refresh if user is still editing
+        const currentSnapshot = serializeSections(sectionsRef.current);
+        const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
+        if (!forceUpdate && hasUnsavedChanges && timeSinceLastChange < 10000) {
+            console.log('⏸️ Refresh skipped: unsaved changes detected (will not overwrite)', {
+                hasUnsavedChanges: true,
                 timeSinceLastChange: `${timeSinceLastChange}ms`
             });
             return;
