@@ -451,19 +451,23 @@ const Clients = React.memo(() => {
         setViewMode('clients');
         setSelectedClient(null);
         
+        // Ensure projectId is a string
+        const projectIdStr = String(projectId);
+        
         // Navigate directly to the project using hash URL
         // This will trigger MainLayout's route handler which dispatches openEntityDetail event
         if (window.RouteState) {
             // Use RouteState API if available
-            window.RouteState.setPageSubpath('projects', [projectId], { 
+            window.RouteState.setPageSubpath('projects', [projectIdStr], { 
                 replace: false, 
                 preserveSearch: false, 
                 preserveHash: false 
             });
-        } else {
-            // Fallback to direct hash navigation
-            window.location.hash = `#/projects/${projectId}`;
         }
+        
+        // Always set hash as well to ensure navigation works
+        // This is the most reliable method
+        window.location.hash = `#/projects/${projectIdStr}`;
     };
 
     const convertLeadToClient = (lead) => {
