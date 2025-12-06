@@ -40,6 +40,16 @@ const calculateStats = (clients, leads, projects, timeEntries) => {
     };
 };
 
+// WidgetWrapper - Wrapper component to ensure hooks are called at component level
+const WidgetWrapper = ({ widgetDef, dashboardData }) => {
+    // This wrapper ensures that widget rendering happens at the component level
+    // rather than inside a map function, which allows hooks to work correctly
+    if (!widgetDef || !widgetDef.render) {
+        return null;
+    }
+    return widgetDef.render(dashboardData);
+};
+
 // MyProjectTasksWidget - Separate component to properly use hooks
 const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
     const [tasks, setTasks] = React.useState([]);
@@ -1074,21 +1084,6 @@ const DashboardLive = () => {
             <div className="flex items-center justify-between">
                 <div>
                     <h2 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>Welcome, {userName}</h2>
-                    <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Last updated: {lastUpdated ? new Date(lastUpdated).toLocaleString() : '—'}</div>
-                </div>
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => setManageOpen(true)}
-                        className="px-3 py-2 text-sm rounded-md border border-gray-300 hover:bg-gray-50"
-                    >
-                        Manage Widgets
-                    </button>
-                    <button
-                        onClick={handleRefresh}
-                        className="px-3 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700"
-                    >
-                        Refresh
-                    </button>
                 </div>
             </div>
 
@@ -1179,15 +1174,22 @@ const DashboardLive = () => {
                                 )}
                                 
                                 <div className="h-full w-full">
-                                    {def.render(dashboardData)}
+                                    <WidgetWrapper widgetDef={def} dashboardData={dashboardData} />
                                 </div>
                             </div>
                         );
                     })}
             </div>
 
-            {/* Edit Layout Button at Bottom */}
-            <div className="flex justify-center pt-4 border-t border-gray-200 dark:border-gray-700">
+            {/* Edit Layout and Manage Widgets Buttons at Bottom */}
+            <div className="flex justify-center gap-2 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <button
+                    onClick={() => setManageOpen(true)}
+                    className="px-6 py-3 text-sm font-semibold rounded-md border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700 dark:text-gray-200 shadow-lg transition-all"
+                >
+                    <i className="fas fa-cog mr-2"></i>
+                    Manage Widgets
+                </button>
                 <button
                     onClick={() => {
                         setEditMode(!editMode);
