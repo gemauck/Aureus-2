@@ -243,12 +243,12 @@ const NotificationCenter = () => {
             }
         };
         
-        // Load notifications after initial delay (2 minutes), then start polling
-        // This prevents immediate requests on page load which can contribute to rate limiting
+        // Load notifications immediately on mount (with a small delay to avoid rate limiting)
+        // Then start polling at regular intervals
         setTimeout(() => {
             loadNotifications();
             restartPollingRef.current();
-        }, 120000); // Wait 2 minutes before first load
+        }, 2000); // Small 2-second delay to avoid immediate requests on page load
         
         return () => {
             if (pollingIntervalRef.current) {
@@ -358,22 +358,81 @@ const NotificationCenter = () => {
                 }
             }
             
-            // Navigate to the link FIRST
-            // Use entity URL navigation if available, otherwise fall back to hash navigation
-            if (window.EntityUrl && notification.link) {
-                const parsed = window.EntityUrl.parseEntityUrl(notification.link);
-                if (parsed) {
-                    // Use entity navigation
-                    window.EntityUrl.navigateToEntity(parsed.entityType, parsed.entityId, parsed.options);
-                } else {
-                    // Fall back to hash navigation
-                    window.location.hash = notification.link;
-                }
-            } else {
-                window.location.hash = notification.link;
+            // Normalize the link - ensure it starts with # for hash-based routing
+            let normalizedLink = notification.link.trim();
+            
+            // Store original link for EntityUrl parsing (without hash prefix)
+            let linkForParsing = normalizedLink;
+            
+            // If link doesn't start with # or /, assume it's a relative path
+            if (!normalizedLink.startsWith('#') && !normalizedLink.startsWith('/')) {
+                normalizedLink = '/' + normalizedLink;
+                linkForParsing = normalizedLink;
             }
             
-            // Helper function to highlight an element
+            // Convert paths starting with / to hash-based routing for navigation
+            // But keep the original format for EntityUrl parsing
+            if (normalizedLink.startsWith('/')) {
+                linkForParsing = normalizedLink; // For EntityUrl, use path without #
+                normalizedLink = '#' + normalizedLink; // For hash navigation, use # prefix
+            } else if (normalizedLink.startsWith('#')) {
+                linkForParsing = normalizedLink.substring(1); // Remove # for EntityUrl parsing
+            }
+            
+            // Navigate to the link FIRST
+            // Use entity URL navigation if available, otherwise fall back to hash navigation
+            let navigationSuccessful = false;
+            
+            if (window.EntityUrl && linkForParsing) {
+                try {
+                    const parsed = window.EntityUrl.parseEntityUrl(linkForParsing);
+                    if (parsed) {
+                        // Use entity navigation
+                        window.EntityUrl.navigateToEntity(parsed.entityType, parsed.entityId, parsed.options);
+                        navigationSuccessful = true;
+                    }
+                } catch (e) {
+                    console.warn('EntityUrl parsing failed, falling back to hash navigation:', e);
+                }
+            }
+            
+            // Fall back to hash navigation if EntityUrl navigation didn't work
+            if (!navigationSuccessful) {
+                // Handle query parameters
+                if (normalizedLink.includes('?')) {
+                    const [hash, query] = normalizedLink.split('?');
+                    // Set hash navigation
+                    window.location.hash = hash;
+                    // Update URL with query parameters
+                    try {
+                        const url = new URL(window.location);
+                        const params = new URLSearchParams(query);
+                        params.forEach((value, key) => {
+                            url.searchParams.set(key, value);
+                        });
+                        window.history.replaceState({}, '', url);
+                    } catch (e) {
+                        console.warn('Failed to update URL with query params:', e);
+                        // Still navigate using hash with query string
+                        window.location.hash = normalizedLink;
+                    }
+                } else {
+                    // Simple hash navigation - ALWAYS navigate if EntityUrl didn't work
+                    window.location.hash = normalizedLink;
+                }
+            } else {
+                // EntityUrl navigation succeeded, but ensure hash is also set for routing consistency
+                // This helps ensure the route is properly reflected in the URL
+                if (!window.location.hash || window.location.hash !== normalizedLink) {
+                    window.location.hash = normalizedLink;
+                }
+            }
+            
+            // Wait a bit for navigation to start before trying to find elements
+            // This is especially important for route changes that load new components
+            // Wrap element finding in setTimeout to give navigation time to complete
+            setTimeout(() => {
+                // Helper function to highlight an element
             const highlightElement = (element) => {
                 if (!element) return;
                 element.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -435,44 +494,113 @@ const NotificationCenter = () => {
                     const sectionId = String(metadata.sectionId);
                     const documentId = String(metadata.documentId);
                     const month = String(metadata.month);
+                    const commentId = metadata.commentId ? String(metadata.commentId) : null;
                     
-                    // Create the comment cell key (same format as createCommentCellKey)
-                    const commentCellKey = JSON.stringify([sectionId, documentId, month]);
+                    // Create the comment cell key (same format as used in MonthlyDocumentCollectionTracker)
+                    // The cell key format is: `${sectionId}-${documentId}-${month}`
+                    const commentCellKey = `${sectionId}-${documentId}-${month}`;
                     
-                    findAndScrollToElement([
-                        `[data-comment-cell="${commentCellKey}"]`,
-                        // Also try with escaped quotes
-                        `[data-comment-cell='${commentCellKey}']`,
-                        // Try finding by section and document
-                        () => {
-                            // Find all comment cells and match by parsing their keys
-                            const allCommentCells = document.querySelectorAll('[data-comment-cell]');
-                            for (const cell of allCommentCells) {
+                    // First, try to find and click the comment cell button to open the popup
+                    const findAndClickCommentCell = (maxRetries = 20, delay = 500) => {
+                        let retries = 0;
+                        const tryFindAndClick = () => {
+                            // Use getAttribute approach to avoid CSS selector issues with special characters
+                            // This is more reliable than querySelector for attribute values that may contain dots, quotes, etc.
+                            const cells = document.querySelectorAll('[data-comment-cell]');
+                            for (const cell of cells) {
                                 const cellKey = cell.getAttribute('data-comment-cell');
-                                try {
-                                    const parsed = JSON.parse(cellKey);
-                                    if (parsed && parsed.length >= 3 && 
-                                        String(parsed[0]) === sectionId && 
-                                        String(parsed[1]) === documentId && 
-                                        String(parsed[2]) === month) {
-                                        return cell;
+                                if (cellKey === commentCellKey) {
+                                    // Found the cell - scroll to it and click
+                                    cell.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    // Find the button (could be the cell itself or a child)
+                                    const button = cell.tagName === 'BUTTON' ? cell : cell.closest('button') || cell.querySelector('button');
+                                    if (button) {
+                                        button.click();
                                     }
-                                } catch (e) {
-                                    // Ignore parse errors
+                                    return true;
                                 }
                             }
-                            return null;
-                        }
-                    ], 15, 400); // More retries and longer delay for comment cells
+                            return false;
+                        };
+                        
+                        const attempt = () => {
+                            if (tryFindAndClick()) {
+                                return; // Found and clicked!
+                            }
+                            retries++;
+                            if (retries < maxRetries) {
+                                setTimeout(attempt, delay);
+                            } else {
+                                console.warn('Could not find comment cell button after', maxRetries, 'attempts');
+                            }
+                        };
+                        
+                        // Start trying after initial delay
+                        setTimeout(attempt, delay);
+                    };
+                    
+                    findAndClickCommentCell(20, 500); // More retries and longer delay for comment cells
+                    
+                    // If a specific comment ID is provided, wait for popup to open and scroll to that comment
+                    if (commentId) {
+                        setTimeout(() => {
+                            findAndScrollToElement([
+                                () => {
+                                    // Use getAttribute to find comments (more reliable than querySelector)
+                                    const popup = document.querySelector('.comment-popup');
+                                    if (popup) {
+                                        // First try within popup
+                                        const comments = popup.querySelectorAll('[data-comment-id]');
+                                        for (const comment of comments) {
+                                            if (comment.getAttribute('data-comment-id') === commentId) {
+                                                return comment;
+                                            }
+                                        }
+                                        // Also try by ID if commentId doesn't contain special characters
+                                        if (!commentId.includes('.')) {
+                                            const byId = popup.querySelector(`#comment-${commentId}`);
+                                            if (byId) return byId;
+                                        }
+                                    }
+                                    // Fallback: search entire document
+                                    const allComments = document.querySelectorAll('[data-comment-id]');
+                                    for (const comment of allComments) {
+                                        if (comment.getAttribute('data-comment-id') === commentId) {
+                                            return comment;
+                                        }
+                                    }
+                                    return null;
+                                },
+                                // Only use querySelector if commentId doesn't contain dots
+                                ...(commentId.includes('.') ? [] : [
+                                    `[data-comment-id="${commentId}"]`,
+                                    `#comment-${commentId}`
+                                ])
+                            ], 15, 300);
+                        }, 800); // Wait for popup to open (longer delay)
+                    }
                 }
                 
                 // Handle document navigation (for MonthlyDocumentCollectionTracker)
-                if (metadata.documentId) {
+                // Skip document navigation if we're already handling comment cell navigation
+                // (to avoid invalid selector errors with IDs containing dots)
+                if (metadata.documentId && !(metadata.sectionId && metadata.documentId && metadata.month !== undefined)) {
                     const documentId = String(metadata.documentId);
+                    // Use getAttribute instead of querySelector for IDs with special characters (dots, etc.)
                     findAndScrollToElement([
-                        `#document-${documentId}`,
+                        () => {
+                            // Try to find by data-document-id attribute (safer than ID selector)
+                            const elements = document.querySelectorAll('[data-document-id]');
+                            for (const el of elements) {
+                                if (el.getAttribute('data-document-id') === documentId) {
+                                    return el;
+                                }
+                            }
+                            return null;
+                        },
                         `[data-document-id="${documentId}"]`,
-                        `[id*="document"][id*="${documentId}"]`
+                        // Only try ID selector if documentId doesn't contain dots (invalid in CSS)
+                        ...(documentId.includes('.') ? [] : [`#document-${documentId}`])
                     ]);
                 }
                 
@@ -530,14 +658,36 @@ const NotificationCenter = () => {
                     ]);
                 }
                 
-                // Handle comment navigation (generic)
-                if (metadata.commentId) {
-                    const commentId = metadata.commentId;
+                // Handle comment navigation (generic) - only if not already handled by MonthlyDocumentCollectionTracker
+                if (metadata.commentId && !(metadata.sectionId && metadata.documentId && metadata.month !== undefined)) {
+                    const commentId = String(metadata.commentId);
                     findAndScrollToElement([
-                        `#comment-${commentId}`,
-                        `[data-comment-id="${commentId}"]`,
-                        `[id*="comment"][id*="${commentId}"]`
-                    ]);
+                        () => {
+                            // Use getAttribute to find comments (handles special characters in IDs)
+                            const allComments = document.querySelectorAll('[data-comment-id]');
+                            for (const comment of allComments) {
+                                if (comment.getAttribute('data-comment-id') === commentId) {
+                                    return comment;
+                                }
+                            }
+                            // Also try in comment containers
+                            const commentContainers = document.querySelectorAll('[class*="comment"], [id*="comment"], .comments-container');
+                            for (const container of commentContainers) {
+                                const comments = container.querySelectorAll('[data-comment-id]');
+                                for (const comment of comments) {
+                                    if (comment.getAttribute('data-comment-id') === commentId) {
+                                        return comment;
+                                    }
+                                }
+                            }
+                            return null;
+                        },
+                        // Only use querySelector if commentId doesn't contain dots
+                        ...(commentId.includes('.') ? [] : [
+                            `[data-comment-id="${commentId}"]`,
+                            `#comment-${commentId}`
+                        ])
+                    ], 15, 400);
                 }
                 
                 // Handle proposal navigation
@@ -582,6 +732,7 @@ const NotificationCenter = () => {
 
                 findAndScrollToElement(selectors);
             }
+            }, 500); // Initial delay to allow navigation to complete
         } else {
             // Even if no link, try to navigate based on metadata
             let metadata = null;
@@ -596,9 +747,40 @@ const NotificationCenter = () => {
             }
             
             // Try to construct a link from metadata
-            if (metadata && metadata.projectId) {
-                const projectLink = `#/projects/${metadata.projectId}`;
-                window.location.hash = projectLink;
+            if (metadata) {
+                let constructedLink = null;
+                
+                if (metadata.projectId) {
+                    if (metadata.taskId) {
+                        constructedLink = `#/projects/${metadata.projectId}?task=${metadata.taskId}`;
+                    } else {
+                        constructedLink = `#/projects/${metadata.projectId}`;
+                    }
+                } else if (metadata.clientId) {
+                    constructedLink = `#/clients/${metadata.clientId}`;
+                } else if (metadata.leadId) {
+                    constructedLink = `#/clients/${metadata.leadId}`;
+                } else if (metadata.taskId) {
+                    constructedLink = `#/projects?task=${metadata.taskId}`;
+                }
+                
+                if (constructedLink) {
+                    // Try EntityUrl navigation first
+                    let navigationSuccessful = false;
+                    if (window.EntityUrl) {
+                        const linkForParsing = constructedLink.startsWith('#') ? constructedLink.substring(1) : constructedLink;
+                        const parsed = window.EntityUrl.parseEntityUrl(linkForParsing);
+                        if (parsed) {
+                            window.EntityUrl.navigateToEntity(parsed.entityType, parsed.entityId, parsed.options);
+                            navigationSuccessful = true;
+                        }
+                    }
+                    
+                    // Fall back to hash navigation
+                    if (!navigationSuccessful) {
+                        window.location.hash = constructedLink;
+                    }
+                }
             }
         }
     };
