@@ -458,7 +458,6 @@ const Clients = React.memo(() => {
         window.location.hash = `#/projects/${projectIdStr}`;
         
         // Also update RouteState to ensure it's in sync
-        // Parse the hash to update RouteState's internal state
         if (window.RouteState && window.EntityUrl) {
             const fullPath = `/projects/${projectIdStr}`;
             const parsed = window.EntityUrl.parseEntityUrl(fullPath);
@@ -471,6 +470,19 @@ const Clients = React.memo(() => {
                     preserveSearch: false,
                     preserveHash: true  // Preserve the hash we just set
                 });
+                
+                // Dispatch openEntityDetail event directly to ensure the project opens
+                // This is needed because hash changes might not always trigger route handlers
+                setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('openEntityDetail', {
+                        detail: {
+                            entityType: 'project',
+                            entityId: projectIdStr,
+                            url: fullPath,
+                            options: {}
+                        }
+                    }));
+                }, 50);
             }
         }
     };
