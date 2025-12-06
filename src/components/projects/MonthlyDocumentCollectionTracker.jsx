@@ -51,6 +51,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const deletionSectionIdsRef = useRef(new Set()); // Track which section IDs are being deleted
     const deletionQueueRef = useRef([]); // Queue for consecutive deletions
     const isProcessingDeletionQueueRef = useRef(false); // Track if we're processing the queue
+    const lastChangeTimestampRef = useRef(0); // Track when last status change was made
+    const refreshTimeoutRef = useRef(null); // Track pending refresh timeout
     
     const getSnapshotKey = (projectId) => projectId ? `documentCollectionSnapshot_${projectId}` : null;
 
@@ -339,6 +341,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return;
         }
         
+        // Don't refresh if user made changes recently (within last 2 seconds)
+        // This prevents overwriting rapid consecutive changes
+        const timeSinceLastChange = Date.now() - lastChangeTimestampRef.current;
+        if (!forceUpdate && timeSinceLastChange < 2000) {
+            console.log('⏸️ Refresh skipped: recent changes detected (will not overwrite)', {
+                timeSinceLastChange: `${timeSinceLastChange}ms`
+            });
+            return;
+        }
+        
         // Don't refresh if a delete operation just happened (give it time to save)
         // This is critical to prevent the deletion from being overwritten by stale data
         if (isDeletingRef.current && !forceUpdate) {
@@ -610,10 +622,24 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             }
             
             // Refresh from database after save to get any concurrent updates
-            // Use a small delay to ensure the save has been fully committed
-            setTimeout(() => {
-                refreshFromDatabase(true);
-            }, 500);
+            // Use a longer delay and check if user is still making changes
+            // Clear any pending refresh
+            if (refreshTimeoutRef.current) {
+                clearTimeout(refreshTimeoutRef.current);
+            }
+            
+            refreshTimeoutRef.current = setTimeout(() => {
+                // Only refresh if no changes have been made in the last 2 seconds
+                const timeSinceLastChange = Date.now() - lastChangeTimestampRef.current;
+                if (timeSinceLastChange > 2000) {
+                    refreshFromDatabase(true);
+                } else {
+                    // User is still making changes, schedule refresh for later
+                    refreshTimeoutRef.current = setTimeout(() => {
+                        refreshFromDatabase(true);
+                    }, 2000);
+                }
+            }, 1500);
         } catch (error) {
             console.error('❌ Error saving to database:', error);
             // Don't throw - allow user to continue working; auto‑save will retry on next change
@@ -1348,6 +1374,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     // ============================================================
     
     const handleUpdateStatus = useCallback((sectionId, documentId, month, status, applyToSelected = false) => {
+        // Track when the last change was made to prevent refresh from overwriting rapid changes
+        lastChangeTimestampRef.current = Date.now();
+        
         // Use functional update to ensure we always work with the latest state
         // This prevents race conditions when making rapid consecutive changes
         setSectionsByYear(prev => {
