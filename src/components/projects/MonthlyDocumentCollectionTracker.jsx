@@ -278,6 +278,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     // Multi-select state: Set of cell keys (sectionId-documentId-month)
     const [selectedCells, setSelectedCells] = useState(new Set());
+    const selectedCellsRef = useRef(new Set());
+    
+    // Keep ref in sync with state
+    useEffect(() => {
+        selectedCellsRef.current = selectedCells;
+    }, [selectedCells]);
     
     // ============================================================
     // LOAD DATA FROM PROJECT PROP + REFRESH FROM DATABASE
@@ -1347,11 +1353,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         setSectionsByYear(prev => {
             const currentYearSections = prev[selectedYear] || [];
             
+            // Always use ref to get the latest selectedCells value (avoids stale closure)
+            const currentSelectedCells = selectedCellsRef.current;
+            
             // If applying to selected cells, get all selected cell keys
             let cellsToUpdate = [];
-            if (applyToSelected && selectedCells.size > 0) {
+            if (applyToSelected && currentSelectedCells.size > 0) {
                 // Parse all selected cell keys
-                cellsToUpdate = Array.from(selectedCells).map(cellKey => {
+                cellsToUpdate = Array.from(currentSelectedCells).map(cellKey => {
                     const [secId, docId, mon] = cellKey.split('-');
                     return { sectionId: secId, documentId: docId, month: mon };
                 });
@@ -1400,13 +1409,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             sectionsRef.current = updatedSectionsByYear;
             
             // Clear selection after applying status to multiple cells
-            if (applyToSelected && selectedCells.size > 0) {
+            if (applyToSelected && currentSelectedCells.size > 0) {
                 setSelectedCells(new Set());
+                selectedCellsRef.current = new Set();
             }
             
             return updatedSectionsByYear;
         });
-    }, [selectedYear, selectedCells]);
+    }, [selectedYear]);
     
     const handleAddComment = async (sectionId, documentId, month, commentText) => {
         if (!commentText.trim()) return;
@@ -1680,11 +1690,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
             // Clear selection when clicking outside status cells (unless Ctrl/Cmd is held)
             // Don't clear if clicking on a status cell or its parent td
-            if (selectedCells.size > 0 && !isStatusCell && !event.ctrlKey && !event.metaKey) {
+            const currentSelectedCells = selectedCellsRef.current;
+            if (currentSelectedCells.size > 0 && !isStatusCell && !event.ctrlKey && !event.metaKey) {
                 const clickedTd = event.target.closest('td');
                 // Only clear if not clicking on a td that contains a status select
                 if (!clickedTd || !clickedTd.querySelector('select[data-section-id]')) {
-                    setSelectedCells(new Set());
+                    const newSet = new Set();
+                    setSelectedCells(newSet);
+                    selectedCellsRef.current = newSet;
                 }
             }
         };
@@ -1796,12 +1809,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     } else {
                         newSet.add(cellKey);
                     }
+                    // Update ref immediately
+                    selectedCellsRef.current = newSet;
                     return newSet;
                 });
             } else {
                 // Single click without modifier - clear selection if clicking on a different cell
-                if (selectedCells.size > 0 && !selectedCells.has(cellKey)) {
-                    setSelectedCells(new Set());
+                // Use ref to get latest value
+                const currentSelectedCells = selectedCellsRef.current;
+                if (currentSelectedCells.size > 0 && !currentSelectedCells.has(cellKey)) {
+                    const newSet = new Set();
+                    setSelectedCells(newSet);
+                    selectedCellsRef.current = newSet;
                 }
             }
         };
@@ -1819,15 +1838,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             e.preventDefault();
                             e.stopPropagation();
                             const newStatus = e.target.value;
+                            // Always use ref to get latest selectedCells value
+                            const currentSelectedCells = selectedCellsRef.current;
                             // Apply to all selected cells if this cell is part of the selection, otherwise just this cell
-                            const applyToSelected = selectedCells.size > 0 && selectedCells.has(cellKey);
+                            const applyToSelected = currentSelectedCells.size > 0 && currentSelectedCells.has(cellKey);
                             handleUpdateStatus(section.id, document.id, month, newStatus, applyToSelected);
                         }}
                         onBlur={(e) => {
                             // Ensure state is saved on blur
                             const newStatus = e.target.value;
                             if (newStatus !== status) {
-                                const applyToSelected = selectedCells.size > 0 && selectedCells.has(cellKey);
+                                const currentSelectedCells = selectedCellsRef.current;
+                                const applyToSelected = currentSelectedCells.size > 0 && currentSelectedCells.has(cellKey);
                                 handleUpdateStatus(section.id, document.id, month, newStatus, applyToSelected);
                             }
                         }}
