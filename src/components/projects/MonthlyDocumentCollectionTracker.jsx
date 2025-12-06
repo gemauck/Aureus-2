@@ -646,23 +646,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
                 
                 // Only refresh if:
-                // 1. No changes in last 5 seconds, AND
+                // 1. No changes in last 10 seconds (longer window after save to prevent overwriting rapid changes), AND
                 // 2. No unsaved changes (everything is saved)
-                if (timeSinceLastChange > 5000 && !hasUnsavedChanges) {
-                    refreshFromDatabase(true);
+                // Use false instead of true so it respects all checks in refreshFromDatabase
+                if (timeSinceLastChange > 10000 && !hasUnsavedChanges) {
+                    refreshFromDatabase(false); // Use false to respect all checks
                 } else {
                     // User is still making changes or has unsaved changes
-                    // Schedule refresh for later when user stops making changes
-                    refreshTimeoutRef.current = setTimeout(() => {
-                        const timeSinceLastChange2 = Date.now() - lastChangeTimestampRef.current;
-                        const currentSnapshot2 = serializeSections(sectionsRef.current);
-                        const hasUnsavedChanges2 = currentSnapshot2 !== lastSavedSnapshotRef.current;
-                        if (timeSinceLastChange2 > 5000 && !hasUnsavedChanges2) {
-                            refreshFromDatabase(true);
-                        }
-                    }, 5000);
+                    // Don't refresh - let the periodic refresh handle it when user stops
+                    console.log('⏸️ Post-save refresh skipped: user still making changes', {
+                        timeSinceLastChange: `${timeSinceLastChange}ms`,
+                        hasUnsavedChanges
+                    });
                 }
-            }, 2000);
+            }, 3000); // Increased delay to 3 seconds to give more time for rapid changes
         } catch (error) {
             console.error('❌ Error saving to database:', error);
             // Don't throw - allow user to continue working; auto‑save will retry on next change
