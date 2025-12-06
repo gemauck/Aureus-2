@@ -1087,11 +1087,6 @@ const DashboardLive = () => {
                 </div>
             </div>
 
-            <div className="flex items-center gap-2 text-xs">
-                <i className={`fas ${getConnectionStatusIcon()} ${getConnectionStatusColor()}`}></i>
-                <span className={`${isDark ? 'text-gray-300' : 'text-gray-700'}`}>Connection: {connectionStatus}</span>
-            </div>
-
             <div 
                 className="grid gap-4"
                 style={{
