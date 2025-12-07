@@ -341,10 +341,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             return;
         }
         
-        // Don't refresh if user made changes recently (within last 5 seconds)
+        // Don't refresh if user made changes recently (within last 15 seconds)
         // This prevents overwriting rapid consecutive changes
+        // Increased from 5 seconds to 15 seconds to better handle rapid consecutive changes
         const timeSinceLastChange = Date.now() - lastChangeTimestampRef.current;
-        if (!forceUpdate && timeSinceLastChange < 5000) {
+        if (!forceUpdate && timeSinceLastChange < 15000) {
             console.log('⏸️ Refresh skipped: recent changes detected (will not overwrite)', {
                 timeSinceLastChange: `${timeSinceLastChange}ms`
             });
@@ -352,9 +353,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
         
         // Also check if there are unsaved changes - don't refresh if user is still editing
+        // This provides additional protection even if the timestamp check passes
         const currentSnapshot = serializeSections(sectionsRef.current);
         const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
-        if (!forceUpdate && hasUnsavedChanges && timeSinceLastChange < 10000) {
+        if (!forceUpdate && hasUnsavedChanges && timeSinceLastChange < 20000) {
             console.log('⏸️ Refresh skipped: unsaved changes detected (will not overwrite)', {
                 hasUnsavedChanges: true,
                 timeSinceLastChange: `${timeSinceLastChange}ms`
@@ -646,10 +648,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
                 
                 // Only refresh if:
-                // 1. No changes in last 10 seconds (longer window after save to prevent overwriting rapid changes), AND
+                // 1. No changes in last 15 seconds (longer window after save to prevent overwriting rapid changes), AND
                 // 2. No unsaved changes (everything is saved)
                 // Use false instead of true so it respects all checks in refreshFromDatabase
-                if (timeSinceLastChange > 10000 && !hasUnsavedChanges) {
+                if (timeSinceLastChange > 15000 && !hasUnsavedChanges) {
                     refreshFromDatabase(false); // Use false to respect all checks
                 } else {
                     // User is still making changes or has unsaved changes
