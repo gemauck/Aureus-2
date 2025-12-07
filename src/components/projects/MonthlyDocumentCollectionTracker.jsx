@@ -53,6 +53,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const isProcessingDeletionQueueRef = useRef(false); // Track if we're processing the queue
     const lastChangeTimestampRef = useRef(0); // Track when last status change was made
     const refreshTimeoutRef = useRef(null); // Track pending refresh timeout
+    const forceSaveTimeoutRef = useRef(null); // Track forced save timeout for rapid changes
     
     const getSnapshotKey = (projectId) => projectId ? `documentCollectionSnapshot_${projectId}` : null;
 
@@ -572,6 +573,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         return () => {
             if (saveTimeoutRef.current) {
                 clearTimeout(saveTimeoutRef.current);
+            }
+            if (forceSaveTimeoutRef.current) {
+                clearTimeout(forceSaveTimeoutRef.current);
             }
         };
     }, [sectionsByYear, isLoading, project?.id]);
@@ -1398,6 +1402,26 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const handleUpdateStatus = useCallback((sectionId, documentId, month, status, applyToSelected = false) => {
         // Track when the last change was made to prevent refresh from overwriting rapid changes
         lastChangeTimestampRef.current = Date.now();
+        
+        // Clear any existing force save timeout
+        if (forceSaveTimeoutRef.current) {
+            clearTimeout(forceSaveTimeoutRef.current);
+        }
+        
+        // Schedule a forced save after 2 seconds of inactivity
+        // This ensures rapid consecutive changes are saved even if debounce keeps resetting
+        forceSaveTimeoutRef.current = setTimeout(() => {
+            const timeSinceLastChange = Date.now() - lastChangeTimestampRef.current;
+            // Only force save if no changes in last 2 seconds (user stopped making changes)
+            if (timeSinceLastChange >= 2000) {
+                const currentSnapshot = serializeSections(sectionsRef.current);
+                const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
+                if (hasUnsavedChanges && !isSavingRef.current) {
+                    console.log('💾 Force saving after rapid changes stopped');
+                    saveToDatabase();
+                }
+            }
+        }, 2000);
         
         // Use functional update to ensure we always work with the latest state
         // This prevents race conditions when making rapid consecutive changes
