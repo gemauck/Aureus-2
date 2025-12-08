@@ -451,40 +451,20 @@ const Clients = React.memo(() => {
         setViewMode('clients');
         setSelectedClient(null);
         
-        // Ensure projectId is a string
+        // Ensure projectId is a string/number
         const projectIdStr = String(projectId);
         
-        // Set hash directly - this is the primary navigation method for hash-based routing
-        window.location.hash = `#/projects/${projectIdStr}`;
+        // Use sessionStorage to pass the project ID to the Projects component
+        // This is more reliable than events because it persists across navigation
+        // The Projects component checks for this after loading projects and opens it automatically
+        // Industry standard: sessionStorage for cross-component communication during navigation
+        sessionStorage.setItem('openProjectId', projectIdStr);
         
-        // Also update RouteState to ensure it's in sync
-        if (window.RouteState && window.EntityUrl) {
-            const fullPath = `/projects/${projectIdStr}`;
-            const parsed = window.EntityUrl.parseEntityUrl(fullPath);
-            if (parsed) {
-                // Update RouteState to reflect the hash-based route
-                window.RouteState.navigate({
-                    page: 'projects',
-                    segments: [projectIdStr],
-                    replace: false,
-                    preserveSearch: false,
-                    preserveHash: true  // Preserve the hash we just set
-                });
-                
-                // Dispatch openEntityDetail event directly to ensure the project opens
-                // This is needed because hash changes might not always trigger route handlers
-                setTimeout(() => {
-                    window.dispatchEvent(new CustomEvent('openEntityDetail', {
-                        detail: {
-                            entityType: 'project',
-                            entityId: projectIdStr,
-                            url: fullPath,
-                            options: {}
-                        }
-                    }));
-                }, 50);
-            }
-        }
+        // Navigate to projects page using the standard navigation event
+        // This ensures MainLayout handles the navigation properly
+        window.dispatchEvent(new CustomEvent('navigateToPage', { 
+            detail: { page: 'projects' } 
+        }));
     };
 
     const convertLeadToClient = (lead) => {
