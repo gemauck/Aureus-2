@@ -1423,77 +1423,78 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             }
         }, 2000);
         
-        // Use functional update to ensure we always work with the latest state
-        // This prevents race conditions when making rapid consecutive changes
-        setSectionsByYear(prev => {
-            const currentYearSections = prev[selectedYear] || [];
-            
-            // Always use ref to get the latest selectedCells value (avoids stale closure)
-            const currentSelectedCells = selectedCellsRef.current;
-            
-            // If applying to selected cells, get all selected cell keys
-            let cellsToUpdate = [];
-            if (applyToSelected && currentSelectedCells.size > 0) {
-                // Parse all selected cell keys
-                cellsToUpdate = Array.from(currentSelectedCells).map(cellKey => {
-                    const [secId, docId, mon] = cellKey.split('-');
-                    return { sectionId: secId, documentId: docId, month: mon };
-                });
-            } else {
-                // Just update the single cell
-                cellsToUpdate = [{ sectionId, documentId, month }];
-            }
-            
-            // Update the sections for the current year
-            const updated = currentYearSections.map(section => {
-                // Check if this section has any documents that need updating
-                const sectionUpdates = cellsToUpdate.filter(cell => String(section.id) === String(cell.sectionId));
-                if (sectionUpdates.length === 0) {
-                    return section;
-                }
-                
-                return {
-                    ...section,
-                    documents: section.documents.map(doc => {
-                        // Check if this document needs updating for any month
-                        const docUpdates = sectionUpdates.filter(cell => String(doc.id) === String(cell.documentId));
-                        if (docUpdates.length === 0) {
-                            return doc;
-                        }
-                        
-                        // Apply status to all matching months for this document
-                        let updatedStatus = doc.collectionStatus || {};
-                        docUpdates.forEach(cell => {
-                            updatedStatus = setStatusForYear(updatedStatus, cell.month, status, selectedYear);
-                        });
-                        
-                        return {
-                            ...doc,
-                            collectionStatus: updatedStatus
-                        };
-                    })
-                };
+        // CRITICAL: For rapid changes, always start from the latest ref value to prevent losing updates
+        // This ensures that if multiple status changes happen in quick succession, each one builds on the latest state
+        const latestSectionsByYear = sectionsRef.current || {};
+        const currentYearSections = latestSectionsByYear[selectedYear] || [];
+        
+        // Always use ref to get the latest selectedCells value (avoids stale closure)
+        const currentSelectedCells = selectedCellsRef.current;
+        
+        // If applying to selected cells, get all selected cell keys
+        let cellsToUpdate = [];
+        if (applyToSelected && currentSelectedCells.size > 0) {
+            // Parse all selected cell keys
+            cellsToUpdate = Array.from(currentSelectedCells).map(cellKey => {
+                const [secId, docId, mon] = cellKey.split('-');
+                return { sectionId: secId, documentId: docId, month: mon };
             });
-            
-            const updatedSectionsByYear = {
-                ...prev,
-                [selectedYear]: updated
-            };
-            
-            // Update ref immediately to prevent race conditions with auto-save
-            sectionsRef.current = updatedSectionsByYear;
-            
-            // Clear selection after applying status to multiple cells
-            // Use setTimeout to ensure React has updated the UI first
-            if (applyToSelected && currentSelectedCells.size > 0) {
-                setTimeout(() => {
-                    setSelectedCells(new Set());
-                    selectedCellsRef.current = new Set();
-                }, 100);
+        } else {
+            // Just update the single cell
+            cellsToUpdate = [{ sectionId, documentId, month }];
+        }
+        
+        // Update the sections for the current year
+        const updated = currentYearSections.map(section => {
+            // Check if this section has any documents that need updating
+            const sectionUpdates = cellsToUpdate.filter(cell => String(section.id) === String(cell.sectionId));
+            if (sectionUpdates.length === 0) {
+                return section;
             }
             
-            return updatedSectionsByYear;
+            return {
+                ...section,
+                documents: section.documents.map(doc => {
+                    // Check if this document needs updating for any month
+                    const docUpdates = sectionUpdates.filter(cell => String(doc.id) === String(cell.documentId));
+                    if (docUpdates.length === 0) {
+                        return doc;
+                    }
+                    
+                    // Apply status to all matching months for this document
+                    let updatedStatus = doc.collectionStatus || {};
+                    docUpdates.forEach(cell => {
+                        updatedStatus = setStatusForYear(updatedStatus, cell.month, status, selectedYear);
+                    });
+                    
+                    return {
+                        ...doc,
+                        collectionStatus: updatedStatus
+                    };
+                })
+            };
         });
+        
+        const updatedSectionsByYear = {
+            ...latestSectionsByYear,
+            [selectedYear]: updated
+        };
+        
+        // Update ref IMMEDIATELY before state update to prevent race conditions
+        // This ensures auto-save always has the latest data, even during rapid changes
+        sectionsRef.current = updatedSectionsByYear;
+        
+        // Now update state (this will trigger auto-save, but ref already has the latest data)
+        setSectionsByYear(updatedSectionsByYear);
+        
+        // Clear selection after applying status to multiple cells
+        // Use setTimeout to ensure React has updated the UI first
+        if (applyToSelected && currentSelectedCells.size > 0) {
+            setTimeout(() => {
+                setSelectedCells(new Set());
+                selectedCellsRef.current = new Set();
+            }, 100);
+        }
     }, [selectedYear]);
     
     const handleAddComment = async (sectionId, documentId, month, commentText) => {
