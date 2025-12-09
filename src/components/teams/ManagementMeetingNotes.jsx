@@ -519,7 +519,11 @@ const ManagementMeetingNotes = () => {
     // Ref to store scroll position that needs to be preserved after state updates
     const preservedScrollPosition = useRef(null);
     
-    // Effect to restore scroll position after state updates
+    // Ref to track previous weeks array keys to avoid unnecessary validation
+    const previousWeekKeysRef = useRef(null);
+    
+    // Effect to restore scroll position after explicit save operations
+    // Only triggers when scrollRestoreTrigger changes (not on every data update)
     useEffect(() => {
         if (preservedScrollPosition.current !== null) {
             const scrollY = preservedScrollPosition.current;
@@ -589,7 +593,7 @@ const ManagementMeetingNotes = () => {
                 preservedScrollPosition.current = null;
             }, 500);
         }
-    }, [currentMonthlyNotes, monthlyNotesList, loading, scrollRestoreTrigger]);
+    }, [scrollRestoreTrigger]); // Only depend on scrollRestoreTrigger, not on data updates
     
     const reloadMonthlyNotes = useCallback(async (preferredMonthKey = null, preserveScroll = false) => {
         // Preserve scroll position if requested
@@ -1131,13 +1135,6 @@ const ManagementMeetingNotes = () => {
     }, [weeks, currentWeekId]);
 
     useEffect(() => {
-        if (!Array.isArray(weeks) || weeks.length === 0) {
-            if (selectedWeek !== null) {
-                setSelectedWeek(null);
-            }
-            return;
-        }
-
         // Helper function to get week identifier
         const getWeekId = (week, index) => {
             if (!week) return null;
@@ -1145,6 +1142,35 @@ const ManagementMeetingNotes = () => {
             if (week.id) return week.id;
             return `week-${index}`;
         };
+        
+        // Get current week keys for comparison
+        const currentWeekKeys = Array.isArray(weeks) && weeks.length > 0
+            ? weeks.map((week, index) => getWeekId(week, index)).filter(Boolean).sort().join(',')
+            : '';
+        
+        // Skip validation if weeks array content hasn't changed (only reference changed)
+        // This prevents unnecessary state updates when data refreshes but content is the same
+        if (previousWeekKeysRef.current === currentWeekKeys && selectedWeek) {
+            // Check if selectedWeek still exists in current weeks (quick validation)
+            const hasSelectedWeek = Array.isArray(weeks) && weeks.length > 0 && weeks.some((week, index) => {
+                const identifier = getWeekId(week, index);
+                return identifier === selectedWeek;
+            });
+            if (hasSelectedWeek) {
+                // Weeks content unchanged and selectedWeek is still valid, skip
+                return;
+            }
+        }
+        
+        // Update ref with current week keys
+        previousWeekKeysRef.current = currentWeekKeys;
+        
+        if (!Array.isArray(weeks) || weeks.length === 0) {
+            if (selectedWeek !== null) {
+                setSelectedWeek(null);
+            }
+            return;
+        }
 
         // Check if selectedWeek from URL exists in weeks
         const weekFromURL = getWeekFromURL();
@@ -1203,8 +1229,10 @@ const ManagementMeetingNotes = () => {
         if (!selectedWeek) {
             return;
         }
+        // Only scroll when selectedWeek changes, not when weeks array reference changes
+        // This prevents unwanted scroll jumps when data updates (auto-saves, etc.)
         scrollToWeekId(selectedWeek);
-    }, [selectedWeek, weeks, scrollToWeekId]);
+    }, [selectedWeek, scrollToWeekId]);
 
     // Expose functions for parent components (no tracking - always returns false)
     const managementMeetingNotesRef = useRef({
