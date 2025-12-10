@@ -7830,6 +7830,91 @@ const Clients = React.memo(() => {
                                 <div className="flex items-center gap-2 text-sm text-gray-600">
                                     <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                                     <span>
-                                        {viewMode === 'leads' 
-                                            ? `Showing ${filteredLeads.length} of ${leads.length} leads${searchTerm ? ` matching "${searchTerm}"` : ''}`
-                                            : viewMode === 'groups'
+                                        {(() => {
+                                            const searchSuffix = searchTerm ? ` matching "${searchTerm}"` : '';
+                                            if (viewMode === 'leads') {
+                                                return `Showing ${filteredLeads.length} of ${leads.length} leads${searchSuffix}`;
+                                            } else if (viewMode === 'groups') {
+                                                return `Showing ${filteredGroups.length} of ${groups.length} groups${searchSuffix}`;
+                                            } else {
+                                                return `Showing ${filteredClients.length} of ${clients.length} clients${searchSuffix}`;
+                                            }
+                                        })()}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+        )}
+
+            {/* Content based on view mode */}
+            {viewMode === 'clients' && <ClientsListView />}
+            {viewMode === 'leads' && <LeadsListView />}
+            {viewMode === 'groups' && (
+                selectedGroup ? (
+                    <GroupDetailView
+                        group={selectedGroup}
+                        members={groupMembers}
+                        isLoading={isLoadingGroupMembers}
+                        error={groupMembersError}
+                        onBack={() => {
+                            setSelectedGroup(null);
+                            setGroupMembers([]);
+                            setGroupMembersError(null);
+                        }}
+                        onClientClick={(client) => {
+                            stopSync();
+                            selectedClientRef.current = client;
+                            setEditingClientId(client.id);
+                            isFormOpenRef.current = true;
+                            setCurrentTab('overview');
+                            setViewMode('client-detail');
+                        }}
+                        onLeadClick={(lead) => {
+                            stopSync();
+                            selectedLeadRef.current = lead;
+                            setEditingLeadId(lead.id);
+                            isFormOpenRef.current = true;
+                            setCurrentLeadTab('overview');
+                            setViewMode('lead-detail');
+                        }}
+                    />
+                ) : (
+                    <GroupsListView />
+                )
+            )}
+            {viewMode === 'pipeline' && (
+                window.PipelineView ? (
+                    <window.PipelineView
+                        clients={clients}
+                        leads={leads}
+                        onOpenLead={openLeadFromPipeline}
+                        onOpenOpportunity={openOpportunityFromPipeline}
+                    />
+                ) : (
+                    <LegacyPipelineView />
+                )
+            )}
+            {viewMode === 'news-feed' && window.ClientNewsFeed && (
+                <window.ClientNewsFeed />
+            )}
+            {viewMode === 'client-detail' && <ClientDetailView />}
+            {viewMode === 'lead-detail' && <LeadDetailView />}
+            {viewMode === 'opportunity-detail' && selectedOpportunityId && (
+                <OpportunityDetailView
+                    opportunityId={selectedOpportunityId}
+                    client={selectedOpportunityClient}
+                    onClose={() => {
+                        setSelectedOpportunityId(null);
+                        setSelectedOpportunityClient(null);
+                        setViewMode('clients');
+                    }}
+                />
+            )}
+            </div>
+        </div>
+    );
+});
+
+export default Clients;

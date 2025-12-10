@@ -48,36 +48,57 @@ fi
 # CRITICAL: Always set correct DATABASE_URL after git pull
 echo ""
 echo "🔧 Ensuring correct DATABASE_URL is set..."
-# Use environment variables for security - set these in your deployment environment
-DB_USERNAME="${DB_USERNAME:-doadmin}"
-DB_PASSWORD="${DB_PASSWORD:-${DATABASE_PASSWORD}}"
-DB_HOST="${DB_HOST:-dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com}"
-DB_PORT="${DB_PORT:-25060}"
-DB_NAME="${DB_NAME:-defaultdb}"
-DB_SSLMODE="${DB_SSLMODE:-require}"
 
-if [ -z "$DB_PASSWORD" ]; then
-    echo "❌ ERROR: DB_PASSWORD or DATABASE_PASSWORD environment variable must be set"
-    exit 1
+# First, try to use existing DATABASE_URL from .env file
+if [ -f .env ] && grep -q "^DATABASE_URL=" .env 2>/dev/null; then
+    EXISTING_DB_URL=$(grep "^DATABASE_URL=" .env | sed 's/^DATABASE_URL=//' | sed 's/^"//' | sed 's/"$//' | sed "s/^'//" | sed "s/'$//")
+    if [ -n "$EXISTING_DB_URL" ] && [ "$EXISTING_DB_URL" != "" ]; then
+        echo "✅ Using existing DATABASE_URL from .env file"
+        export DATABASE_URL="$EXISTING_DB_URL"
+        # Also update /etc/environment if it exists
+        if [ -f /etc/environment ]; then
+            sed -i '/^DATABASE_URL=/d' /etc/environment
+            echo "DATABASE_URL=\"$EXISTING_DB_URL\"" >> /etc/environment
+        fi
+    else
+        echo "⚠️  DATABASE_URL in .env is empty, will try to set from environment variables"
+        # Fall through to setting from env vars
+    fi
 fi
 
-CORRECT_DATABASE_URL="postgresql://\${DB_USERNAME}:\${DB_PASSWORD}@\${DB_HOST}:\${DB_PORT}/\${DB_NAME}?sslmode=\${DB_SSLMODE}"
-
-# Update .env
-if grep -q "^DATABASE_URL=" .env 2>/dev/null; then
-    sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"\${CORRECT_DATABASE_URL}\"|" .env
-else
-    echo "DATABASE_URL=\"\${CORRECT_DATABASE_URL}\"" >> .env
+# If DATABASE_URL is not set yet, try to set it from environment variables
+if [ -z "$DATABASE_URL" ]; then
+    # Use environment variables for security - set these in your deployment environment
+    DB_USERNAME="${DB_USERNAME:-doadmin}"
+    DB_PASSWORD="${DB_PASSWORD:-${DATABASE_PASSWORD}}"
+    DB_HOST="${DB_HOST:-dbaas-db-6934625-nov-3-backup-nov-3-backup5-do-user-28031752-0.l.db.ondigitalocean.com}"
+    DB_PORT="${DB_PORT:-25060}"
+    DB_NAME="${DB_NAME:-defaultdb}"
+    DB_SSLMODE="${DB_SSLMODE:-require}"
+    
+    if [ -z "$DB_PASSWORD" ]; then
+        echo "⚠️  WARNING: DB_PASSWORD not provided, but existing DATABASE_URL will be preserved if present"
+        echo "   If DATABASE_URL is missing, you'll need to set it manually"
+    else
+        CORRECT_DATABASE_URL="postgresql://\${DB_USERNAME}:\${DB_PASSWORD}@\${DB_HOST}:\${DB_PORT}/\${DB_NAME}?sslmode=\${DB_SSLMODE}"
+        
+        # Update .env
+        if grep -q "^DATABASE_URL=" .env 2>/dev/null; then
+            sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"\${CORRECT_DATABASE_URL}\"|" .env
+        else
+            echo "DATABASE_URL=\"\${CORRECT_DATABASE_URL}\"" >> .env
+        fi
+        
+        # Update /etc/environment
+        if [ -f /etc/environment ]; then
+            sed -i '/^DATABASE_URL=/d' /etc/environment
+            echo "DATABASE_URL=\"\${CORRECT_DATABASE_URL}\"" >> /etc/environment
+        fi
+        
+        export DATABASE_URL="\${CORRECT_DATABASE_URL}"
+        echo "✅ DATABASE_URL set to correct production database"
+    fi
 fi
-
-# Update /etc/environment
-if [ -f /etc/environment ]; then
-    sed -i '/^DATABASE_URL=/d' /etc/environment
-    echo "DATABASE_URL=\"\${CORRECT_DATABASE_URL}\"" >> /etc/environment
-fi
-
-export DATABASE_URL="\${CORRECT_DATABASE_URL}"
-echo "✅ DATABASE_URL set to correct production database"
 
 echo ""
 echo "📦 Installing dependencies..."
