@@ -55,13 +55,22 @@ const MainLayout = () => {
     const getInitialPage = () => {
         if (window.RouteState) {
             const route = window.RouteState.getRoute();
-            if (route?.page && VALID_PAGES.includes(route.page)) {
-                return route.page;
+            let page = route?.page;
+            // Map 'crm' to 'clients' for backward compatibility
+            if (page === 'crm') {
+                page = 'clients';
+            }
+            if (page && VALID_PAGES.includes(page)) {
+                return page;
             }
         }
         const pathname = (window.location.pathname || '').toLowerCase();
         if (pathname && pathname !== '/' && !PUBLIC_ROUTES.some(route => pathname.startsWith(route))) {
-            const pageFromPath = pathname.replace(/^\//, '').split('/')[0];
+            let pageFromPath = pathname.replace(/^\//, '').split('/')[0];
+            // Map 'crm' to 'clients' for backward compatibility
+            if (pageFromPath === 'crm') {
+                pageFromPath = 'clients';
+            }
             if (VALID_PAGES.includes(pageFromPath)) {
                 return pageFromPath;
             }
@@ -78,7 +87,15 @@ const MainLayout = () => {
         }
 
         const handleRouteChange = (route) => {
-            const nextPage = route?.page || 'dashboard';
+            let nextPage = route?.page || 'dashboard';
+            // Map 'crm' to 'clients' for backward compatibility
+            if (nextPage === 'crm') {
+                nextPage = 'clients';
+                // Update the URL to reflect the correct page
+                if (window.RouteState) {
+                    window.RouteState.setPageSubpath('clients', route.segments || [], { replace: true });
+                }
+            }
             if (!VALID_PAGES.includes(nextPage)) {
                 const pathname = (window.location.pathname || '').toLowerCase();
                 const isPublicRoute = PUBLIC_ROUTES.some(routePath => pathname.startsWith(routePath));

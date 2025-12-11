@@ -84,7 +84,11 @@
 
     const getRoute = () => {
         const segments = getSegmentsFromPath();
-        const page = segments[0] || 'dashboard';
+        let page = segments[0] || 'dashboard';
+        // Map 'crm' to 'clients' for backward compatibility
+        if (page === 'crm') {
+            page = 'clients';
+        }
         return {
             page,
             segments: segments.slice(1),
