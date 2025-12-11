@@ -1043,24 +1043,16 @@ const Users = () => {
             )}
 
             {/* Invitation Modal */}
-            {showInviteModal && typeof window.InviteUserModal === 'function' && (
-                React.createElement(window.InviteUserModal, {
-                    onClose: () => {
+            {showInviteModal && window.InviteUserModal && (
+                <window.InviteUserModal
+                    onClose={() => {
                         console.log('🚪 Closing invite modal');
                         setShowInviteModal(false);
-                    },
-                    onSave: handleSaveInvitation,
-                    roleDefinitions: roleDefinitions,
-                    departments: departments
-                })
-            )}
-            {showInviteModal && typeof window.InviteUserModal !== 'function' && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white p-6 rounded-lg">
-                        <p>Loading invite modal...</p>
-                        <button onClick={() => setShowInviteModal(false)}>Close</button>
-                    </div>
-                </div>
+                    }}
+                    onSave={handleSaveInvitation}
+                    roleDefinitions={roleDefinitions}
+                    departments={departments}
+                />
             )}
         </div>
     );
