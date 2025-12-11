@@ -17,6 +17,7 @@ const Users = () => {
     const [filterRole, setFilterRole] = useState('all');
     const [filterStatus, setFilterStatus] = useState('all');
     const [viewMode, setViewMode] = useState('table'); // 'grid' or 'table'
+    const [inviteModalAvailable, setInviteModalAvailable] = useState(false);
 
     // Role definitions with permissions (Admin > Manager > User > Guest hierarchy)
     const roleDefinitions = {
@@ -96,13 +97,29 @@ const Users = () => {
         };
     }, [selectedUser, showUserModal, showInviteModal]);
 
+    // Check if InviteUserModal is available
+    useEffect(() => {
+        const checkModal = () => {
+            const isAvailable = typeof window.InviteUserModal === 'function';
+            if (isAvailable !== inviteModalAvailable) {
+                setInviteModalAvailable(isAvailable);
+            }
+        };
+        
+        checkModal();
+        // Check periodically in case it loads later
+        const interval = setInterval(checkModal, 100);
+        return () => clearInterval(interval);
+    }, [inviteModalAvailable]);
+
     // Debug: Log when showInviteModal changes
     useEffect(() => {
         if (showInviteModal) {
             console.log('🎯 showInviteModal is true, should render modal');
             console.log('🔍 InviteUserModal available:', typeof window.InviteUserModal);
+            console.log('🔍 inviteModalAvailable state:', inviteModalAvailable);
         }
-    }, [showInviteModal]);
+    }, [showInviteModal, inviteModalAvailable]);
 
     // Debug: Verify delete buttons are rendered
     useEffect(() => {
@@ -581,9 +598,6 @@ const Users = () => {
         );
     }
 
-    // Get InviteModal component reference
-    const InviteModal = window.InviteUserModal;
-
     return (
         <div className="space-y-3">
             {/* Header */}
@@ -1046,21 +1060,21 @@ const Users = () => {
             )}
 
             {/* Invitation Modal */}
-            {showInviteModal && InviteModal && (
-                <InviteModal
-                    onClose={() => {
+            {showInviteModal && inviteModalAvailable && window.InviteUserModal && (
+                React.createElement(window.InviteUserModal, {
+                    onClose: () => {
                         console.log('🚪 Closing invite modal');
                         setShowInviteModal(false);
-                    }}
-                    onSave={handleSaveInvitation}
-                    roleDefinitions={roleDefinitions}
-                    departments={departments}
-                />
+                    },
+                    onSave: handleSaveInvitation,
+                    roleDefinitions: roleDefinitions,
+                    departments: departments
+                })
             )}
-            {showInviteModal && !InviteModal && (
+            {showInviteModal && !inviteModalAvailable && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                     <div className="bg-white p-6 rounded-lg">
-                        <p>Error: InviteUserModal component not loaded</p>
+                        <p>Loading invite modal...</p>
                         <button onClick={() => setShowInviteModal(false)}>Close</button>
                     </div>
                 </div>
