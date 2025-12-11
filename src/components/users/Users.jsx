@@ -581,6 +581,9 @@ const Users = () => {
         );
     }
 
+    // Get modal component references (re-evaluated on each render)
+    const InviteModal = window.InviteUserModal;
+
     return (
         <div className="space-y-3">
             {/* Header */}
@@ -1043,8 +1046,8 @@ const Users = () => {
             )}
 
             {/* Invitation Modal */}
-            {showInviteModal && window.InviteUserModal && (
-                <window.InviteUserModal
+            {showInviteModal && InviteModal && (
+                <InviteModal
                     onClose={() => {
                         console.log('🚪 Closing invite modal');
                         setShowInviteModal(false);
