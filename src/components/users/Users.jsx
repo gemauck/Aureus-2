@@ -70,16 +70,27 @@ const Users = () => {
         
         const handleRouteChange = (route) => {
             // If we're on the users page and there are no segments, reset selected user and close modals
+            // Only close modals if we're actually navigating away (not just opening them)
             if (route?.page === 'users' && (!route.segments || route.segments.length === 0)) {
-                if (selectedUser) {
-                    setSelectedUser(null);
-                }
-                if (showUserModal) {
-                    setShowUserModal(false);
-                }
-                if (showInviteModal) {
-                    setShowInviteModal(false);
-                }
+                // Use functional updates to access current state values
+                setSelectedUser(prev => {
+                    if (prev) {
+                        return null;
+                    }
+                    return prev;
+                });
+                setShowUserModal(prev => {
+                    if (prev) {
+                        return false;
+                    }
+                    return prev;
+                });
+                setShowInviteModal(prev => {
+                    if (prev) {
+                        return false;
+                    }
+                    return prev;
+                });
             }
         };
         
@@ -95,7 +106,7 @@ const Users = () => {
                 unsubscribe();
             }
         };
-    }, [selectedUser, showUserModal, showInviteModal]);
+    }, []); // Empty dependency array - only run on mount/unmount
 
     // Debug: Log when showInviteModal changes
     useEffect(() => {
