@@ -84,8 +84,8 @@ if [ -n "${UPSTREAM_CURL}" ]; then
 else
   warn "No response from upstream ${UPSTREAM_HOST}:${UPSTREAM_PORT}. Attempting to restart app."
   $SSH "bash -lc 'pm2 ls >/dev/null 2>&1 && pm2 restart all || true; \
-                 systemctl list-units --type=service --no-pager | grep -E "(node|app|erp)\.service" -i || true; \
-                 for svc in erp app node; do systemctl restart \"$svc\" 2>/dev/null || true; done; \
+                 systemctl list-units --type=service --no-pager | grep -iE \"\\(node\\|app\\|erp\\)\\.service\" || true; \
+                 for svc in erp app node; do systemctl restart \"\$svc\" 2>/dev/null || true; done; \
                  sleep 3'"
   # retry
   UPSTREAM_CURL=$($SSH "bash -lc 'curl -sS -m 5 -H \"Host: ${SITE_DOMAIN}\" http://${UPSTREAM_HOST}:${UPSTREAM_PORT}/ | head -c 200 || true'" )
