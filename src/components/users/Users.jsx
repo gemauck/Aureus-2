@@ -96,6 +96,14 @@ const Users = () => {
         };
     }, [selectedUser, showUserModal, showInviteModal]);
 
+    // Debug: Log when showInviteModal changes
+    useEffect(() => {
+        if (showInviteModal) {
+            console.log('🎯 showInviteModal is true, should render modal');
+            console.log('🔍 InviteUserModal available:', typeof window.InviteUserModal);
+        }
+    }, [showInviteModal]);
+
     // Debug: Verify delete buttons are rendered
     useEffect(() => {
         const deleteButtons = document.querySelectorAll('button[title="Delete"]');
@@ -184,7 +192,9 @@ const Users = () => {
     };
 
     const handleInviteUser = () => {
+        console.log('📧 Invite User button clicked, opening modal...');
         setShowInviteModal(true);
+        console.log('✅ showInviteModal set to true');
     };
 
     const handleEditUser = (user) => {
@@ -1034,12 +1044,24 @@ const Users = () => {
 
             {/* Invitation Modal */}
             {showInviteModal && (
-                <window.InviteUserModal
-                    onClose={() => setShowInviteModal(false)}
-                    onSave={handleSaveInvitation}
-                    roleDefinitions={roleDefinitions}
-                    departments={departments}
-                />
+                window.InviteUserModal ? (
+                    <window.InviteUserModal
+                        onClose={() => {
+                            console.log('🚪 Closing invite modal');
+                            setShowInviteModal(false);
+                        }}
+                        onSave={handleSaveInvitation}
+                        roleDefinitions={roleDefinitions}
+                        departments={departments}
+                    />
+                ) : (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="bg-white p-6 rounded-lg">
+                            <p>Error: InviteUserModal component not loaded</p>
+                            <button onClick={() => setShowInviteModal(false)}>Close</button>
+                        </div>
+                    </div>
+                )
             )}
         </div>
     );

@@ -24,7 +24,8 @@ const UserManagement = () => {
     const [newInvitation, setNewInvitation] = useState({
         email: '',
         name: '',
-        role: 'user'
+        role: 'user',
+        accessibleProjectIds: []
     });
     const [newUser, setNewUser] = useState({
         name: '',
@@ -199,16 +200,33 @@ const UserManagement = () => {
             const token = window.storage?.getToken?.();
             const currentUser = window.storage?.getUser?.();
             
+            if (!token) {
+                console.error('❌ No authentication token found');
+                alert('You must be logged in to invite users');
+                return;
+            }
+            
+            const requestBody = {
+                ...newInvitation,
+                accessibleProjectIds: newInvitation.accessibleProjectIds || [],
+                invitedBy: currentUser?.name || 'Admin'
+            };
+            
+            console.log('📤 Sending invitation request:', {
+                email: requestBody.email,
+                name: requestBody.name,
+                role: requestBody.role,
+                hasAccessibleProjectIds: Array.isArray(requestBody.accessibleProjectIds),
+                projectIdsCount: requestBody.accessibleProjectIds?.length || 0
+            });
+            
             const response = await fetch('/api/users/invite', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({
-                    ...newInvitation,
-                    invitedBy: currentUser?.name || 'Admin'
-                })
+                body: JSON.stringify(requestBody)
             });
 
             // Check if response is JSON
@@ -226,9 +244,10 @@ const UserManagement = () => {
             
 
             if (response.ok) {
+                console.log('✅ Invitation sent successfully:', data);
                 
                 setShowInviteModal(false);
-                setNewInvitation({ email: '', name: '', role: 'user' });
+                setNewInvitation({ email: '', name: '', role: 'user', accessibleProjectIds: [] });
                 
                 // Reload users and invitations
                 await loadUsers();
@@ -238,7 +257,11 @@ const UserManagement = () => {
                 const responseData = data.data || data;
                 showInvitationResultModal(responseData);
             } else {
-                console.error('❌ Invitation failed:', data);
+                console.error('❌ Invitation failed:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    data: data
+                });
                 // Extract error message from { error: { code, message, details } } structure
                 const errorMessage = data.error?.message || data.message || data.error || 'Failed to send invitation';
                 alert(errorMessage);
@@ -803,7 +826,10 @@ const UserManagement = () => {
                         Add Guest
                     </button>
                     <button
-                        onClick={() => setShowInviteModal(true)}
+                        onClick={() => {
+                            setNewInvitation({ email: '', name: '', role: 'user', accessibleProjectIds: [] });
+                            setShowInviteModal(true);
+                        }}
                         className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center"
                     >
                         <i className="fas fa-envelope mr-2"></i>
