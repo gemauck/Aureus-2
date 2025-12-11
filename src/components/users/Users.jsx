@@ -581,6 +581,9 @@ const Users = () => {
         );
     }
 
+    // Get InviteModal component reference
+    const InviteModal = window.InviteUserModal;
+
     return (
         <div className="space-y-3">
             {/* Header */}
@@ -1043,42 +1046,25 @@ const Users = () => {
             )}
 
             {/* Invitation Modal */}
-            {showInviteModal && (() => {
-                const InviteModal = window.InviteUserModal;
-                if (!InviteModal) {
-                    console.error('❌ InviteUserModal component not available');
-                    return (
-                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                            <div className="bg-white p-6 rounded-lg">
-                                <p>Error: InviteUserModal component not loaded</p>
-                                <button onClick={() => setShowInviteModal(false)}>Close</button>
-                            </div>
-                        </div>
-                    );
-                }
-                console.log('🎨 Rendering InviteUserModal with React.createElement');
-                try {
-                    return React.createElement(InviteModal, {
-                        onClose: () => {
-                            console.log('🚪 Closing invite modal');
-                            setShowInviteModal(false);
-                        },
-                        onSave: handleSaveInvitation,
-                        roleDefinitions: roleDefinitions,
-                        departments: departments
-                    });
-                } catch (error) {
-                    console.error('❌ Error rendering InviteUserModal:', error);
-                    return (
-                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                            <div className="bg-white p-6 rounded-lg">
-                                <p>Error rendering modal: {error.message}</p>
-                                <button onClick={() => setShowInviteModal(false)}>Close</button>
-                            </div>
-                        </div>
-                    );
-                }
-            })()}
+            {showInviteModal && InviteModal && (
+                <InviteModal
+                    onClose={() => {
+                        console.log('🚪 Closing invite modal');
+                        setShowInviteModal(false);
+                    }}
+                    onSave={handleSaveInvitation}
+                    roleDefinitions={roleDefinitions}
+                    departments={departments}
+                />
+            )}
+            {showInviteModal && !InviteModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white p-6 rounded-lg">
+                        <p>Error: InviteUserModal component not loaded</p>
+                        <button onClick={() => setShowInviteModal(false)}>Close</button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
