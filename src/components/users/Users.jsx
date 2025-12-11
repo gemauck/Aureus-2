@@ -17,7 +17,6 @@ const Users = () => {
     const [filterRole, setFilterRole] = useState('all');
     const [filterStatus, setFilterStatus] = useState('all');
     const [viewMode, setViewMode] = useState('table'); // 'grid' or 'table'
-    const [inviteModalAvailable, setInviteModalAvailable] = useState(false);
 
     // Role definitions with permissions (Admin > Manager > User > Guest hierarchy)
     const roleDefinitions = {
@@ -97,29 +96,13 @@ const Users = () => {
         };
     }, [selectedUser, showUserModal, showInviteModal]);
 
-    // Check if InviteUserModal is available
-    useEffect(() => {
-        const checkModal = () => {
-            const isAvailable = typeof window.InviteUserModal === 'function';
-            if (isAvailable !== inviteModalAvailable) {
-                setInviteModalAvailable(isAvailable);
-            }
-        };
-        
-        checkModal();
-        // Check periodically in case it loads later
-        const interval = setInterval(checkModal, 100);
-        return () => clearInterval(interval);
-    }, [inviteModalAvailable]);
-
     // Debug: Log when showInviteModal changes
     useEffect(() => {
         if (showInviteModal) {
             console.log('🎯 showInviteModal is true, should render modal');
             console.log('🔍 InviteUserModal available:', typeof window.InviteUserModal);
-            console.log('🔍 inviteModalAvailable state:', inviteModalAvailable);
         }
-    }, [showInviteModal, inviteModalAvailable]);
+    }, [showInviteModal]);
 
     // Debug: Verify delete buttons are rendered
     useEffect(() => {
@@ -1060,7 +1043,7 @@ const Users = () => {
             )}
 
             {/* Invitation Modal */}
-            {showInviteModal && inviteModalAvailable && window.InviteUserModal && (
+            {showInviteModal && typeof window.InviteUserModal === 'function' && (
                 React.createElement(window.InviteUserModal, {
                     onClose: () => {
                         console.log('🚪 Closing invite modal');
@@ -1071,7 +1054,7 @@ const Users = () => {
                     departments: departments
                 })
             )}
-            {showInviteModal && !inviteModalAvailable && (
+            {showInviteModal && typeof window.InviteUserModal !== 'function' && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                     <div className="bg-white p-6 rounded-lg">
                         <p>Loading invite modal...</p>
