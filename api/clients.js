@@ -101,12 +101,15 @@ async function handler(req, res) {
         let rawClients
         try {
           
-          // Query clients directly using Prisma (we confirmed there are no NULL types, all are 'client' or 'lead')
+          // Query clients directly using Prisma - include both 'client' type and NULL types (legacy clients)
           // Use defensive includes - if relations fail, try without them
           try {
             rawClients = await prisma.client.findMany({
               where: {
-                type: 'client'
+                OR: [
+                  { type: 'client' },
+                  { type: null }
+                ]
               },
               include: {
                 ...(validUserId ? {
@@ -158,7 +161,10 @@ async function handler(req, res) {
             try {
               rawClients = await prisma.client.findMany({
                 where: {
-                  type: 'client'
+                  OR: [
+                    { type: 'client' },
+                    { type: null }
+                  ]
                 },
                 include: {
                   ...(hasGroupMembershipsTable ? {
@@ -200,7 +206,10 @@ async function handler(req, res) {
               try {
                 rawClients = await prisma.client.findMany({
                   where: {
-                    type: 'client'
+                    OR: [
+                      { type: 'client' },
+                      { type: null }
+                    ]
                   },
                   orderBy: {
                     createdAt: 'desc'
