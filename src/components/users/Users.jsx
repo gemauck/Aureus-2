@@ -17,6 +17,7 @@ const Users = () => {
     const [filterRole, setFilterRole] = useState('all');
     const [filterStatus, setFilterStatus] = useState('all');
     const [viewMode, setViewMode] = useState('table'); // 'grid' or 'table'
+    const [forceUpdate, setForceUpdate] = useState(0);
 
     // Role definitions with permissions (Admin > Manager > User > Guest hierarchy)
     const roleDefinitions = {
@@ -193,8 +194,10 @@ const Users = () => {
 
     const handleInviteUser = () => {
         console.log('📧 Invite User button clicked, opening modal...');
+        console.log('🔍 window.InviteUserModal before setState:', typeof window.InviteUserModal);
         setShowInviteModal(true);
-        console.log('✅ showInviteModal set to true');
+        setForceUpdate(prev => prev + 1); // Force re-render
+        console.log('✅ showInviteModal set to true, forceUpdate triggered');
     };
 
     const handleEditUser = (user) => {
@@ -583,6 +586,7 @@ const Users = () => {
 
     // Get modal component references (re-evaluated on each render)
     const InviteModal = window.InviteUserModal;
+    console.log('🔄 Render - showInviteModal:', showInviteModal, 'InviteModal:', typeof InviteModal, 'forceUpdate:', forceUpdate);
 
     return (
         <div className="space-y-3">
@@ -1046,17 +1050,15 @@ const Users = () => {
             )}
 
             {/* Invitation Modal */}
-            {showInviteModal && InviteModal && (
-                <InviteModal
-                    onClose={() => {
-                        console.log('🚪 Closing invite modal');
-                        setShowInviteModal(false);
-                    }}
-                    onSave={handleSaveInvitation}
-                    roleDefinitions={roleDefinitions}
-                    departments={departments}
-                />
-            )}
+            {showInviteModal && InviteModal && React.createElement(InviteModal, {
+                onClose: () => {
+                    console.log('🚪 Closing invite modal');
+                    setShowInviteModal(false);
+                },
+                onSave: handleSaveInvitation,
+                roleDefinitions: roleDefinitions,
+                departments: departments
+            })}
         </div>
     );
 };
