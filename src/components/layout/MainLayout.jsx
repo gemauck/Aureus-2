@@ -316,7 +316,8 @@ const MainLayout = () => {
     
     React.useEffect(() => {
         const checkClients = () => {
-            const ClientsComponent = window.Clients || window.ClientsSimple;
+            // PRIORITY: Prefer main Clients component (has groups fix), only fallback to ClientsSimple if main one never loads
+            const ClientsComponent = window.Clients; // Only check for main Clients component
             const isValidComponent = ClientsComponent && (
                 typeof ClientsComponent === 'function' || 
                 (typeof ClientsComponent === 'object' && ClientsComponent.$$typeof)
@@ -349,10 +350,16 @@ const MainLayout = () => {
             }
         }, 200);
         
+        // Wait longer for main Clients component (up to 30 seconds)
         const timeout = setTimeout(() => {
             clearInterval(interval);
             window.removeEventListener('clientsComponentReady', handleClientsAvailable);
-        }, 20000);
+            // Only set ready if we have at least ClientsSimple as fallback
+            if (!clientsComponentReady && window.ClientsSimple) {
+                console.warn('⚠️ Main Clients component not loaded, using ClientsSimple as fallback');
+                setClientsComponentReady(true);
+            }
+        }, 30000);
         
         return () => {
             clearInterval(interval);
@@ -455,7 +462,17 @@ const MainLayout = () => {
         if (isMobile && window.ClientsMobile) {
             return window.ClientsMobile;
         }
-        return window.Clients || window.ClientsSimple || (() => <div className="text-center py-12 text-gray-500">Clients loading...</div>);
+        // PRIORITY: Always prefer main Clients component (has groups fix) over ClientsSimple
+        // Only use ClientsSimple as last resort fallback if main component never loads
+        if (window.Clients) {
+            return window.Clients;
+        }
+        // Fallback to ClientsSimple only if main Clients is not available
+        if (window.ClientsSimple) {
+            console.warn('⚠️ Using ClientsSimple fallback - main Clients component not loaded');
+            return window.ClientsSimple;
+        }
+        return () => <div className="text-center py-12 text-gray-500">Clients loading...</div>;
     }, [clientsComponentReady, isMobile]);
     
     const Pipeline = React.useMemo(() => {

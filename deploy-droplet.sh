@@ -36,13 +36,15 @@ echo ""
 
 # Pull latest changes
 echo "📥 Pulling latest changes from GitHub..."
-if git pull origin main; then
+git fetch origin main
+if git reset --hard origin/main; then
     echo "✅ Code updated successfully"
 else
-    echo "⚠️  Git pull had conflicts, trying to resolve..."
+    echo "⚠️  Git reset failed, trying alternative approach..."
     git stash || true
-    git pull origin main
-    echo "✅ Code updated after stash"
+    git fetch origin main
+    git reset --hard origin/main
+    echo "✅ Code updated after reset"
 fi
 
 # CRITICAL: Always set correct DATABASE_URL after git pull

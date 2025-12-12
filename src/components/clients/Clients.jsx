@@ -672,6 +672,18 @@ const Clients = React.memo(() => {
         viewModeRef.current = viewMode;
     }, [clients, leads, viewMode]);
     
+    // Ensure viewMode is always valid on mount and when it changes
+    useEffect(() => {
+        const validListViews = ['clients', 'leads', 'pipeline', 'groups'];
+        const validDetailViews = ['client-detail', 'lead-detail', 'opportunity-detail'];
+        const validViews = [...validListViews, ...validDetailViews, 'news-feed'];
+        
+        if (!validViews.includes(viewMode)) {
+            console.warn('⚠️ Invalid viewMode detected:', viewMode, '- resetting to "clients"');
+            setViewMode('clients');
+        }
+    }, [viewMode]);
+    
     // REMOVED: Group enrichment useEffect - was causing rate limit issues
     // The group data should come from the main API response, not separate API calls
 
@@ -1209,11 +1221,18 @@ const Clients = React.memo(() => {
         if (!window.RouteState) return;
         
         const handleRouteChange = (route) => {
-            // If we're on the clients page and there are no segments, reset to clients list view
-            // BUT don't reset if we're viewing a detail (client-detail, lead-detail, opportunity-detail)
+            // If we're on the clients page and there are no segments, ensure we're showing a valid list view
+            // Valid list views are: 'clients', 'leads', 'pipeline', 'groups'
+            // Detail views are: 'client-detail', 'lead-detail', 'opportunity-detail'
+            // If viewMode is 'news-feed' or any other unexpected value, reset to 'clients'
             if (route?.page === 'clients' && (!route.segments || route.segments.length === 0)) {
-                if (viewMode !== 'clients' && viewMode !== 'leads' && viewMode !== 'pipeline' && viewMode !== 'groups'
-                    && viewMode !== 'client-detail' && viewMode !== 'lead-detail' && viewMode !== 'opportunity-detail') {
+                const validListViews = ['clients', 'leads', 'pipeline', 'groups'];
+                const validDetailViews = ['client-detail', 'lead-detail', 'opportunity-detail'];
+                const isValidView = validListViews.includes(viewMode) || validDetailViews.includes(viewMode);
+                
+                // If viewMode is 'news-feed' or invalid, reset to 'clients' (the default list view)
+                if (viewMode === 'news-feed' || !isValidView) {
+                    console.log('🔄 Resetting viewMode to "clients" - invalid or news-feed viewMode detected:', viewMode);
                     setViewMode('clients');
                     selectedClientRef.current = null;
                     selectedLeadRef.current = null;
@@ -7911,6 +7930,20 @@ const Clients = React.memo(() => {
                         setViewMode('clients');
                     }}
                 />
+            )}
+            {/* Fallback: If viewMode is unexpected, show clients view */}
+            {viewMode !== 'clients' && viewMode !== 'leads' && viewMode !== 'groups' && viewMode !== 'pipeline' 
+                && viewMode !== 'news-feed' && viewMode !== 'client-detail' && viewMode !== 'lead-detail' 
+                && viewMode !== 'opportunity-detail' && (
+                <div className="p-4 text-center text-gray-500">
+                    <p>Unexpected view mode: {viewMode}</p>
+                    <button 
+                        onClick={() => setViewMode('clients')}
+                        className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                        Show Clients
+                    </button>
+                </div>
             )}
             </div>
         </div>
