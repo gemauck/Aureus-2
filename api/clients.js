@@ -108,6 +108,7 @@ async function handler(req, res) {
               where: {
                 OR: [
                   { type: 'client' },
+                  { type: 'group' },
                   { type: null }
                 ]
               },
@@ -163,6 +164,7 @@ async function handler(req, res) {
                 where: {
                   OR: [
                     { type: 'client' },
+                    { type: 'group' },
                     { type: null }
                   ]
                 },
@@ -301,7 +303,7 @@ async function handler(req, res) {
                          "billingTerms", "ownerId", "externalAgentId", "createdAt", "updatedAt",
                          proposals, thumbnail, services, "rssSubscribed"
                   FROM "Client"
-                  WHERE (type = 'client' OR type IS NULL)
+                  WHERE (type = 'client' OR type = 'group' OR type IS NULL)
                   AND type != 'lead'
                   ORDER BY "createdAt" DESC
                 `
@@ -338,7 +340,7 @@ async function handler(req, res) {
               })
               // Filter manually and add empty tags
               rawClients = rawClients
-                .filter(c => !c.type || c.type === 'client' || c.type === null)
+                .filter(c => !c.type || c.type === 'client' || c.type === 'group' || c.type === null)
             }
           }
         }
