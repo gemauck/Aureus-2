@@ -461,8 +461,8 @@ const MainLayout = () => {
         );
     }, [taskManagementReady, isDark]);
 
-    // Use a function instead of useMemo to always check at render time
-    const getClientsComponent = () => {
+    // Always check at render time - don't memoize to ensure we always get the latest component
+    const getClientsComponent = React.useCallback(() => {
         if (isMobile && window.ClientsMobileOptimized) {
             return window.ClientsMobileOptimized;
         }
@@ -481,12 +481,10 @@ const MainLayout = () => {
             return window.ClientsSimple;
         }
         return () => <div className="text-center py-12 text-gray-500">Clients loading...</div>;
-    };
+    }, [isMobile]);
     
-    // Force re-render when main component becomes available by using state
-    const Clients = React.useMemo(() => {
-        return getClientsComponent();
-    }, [clientsComponentReady, isMobile, mainClientsAvailable]);
+    // Don't memoize - always get fresh component at render time
+    const Clients = getClientsComponent();
     
     // Continuously check for main Clients component and update state when it becomes available
     React.useEffect(() => {
@@ -984,9 +982,11 @@ const MainLayout = () => {
                 case 'dashboard': 
                     return <ErrorBoundary key="dashboard"><Dashboard /></ErrorBoundary>;
                 case 'clients': 
+                    // Always get fresh component at render time
+                    const ClientsComponent = getClientsComponent();
                     // Use dynamic key that changes when main Clients component loads to force re-render
-                    const clientsKey = mainClientsAvailable ? 'clients-main' : 'clients-simple';
-                    return <ErrorBoundary key={clientsKey}><Clients /></ErrorBoundary>;
+                    const clientsKey = (window.Clients && typeof window.Clients === 'function') ? 'clients-main' : 'clients-simple';
+                    return <ErrorBoundary key={clientsKey}><ClientsComponent /></ErrorBoundary>;
                 case 'projects': 
                     return <ErrorBoundary key="projects"><Projects /></ErrorBoundary>;
                 case 'teams': 
@@ -1065,7 +1065,7 @@ const MainLayout = () => {
                 </div>
             );
         }
-    }, [currentPage, Dashboard, Clients, Projects, Teams, Users, Account, TimeTracking, LeavePlatform, Manufacturing, ServiceAndMaintenance, Tools, Reports, TaskManagementComponent, Settings, ErrorBoundary, isAdmin, mainClientsAvailable]);
+    }, [currentPage, Dashboard, Projects, Teams, Users, Account, TimeTracking, LeavePlatform, Manufacturing, ServiceAndMaintenance, Tools, Reports, TaskManagementComponent, Settings, ErrorBoundary, isAdmin, getClientsComponent]);
 
     React.useEffect(() => {
         window.currentPage = currentPage;
