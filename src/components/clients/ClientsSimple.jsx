@@ -468,5 +468,13 @@ const ClientsSimple = () => {
     );
 };
 
-// Make available globally
-window.ClientsSimple = ClientsSimple;
+// Make available globally - BUT ONLY AS FALLBACK
+// Main Clients component should always be used if available
+// Only register if main Clients component is not available
+if (!window.Clients || typeof window.Clients !== 'function') {
+    window.ClientsSimple = ClientsSimple;
+    console.log('⚠️ ClientsSimple registered as fallback - main Clients component not available');
+} else {
+    console.log('✅ Main Clients component available - skipping ClientsSimple registration');
+    // Don't register ClientsSimple if main Clients is available
+}
