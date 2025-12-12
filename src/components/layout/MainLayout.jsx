@@ -978,7 +978,9 @@ const MainLayout = () => {
                 case 'dashboard': 
                     return <ErrorBoundary key="dashboard"><Dashboard /></ErrorBoundary>;
                 case 'clients': 
-                    return <ErrorBoundary key="clients"><Clients /></ErrorBoundary>;
+                    // Use dynamic key that changes when main Clients component loads to force re-render
+                    const clientsKey = mainClientsAvailable ? 'clients-main' : 'clients-simple';
+                    return <ErrorBoundary key={clientsKey}><Clients /></ErrorBoundary>;
                 case 'projects': 
                     return <ErrorBoundary key="projects"><Projects /></ErrorBoundary>;
                 case 'teams': 
@@ -1057,7 +1059,7 @@ const MainLayout = () => {
                 </div>
             );
         }
-    }, [currentPage, Dashboard, Clients, Projects, Teams, Users, Account, TimeTracking, LeavePlatform, Manufacturing, ServiceAndMaintenance, Tools, Reports, TaskManagementComponent, Settings, ErrorBoundary, isAdmin]);
+    }, [currentPage, Dashboard, Clients, Projects, Teams, Users, Account, TimeTracking, LeavePlatform, Manufacturing, ServiceAndMaintenance, Tools, Reports, TaskManagementComponent, Settings, ErrorBoundary, isAdmin, mainClientsAvailable]);
 
     React.useEffect(() => {
         window.currentPage = currentPage;
