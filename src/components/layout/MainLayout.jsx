@@ -313,6 +313,7 @@ const MainLayout = () => {
     }, []);
     
     const [clientsComponentReady, setClientsComponentReady] = React.useState(false);
+    const [mainClientsAvailable, setMainClientsAvailable] = React.useState(false);
     
     React.useEffect(() => {
         const checkClients = () => {
@@ -322,8 +323,13 @@ const MainLayout = () => {
                 typeof ClientsComponent === 'function' || 
                 (typeof ClientsComponent === 'object' && ClientsComponent.$$typeof)
             );
-            if (isValidComponent && !clientsComponentReady) {
-                setClientsComponentReady(true);
+            if (isValidComponent) {
+                if (!clientsComponentReady) {
+                    setClientsComponentReady(true);
+                }
+                if (!mainClientsAvailable) {
+                    setMainClientsAvailable(true);
+                }
                 return true;
             }
             return false;
@@ -462,18 +468,48 @@ const MainLayout = () => {
         if (isMobile && window.ClientsMobile) {
             return window.ClientsMobile;
         }
-        // PRIORITY: Always prefer main Clients component (has groups fix) over ClientsSimple
-        // Only use ClientsSimple as last resort fallback if main component never loads
-        if (window.Clients) {
+        // PRIORITY: Always check for main Clients component at render time (has groups fix)
+        // This ensures we use the main component even if it loads after ClientsSimple
+        if (window.Clients && typeof window.Clients === 'function') {
+            console.log('✅ Using main Clients component (has Groups tab)');
             return window.Clients;
         }
         // Fallback to ClientsSimple only if main Clients is not available
-        if (window.ClientsSimple) {
+        if (window.ClientsSimple && typeof window.ClientsSimple === 'function') {
             console.warn('⚠️ Using ClientsSimple fallback - main Clients component not loaded');
             return window.ClientsSimple;
         }
         return () => <div className="text-center py-12 text-gray-500">Clients loading...</div>;
-    }, [clientsComponentReady, isMobile]);
+    }, [clientsComponentReady, isMobile, mainClientsAvailable]);
+    
+    // Continuously check for main Clients component and update state when it becomes available
+    React.useEffect(() => {
+        const checkMainClients = () => {
+            if (window.Clients && typeof window.Clients === 'function' && !mainClientsAvailable) {
+                console.log('🔄 Main Clients component detected, updating state');
+                setMainClientsAvailable(true);
+                setClientsComponentReady(true);
+            }
+        };
+        
+        // Check immediately
+        checkMainClients();
+        
+        // Check periodically until found
+        const interval = setInterval(() => {
+            checkMainClients();
+        }, 500);
+        
+        // Stop checking after 30 seconds
+        const timeout = setTimeout(() => {
+            clearInterval(interval);
+        }, 30000);
+        
+        return () => {
+            clearInterval(interval);
+            clearTimeout(timeout);
+        };
+    }, [mainClientsAvailable]);
     
     const Pipeline = React.useMemo(() => {
         return window.Pipeline;
