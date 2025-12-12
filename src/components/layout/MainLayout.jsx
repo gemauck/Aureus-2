@@ -461,7 +461,8 @@ const MainLayout = () => {
         );
     }, [taskManagementReady, isDark]);
 
-    const Clients = React.useMemo(() => {
+    // Use a function instead of useMemo to always check at render time
+    const getClientsComponent = () => {
         if (isMobile && window.ClientsMobileOptimized) {
             return window.ClientsMobileOptimized;
         }
@@ -480,6 +481,11 @@ const MainLayout = () => {
             return window.ClientsSimple;
         }
         return () => <div className="text-center py-12 text-gray-500">Clients loading...</div>;
+    };
+    
+    // Force re-render when main component becomes available by using state
+    const Clients = React.useMemo(() => {
+        return getClientsComponent();
     }, [clientsComponentReady, isMobile, mainClientsAvailable]);
     
     // Continuously check for main Clients component and update state when it becomes available
