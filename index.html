@@ -78,32 +78,90 @@
     </script>
     
     <!-- Cache Clearing Script - Runs early to clear stale cache -->
+    <!-- VERSION: 20251215-groups-fix-v2 - Update this when deploying new changes -->
     <script>
         (function() {
-            // Check if we need to force clear cache (via URL parameter or localStorage flag)
+            var APP_VERSION = '20251215-groups-fix-v2';
+            var VERSION_STORAGE_KEY = 'abcotronics_app_html_version';
+            
             try {
+                // Check stored version vs current version
+                var storedVersion = localStorage.getItem(VERSION_STORAGE_KEY);
+                var versionMismatch = storedVersion !== APP_VERSION;
+                
+                // Check if we need to force clear cache (via URL parameter or localStorage flag or version mismatch)
                 var urlParams = new URLSearchParams(window.location.search);
                 var hashParams = new URLSearchParams((window.location.hash || '').split('?')[1] || '');
                 var shouldClearCache = urlParams.has('clearCache') || 
                                       urlParams.has('forceRefresh') || 
                                       hashParams.has('clearCache') || 
                                       hashParams.has('forceRefresh') ||
-                                      localStorage.getItem('abcotronics_force_clear_cache') === 'true';
+                                      localStorage.getItem('abcotronics_force_clear_cache') === 'true' ||
+                                      versionMismatch;
                 
-                if (shouldClearCache) {
+                if (shouldClearCache || versionMismatch) {
                     console.log('🧹 Force clearing cache on page load...');
-                    // Clear localStorage cache flags
-                    localStorage.removeItem('abcotronics_force_clear_cache');
+                    console.log('📦 Version check: stored=' + storedVersion + ', current=' + APP_VERSION);
+                    
+                    // Clear all localStorage cache related to clients/leads/groups
+                    try {
+                        var keysToRemove = [];
+                        for (var i = 0; i < localStorage.length; i++) {
+                            var key = localStorage.key(i);
+                            if (key && (
+                                key.includes('clients') || 
+                                key.includes('leads') || 
+                                key.includes('groups') ||
+                                key.includes('cache') ||
+                                key.includes('Client') ||
+                                key.includes('Lead') ||
+                                key.includes('Group') ||
+                                key.startsWith('abcotronics_') ||
+                                key.startsWith('app_')
+                            )) {
+                                keysToRemove.push(key);
+                            }
+                        }
+                        keysToRemove.forEach(function(key) {
+                            localStorage.removeItem(key);
+                            console.log('🗑️ Cleared localStorage key:', key);
+                        });
+                    } catch (e) {
+                        console.warn('Could not clear localStorage:', e);
+                    }
                     
                     // Clear sessionStorage
                     try {
                         sessionStorage.clear();
+                        console.log('🗑️ Cleared sessionStorage');
                     } catch (e) {
                         console.warn('Could not clear sessionStorage:', e);
                     }
                     
+                    // Clear IndexedDB if available (for advanced caching)
+                    if ('indexedDB' in window) {
+                        try {
+                            indexedDB.databases().then(function(databases) {
+                                databases.forEach(function(db) {
+                                    if (db.name && (db.name.includes('cache') || db.name.includes('abcotronics'))) {
+                                        indexedDB.deleteDatabase(db.name);
+                                        console.log('🗑️ Cleared IndexedDB:', db.name);
+                                    }
+                                });
+                            }).catch(function(e) {
+                                console.warn('Could not clear IndexedDB:', e);
+                            });
+                        } catch (e) {
+                            console.warn('IndexedDB not available:', e);
+                        }
+                    }
+                    
                     // Set a flag for when DatabaseAPI loads to clear its cache
                     window.__CLEAR_DATABASE_CACHE_ON_LOAD__ = true;
+                    window.__FORCE_REFRESH_DATA__ = true;
+                    
+                    // Update stored version
+                    localStorage.setItem(VERSION_STORAGE_KEY, APP_VERSION);
                     
                     // Remove refresh parameters from URL
                     if (urlParams.has('clearCache') || urlParams.has('forceRefresh')) {
@@ -114,7 +172,32 @@
                         window.history.replaceState({}, '', newUrl);
                     }
                     
-                    console.log('✅ Cache clear flag set - will clear when DatabaseAPI loads');
+                    console.log('✅ Cache cleared and version updated to:', APP_VERSION);
+                    
+                    // If version mismatch, force a hard reload to get fresh HTML
+                    if (versionMismatch && !urlParams.has('noReload')) {
+                        console.log('🔄 Version mismatch detected - forcing hard reload to get fresh HTML');
+                        console.log('   Old version:', storedVersion);
+                        console.log('   New version:', APP_VERSION);
+                        // Force a hard reload with cache bypass
+                        setTimeout(function() {
+                            // Add noReload param to prevent infinite loop
+                            var reloadUrl = window.location.pathname + '?noReload=1' + window.location.hash;
+                            // Use location.reload(true) for hard reload, or location.replace for cache bypass
+                            if (window.location.reload) {
+                                // Try to force reload from server
+                                window.location.href = reloadUrl;
+                            } else {
+                                window.location.replace(reloadUrl);
+                            }
+                        }, 100);
+                        return; // Exit early to prevent further execution
+                    }
+                } else {
+                    // No cache clear needed, but update version if not set
+                    if (!storedVersion) {
+                        localStorage.setItem(VERSION_STORAGE_KEY, APP_VERSION);
+                    }
                 }
             } catch (e) {
                 console.warn('Error in cache clearing script:', e);
