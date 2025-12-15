@@ -179,18 +179,16 @@
                         console.log('🔄 Version mismatch detected - forcing hard reload to get fresh HTML');
                         console.log('   Old version:', storedVersion);
                         console.log('   New version:', APP_VERSION);
-                        // Force a hard reload with cache bypass
-                        setTimeout(function() {
-                            // Add noReload param to prevent infinite loop
-                            var reloadUrl = window.location.pathname + '?noReload=1' + window.location.hash;
-                            // Use location.reload(true) for hard reload, or location.replace for cache bypass
-                            if (window.location.reload) {
-                                // Try to force reload from server
-                                window.location.href = reloadUrl;
-                            } else {
-                                window.location.replace(reloadUrl);
-                            }
-                        }, 100);
+                        // Force an immediate hard reload with cache bypass
+                        // Use location.reload(true) for maximum cache bypass (deprecated but still works)
+                        if (window.location.reload) {
+                            // Force reload from server, bypassing cache
+                            window.location.reload(true);
+                        } else {
+                            // Fallback: redirect with cache-busting timestamp
+                            var reloadUrl = window.location.href.split('?')[0] + '?noReload=1&_t=' + Date.now();
+                            window.location.replace(reloadUrl);
+                        }
                         return; // Exit early to prevent further execution
                     }
                 } else {
