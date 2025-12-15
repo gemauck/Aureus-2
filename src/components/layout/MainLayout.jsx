@@ -478,24 +478,35 @@ const MainLayout = () => {
     // Continuously check for main Clients component and update state when it becomes available
     React.useEffect(() => {
         const checkMainClients = () => {
-            if (window.Clients && typeof window.Clients === 'function' && !mainClientsAvailable) {
-                console.log('🔄 Main Clients component detected, updating state');
-                setMainClientsAvailable(true);
-                setClientsComponentReady(true);
+            if (window.Clients && typeof window.Clients === 'function') {
+                if (!mainClientsAvailable) {
+                    console.log('🔄 Main Clients component detected, updating state');
+                    setMainClientsAvailable(true);
+                    setClientsComponentReady(true);
+                }
+                return true; // Found it
             }
+            return false; // Not found yet
         };
         
         // Check immediately
-        checkMainClients();
+        if (checkMainClients()) {
+            return; // Already available, no need to poll
+        }
         
         // Check periodically until found
         const interval = setInterval(() => {
-            checkMainClients();
-        }, 500);
+            if (checkMainClients()) {
+                clearInterval(interval);
+            }
+        }, 200); // Check more frequently
         
         // Stop checking after 30 seconds
         const timeout = setTimeout(() => {
             clearInterval(interval);
+            if (!mainClientsAvailable) {
+                console.warn('⚠️ Main Clients component not loaded after 30 seconds');
+            }
         }, 30000);
         
         return () => {
@@ -974,7 +985,11 @@ const MainLayout = () => {
                     // Always get fresh component at render time
                     const ClientsComponent = getClientsComponent();
                     // Use dynamic key that changes when main Clients component loads to force re-render
-                    const clientsKey = (window.Clients && typeof window.Clients === 'function') ? 'clients-main' : 'clients-simple';
+                    const clientsKey = (window.Clients && typeof window.Clients === 'function') ? 'clients-main' : 'clients-loading';
+                    // Log for debugging
+                    if (!window.Clients || typeof window.Clients !== 'function') {
+                        console.log('⚠️ MainLayout: window.Clients not available yet, showing loading state');
+                    }
                     return <ErrorBoundary key={clientsKey}><ClientsComponent /></ErrorBoundary>;
                 case 'projects': 
                     return <ErrorBoundary key="projects"><Projects /></ErrorBoundary>;
