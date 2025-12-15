@@ -809,10 +809,13 @@ try {
 
         // Create validation lists sheet
         const validationSheet = workbook.addWorksheet('Validation Lists');
-        validationSheet.getColumn(1).header = 'Type Options';
-        validationSheet.getColumn(3).header = 'Unit Options';
-        validationSheet.getColumn(5).header = 'Category Options';
         
+        // Add headers in row 1
+        validationSheet.getCell(1, 1).value = 'Type Options';
+        validationSheet.getCell(1, 3).value = 'Unit Options';
+        validationSheet.getCell(1, 5).value = 'Category Options';
+        
+        // Add data starting from row 2
         typeValues.forEach((val, idx) => {
           validationSheet.getCell(idx + 2, 1).value = val;
         });
@@ -868,10 +871,12 @@ try {
         worksheet.getColumn(17).width = 12; // Location Code
 
         // Add data validation for Type column (column D, rows 2-100)
+        // ExcelJS uses formulae array with proper Excel formula syntax
+        const typeEndRow = typeValues.length + 1;
         const typeValidation = {
           type: 'list',
           allowBlank: false,
-          formulae: [`Validation Lists!$A$2:$A$${typeValues.length + 1}`],
+          formulae: [`'Validation Lists'!$A$2:$A$${typeEndRow}`],
           showInputMessage: true,
           promptTitle: 'Type',
           prompt: 'Select a valid type from the dropdown',
@@ -887,10 +892,11 @@ try {
         }
 
         // Add data validation for Unit column (column F, rows 2-100)
+        const unitEndRow = unitValues.length + 1;
         const unitValidation = {
           type: 'list',
           allowBlank: false,
-          formulae: [`Validation Lists!$C$2:$C$${unitValues.length + 1}`],
+          formulae: [`'Validation Lists'!$C$2:$C$${unitEndRow}`],
           showInputMessage: true,
           promptTitle: 'Unit',
           prompt: 'Select a valid unit from the dropdown',
