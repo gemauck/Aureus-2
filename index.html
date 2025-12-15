@@ -505,35 +505,17 @@
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; console.log('✅ React loaded'); }" onerror="console.error('❌ Failed to load React from CDN');"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; } if(typeof ReactDOM !== 'undefined') { window.ReactDOM = ReactDOM; window.BabelReady = true; window.dispatchEvent(new Event('babelready')); console.log('✅ ReactDOM loaded'); }" onerror="console.error('❌ Failed to load ReactDOM from CDN');"></script>
     <!-- XLSX library for Excel export - Load without defer to ensure proper initialization -->
-    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.20.1/xlsx.full.min.js" 
+    <script crossorigin src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js" 
             onload="(function() { 
                      if(typeof XLSX !== 'undefined' && XLSX && XLSX.utils) { 
                        window.XLSX = XLSX; 
-                       console.log('✅ XLSX library loaded from cdnjs'); 
+                       console.log('✅ XLSX library loaded from SheetJS CDN'); 
                      } else {
-                       console.warn('⚠️ XLSX loaded but not properly initialized, trying fallback');
-                       var fallback = document.createElement('script'); 
-                       fallback.crossOrigin = 'anonymous'; 
-                       fallback.src = 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js'; 
-                       fallback.onload = function() { 
-                         if(typeof XLSX !== 'undefined' && XLSX && XLSX.utils) { 
-                           window.XLSX = XLSX; 
-                           console.log('✅ XLSX library loaded from fallback CDN (sheetjs)'); 
-                         } else { 
-                           console.error('❌ XLSX failed to initialize from both CDNs'); 
-                         } 
-                       }; 
-                       fallback.onerror = function() { console.error('❌ XLSX failed to load from fallback CDN'); }; 
-                       document.head.appendChild(fallback);
+                       console.warn('⚠️ XLSX loaded but not properly initialized');
+                       console.error('❌ XLSX failed to initialize - Excel export will be unavailable');
                      }
                    })();" 
-            onerror="console.error('❌ XLSX CDN load failed from cdnjs - attempting fallback'); 
-                     var fallback = document.createElement('script'); 
-                     fallback.crossOrigin = 'anonymous'; 
-                     fallback.src = 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js'; 
-                     fallback.onload = function() { if(typeof XLSX !== 'undefined' && XLSX && XLSX.utils) { window.XLSX = XLSX; console.log('✅ XLSX library loaded from fallback CDN (sheetjs)'); } else { console.error('❌ XLSX failed to initialize from fallback'); } }; 
-                     fallback.onerror = function() { console.error('❌ XLSX failed to load from both CDNs - Excel export will be unavailable'); }; 
-                     document.head.appendChild(fallback);"></script>
+            onerror="console.error('❌ XLSX CDN load failed from SheetJS - Excel export will be unavailable');"></script>
     
     <!-- Verify React loaded and expose globally (fallback) -->
     <script>
