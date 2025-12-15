@@ -829,17 +829,27 @@ Category: components, accessories, finished_goods, raw_materials, packaging, wor
       const unitValues = ['pcs', 'kg', 'g', 'm', 'cm', 'mm', 'L', 'mL', 'box', 'pack', 'roll', 'sheet', 'set', 'pair', 'dozen'];
       const categoryValues = ['components', 'accessories', 'finished_goods', 'raw_materials', 'packaging', 'work_in_progress'];
 
-      // Create validation lists sheet
-      const validationData = [
-        ['Type Options'],
-        ...typeValues.map(v => [v]),
-        [''],
-        ['Unit Options'],
-        ...unitValues.map(v => [v]),
-        [''],
-        ['Category Options'],
-        ...categoryValues.map(v => [v])
-      ];
+      // Create validation lists sheet with proper structure for data validation
+      // Column A: Type options (starting at row 2)
+      // Column C: Unit options (starting at row 2)
+      // Column E: Category options (starting at row 2)
+      const validationData = [];
+      
+      // Row 1: Headers
+      validationData.push(['Type Options', '', 'Unit Options', '', 'Category Options']);
+      
+      // Fill data - pad rows to match longest array
+      const maxRows = Math.max(typeValues.length, unitValues.length, categoryValues.length);
+      for (let i = 0; i < maxRows; i++) {
+        const row = [];
+        row[0] = i < typeValues.length ? typeValues[i] : '';      // Column A
+        row[1] = ''; // Column B (empty)
+        row[2] = i < unitValues.length ? unitValues[i] : '';      // Column C
+        row[3] = ''; // Column D (empty)
+        row[4] = i < categoryValues.length ? categoryValues[i] : ''; // Column E
+        validationData.push(row);
+      }
+      
       const wsValidation = XLSXLib.utils.aoa_to_sheet(validationData);
       XLSXLib.utils.book_append_sheet(wb, wsValidation, 'Validation Lists');
 
@@ -881,6 +891,53 @@ Category: components, accessories, finished_goods, raw_materials, packaging, wor
         { wch: 12 }  // Location Code
       ];
       ws['!cols'] = colWidths;
+
+      // Add data validation for Type column (column D, index 3) and Unit column (column F, index 5)
+      // Note: xlsx library has limited support for data validation, so we'll add it manually
+      // Using range references to the Validation Lists sheet
+      
+      // Type column validation (D2:D1000) - references Validation Lists!A2:A6
+      const typeRange = 'D2:D1000';
+      const typeSource = 'Validation Lists!$A$2:$A$6';
+      
+      // Unit column validation (F2:F1000) - references Validation Lists!C2:C16
+      const unitRange = 'F2:F1000';
+      const unitSource = 'Validation Lists!$C$2:$C$16';
+      
+      // Initialize data validation array if it doesn't exist
+      if (!ws['!dataValidation']) {
+        ws['!dataValidation'] = [];
+      }
+      
+      // Add Type column data validation
+      ws['!dataValidation'].push({
+        sqref: typeRange,
+        type: 'list',
+        formula1: typeSource,
+        showDropDown: '1',
+        showInputMessage: '1',
+        promptTitle: 'Type',
+        prompt: 'Select a valid type from the dropdown',
+        showErrorBox: '1',
+        errorStyle: 'stop',
+        errorTitle: 'Invalid Type',
+        error: 'Please select a valid type: component, raw_material, work_in_progress, finished_good, or final_product'
+      });
+      
+      // Add Unit column data validation
+      ws['!dataValidation'].push({
+        sqref: unitRange,
+        type: 'list',
+        formula1: unitSource,
+        showDropDown: '1',
+        showInputMessage: '1',
+        promptTitle: 'Unit',
+        prompt: 'Select a valid unit from the dropdown',
+        showErrorBox: '1',
+        errorStyle: 'stop',
+        errorTitle: 'Invalid Unit',
+        error: 'Please select a valid unit from the dropdown list'
+      });
 
       // Add instructions at the end (after data)
       const instructionRows = [
