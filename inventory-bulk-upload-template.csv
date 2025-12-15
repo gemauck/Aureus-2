@@ -1,0 +1,5 @@
+SKU,Name,Category,Type,Quantity,Unit,Unit Cost,Total Value,Reorder Point,Reorder Qty,Location,Supplier,Thumbnail,Legacy Part Number,Manufacturing Part Number,Supplier Part Numbers,Location Code
+SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main Warehouse,Supplier ABC,,OLD-PART-001,MFG-PART-001,"[""SUP-001"",""SUP-002""]",LOC001
+SKU0002,Example Component 2,accessories,raw_material,50,pcs,2.25,112.50,10,15,Main Warehouse,Supplier XYZ,,OLD-PART-002,MFG-PART-002,"[""SUP-003""]",LOC001
+SKU0003,Finished Product 1,finished_goods,final_product,25,pcs,150.00,3750.00,5,10,Main Warehouse,Internal,,OLD-PART-003,MFG-PART-003,"[]",LOC001
+
