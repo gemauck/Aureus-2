@@ -781,10 +781,10 @@ try {
     // Helper function to get XLSX library (waits if needed)
     const getXLSX = () => {
       // Check multiple possible locations
-      if (typeof window !== 'undefined' && window.XLSX) {
+      if (typeof window !== 'undefined' && window.XLSX && window.XLSX.utils) {
         return window.XLSX;
       }
-      if (typeof XLSX !== 'undefined') {
+      if (typeof XLSX !== 'undefined' && XLSX.utils) {
         return XLSX;
       }
       return null;
@@ -797,12 +797,12 @@ try {
       for (let i = 0; i < 20; i++) {
         await new Promise(resolve => setTimeout(resolve, 100));
         XLSXLib = getXLSX();
-        if (XLSXLib) break;
+        if (XLSXLib && XLSXLib.utils) break;
       }
     }
 
-    // If still not available, fallback to CSV
-    if (!XLSXLib) {
+    // If still not available or doesn't have utils, fallback to CSV
+    if (!XLSXLib || !XLSXLib.utils) {
       console.warn('XLSX library not available, falling back to CSV');
       const templateContent = `SKU,Name,Category,Type,Quantity,Unit,Unit Cost,Total Value,Reorder Point,Reorder Qty,Location,Supplier,Thumbnail,Legacy Part Number,Manufacturing Part Number,Supplier Part Numbers,Location Code
 SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main Warehouse,Supplier ABC,,OLD-PART-001,MFG-PART-001,"[{""supplier"":""Supplier ABC"",""partNumber"":""SUP-001""},{""supplier"":""Supplier ABC"",""partNumber"":""SUP-002""}]",LOC001
