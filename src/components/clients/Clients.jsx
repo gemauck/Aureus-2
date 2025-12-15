@@ -7950,4 +7950,7 @@ const Clients = React.memo(() => {
     );
 });
 
+// Register to window for global access
+window.Clients = Clients;
+
 export default Clients;
