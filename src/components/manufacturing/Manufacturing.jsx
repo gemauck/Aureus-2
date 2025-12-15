@@ -211,11 +211,14 @@ try {
   const [showCategoryInput, setShowCategoryInput] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isExportingInventory, setIsExportingInventory] = useState(false);
+  const [isBulkUploading, setIsBulkUploading] = useState(false);
+  const [bulkUploadProgress, setBulkUploadProgress] = useState({ current: 0, total: 0 });
   const [clients, setClients] = useState([]);
   const [users, setUsers] = useState([]);
   const [duplicateWarnings, setDuplicateWarnings] = useState([]);
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
   const [pendingCreateData, setPendingCreateData] = useState(null);
+  const fileInputRef = useRef(null);
 
 
   // Load data from API - OPTIMIZED: Parallel loading + localStorage cache
@@ -772,6 +775,238 @@ try {
       setIsExportingInventory(false);
     }
   }, [inventory]);
+
+  // Download CSV template for bulk upload
+  const handleDownloadTemplate = useCallback(() => {
+    const templateContent = `SKU,Name,Category,Type,Quantity,Unit,Unit Cost,Total Value,Reorder Point,Reorder Qty,Location,Supplier,Thumbnail,Legacy Part Number,Manufacturing Part Number,Supplier Part Numbers,Location Code
+SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main Warehouse,Supplier ABC,,OLD-PART-001,MFG-PART-001,"[""SUP-001"",""SUP-002""]",LOC001
+SKU0002,Example Component 2,accessories,raw_material,50,pcs,2.25,112.50,10,15,Main Warehouse,Supplier XYZ,,OLD-PART-002,MFG-PART-002,"[""SUP-003""]",LOC001
+SKU0003,Finished Product 1,finished_goods,final_product,25,pcs,150.00,3750.00,5,10,Main Warehouse,Internal,,OLD-PART-003,MFG-PART-003,"[]",LOC001`;
+
+    const blob = new Blob([templateContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'inventory-bulk-upload-template.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, []);
+
+  // Parse CSV content to JSON format
+  const parseCSV = useCallback((csvContent) => {
+    const lines = csvContent.trim().split('\n');
+    if (lines.length < 2) {
+      throw new Error('CSV must have at least a header row and one data row');
+    }
+
+    const headers = lines[0].split(',').map(h => h.trim());
+    const rows = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue; // Skip empty lines
+
+      // Simple CSV parsing (handles quoted fields)
+      const values = [];
+      let current = '';
+      let inQuotes = false;
+
+      for (let j = 0; j < line.length; j++) {
+        const char = line[j];
+        
+        if (char === '"') {
+          if (inQuotes && line[j + 1] === '"') {
+            // Escaped quote
+            current += '"';
+            j++;
+          } else {
+            // Toggle quote state
+            inQuotes = !inQuotes;
+          }
+        } else if (char === ',' && !inQuotes) {
+          values.push(current.trim());
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      values.push(current.trim()); // Add last value
+
+      if (values.length !== headers.length) {
+        console.warn(`⚠️  Row ${i + 1} has ${values.length} columns, expected ${headers.length}. Skipping.`);
+        continue;
+      }
+
+      const row = {};
+      headers.forEach((header, index) => {
+        let value = values[index] || '';
+        
+        // Parse JSON arrays for Supplier Part Numbers
+        if (header === 'Supplier Part Numbers' && value) {
+          try {
+            // Remove extra quotes if present
+            value = value.replace(/^["']|["']$/g, '');
+            // Try to parse as JSON
+            if (value.startsWith('[') && value.endsWith(']')) {
+              value = JSON.parse(value);
+            } else if (value) {
+              // Single value, wrap in array
+              value = [value];
+            } else {
+              value = [];
+            }
+          } catch (e) {
+            // If parsing fails, treat as single value or empty
+            value = value ? [value] : [];
+          }
+        }
+        
+        // Convert numeric fields
+        if (['Quantity', 'Unit Cost', 'Total Value', 'Reorder Point', 'Reorder Qty'].includes(header)) {
+          value = value ? parseFloat(value) : (header === 'Quantity' ? 0 : 0);
+        }
+        
+        // Map CSV headers to API field names
+        const fieldMap = {
+          'SKU': 'sku',
+          'Name': 'name',
+          'Category': 'category',
+          'Type': 'type',
+          'Quantity': 'quantity',
+          'Unit': 'unit',
+          'Unit Cost': 'unitCost',
+          'Total Value': 'totalValue',
+          'Reorder Point': 'reorderPoint',
+          'Reorder Qty': 'reorderQty',
+          'Location': 'location',
+          'Supplier': 'supplier',
+          'Thumbnail': 'thumbnail',
+          'Legacy Part Number': 'legacyPartNumber',
+          'Manufacturing Part Number': 'manufacturingPartNumber',
+          'Supplier Part Numbers': 'supplierPartNumbers',
+          'Location Code': 'locationCode'
+        };
+
+        const apiField = fieldMap[header] || header.toLowerCase().replace(/\s+/g, '');
+        
+        // Only include non-empty values (except for numeric fields which should be 0 if empty)
+        if (value !== '' && value !== null && value !== undefined) {
+          row[apiField] = value;
+        }
+      });
+
+      // Only add row if it has at least a name
+      if (row.name) {
+        rows.push(row);
+      } else {
+        console.warn(`⚠️  Row ${i + 1} skipped: missing required 'name' field`);
+      }
+    }
+
+    return rows;
+  }, []);
+
+  // Handle bulk upload from CSV file
+  const handleBulkUpload = useCallback(async (file) => {
+    if (!file) return;
+
+    setIsBulkUploading(true);
+    setBulkUploadProgress({ current: 0, total: 0 });
+
+    try {
+      // Read file content
+      const text = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = reject;
+        reader.readAsText(file);
+      });
+
+      // Parse CSV
+      const items = parseCSV(text);
+      
+      if (items.length === 0) {
+        window.alert('No valid items found in CSV file. Please check the format.');
+        setIsBulkUploading(false);
+        return;
+      }
+
+      setBulkUploadProgress({ current: 0, total: items.length });
+
+      // Upload via API
+      if (!window.DatabaseAPI || !window.DatabaseAPI.makeRequest) {
+        throw new Error('DatabaseAPI not available');
+      }
+
+      const response = await window.DatabaseAPI.makeRequest('/manufacturing/inventory', {
+        method: 'POST',
+        body: JSON.stringify({ items })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: response.statusText }));
+        throw new Error(errorData.message || `Upload failed: ${response.status}`);
+      }
+
+      const result = await response.json();
+      const created = result.data?.created || result.created || 0;
+      const errors = result.data?.errors || result.errors || 0;
+
+      // Refresh inventory
+      if (window.DatabaseAPI && typeof window.DatabaseAPI.getInventory === 'function') {
+        try {
+          const invResponse = await window.DatabaseAPI.getInventory(selectedLocationId !== 'all' ? selectedLocationId : null);
+          if (invResponse?.data?.items) {
+            setInventory(invResponse.data.items);
+            localStorage.setItem('manufacturing_inventory', JSON.stringify(invResponse.data.items));
+          }
+        } catch (refreshError) {
+          console.warn('Failed to refresh inventory after upload:', refreshError);
+        }
+      }
+
+      // Show success message
+      const message = `✅ Bulk upload complete!\n\n` +
+        `Created: ${created} items\n` +
+        (errors > 0 ? `Errors: ${errors} items\n` : '') +
+        `\nTotal processed: ${items.length} items`;
+      
+      window.alert(message);
+
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+
+    } catch (error) {
+      console.error('❌ Bulk upload error:', error);
+      window.alert(`Failed to upload inventory: ${error.message}\n\nPlease check:\n- CSV format is correct\n- All required fields (Name) are filled\n- File is saved as CSV format`);
+    } finally {
+      setIsBulkUploading(false);
+      setBulkUploadProgress({ current: 0, total: 0 });
+    }
+  }, [parseCSV, selectedLocationId]);
+
+  // Handle file input change
+  const handleFileInputChange = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.name.endsWith('.csv')) {
+        window.alert('Please select a CSV file.');
+        return;
+      }
+      handleBulkUpload(file);
+    }
+  }, [handleBulkUpload]);
+
+  // Trigger file input click
+  const handleBulkUploadClick = useCallback(() => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  }, []);
 
   const getInitialInventory = () => [];
 
@@ -1398,6 +1633,30 @@ try {
               >
                 <i className={`fas fa-rotate-right text-xs ${isRefreshing ? 'animate-spin' : ''}`}></i>
                 {isRefreshing ? 'Refreshing…' : 'Refresh'}
+              </button>
+              <button
+                onClick={handleDownloadTemplate}
+                className="px-3 py-2 text-sm rounded-lg flex items-center gap-2 border bg-white hover:bg-gray-50 border-gray-300"
+                title="Download CSV template for bulk upload"
+              >
+                <i className="fas fa-file-download text-xs"></i>
+                Download Template
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={handleFileInputChange}
+                style={{ display: 'none' }}
+              />
+              <button
+                onClick={handleBulkUploadClick}
+                disabled={isBulkUploading}
+                className={`px-3 py-2 text-sm rounded-lg flex items-center gap-2 border ${isBulkUploading ? 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed' : 'bg-white hover:bg-gray-50 border-gray-300'}`}
+                title="Upload CSV file to bulk import inventory items"
+              >
+                <i className={`${isBulkUploading ? 'fas fa-spinner animate-spin' : 'fas fa-upload'} text-xs`}></i>
+                {isBulkUploading ? `Uploading... ${bulkUploadProgress.total > 0 ? `(${bulkUploadProgress.current}/${bulkUploadProgress.total})` : ''}` : 'Bulk Upload'}
               </button>
               <button
                 onClick={handleExportInventory}
