@@ -779,8 +779,8 @@ try {
   // Download CSV template for bulk upload
   const handleDownloadTemplate = useCallback(() => {
     const templateContent = `SKU,Name,Category,Type,Quantity,Unit,Unit Cost,Total Value,Reorder Point,Reorder Qty,Location,Supplier,Thumbnail,Legacy Part Number,Manufacturing Part Number,Supplier Part Numbers,Location Code
-SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main Warehouse,Supplier ABC,,OLD-PART-001,MFG-PART-001,"[""SUP-001"",""SUP-002""]",LOC001
-SKU0002,Example Component 2,accessories,raw_material,50,pcs,2.25,112.50,10,15,Main Warehouse,Supplier XYZ,,OLD-PART-002,MFG-PART-002,"[""SUP-003""]",LOC001
+SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main Warehouse,Supplier ABC,,OLD-PART-001,MFG-PART-001,"[{""supplier"":""Supplier ABC"",""partNumber"":""SUP-001""},{""supplier"":""Supplier ABC"",""partNumber"":""SUP-002""}]",LOC001
+SKU0002,Example Component 2,accessories,raw_material,50,pcs,2.25,112.50,10,15,Main Warehouse,Supplier XYZ,,OLD-PART-002,MFG-PART-002,"[{""supplier"":""Supplier XYZ"",""partNumber"":""SUP-003""}]",LOC001
 SKU0003,Finished Product 1,finished_goods,final_product,25,pcs,150.00,3750.00,5,10,Main Warehouse,Internal,,OLD-PART-003,MFG-PART-003,"[]",LOC001`;
 
     const blob = new Blob([templateContent], { type: 'text/csv;charset=utf-8;' });
@@ -840,26 +840,48 @@ SKU0003,Finished Product 1,finished_goods,final_product,25,pcs,150.00,3750.00,5,
       }
 
       const row = {};
+      // Find supplier index for use when processing Supplier Part Numbers
+      const supplierIndex = headers.findIndex(h => h === 'Supplier');
+      const supplierValue = supplierIndex >= 0 ? (values[supplierIndex] || '').trim() : '';
+      
       headers.forEach((header, index) => {
         let value = values[index] || '';
         
         // Parse JSON arrays for Supplier Part Numbers
+        // Supports two formats:
+        // 1. Array of objects: [{"supplier": "Supplier Name", "partNumber": "PART123"}, ...]
+        // 2. Array of strings (legacy): ["PART1", "PART2"] - converts to objects using Supplier field
         if (header === 'Supplier Part Numbers' && value) {
           try {
             // Remove extra quotes if present
             value = value.replace(/^["']|["']$/g, '');
             // Try to parse as JSON
             if (value.startsWith('[') && value.endsWith(']')) {
-              value = JSON.parse(value);
+              const parsed = JSON.parse(value);
+              // Check if it's an array of objects (new format)
+              if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'object' && parsed[0].supplier !== undefined) {
+                // Already in correct format: [{supplier: "...", partNumber: "..."}]
+                value = parsed;
+              } else if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
+                // Legacy format: ["PART1", "PART2"] - convert to objects
+                // Use the Supplier field from CSV if available, otherwise empty
+                value = parsed.map(partNum => ({ supplier: supplierValue, partNumber: partNum }));
+              } else {
+                value = [];
+              }
             } else if (value) {
-              // Single value, wrap in array
-              value = [value];
+              // Single string value - convert to object format
+              value = [{ supplier: supplierValue, partNumber: value }];
             } else {
               value = [];
             }
           } catch (e) {
             // If parsing fails, treat as single value or empty
-            value = value ? [value] : [];
+            if (value) {
+              value = [{ supplier: supplierValue, partNumber: value }];
+            } else {
+              value = [];
+            }
           }
         }
         
@@ -933,7 +955,18 @@ SKU0003,Finished Product 1,finished_goods,final_product,25,pcs,150.00,3750.00,5,
         return;
       }
 
-      setBulkUploadProgress({ current: 0, total: items.length });
+      // Convert supplierPartNumbers arrays to JSON strings (API expects string format)
+      const processedItems = items.map(item => {
+        if (item.supplierPartNumbers && Array.isArray(item.supplierPartNumbers)) {
+          return {
+            ...item,
+            supplierPartNumbers: JSON.stringify(item.supplierPartNumbers)
+          };
+        }
+        return item;
+      });
+
+      setBulkUploadProgress({ current: 0, total: processedItems.length });
 
       // Upload via API
       if (!window.DatabaseAPI || !window.DatabaseAPI.makeRequest) {
@@ -942,7 +975,7 @@ SKU0003,Finished Product 1,finished_goods,final_product,25,pcs,150.00,3750.00,5,
 
       const response = await window.DatabaseAPI.makeRequest('/manufacturing/inventory', {
         method: 'POST',
-        body: JSON.stringify({ items })
+        body: JSON.stringify({ items: processedItems })
       });
 
       if (!response.ok) {
