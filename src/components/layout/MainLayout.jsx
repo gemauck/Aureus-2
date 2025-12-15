@@ -468,8 +468,13 @@ const MainLayout = () => {
             return window.ClientsMobile;
         }
         // Use main Clients component (has Groups tab)
-        if (window.Clients && typeof window.Clients === 'function') {
-            return window.Clients;
+        // React components can be functions or objects (with $$typeof)
+        const ClientsComponent = window.Clients;
+        if (ClientsComponent && (
+            typeof ClientsComponent === 'function' || 
+            (typeof ClientsComponent === 'object' && ClientsComponent.$$typeof)
+        )) {
+            return ClientsComponent;
         }
         // Loading state if main component not available yet
         return () => <div className="text-center py-12 text-gray-500">Clients loading...</div>;
@@ -478,7 +483,13 @@ const MainLayout = () => {
     // Continuously check for main Clients component and update state when it becomes available
     React.useEffect(() => {
         const checkMainClients = () => {
-            if (window.Clients && typeof window.Clients === 'function') {
+            // React components can be functions or objects (with $$typeof)
+            const ClientsComponent = window.Clients;
+            const isValidComponent = ClientsComponent && (
+                typeof ClientsComponent === 'function' || 
+                (typeof ClientsComponent === 'object' && ClientsComponent.$$typeof)
+            );
+            if (isValidComponent) {
                 if (!mainClientsAvailable) {
                     console.log('🔄 Main Clients component detected, updating state');
                     setMainClientsAvailable(true);
@@ -985,9 +996,14 @@ const MainLayout = () => {
                     // Always get fresh component at render time
                     const ClientsComponent = getClientsComponent();
                     // Use dynamic key that changes when main Clients component loads to force re-render
-                    const clientsKey = (window.Clients && typeof window.Clients === 'function') ? 'clients-main' : 'clients-loading';
+                    const MainClientsComponent = window.Clients;
+                    const isValidComponent = MainClientsComponent && (
+                        typeof MainClientsComponent === 'function' || 
+                        (typeof MainClientsComponent === 'object' && MainClientsComponent.$$typeof)
+                    );
+                    const clientsKey = isValidComponent ? 'clients-main' : 'clients-loading';
                     // Log for debugging
-                    if (!window.Clients || typeof window.Clients !== 'function') {
+                    if (!isValidComponent) {
                         console.log('⚠️ MainLayout: window.Clients not available yet, showing loading state');
                     }
                     return <ErrorBoundary key={clientsKey}><ClientsComponent /></ErrorBoundary>;
