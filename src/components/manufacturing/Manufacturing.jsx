@@ -782,30 +782,53 @@ try {
     const getXLSX = () => {
       // Try multiple possible locations and structures
       // The CDN might expose it differently
-      if (typeof XLSX !== 'undefined' && XLSX.utils) {
-        return XLSX;
-      }
-      if (typeof window !== 'undefined' && window.XLSX && window.XLSX.utils) {
-        return window.XLSX;
-      }
-      // Sometimes it's nested differently
-      if (typeof window !== 'undefined' && window.XLSX) {
-        const xlsx = window.XLSX;
-        if (xlsx.utils || (xlsx.default && xlsx.default.utils)) {
-          return xlsx.default || xlsx;
+      
+      // Check global XLSX
+      if (typeof XLSX !== 'undefined') {
+        // Check if it has utils (fully loaded)
+        if (XLSX.utils && typeof XLSX.utils.book_new === 'function') {
+          return XLSX;
+        }
+        // Check if it has any properties (might be loading)
+        const keys = Object.keys(XLSX);
+        if (keys.length > 0) {
+          // Has properties, might be the library
+          if (XLSX.utils) return XLSX;
         }
       }
+      
+      // Check window.XLSX
+      if (typeof window !== 'undefined' && window.XLSX) {
+        if (window.XLSX.utils && typeof window.XLSX.utils.book_new === 'function') {
+          return window.XLSX;
+        }
+        const keys = Object.keys(window.XLSX);
+        if (keys.length > 0 && window.XLSX.utils) {
+          return window.XLSX;
+        }
+      }
+      
+      // Sometimes it's nested differently (ES modules)
+      if (typeof window !== 'undefined' && window.XLSX) {
+        const xlsx = window.XLSX;
+        if (xlsx.default && xlsx.default.utils && typeof xlsx.default.utils.book_new === 'function') {
+          return xlsx.default;
+        }
+      }
+      
       return null;
     };
 
-    // Try to get XLSX, wait a bit if not immediately available (defer loading)
+    // Try to get XLSX, wait longer if not immediately available (defer loading)
     let XLSXLib = getXLSX();
     if (!XLSXLib) {
-      // Wait up to 2 seconds for XLSX to load (it's loaded with defer)
-      for (let i = 0; i < 20; i++) {
+      // Wait up to 5 seconds for XLSX to fully load (it's loaded with defer)
+      for (let i = 0; i < 50; i++) {
         await new Promise(resolve => setTimeout(resolve, 100));
         XLSXLib = getXLSX();
-        if (XLSXLib && XLSXLib.utils) break;
+        if (XLSXLib && XLSXLib.utils && typeof XLSXLib.utils.book_new === 'function') {
+          break;
+        }
       }
     }
 
