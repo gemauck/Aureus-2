@@ -776,22 +776,131 @@ try {
     }
   }, [inventory]);
 
-  // Download CSV template for bulk upload
+  // Download Excel template for bulk upload with dropdowns
   const handleDownloadTemplate = useCallback(() => {
-    const templateContent = `SKU,Name,Category,Type,Quantity,Unit,Unit Cost,Total Value,Reorder Point,Reorder Qty,Location,Supplier,Thumbnail,Legacy Part Number,Manufacturing Part Number,Supplier Part Numbers,Location Code
+    // Check if xlsx library is available (it's loaded with defer, so might need to wait)
+    if (typeof XLSX === 'undefined' && typeof window.XLSX === 'undefined') {
+      // Fallback to CSV if xlsx not available
+      const templateContent = `SKU,Name,Category,Type,Quantity,Unit,Unit Cost,Total Value,Reorder Point,Reorder Qty,Location,Supplier,Thumbnail,Legacy Part Number,Manufacturing Part Number,Supplier Part Numbers,Location Code
 SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main Warehouse,Supplier ABC,,OLD-PART-001,MFG-PART-001,"[{""supplier"":""Supplier ABC"",""partNumber"":""SUP-001""},{""supplier"":""Supplier ABC"",""partNumber"":""SUP-002""}]",LOC001
 SKU0002,Example Component 2,accessories,raw_material,50,pcs,2.25,112.50,10,15,Main Warehouse,Supplier XYZ,,OLD-PART-002,MFG-PART-002,"[{""supplier"":""Supplier XYZ"",""partNumber"":""SUP-003""}]",LOC001
 SKU0003,Finished Product 1,finished_goods,final_product,25,pcs,150.00,3750.00,5,10,Main Warehouse,Internal,,OLD-PART-003,MFG-PART-003,"[]",LOC001`;
 
-    const blob = new Blob([templateContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'inventory-bulk-upload-template.csv';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+      const blob = new Blob([templateContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'inventory-bulk-upload-template.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      return;
+    }
+
+    try {
+      // Use window.XLSX if available, fallback to XLSX
+      const XLSXLib = window.XLSX || XLSX;
+      if (!XLSXLib) {
+        throw new Error('XLSX library not available');
+      }
+
+      // Create workbook
+      const wb = XLSXLib.utils.book_new();
+
+      // Valid values for dropdowns
+      const typeValues = ['component', 'raw_material', 'work_in_progress', 'finished_good', 'final_product'];
+      const unitValues = ['pcs', 'kg', 'g', 'm', 'cm', 'mm', 'L', 'mL', 'box', 'pack', 'roll', 'sheet', 'set', 'pair', 'dozen'];
+      const categoryValues = ['components', 'accessories', 'finished_goods', 'raw_materials', 'packaging', 'work_in_progress'];
+
+      // Create validation lists sheet
+      const validationData = [
+        ['Type Options'],
+        ...typeValues.map(v => [v]),
+        [''],
+        ['Unit Options'],
+        ...unitValues.map(v => [v]),
+        [''],
+        ['Category Options'],
+        ...categoryValues.map(v => [v])
+      ];
+      const wsValidation = XLSXLib.utils.aoa_to_sheet(validationData);
+      XLSXLib.utils.book_append_sheet(wb, wsValidation, 'Validation Lists');
+
+      // Create main data sheet
+      const headers = [
+        'SKU', 'Name', 'Category', 'Type', 'Quantity', 'Unit', 'Unit Cost', 
+        'Total Value', 'Reorder Point', 'Reorder Qty', 'Location', 'Supplier', 
+        'Thumbnail', 'Legacy Part Number', 'Manufacturing Part Number', 
+        'Supplier Part Numbers', 'Location Code'
+      ];
+
+      const exampleRows = [
+        ['SKU0001', 'Example Component 1', 'components', 'component', 100, 'pcs', 5.50, 550.00, 20, 30, 'Main Warehouse', 'Supplier ABC', '', 'OLD-PART-001', 'MFG-PART-001', '[{"supplier":"Supplier ABC","partNumber":"SUP-001"},{"supplier":"Supplier ABC","partNumber":"SUP-002"}]', 'LOC001'],
+        ['SKU0002', 'Example Component 2', 'accessories', 'raw_material', 50, 'pcs', 2.25, 112.50, 10, 15, 'Main Warehouse', 'Supplier XYZ', '', 'OLD-PART-002', 'MFG-PART-002', '[{"supplier":"Supplier XYZ","partNumber":"SUP-003"}]', 'LOC001'],
+        ['SKU0003', 'Finished Product 1', 'finished_goods', 'final_product', 25, 'pcs', 150.00, 3750.00, 5, 10, 'Main Warehouse', 'Internal', '', 'OLD-PART-003', 'MFG-PART-003', '[]', 'LOC001']
+      ];
+
+      const data = [headers, ...exampleRows];
+      const ws = XLSXLib.utils.aoa_to_sheet(data);
+
+      // Set column widths
+      const colWidths = [
+        { wch: 12 }, // SKU
+        { wch: 30 }, // Name
+        { wch: 15 }, // Category
+        { wch: 18 }, // Type
+        { wch: 10 }, // Quantity
+        { wch: 8 },  // Unit
+        { wch: 12 }, // Unit Cost
+        { wch: 12 }, // Total Value
+        { wch: 12 }, // Reorder Point
+        { wch: 12 }, // Reorder Qty
+        { wch: 20 }, // Location
+        { wch: 20 }, // Supplier
+        { wch: 15 }, // Thumbnail
+        { wch: 20 }, // Legacy Part Number
+        { wch: 25 }, // Manufacturing Part Number
+        { wch: 40 }, // Supplier Part Numbers
+        { wch: 12 }  // Location Code
+      ];
+      ws['!cols'] = colWidths;
+
+      // Add instructions at the end (after data)
+      const instructionRows = [
+        [''],
+        ['=== INSTRUCTIONS ===', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+        ['1. Delete example rows (rows 2-4) before adding your data', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+        ['2. To set up DROPDOWNS for Type and Unit columns:', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+        ['   - Select Type column (column D), go to Data > Data Validation', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+        ['   - Allow: List, Source: =Validation Lists!$A$2:$A$6', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+        ['   - Repeat for Unit column (F): =Validation Lists!$C$2:$C$16', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+        ['3. Valid values are in the "Validation Lists" sheet', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+        ['4. SKU is optional - will auto-generate if empty', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+        ['5. Supplier Part Numbers: [{"supplier":"Name","partNumber":"PART123"}]', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '']
+      ];
+      XLSXLib.utils.sheet_add_aoa(ws, instructionRows, { origin: -1 });
+
+      XLSXLib.utils.book_append_sheet(wb, ws, 'Inventory Template');
+
+      // Write file
+      XLSXLib.writeFile(wb, 'inventory-bulk-upload-template.xlsx');
+    } catch (error) {
+      console.error('Error creating Excel file:', error);
+      // Fallback to CSV
+      const templateContent = `SKU,Name,Category,Type,Quantity,Unit,Unit Cost,Total Value,Reorder Point,Reorder Qty,Location,Supplier,Thumbnail,Legacy Part Number,Manufacturing Part Number,Supplier Part Numbers,Location Code
+SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main Warehouse,Supplier ABC,,OLD-PART-001,MFG-PART-001,"[{""supplier"":""Supplier ABC"",""partNumber"":""SUP-001""},{""supplier"":""Supplier ABC"",""partNumber"":""SUP-002""}]",LOC001`;
+
+      const blob = new Blob([templateContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'inventory-bulk-upload-template.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
   }, []);
 
   // Parse CSV content to JSON format
@@ -930,8 +1039,8 @@ SKU0003,Finished Product 1,finished_goods,final_product,25,pcs,150.00,3750.00,5,
     return rows;
   }, []);
 
-  // Handle bulk upload from CSV file
-  const handleBulkUpload = useCallback(async (file) => {
+  // Handle bulk upload from CSV or Excel file
+  const handleBulkUpload = useCallback(async (file, originalFileName) => {
     if (!file) return;
 
     setIsBulkUploading(true);
@@ -1023,13 +1132,47 @@ SKU0003,Finished Product 1,finished_goods,final_product,25,pcs,150.00,3750.00,5,
   }, [parseCSV, selectedLocationId]);
 
   // Handle file input change
-  const handleFileInputChange = useCallback((e) => {
+  const handleFileInputChange = useCallback(async (e) => {
     const file = e.target.files?.[0];
-    if (file) {
-      if (!file.name.endsWith('.csv')) {
-        window.alert('Please select a CSV file.');
+    if (!file) return;
+
+    const fileName = file.name.toLowerCase();
+    const isCSV = fileName.endsWith('.csv');
+    const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+
+    if (!isCSV && !isExcel) {
+      window.alert('Please select a CSV or Excel file (.csv, .xlsx, .xls).');
+      return;
+    }
+
+    if (isExcel) {
+      // Handle Excel file
+      const XLSXLib = window.XLSX || XLSX;
+      if (!XLSXLib) {
+        window.alert('Excel file support requires xlsx library. Please use CSV format.');
         return;
       }
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const workbook = XLSXLib.read(arrayBuffer, { type: 'array' });
+        
+        // Get first sheet (or sheet named 'Inventory Template')
+        const sheetName = workbook.SheetNames.find(name => 
+          name.toLowerCase().includes('inventory') || name.toLowerCase().includes('template')
+        ) || workbook.SheetNames[0];
+        
+        const worksheet = workbook.Sheets[sheetName];
+        
+        // Convert to CSV format for parsing
+        const csvData = XLSXLib.utils.sheet_to_csv(worksheet);
+        handleBulkUpload(new Blob([csvData], { type: 'text/csv' }), file.name);
+      } catch (error) {
+        console.error('Error reading Excel file:', error);
+        window.alert('Failed to read Excel file. Please check the file format or try using CSV format.');
+      }
+    } else {
+      // Handle CSV file
       handleBulkUpload(file);
     }
   }, [handleBulkUpload]);
@@ -1670,7 +1813,7 @@ SKU0003,Finished Product 1,finished_goods,final_product,25,pcs,150.00,3750.00,5,
               <button
                 onClick={handleDownloadTemplate}
                 className="px-3 py-2 text-sm rounded-lg flex items-center gap-2 border bg-white hover:bg-gray-50 border-gray-300"
-                title="Download CSV template for bulk upload"
+                title="Download Excel template with dropdowns for bulk upload"
               >
                 <i className="fas fa-file-download text-xs"></i>
                 Download Template
@@ -1678,7 +1821,7 @@ SKU0003,Finished Product 1,finished_goods,final_product,25,pcs,150.00,3750.00,5,
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".csv"
+                accept=".csv,.xlsx,.xls"
                 onChange={handleFileInputChange}
                 style={{ display: 'none' }}
               />
@@ -1686,7 +1829,7 @@ SKU0003,Finished Product 1,finished_goods,final_product,25,pcs,150.00,3750.00,5,
                 onClick={handleBulkUploadClick}
                 disabled={isBulkUploading}
                 className={`px-3 py-2 text-sm rounded-lg flex items-center gap-2 border ${isBulkUploading ? 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed' : 'bg-white hover:bg-gray-50 border-gray-300'}`}
-                title="Upload CSV file to bulk import inventory items"
+                title="Upload CSV or Excel file to bulk import inventory items"
               >
                 <i className={`${isBulkUploading ? 'fas fa-spinner animate-spin' : 'fas fa-upload'} text-xs`}></i>
                 {isBulkUploading ? `Uploading... ${bulkUploadProgress.total > 0 ? `(${bulkUploadProgress.current}/${bulkUploadProgress.total})` : ''}` : 'Bulk Upload'}
