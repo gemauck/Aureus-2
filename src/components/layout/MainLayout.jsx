@@ -317,8 +317,8 @@ const MainLayout = () => {
     
     React.useEffect(() => {
         const checkClients = () => {
-            // PRIORITY: Prefer main Clients component (has groups fix), only fallback to ClientsSimple if main one never loads
-            const ClientsComponent = window.Clients; // Only check for main Clients component
+            // Only check for main Clients component
+            const ClientsComponent = window.Clients;
             const isValidComponent = ClientsComponent && (
                 typeof ClientsComponent === 'function' || 
                 (typeof ClientsComponent === 'object' && ClientsComponent.$$typeof)
@@ -356,14 +356,12 @@ const MainLayout = () => {
             }
         }, 200);
         
-        // Wait longer for main Clients component (up to 30 seconds)
+        // Wait for main Clients component (up to 30 seconds)
         const timeout = setTimeout(() => {
             clearInterval(interval);
             window.removeEventListener('clientsComponentReady', handleClientsAvailable);
-            // Only set ready if we have at least ClientsSimple as fallback
-            if (!clientsComponentReady && window.ClientsSimple) {
-                console.warn('⚠️ Main Clients component not loaded, using ClientsSimple as fallback');
-                setClientsComponentReady(true);
+            if (!clientsComponentReady) {
+                console.warn('⚠️ Main Clients component not loaded after 30 seconds');
             }
         }, 30000);
         
@@ -461,7 +459,7 @@ const MainLayout = () => {
         );
     }, [taskManagementReady, isDark]);
 
-    // Always check at render time - don't memoize to ensure we always get the latest component
+    // Always check at render time - only use main Clients component
     const getClientsComponent = React.useCallback(() => {
         if (isMobile && window.ClientsMobileOptimized) {
             return window.ClientsMobileOptimized;
@@ -469,22 +467,13 @@ const MainLayout = () => {
         if (isMobile && window.ClientsMobile) {
             return window.ClientsMobile;
         }
-        // PRIORITY: Always check for main Clients component at render time (has groups fix)
-        // This ensures we use the main component even if it loads after ClientsSimple
+        // Use main Clients component (has Groups tab)
         if (window.Clients && typeof window.Clients === 'function') {
-            console.log('✅ Using main Clients component (has Groups tab)');
             return window.Clients;
         }
-        // Fallback to ClientsSimple only if main Clients is not available
-        if (window.ClientsSimple && typeof window.ClientsSimple === 'function') {
-            console.warn('⚠️ Using ClientsSimple fallback - main Clients component not loaded');
-            return window.ClientsSimple;
-        }
+        // Loading state if main component not available yet
         return () => <div className="text-center py-12 text-gray-500">Clients loading...</div>;
     }, [isMobile]);
-    
-    // Don't memoize - always get fresh component at render time
-    const Clients = getClientsComponent();
     
     // Continuously check for main Clients component and update state when it becomes available
     React.useEffect(() => {
