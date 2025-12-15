@@ -1318,10 +1318,12 @@
                 }
             }, 20000); // Increased to 20 seconds to account for lazy loading
             // Late bind Clients if it registers after this script
+            // NOTE: Only bind main Clients component - ClientsSimple has been removed
             (function() {
                 function bindClients() {
                     if (!window.Clients) {
-                        window.Clients = window.Clients || window.ClientsDatabaseFirst || window.ClientsSimple || window.ClientsCached;
+                        // Only use main Clients component - no fallback to ClientsSimple
+                        window.Clients = window.Clients || window.ClientsDatabaseFirst || window.ClientsCached;
                         if (window.Clients) {
                             console.log('✅ Bound window.Clients dynamically');
                         }

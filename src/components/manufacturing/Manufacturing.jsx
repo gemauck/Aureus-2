@@ -835,10 +835,21 @@ try {
     // If still not available or doesn't have utils, fallback to CSV
     if (!XLSXLib || !XLSXLib.utils) {
       console.warn('XLSX library not available, falling back to CSV');
+      
+      // Show user-friendly notification
+      if (window.alert) {
+        window.alert('Excel template unavailable. Downloading CSV template instead.\n\nNote: Excel support requires the XLSX library to load properly. You can still use the CSV file - it works the same way!');
+      }
+      
       const templateContent = `SKU,Name,Category,Type,Quantity,Unit,Unit Cost,Total Value,Reorder Point,Reorder Qty,Location,Supplier,Thumbnail,Legacy Part Number,Manufacturing Part Number,Supplier Part Numbers,Location Code
 SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main Warehouse,Supplier ABC,,OLD-PART-001,MFG-PART-001,"[{""supplier"":""Supplier ABC"",""partNumber"":""SUP-001""},{""supplier"":""Supplier ABC"",""partNumber"":""SUP-002""}]",LOC001
 SKU0002,Example Component 2,accessories,raw_material,50,pcs,2.25,112.50,10,15,Main Warehouse,Supplier XYZ,,OLD-PART-002,MFG-PART-002,"[{""supplier"":""Supplier XYZ"",""partNumber"":""SUP-003""}]",LOC001
-SKU0003,Finished Product 1,finished_goods,final_product,25,pcs,150.00,3750.00,5,10,Main Warehouse,Internal,,OLD-PART-003,MFG-PART-003,"[]",LOC001`;
+SKU0003,Finished Product 1,finished_goods,final_product,25,pcs,150.00,3750.00,5,10,Main Warehouse,Internal,,OLD-PART-003,MFG-PART-003,"[]",LOC001
+
+VALID VALUES:
+Type: component, raw_material, work_in_progress, finished_good, final_product
+Unit: pcs, kg, g, m, cm, mm, L, mL, box, pack, roll, sheet, set, pair, dozen
+Category: components, accessories, finished_goods, raw_materials, packaging, work_in_progress`;
 
       const blob = new Blob([templateContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
