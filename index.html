@@ -517,6 +517,18 @@
                    })();" 
             onerror="console.error('❌ XLSX CDN load failed from SheetJS - Excel export will be unavailable');"></script>
     
+    <!-- ExcelJS library for Excel data validation support (dropdowns) - from unpkg (allowed by CSP) -->
+    <script crossorigin src="https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js" 
+            onload="(function() { 
+                     if(typeof ExcelJS !== 'undefined') { 
+                       window.ExcelJS = ExcelJS; 
+                       console.log('✅ ExcelJS library loaded for data validation support'); 
+                     } else {
+                       console.warn('⚠️ ExcelJS loaded but not properly initialized');
+                     }
+                   })();" 
+            onerror="console.warn('⚠️ ExcelJS CDN load failed - data validation dropdowns may not work');"></script>
+    
     <!-- Verify React loaded and expose globally (fallback) -->
     <script>
         // Fallback check after scripts load

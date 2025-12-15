@@ -778,10 +778,18 @@ try {
 
   // Download Excel template for bulk upload with dropdowns
   const handleDownloadTemplate = useCallback(async () => {
-    // Get XLSX library - wait for it to load (similar to MonthlyDocumentCollectionTracker)
+    // Try to use ExcelJS first (has full data validation support), fallback to XLSX
+    let ExcelJSLib = window.ExcelJS;
     let XLSXLib = window.XLSX;
     
-    // Wait for XLSX to load (it's loaded with defer)
+    // Wait for libraries to load
+    if (!ExcelJSLib) {
+      for (let i = 0; i < 20 && !ExcelJSLib; i++) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        ExcelJSLib = window.ExcelJS;
+      }
+    }
+    
     if (!XLSXLib || !XLSXLib.utils) {
       for (let i = 0; i < 30 && (!XLSXLib || !XLSXLib.utils); i++) {
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -789,7 +797,142 @@ try {
       }
     }
 
-    // If still not available or doesn't have utils, fallback to CSV
+    // If ExcelJS is available, use it for proper data validation support
+    if (ExcelJSLib) {
+      try {
+        const workbook = new ExcelJSLib.Workbook();
+        
+        // Valid values for dropdowns
+        const typeValues = ['component', 'raw_material', 'work_in_progress', 'finished_good', 'final_product'];
+        const unitValues = ['pcs', 'kg', 'g', 'm', 'cm', 'mm', 'L', 'mL', 'box', 'pack', 'roll', 'sheet', 'set', 'pair', 'dozen'];
+        const categoryValues = ['components', 'accessories', 'finished_goods', 'raw_materials', 'packaging', 'work_in_progress'];
+
+        // Create validation lists sheet
+        const validationSheet = workbook.addWorksheet('Validation Lists');
+        validationSheet.getColumn(1).header = 'Type Options';
+        validationSheet.getColumn(3).header = 'Unit Options';
+        validationSheet.getColumn(5).header = 'Category Options';
+        
+        typeValues.forEach((val, idx) => {
+          validationSheet.getCell(idx + 2, 1).value = val;
+        });
+        unitValues.forEach((val, idx) => {
+          validationSheet.getCell(idx + 2, 3).value = val;
+        });
+        categoryValues.forEach((val, idx) => {
+          validationSheet.getCell(idx + 2, 5).value = val;
+        });
+
+        // Create main data sheet
+        const worksheet = workbook.addWorksheet('Inventory Template');
+        
+        // Headers
+        const headers = [
+          'SKU', 'Name', 'Category', 'Type', 'Quantity', 'Unit', 'Unit Cost', 
+          'Total Value', 'Reorder Point', 'Reorder Qty', 'Location', 'Supplier', 
+          'Thumbnail', 'Legacy Part Number', 'Manufacturing Part Number', 
+          'Supplier Part Numbers', 'Location Code'
+        ];
+        worksheet.addRow(headers);
+        
+        // Style header row
+        worksheet.getRow(1).font = { bold: true };
+        worksheet.getRow(1).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE0E0E0' }
+        };
+
+        // Example rows
+        worksheet.addRow(['SKU0001', 'Example Component 1', 'components', 'component', 100, 'pcs', 5.50, 550.00, 20, 30, 'Main Warehouse', 'Supplier ABC', '', 'OLD-PART-001', 'MFG-PART-001', '[{"supplier":"Supplier ABC","partNumber":"SUP-001"},{"supplier":"Supplier ABC","partNumber":"SUP-002"}]', 'LOC001']);
+        worksheet.addRow(['SKU0002', 'Example Component 2', 'accessories', 'raw_material', 50, 'pcs', 2.25, 112.50, 10, 15, 'Main Warehouse', 'Supplier XYZ', '', 'OLD-PART-002', 'MFG-PART-002', '[{"supplier":"Supplier XYZ","partNumber":"SUP-003"}]', 'LOC001']);
+        worksheet.addRow(['SKU0003', 'Finished Product 1', 'finished_goods', 'final_product', 25, 'pcs', 150.00, 3750.00, 5, 10, 'Main Warehouse', 'Internal', '', 'OLD-PART-003', 'MFG-PART-003', '[]', 'LOC001']);
+
+        // Set column widths
+        worksheet.getColumn(1).width = 12;  // SKU
+        worksheet.getColumn(2).width = 30; // Name
+        worksheet.getColumn(3).width = 15; // Category
+        worksheet.getColumn(4).width = 18; // Type
+        worksheet.getColumn(5).width = 10; // Quantity
+        worksheet.getColumn(6).width = 8;  // Unit
+        worksheet.getColumn(7).width = 12; // Unit Cost
+        worksheet.getColumn(8).width = 12; // Total Value
+        worksheet.getColumn(9).width = 12; // Reorder Point
+        worksheet.getColumn(10).width = 12; // Reorder Qty
+        worksheet.getColumn(11).width = 20; // Location
+        worksheet.getColumn(12).width = 20; // Supplier
+        worksheet.getColumn(13).width = 15; // Thumbnail
+        worksheet.getColumn(14).width = 20; // Legacy Part Number
+        worksheet.getColumn(15).width = 25; // Manufacturing Part Number
+        worksheet.getColumn(16).width = 40; // Supplier Part Numbers
+        worksheet.getColumn(17).width = 12; // Location Code
+
+        // Add data validation for Type column (column D, rows 2-100)
+        const typeValidation = {
+          type: 'list',
+          allowBlank: false,
+          formulae: [`Validation Lists!$A$2:$A$${typeValues.length + 1}`],
+          showInputMessage: true,
+          promptTitle: 'Type',
+          prompt: 'Select a valid type from the dropdown',
+          showErrorBox: true,
+          errorStyle: 'stop',
+          errorTitle: 'Invalid Type',
+          error: 'Please select a valid type: component, raw_material, work_in_progress, finished_good, or final_product'
+        };
+        
+        // Apply to range D2:D100 (can be extended by user if needed)
+        for (let row = 2; row <= 100; row++) {
+          worksheet.getCell(row, 4).dataValidation = typeValidation; // Column D
+        }
+
+        // Add data validation for Unit column (column F, rows 2-100)
+        const unitValidation = {
+          type: 'list',
+          allowBlank: false,
+          formulae: [`Validation Lists!$C$2:$C$${unitValues.length + 1}`],
+          showInputMessage: true,
+          promptTitle: 'Unit',
+          prompt: 'Select a valid unit from the dropdown',
+          showErrorBox: true,
+          errorStyle: 'stop',
+          errorTitle: 'Invalid Unit',
+          error: 'Please select a valid unit from the dropdown list'
+        };
+        
+        // Apply to range F2:F100 (can be extended by user if needed)
+        for (let row = 2; row <= 100; row++) {
+          worksheet.getCell(row, 6).dataValidation = unitValidation; // Column F
+        }
+
+        // Add instructions
+        worksheet.addRow([]);
+        worksheet.addRow(['=== INSTRUCTIONS ===']);
+        worksheet.addRow(['1. Delete example rows (rows 2-4) before adding your data']);
+        worksheet.addRow(['2. Type and Unit columns have dropdown lists - click the arrow to select']);
+        worksheet.addRow(['3. Valid values are in the "Validation Lists" sheet']);
+        worksheet.addRow(['4. SKU is optional - will auto-generate if empty']);
+        worksheet.addRow(['5. Supplier Part Numbers: [{"supplier":"Name","partNumber":"PART123"}]']);
+
+        // Write file
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'inventory-bulk-upload-template.xlsx';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        return;
+      } catch (error) {
+        console.error('Error creating Excel file with ExcelJS:', error);
+        // Fall through to XLSX fallback
+      }
+    }
+
+    // Fallback to XLSX (limited data validation support)
     if (!XLSXLib || !XLSXLib.utils) {
       console.warn('XLSX library not available, falling back to CSV');
       
@@ -821,7 +964,7 @@ Category: components, accessories, finished_goods, raw_materials, packaging, wor
     }
 
     try {
-      // Create workbook
+      // Create workbook using XLSX (fallback - limited data validation)
       const wb = XLSXLib.utils.book_new();
 
       // Valid values for dropdowns
