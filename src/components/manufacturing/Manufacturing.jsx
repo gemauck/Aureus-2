@@ -780,12 +780,20 @@ try {
   const handleDownloadTemplate = useCallback(async () => {
     // Helper function to get XLSX library (waits if needed)
     const getXLSX = () => {
-      // Check multiple possible locations
+      // Try multiple possible locations and structures
+      // The CDN might expose it differently
+      if (typeof XLSX !== 'undefined' && XLSX.utils) {
+        return XLSX;
+      }
       if (typeof window !== 'undefined' && window.XLSX && window.XLSX.utils) {
         return window.XLSX;
       }
-      if (typeof XLSX !== 'undefined' && XLSX.utils) {
-        return XLSX;
+      // Sometimes it's nested differently
+      if (typeof window !== 'undefined' && window.XLSX) {
+        const xlsx = window.XLSX;
+        if (xlsx.utils || (xlsx.default && xlsx.default.utils)) {
+          return xlsx.default || xlsx;
+        }
       }
       return null;
     };
@@ -822,6 +830,17 @@ SKU0003,Finished Product 1,finished_goods,final_product,25,pcs,150.00,3750.00,5,
     }
 
     try {
+      // Verify XLSX library structure
+      if (!XLSXLib || !XLSXLib.utils || typeof XLSXLib.utils.book_new !== 'function') {
+        console.error('XLSX library structure invalid:', {
+          hasXLSXLib: !!XLSXLib,
+          hasUtils: !!(XLSXLib && XLSXLib.utils),
+          hasBookNew: !!(XLSXLib && XLSXLib.utils && XLSXLib.utils.book_new),
+          XLSXLibType: typeof XLSXLib,
+          utilsType: XLSXLib ? typeof XLSXLib.utils : 'N/A'
+        });
+        throw new Error('XLSX library not properly loaded');
+      }
 
       // Create workbook
       const wb = XLSXLib.utils.book_new();
