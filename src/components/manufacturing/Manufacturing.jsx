@@ -778,57 +778,14 @@ try {
 
   // Download Excel template for bulk upload with dropdowns
   const handleDownloadTemplate = useCallback(async () => {
-    // Helper function to get XLSX library (waits if needed)
-    const getXLSX = () => {
-      // Try multiple possible locations and structures
-      // The CDN might expose it differently
-      
-      // Check global XLSX
-      if (typeof XLSX !== 'undefined') {
-        // Check if it has utils (fully loaded)
-        if (XLSX.utils && typeof XLSX.utils.book_new === 'function') {
-          return XLSX;
-        }
-        // Check if it has any properties (might be loading)
-        const keys = Object.keys(XLSX);
-        if (keys.length > 0) {
-          // Has properties, might be the library
-          if (XLSX.utils) return XLSX;
-        }
-      }
-      
-      // Check window.XLSX
-      if (typeof window !== 'undefined' && window.XLSX) {
-        if (window.XLSX.utils && typeof window.XLSX.utils.book_new === 'function') {
-          return window.XLSX;
-        }
-        const keys = Object.keys(window.XLSX);
-        if (keys.length > 0 && window.XLSX.utils) {
-          return window.XLSX;
-        }
-      }
-      
-      // Sometimes it's nested differently (ES modules)
-      if (typeof window !== 'undefined' && window.XLSX) {
-        const xlsx = window.XLSX;
-        if (xlsx.default && xlsx.default.utils && typeof xlsx.default.utils.book_new === 'function') {
-          return xlsx.default;
-        }
-      }
-      
-      return null;
-    };
-
-    // Try to get XLSX, wait longer if not immediately available (defer loading)
-    let XLSXLib = getXLSX();
-    if (!XLSXLib) {
-      // Wait up to 5 seconds for XLSX to fully load (it's loaded with defer)
-      for (let i = 0; i < 50; i++) {
+    // Get XLSX library - wait for it to load (similar to MonthlyDocumentCollectionTracker)
+    let XLSXLib = window.XLSX;
+    
+    // Wait for XLSX to load (it's loaded with defer)
+    if (!XLSXLib || !XLSXLib.utils) {
+      for (let i = 0; i < 30 && (!XLSXLib || !XLSXLib.utils); i++) {
         await new Promise(resolve => setTimeout(resolve, 100));
-        XLSXLib = getXLSX();
-        if (XLSXLib && XLSXLib.utils && typeof XLSXLib.utils.book_new === 'function') {
-          break;
-        }
+        XLSXLib = window.XLSX;
       }
     }
 
@@ -864,18 +821,6 @@ Category: components, accessories, finished_goods, raw_materials, packaging, wor
     }
 
     try {
-      // Verify XLSX library structure
-      if (!XLSXLib || !XLSXLib.utils || typeof XLSXLib.utils.book_new !== 'function') {
-        console.error('XLSX library structure invalid:', {
-          hasXLSXLib: !!XLSXLib,
-          hasUtils: !!(XLSXLib && XLSXLib.utils),
-          hasBookNew: !!(XLSXLib && XLSXLib.utils && XLSXLib.utils.book_new),
-          XLSXLibType: typeof XLSXLib,
-          utilsType: XLSXLib ? typeof XLSXLib.utils : 'N/A'
-        });
-        throw new Error('XLSX library not properly loaded');
-      }
-
       // Create workbook
       const wb = XLSXLib.utils.book_new();
 
@@ -1217,10 +1162,19 @@ SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main 
     }
 
     if (isExcel) {
-      // Handle Excel file
-      const XLSXLib = window.XLSX || XLSX;
-      if (!XLSXLib) {
-        window.alert('Excel file support requires xlsx library. Please use CSV format.');
+      // Handle Excel file - wait for XLSX library
+      let XLSXLib = window.XLSX;
+      
+      // Wait for XLSX to load (it's loaded with defer)
+      if (!XLSXLib || !XLSXLib.utils) {
+        for (let i = 0; i < 30 && (!XLSXLib || !XLSXLib.utils); i++) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          XLSXLib = window.XLSX;
+        }
+      }
+
+      if (!XLSXLib || !XLSXLib.utils) {
+        window.alert('Excel file support requires xlsx library. Please refresh the page or use CSV format.');
         return;
       }
 
