@@ -777,10 +777,33 @@ try {
   }, [inventory]);
 
   // Download Excel template for bulk upload with dropdowns
-  const handleDownloadTemplate = useCallback(() => {
-    // Check if xlsx library is available (it's loaded with defer, so might need to wait)
-    if (typeof XLSX === 'undefined' && typeof window.XLSX === 'undefined') {
-      // Fallback to CSV if xlsx not available
+  const handleDownloadTemplate = useCallback(async () => {
+    // Helper function to get XLSX library (waits if needed)
+    const getXLSX = () => {
+      // Check multiple possible locations
+      if (typeof window !== 'undefined' && window.XLSX) {
+        return window.XLSX;
+      }
+      if (typeof XLSX !== 'undefined') {
+        return XLSX;
+      }
+      return null;
+    };
+
+    // Try to get XLSX, wait a bit if not immediately available (defer loading)
+    let XLSXLib = getXLSX();
+    if (!XLSXLib) {
+      // Wait up to 2 seconds for XLSX to load (it's loaded with defer)
+      for (let i = 0; i < 20; i++) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        XLSXLib = getXLSX();
+        if (XLSXLib) break;
+      }
+    }
+
+    // If still not available, fallback to CSV
+    if (!XLSXLib) {
+      console.warn('XLSX library not available, falling back to CSV');
       const templateContent = `SKU,Name,Category,Type,Quantity,Unit,Unit Cost,Total Value,Reorder Point,Reorder Qty,Location,Supplier,Thumbnail,Legacy Part Number,Manufacturing Part Number,Supplier Part Numbers,Location Code
 SKU0001,Example Component 1,components,component,100,pcs,5.50,550.00,20,30,Main Warehouse,Supplier ABC,,OLD-PART-001,MFG-PART-001,"[{""supplier"":""Supplier ABC"",""partNumber"":""SUP-001""},{""supplier"":""Supplier ABC"",""partNumber"":""SUP-002""}]",LOC001
 SKU0002,Example Component 2,accessories,raw_material,50,pcs,2.25,112.50,10,15,Main Warehouse,Supplier XYZ,,OLD-PART-002,MFG-PART-002,"[{""supplier"":""Supplier XYZ"",""partNumber"":""SUP-003""}]",LOC001
@@ -799,11 +822,6 @@ SKU0003,Finished Product 1,finished_goods,final_product,25,pcs,150.00,3750.00,5,
     }
 
     try {
-      // Use window.XLSX if available, fallback to XLSX
-      const XLSXLib = window.XLSX || XLSX;
-      if (!XLSXLib) {
-        throw new Error('XLSX library not available');
-      }
 
       // Create workbook
       const wb = XLSXLib.utils.book_new();
