@@ -33,7 +33,7 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
         // './src/components/clients/LeadDetailModal.jsx',
         // './src/components/clients/Clients.jsx', // Loaded in index.html BEFORE lazy-loader runs
         // './src/components/clients/ClientDetailModalMobile.jsx', // Loaded in index.html - blocked to prevent conflicts
-        './src/components/clients/ClientsSimple.jsx',
+        // './src/components/clients/ClientsSimple.jsx', // REMOVED - no longer needed
         './src/components/clients/ClientsMobile.jsx',
         './src/components/clients/ClientsMobileOptimized.jsx',
         './src/components/clients/BulkOperations.jsx',
