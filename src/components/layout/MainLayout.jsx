@@ -473,7 +473,7 @@ const MainLayout = () => {
         }
         // Loading state if main component not available yet
         return () => <div className="text-center py-12 text-gray-500">Clients loading...</div>;
-    }, [isMobile]);
+    }, [isMobile, mainClientsAvailable]); // Add mainClientsAvailable to force re-evaluation
     
     // Continuously check for main Clients component and update state when it becomes available
     React.useEffect(() => {
@@ -1069,7 +1069,7 @@ const MainLayout = () => {
                 </div>
             );
         }
-    }, [currentPage, Dashboard, Projects, Teams, Users, Account, TimeTracking, LeavePlatform, Manufacturing, ServiceAndMaintenance, Tools, Reports, TaskManagementComponent, Settings, ErrorBoundary, isAdmin, getClientsComponent]);
+    }, [currentPage, Dashboard, Projects, Teams, Users, Account, TimeTracking, LeavePlatform, Manufacturing, ServiceAndMaintenance, Tools, Reports, TaskManagementComponent, Settings, ErrorBoundary, isAdmin, getClientsComponent, mainClientsAvailable]);
 
     React.useEffect(() => {
         window.currentPage = currentPage;
