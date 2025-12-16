@@ -75,6 +75,7 @@
         'utils/whatsapp.js',
         'utils/routeState.js',
         'utils/entityUrl.js',
+        'utils/componentUrlRouting.js',
         'utils/mentionHelper.js',
         
         // Hooks
