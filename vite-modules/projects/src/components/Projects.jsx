@@ -169,6 +169,128 @@ export function Projects({ onProjectClick }) {
         }
     }, []);
     
+    // Helper function to update project URL with tab/section/comment info
+    const updateProjectUrl = React.useCallback((projectId, options = {}) => {
+        if (!window.RouteState || !projectId) return;
+        
+        const segments = [String(projectId)];
+        const searchParams = new URLSearchParams();
+        
+        if (options.tab) {
+            searchParams.set('tab', options.tab);
+        }
+        if (options.section) {
+            searchParams.set('section', options.section);
+        }
+        if (options.commentId) {
+            searchParams.set('commentId', options.commentId);
+        }
+        
+        const search = searchParams.toString();
+        window.RouteState.navigate({
+            page: 'projects',
+            segments: segments,
+            search: search ? `?${search}` : '',
+            hash: '',
+            replace: false,
+            preserveSearch: false,
+            preserveHash: false
+        });
+    }, []);
+    
+    // Expose URL update function for ProjectDetail to use
+    useEffect(() => {
+        if (viewingProject && viewingProject.id) {
+            window.updateProjectUrl = (options = {}) => {
+                updateProjectUrl(viewingProject.id, options);
+            };
+        } else {
+            window.updateProjectUrl = null;
+        }
+    }, [viewingProject, updateProjectUrl]);
+    
+    // Listen for route changes to handle project navigation and URL-based project opening
+    useEffect(() => {
+        if (!window.RouteState) return;
+        
+        const handleRouteChange = async (route) => {
+            if (route?.page !== 'projects') return;
+            
+            // If no segments, reset viewing project
+            if (!route.segments || route.segments.length === 0) {
+                if (viewingProject) {
+                    setViewingProject(null);
+                }
+                return;
+            }
+            
+            // URL contains a project ID - open that project
+            const projectId = route.segments[0];
+            if (projectId) {
+                // Check if we're already viewing this project
+                if (viewingProject && String(viewingProject.id) === String(projectId)) {
+                    // Already viewing this project, but check if we need to handle tab/section
+                    const tab = route.search?.get('tab');
+                    const section = route.search?.get('section');
+                    const commentId = route.search?.get('commentId');
+                    
+                    if (tab || section || commentId) {
+                        setTimeout(() => {
+                            if (tab) {
+                                window.dispatchEvent(new CustomEvent('switchProjectTab', {
+                                    detail: { tab, section, commentId }
+                                }));
+                            }
+                            if (section) {
+                                window.dispatchEvent(new CustomEvent('switchProjectSection', {
+                                    detail: { section, commentId }
+                                }));
+                            }
+                            if (commentId) {
+                                window.dispatchEvent(new CustomEvent('scrollToComment', {
+                                    detail: { commentId }
+                                }));
+                            }
+                        }, 100);
+                    }
+                    return; // Already viewing this project
+                }
+                
+                // Find project in cache or fetch it
+                const cachedProject = projects.find(p => String(p.id) === String(projectId));
+                if (cachedProject) {
+                    handleViewProject(cachedProject);
+                } else {
+                    // Project not in cache, try to fetch it
+                    try {
+                        if (window.DatabaseAPI?.getProject) {
+                            const response = await window.DatabaseAPI.getProject(projectId);
+                            const projectData = response?.data?.project || response?.project || response?.data;
+                            if (projectData) {
+                                handleViewProject(projectData);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Failed to load project from URL:', error);
+                    }
+                }
+            }
+        };
+        
+        // Check initial route
+        const currentRoute = window.RouteState.getRoute();
+        handleRouteChange(currentRoute);
+        
+        // Subscribe to route changes
+        const unsubscribe = window.RouteState.subscribe(handleRouteChange);
+        
+        return () => {
+            if (unsubscribe && typeof unsubscribe === 'function') {
+                unsubscribe();
+            }
+        };
+    }, [projects, viewingProject, handleViewProject]);
+    
     // Wait for ProjectProgressTracker component to load when needed
     useEffect(() => {
         if (showProgressTracker && !window.ProjectProgressTracker && !waitingForTracker) {
@@ -1190,6 +1312,15 @@ export function Projects({ onProjectClick }) {
                 console.log('✅ ProjectDetail is available, setting viewingProject');
                 // Create a new object reference to ensure React detects the change
                 setViewingProject({ ...normalizedProject });
+                
+                // Update URL to reflect the selected project
+                if (window.RouteState && normalizedProject.id) {
+                    window.RouteState.setPageSubpath('projects', [String(normalizedProject.id)], {
+                        replace: false,
+                        preserveSearch: false,
+                        preserveHash: false
+                    });
+                }
             } else {
                 console.error('❌ ProjectDetail still not available after loading attempt');
                 console.error('🔍 Debug info:', {
@@ -1201,6 +1332,15 @@ export function Projects({ onProjectClick }) {
                 });
                 // Still set viewingProject so the loading UI can show
                 setViewingProject(normalizedProject);
+                
+                // Update URL even if ProjectDetail isn't loaded yet
+                if (window.RouteState && normalizedProject.id) {
+                    window.RouteState.setPageSubpath('projects', [String(normalizedProject.id)], {
+                        replace: false,
+                        preserveSearch: false,
+                        preserveHash: false
+                    });
+                }
                 // The render will show the loading state
             }
         } catch (error) {
@@ -1902,7 +2042,17 @@ export function Projects({ onProjectClick }) {
                             Reload Page
                         </button>
                         <button 
-                            onClick={() => setViewingProject(null)}
+                            onClick={() => {
+                            setViewingProject(null);
+                            // Update URL to clear project ID
+                            if (window.RouteState) {
+                                window.RouteState.setPageSubpath('projects', [], {
+                                    replace: false,
+                                    preserveSearch: false,
+                                    preserveHash: false
+                                });
+                            }
+                        }}
                             className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm font-medium"
                         >
                             <i className="fas fa-arrow-left mr-2"></i>
@@ -1951,7 +2101,17 @@ export function Projects({ onProjectClick }) {
             console.log('✅ Rendering ProjectDetail component with project:', viewingProject.id);
             return <ProjectDetailComponent 
                 project={viewingProject} 
-                onBack={() => setViewingProject(null)}
+                onBack={() => {
+                    setViewingProject(null);
+                    // Update URL to clear project ID
+                    if (window.RouteState) {
+                        window.RouteState.setPageSubpath('projects', [], {
+                            replace: false,
+                            preserveSearch: false,
+                            preserveHash: false
+                        });
+                    }
+                }}
                 onDelete={handleDeleteProject}
             />;
         } catch (error) {

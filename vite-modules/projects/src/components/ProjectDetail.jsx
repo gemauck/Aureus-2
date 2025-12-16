@@ -115,17 +115,91 @@ export function ProjectDetail({ project, onBack, onDelete }) {
     // Tab navigation state - always default to overview when opening a project
     const [activeSection, setActiveSection] = useState('overview');
     
+    // Wrapper function to update both section state and URL
+    const switchSection = useCallback((section, options = {}) => {
+        setActiveSection(section);
+        
+        // Update URL if updateProjectUrl function is available
+        if (window.updateProjectUrl && project?.id) {
+            window.updateProjectUrl({
+                tab: section,
+                section: options.section,
+                commentId: options.commentId
+            });
+        }
+    }, [project?.id]);
+    
     // Persist activeSection to sessionStorage (for navigation within the same session)
     useEffect(() => {
         sessionStorage.setItem(`project-${project.id}-activeSection`, activeSection);
         console.log('🟢 Active section changed to:', activeSection);
     }, [activeSection, project.id]);
     
+    // Listen for switchProjectTab event to handle programmatic tab switching
+    useEffect(() => {
+        const handleSwitchTab = (event) => {
+            if (!event.detail) return;
+            const { tab, section, commentId } = event.detail;
+            if (tab) {
+                switchSection(tab, { section, commentId });
+            }
+        };
+        
+        window.addEventListener('switchProjectTab', handleSwitchTab);
+        return () => window.removeEventListener('switchProjectTab', handleSwitchTab);
+    }, [switchSection]);
+    
+    // Listen for switchProjectSection event
+    useEffect(() => {
+        const handleSwitchSection = (event) => {
+            if (!event.detail) return;
+            const { section, commentId } = event.detail;
+            if (section) {
+                switchSection(activeSection, { section, commentId });
+            }
+        };
+        
+        window.addEventListener('switchProjectSection', handleSwitchSection);
+        return () => window.removeEventListener('switchProjectSection', handleSwitchSection);
+    }, [activeSection, switchSection]);
+    
+    // Listen for scrollToComment event
+    useEffect(() => {
+        const handleScrollToComment = (event) => {
+            if (!event.detail || !event.detail.commentId) return;
+            const { commentId } = event.detail;
+            
+            // Update URL with commentId
+            if (window.updateProjectUrl && project?.id) {
+                window.updateProjectUrl({
+                    tab: activeSection,
+                    commentId: commentId
+                });
+            }
+            
+            // Try to scroll to the comment element
+            setTimeout(() => {
+                const commentElement = document.querySelector(`[data-comment-id="${commentId}"]`);
+                if (commentElement) {
+                    commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Highlight the comment briefly
+                    commentElement.classList.add('highlight-comment');
+                    setTimeout(() => {
+                        commentElement.classList.remove('highlight-comment');
+                    }, 2000);
+                }
+            }, 100);
+        };
+        
+        window.addEventListener('scrollToComment', handleScrollToComment);
+        return () => window.removeEventListener('scrollToComment', handleScrollToComment);
+    }, [activeSection, project?.id]);
+    
     // Reset to overview when project changes (opening a different project)
     useEffect(() => {
-        setActiveSection('overview');
+        switchSection('overview');
         console.log('🔄 Project changed, defaulting to overview');
-    }, [project.id]);
+    }, [project.id, switchSection]);
     
     // Track if document collection process exists
     // Normalize the value from project prop (handle boolean, string, number, undefined)
@@ -979,7 +1053,7 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                             Reload Page
                         </button>
                         <button
-                            onClick={() => setActiveSection('overview')}
+                            onClick={() => switchSection('overview')}
                             className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
                         >
                             <i className="fas fa-arrow-left mr-2"></i>
@@ -997,7 +1071,7 @@ export function ProjectDetail({ project, onBack, onDelete }) {
             <MonthlyDocumentCollectionTracker
                 key={`doc-tracker-${project?.id || 'default'}`}
                 project={project}
-                onBack={() => setActiveSection('overview')}
+                onBack={() => switchSection('overview')}
             />
         );
     };
@@ -2721,7 +2795,7 @@ export function ProjectDetail({ project, onBack, onDelete }) {
             <div className="bg-white rounded-lg border border-gray-200 p-1">
                 <div className="flex gap-1">
                     <button
-                        onClick={() => setActiveSection('overview')}
+                        onClick={() => switchSection('overview')}
                         className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                             activeSection === 'overview'
                                 ? 'bg-primary-600 text-white'
@@ -2732,7 +2806,7 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                         Overview
                     </button>
                     <button
-                        onClick={() => setActiveSection('tasks')}
+                        onClick={() => switchSection('tasks')}
                         className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                             activeSection === 'tasks'
                                 ? 'bg-primary-600 text-white'
@@ -2744,7 +2818,7 @@ export function ProjectDetail({ project, onBack, onDelete }) {
                     </button>
                     {hasDocumentCollectionProcess && (
                         <button
-                            onClick={() => setActiveSection('documentCollection')}
+                            onClick={() => switchSection('documentCollection')}
                             className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                                 activeSection === 'documentCollection'
                                     ? 'bg-primary-600 text-white'
