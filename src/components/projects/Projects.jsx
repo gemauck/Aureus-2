@@ -190,6 +190,47 @@ const Projects = () => {
         return () => window.removeEventListener('hashchange', handleHashChangeForTracker);
     }, []);
     
+    // Helper function to update project URL with tab/section/comment info
+    const updateProjectUrl = useCallback((projectId, options = {}) => {
+        if (!window.RouteState || !projectId) return;
+        
+        const segments = [String(projectId)];
+        const searchParams = new URLSearchParams();
+        
+        if (options.tab) {
+            searchParams.set('tab', options.tab);
+        }
+        if (options.section) {
+            searchParams.set('section', options.section);
+        }
+        if (options.commentId) {
+            searchParams.set('commentId', options.commentId);
+        }
+        
+        const search = searchParams.toString();
+        // Use navigate directly to support search parameter
+        window.RouteState.navigate({
+            page: 'projects',
+            segments: segments,
+            search: search ? `?${search}` : '',
+            hash: '',
+            replace: false,
+            preserveSearch: false,
+            preserveHash: false
+        });
+    }, []);
+    
+    // Expose URL update function for ProjectDetail to use
+    useEffect(() => {
+        if (viewingProject && viewingProject.id) {
+            window.updateProjectUrl = (options = {}) => {
+                updateProjectUrl(viewingProject.id, options);
+            };
+        } else {
+            window.updateProjectUrl = null;
+        }
+    }, [viewingProject, updateProjectUrl]);
+    
     // Listen for entity navigation events (from notifications, comments, etc.)
     useEffect(() => {
         const handleEntityNavigation = async (event) => {
@@ -201,19 +242,22 @@ const Projects = () => {
             // Handle project and task entities
             if (entityType === 'project') {
                 // Find the project in our data
-                const project = projects.find(p => p.id === entityId);
+                const project = projects.find(p => p.id === entityId || String(p.id) === String(entityId));
                 
                 if (project) {
                     setSelectedProject(project);
                     setViewingProject(project);
                     setShowModal(false);
                     
+                    // Update URL with project ID and any options
+                    updateProjectUrl(entityId, options);
+                    
                     // Handle tab navigation if specified
                     if (options?.tab) {
                         // ProjectDetail component will handle tab switching
                         setTimeout(() => {
                             window.dispatchEvent(new CustomEvent('switchProjectTab', {
-                                detail: { tab: options.tab }
+                                detail: { tab: options.tab, section: options.section, commentId: options.commentId }
                             }));
                         }, 100);
                     }
@@ -229,6 +273,18 @@ const Projects = () => {
                                 setSelectedProject(projectData);
                                 setViewingProject(projectData);
                                 setShowModal(false);
+                                
+                                // Update URL with project ID and any options
+                                updateProjectUrl(entityId, options);
+                                
+                                // Handle tab navigation if specified
+                                if (options?.tab) {
+                                    setTimeout(() => {
+                                        window.dispatchEvent(new CustomEvent('switchProjectTab', {
+                                            detail: { tab: options.tab, section: options.section, commentId: options.commentId }
+                                        }));
+                                    }, 100);
+                                }
                             }
                         }
                     } catch (error) {
@@ -291,18 +347,75 @@ const Projects = () => {
         
         window.addEventListener('openEntityDetail', handleEntityNavigation);
         return () => window.removeEventListener('openEntityDetail', handleEntityNavigation);
-    }, [projects]);
+    }, [projects, updateProjectUrl]);
     
-    // Listen for route changes to reset selected project when navigating to base projects page
+    // Listen for route changes to handle project navigation and URL-based project opening
     useEffect(() => {
         if (!window.RouteState) return;
         
-        const handleRouteChange = (route) => {
-            // If we're on the projects page and there are no segments, reset selected project
-            if (route?.page === 'projects' && (!route.segments || route.segments.length === 0)) {
-                if (selectedProject) {
-                    setSelectedProject(null);
-                    setViewingProject(null);
+        const handleRouteChange = async (route) => {
+            // If we're on the projects page
+            if (route?.page === 'projects') {
+                // If there are no segments, reset selected project
+                if (!route.segments || route.segments.length === 0) {
+                    if (selectedProject || viewingProject) {
+                        setSelectedProject(null);
+                        setViewingProject(null);
+                    }
+                } else {
+                    // URL contains a project ID - open that project
+                    const projectId = route.segments[0];
+                    if (projectId) {
+                        // Check if we're already viewing this project
+                        if (viewingProject && String(viewingProject.id) === String(projectId)) {
+                            // Already viewing this project, but check if we need to handle tab/section
+                            const tab = route.search?.get('tab');
+                            const section = route.search?.get('section');
+                            const commentId = route.search?.get('commentId');
+                            
+                            if (tab || section || commentId) {
+                                // Dispatch event to ProjectDetail to switch tab/section
+                                setTimeout(() => {
+                                    if (tab) {
+                                        window.dispatchEvent(new CustomEvent('switchProjectTab', {
+                                            detail: { tab, section, commentId }
+                                        }));
+                                    }
+                                    if (section) {
+                                        window.dispatchEvent(new CustomEvent('switchProjectSection', {
+                                            detail: { section, commentId }
+                                        }));
+                                    }
+                                    if (commentId) {
+                                        window.dispatchEvent(new CustomEvent('scrollToComment', {
+                                            detail: { commentId }
+                                        }));
+                                    }
+                                }, 100);
+                            }
+                            return; // Already viewing this project
+                        }
+                        
+                        // Find project in cache or fetch it
+                        const cachedProject = projects.find(p => String(p.id) === String(projectId));
+                        if (cachedProject) {
+                            // Use handleViewProject to ensure proper loading and normalization
+                            handleViewProject(cachedProject);
+                        } else {
+                            // Project not in cache, try to fetch it
+                            try {
+                                if (window.DatabaseAPI?.getProject) {
+                                    const response = await window.DatabaseAPI.getProject(projectId);
+                                    const projectData = response?.data?.project || response?.project || response?.data;
+                                    if (projectData) {
+                                        handleViewProject(projectData);
+                                    }
+                                }
+                            } catch (error) {
+                                console.error('Failed to load project from URL:', error);
+                            }
+                        }
+                    }
                 }
             }
         };
@@ -319,7 +432,7 @@ const Projects = () => {
                 unsubscribe();
             }
         };
-    }, [selectedProject]);
+    }, [selectedProject, viewingProject, projects]);
     
     // Listen for explicit navigation to projects list (e.g., clicking "Projects" in sidebar while already on projects page)
     useEffect(() => {
@@ -1283,6 +1396,18 @@ const Projects = () => {
                     }
                     return { ...normalizedProject };
                 });
+                
+                // Update URL to reflect the selected project
+                if (window.RouteState && normalizedProject.id) {
+                    window.RouteState.setPageSubpath('projects', [String(normalizedProject.id)], {
+                        replace: false,
+                        preserveSearch: false,
+                        preserveHash: false
+                    });
+                } else if (window.EntityUrl && normalizedProject.id) {
+                    // Fallback to EntityUrl if RouteState not available
+                    window.EntityUrl.navigateToEntity('project', String(normalizedProject.id));
+                }
             } else {
                 console.error('❌ ProjectDetail still not available after loading attempt');
                 console.error('🔍 Debug info:', {
@@ -1979,8 +2104,18 @@ const Projects = () => {
                             <i className="fas fa-sync-alt mr-2"></i>
                             Reload Page
                         </button>
-                        <button 
-                            onClick={() => setViewingProject(null)}
+                        <button
+                            onClick={() => {
+                                setViewingProject(null);
+                                // Update URL to clear project ID
+                                if (window.RouteState) {
+                                    window.RouteState.setPageSubpath('projects', [], {
+                                        replace: false,
+                                        preserveSearch: false,
+                                        preserveHash: false
+                                    });
+                                }
+                            }}
                             className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm font-medium"
                         >
                             <i className="fas fa-arrow-left mr-2"></i>
@@ -2014,13 +2149,23 @@ const Projects = () => {
                                 <i className="fas fa-sync-alt mr-2"></i>
                                 Reload Page
                             </button>
-                            <button 
-                                onClick={() => setViewingProject(null)}
-                                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm font-medium"
-                            >
-                                <i className="fas fa-arrow-left mr-2"></i>
-                                Back to Projects
-                            </button>
+                        <button
+                            onClick={() => {
+                                setViewingProject(null);
+                                // Update URL to clear project ID
+                                if (window.RouteState) {
+                                    window.RouteState.setPageSubpath('projects', [], {
+                                        replace: false,
+                                        preserveSearch: false,
+                                        preserveHash: false
+                                    });
+                                }
+                            }}
+                            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm font-medium"
+                        >
+                            <i className="fas fa-arrow-left mr-2"></i>
+                            Back to Projects
+                        </button>
                         </div>
                     </div>
                 );
@@ -2028,7 +2173,17 @@ const Projects = () => {
             
             return <ProjectDetailComponent 
                 project={viewingProject} 
-                onBack={() => setViewingProject(null)}
+                onBack={() => {
+                    setViewingProject(null);
+                    // Update URL to clear project ID
+                    if (window.RouteState) {
+                        window.RouteState.setPageSubpath('projects', [], {
+                            replace: false,
+                            preserveSearch: false,
+                            preserveHash: false
+                        });
+                    }
+                }}
                 onDelete={handleDeleteProject}
             />;
         } catch (error) {

@@ -297,6 +297,21 @@ const Teams = () => {
         
         // No blocking needed - allow immediate switch
         setActiveTabState(newTab);
+        
+        // Update URL with tab if team is selected
+        if (selectedTeam && window.RouteState) {
+            const searchParams = new URLSearchParams();
+            searchParams.set('tab', newTab);
+            window.RouteState.navigate({
+                page: 'teams',
+                segments: [String(selectedTeam.id)],
+                search: `?${searchParams.toString()}`,
+                hash: '',
+                replace: false,
+                preserveSearch: false,
+                preserveHash: false
+            });
+        }
     }, []);
     const [selectedTeam, setSelectedTeam] = useState(() => {
         // Initialize from URL if available
@@ -478,11 +493,11 @@ const Teams = () => {
     useEffect(() => {
         if (!window.RouteState) return;
         
-        const handleRouteChange = (route) => {
-            // If we're on the teams page and there are no segments, reset selected team
-            // BUT only if we're actually navigating away (route change), not when team is selected
-            if (route?.page === 'teams' && (!route.segments || route.segments.length === 0)) {
-                // Use functional update to get current selectedTeam value
+        const handleRouteChange = async (route) => {
+            if (route?.page !== 'teams') return;
+            
+            // If no segments, reset selected team
+            if (!route.segments || route.segments.length === 0) {
                 setSelectedTeam((currentTeam) => {
                     // Only reset if there's actually a team selected
                     if (currentTeam) {
@@ -491,6 +506,22 @@ const Teams = () => {
                     }
                     return currentTeam;
                 });
+                return;
+            }
+            
+            // URL contains a team ID - open that team
+            const teamId = route.segments[0];
+            if (teamId) {
+                const team = TEAMS.find(t => t.id === teamId || String(t.id) === String(teamId));
+                if (team && isTeamAccessible(team.id)) {
+                    setSelectedTeam(team);
+                    
+                    // Handle tab from query params
+                    const tab = route.search?.get('tab');
+                    if (tab) {
+                        setActiveTab(tab);
+                    }
+                }
             }
         };
         
@@ -754,6 +785,16 @@ const Teams = () => {
             return;
         }
         setSelectedTeam(team);
+        
+        // Update URL to reflect the selected team
+        if (window.RouteState && team?.id) {
+            window.RouteState.setPageSubpath('teams', [String(team.id)], {
+                replace: false,
+                preserveSearch: false,
+                preserveHash: false
+            });
+        }
+        
         // Only set tab to 'documents' if not already set from URL
         const urlParams = new URLSearchParams(window.location.search);
         const urlTab = urlParams.get('tab');
@@ -919,7 +960,17 @@ const Teams = () => {
                 </div>
                 {selectedTeam && (
                     <button
-                        onClick={() => setSelectedTeam(null)}
+                        onClick={() => {
+                            setSelectedTeam(null);
+                            // Update URL to clear team ID
+                            if (window.RouteState) {
+                                window.RouteState.setPageSubpath('teams', [], {
+                                    replace: false,
+                                    preserveSearch: false,
+                                    preserveHash: false
+                                });
+                            }
+                        }}
 						className={`px-3 py-2 sm:py-1.5 text-xs sm:text-xs rounded-lg hover:bg-gray-200 transition whitespace-nowrap min-h-[44px] sm:min-h-0 ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                     >
                         <i className="fas fa-arrow-left mr-1.5"></i>

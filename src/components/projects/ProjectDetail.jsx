@@ -614,6 +614,20 @@ function initializeProjectDetail() {
     // as per product decision to keep the entry point consistent.
     const [activeSection, setActiveSection] = useState('overview');
     
+    // Wrapper function to update both section state and URL
+    const switchSection = useCallback((section, options = {}) => {
+        setActiveSection(section);
+        
+        // Update URL if updateProjectUrl function is available
+        if (window.updateProjectUrl && project?.id) {
+            window.updateProjectUrl({
+                tab: section,
+                section: options.section,
+                commentId: options.commentId
+            });
+        }
+    }, [project?.id]);
+    
     // Initialize taskLists with project-specific data
     const [taskLists, setTaskLists] = useState(
         project.taskLists || [
@@ -700,16 +714,76 @@ function initializeProjectDetail() {
     
     // Memoize the back callback to prevent DocumentCollectionProcessSection from re-rendering
     const handleBackToOverview = useCallback(() => {
-        setActiveSection('overview');
-    }, []);
+        switchSection('overview');
+    }, [switchSection]);
+    
+    // Listen for switchProjectTab event to handle programmatic tab switching
+    useEffect(() => {
+        const handleSwitchTab = (event) => {
+            if (!event.detail) return;
+            const { tab, section, commentId } = event.detail;
+            if (tab) {
+                switchSection(tab, { section, commentId });
+            }
+        };
+        
+        window.addEventListener('switchProjectTab', handleSwitchTab);
+        return () => window.removeEventListener('switchProjectTab', handleSwitchTab);
+    }, [switchSection]);
+    
+    // Listen for switchProjectSection event
+    useEffect(() => {
+        const handleSwitchSection = (event) => {
+            if (!event.detail) return;
+            const { section, commentId } = event.detail;
+            if (section) {
+                switchSection(activeSection, { section, commentId });
+            }
+        };
+        
+        window.addEventListener('switchProjectSection', handleSwitchSection);
+        return () => window.removeEventListener('switchProjectSection', handleSwitchSection);
+    }, [activeSection, switchSection]);
+    
+    // Listen for scrollToComment event
+    useEffect(() => {
+        const handleScrollToComment = (event) => {
+            if (!event.detail || !event.detail.commentId) return;
+            const { commentId } = event.detail;
+            
+            // Update URL with commentId
+            if (window.updateProjectUrl && project?.id) {
+                window.updateProjectUrl({
+                    tab: activeSection,
+                    commentId: commentId
+                });
+            }
+            
+            // Try to scroll to the comment element
+            setTimeout(() => {
+                const commentElement = document.querySelector(`[data-comment-id="${commentId}"]`);
+                if (commentElement) {
+                    commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    // Highlight the comment briefly
+                    commentElement.classList.add('highlight-comment');
+                    setTimeout(() => {
+                        commentElement.classList.remove('highlight-comment');
+                    }, 2000);
+                }
+            }, 100);
+        };
+        
+        window.addEventListener('scrollToComment', handleScrollToComment);
+        return () => window.removeEventListener('scrollToComment', handleScrollToComment);
+    }, [activeSection, project?.id]);
     
     // Ensure we are on the overview tab when switching to a different project.
     useEffect(() => {
         if (!project?.id) return;
         if (activeSection !== 'overview') {
-            setActiveSection('overview');
+            switchSection('overview');
         }
-    }, [project?.id]);
+    }, [project?.id, switchSection]);
 
     // If the project is opened via a deep-link to the document collection tracker
     // (for example from an email notification), ensure the Document Collection tab
@@ -724,7 +798,7 @@ function initializeProjectDetail() {
             const deepDocumentId = params.get('docDocumentId');
             const deepMonth = params.get('docMonth');
             if (deepSectionId && deepDocumentId && deepMonth) {
-                setActiveSection('documentCollection');
+                switchSection('documentCollection');
             }
         } catch (error) {
             console.warn('⚠️ ProjectDetail: failed to apply document collection deep-link:', error);
@@ -2429,7 +2503,7 @@ function initializeProjectDetail() {
             
             // Update state first
             setHasDocumentCollectionProcess(true);
-            setActiveSection('documentCollection');
+            switchSection('documentCollection');
             setShowDocumentProcessDropdown(false);
             
             // Immediately save to database to ensure persistence
@@ -3175,7 +3249,7 @@ function initializeProjectDetail() {
             <div className="bg-white rounded-lg border border-gray-200 p-1">
                 <div className="flex gap-1">
                     <button
-                        onClick={() => setActiveSection('overview')}
+                        onClick={() => switchSection('overview')}
                         className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                             activeSection === 'overview'
                                 ? 'bg-primary-600 text-white'
@@ -3186,7 +3260,7 @@ function initializeProjectDetail() {
                         Overview
                     </button>
                     <button
-                        onClick={() => setActiveSection('tasks')}
+                        onClick={() => switchSection('tasks')}
                         className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                             activeSection === 'tasks'
                                 ? 'bg-primary-600 text-white'
@@ -3198,7 +3272,7 @@ function initializeProjectDetail() {
                     </button>
                     {hasDocumentCollectionProcess && (
                         <button
-                            onClick={() => setActiveSection('documentCollection')}
+                            onClick={() => switchSection('documentCollection')}
                             className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                                 activeSection === 'documentCollection'
                                     ? 'bg-primary-600 text-white'

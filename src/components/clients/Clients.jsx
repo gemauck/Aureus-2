@@ -1102,6 +1102,15 @@ const Clients = React.memo(() => {
         selectedLeadRef.current = null;
         isFormOpenRef.current = true;
         setViewMode('client-detail');
+        
+        // Update URL to reflect the selected client
+        if (window.RouteState && client?.id) {
+            window.RouteState.setPageSubpath('clients', [String(client.id)], {
+                replace: false,
+                preserveSearch: false,
+                preserveHash: false
+            });
+        }
     }, [stopSync]);
 
     const handleOpenLead = useCallback((lead, options = {}) => {
@@ -1149,6 +1158,16 @@ const Clients = React.memo(() => {
         selectedLeadRef.current = candidateLead;
         selectedClientRef.current = null;
         isFormOpenRef.current = true;
+        
+        // Update URL to reflect the selected lead
+        if (window.RouteState && normalizedId) {
+            window.RouteState.setPageSubpath('clients', [normalizedId], {
+                replace: false,
+                preserveSearch: false,
+                preserveHash: false
+            });
+        }
+        
         if (options.fromPipeline) {
             try {
                 sessionStorage.setItem('returnToPipeline', 'true');
@@ -1220,12 +1239,11 @@ const Clients = React.memo(() => {
     useEffect(() => {
         if (!window.RouteState) return;
         
-        const handleRouteChange = (route) => {
-            // If we're on the clients page and there are no segments, ensure we're showing a valid list view
-            // Valid list views are: 'clients', 'leads', 'pipeline', 'groups'
-            // Detail views are: 'client-detail', 'lead-detail', 'opportunity-detail'
-            // If viewMode is 'news-feed' or any other unexpected value, reset to 'clients'
-            if (route?.page === 'clients' && (!route.segments || route.segments.length === 0)) {
+        const handleRouteChange = async (route) => {
+            if (route?.page !== 'clients') return;
+            
+            // If no segments, ensure we're showing a valid list view
+            if (!route.segments || route.segments.length === 0) {
                 const validListViews = ['clients', 'leads', 'pipeline', 'groups'];
                 const validDetailViews = ['client-detail', 'lead-detail', 'opportunity-detail'];
                 const isValidView = validListViews.includes(viewMode) || validDetailViews.includes(viewMode);
@@ -1236,6 +1254,80 @@ const Clients = React.memo(() => {
                     setViewMode('clients');
                     selectedClientRef.current = null;
                     selectedLeadRef.current = null;
+                } else if (validDetailViews.includes(viewMode)) {
+                    // Clear detail view when URL has no segments
+                    setViewMode('clients');
+                    selectedClientRef.current = null;
+                    selectedLeadRef.current = null;
+                }
+                return;
+            }
+            
+            // URL contains an entity ID - open that entity
+            const entityId = route.segments[0];
+            if (!entityId) return;
+            
+            // Determine entity type from URL or try to find in clients/leads
+            let entity = null;
+            let entityType = null;
+            
+            // Try to find in clients first
+            entity = clients.find(c => String(c.id) === String(entityId));
+            if (entity) {
+                entityType = 'client';
+            } else {
+                // Try to find in leads
+                entity = leads.find(l => String(l.id) === String(entityId));
+                if (entity) {
+                    entityType = 'lead';
+                } else {
+                    // Try to fetch from API
+                    try {
+                        if (window.DatabaseAPI?.getClient) {
+                            const response = await window.DatabaseAPI.getClient(entityId);
+                            const clientData = response?.data?.client || response?.client || response?.data;
+                            if (clientData) {
+                                entity = clientData;
+                                entityType = clientData.type === 'lead' ? 'lead' : 'client';
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Failed to load client/lead from URL:', error);
+                    }
+                }
+            }
+            
+            if (entity && entityType) {
+                // Open the entity
+                if (entityType === 'client') {
+                    handleOpenClient(entity);
+                } else if (entityType === 'lead') {
+                    handleOpenLead(entity);
+                }
+                
+                // Handle tab/section/comment from query params
+                const tab = route.search?.get('tab');
+                const section = route.search?.get('section');
+                const commentId = route.search?.get('commentId');
+                
+                if (tab || section || commentId) {
+                    setTimeout(() => {
+                        if (tab) {
+                            window.dispatchEvent(new CustomEvent('switchClientsTab', {
+                                detail: { tab, section, commentId }
+                            }));
+                        }
+                        if (section) {
+                            window.dispatchEvent(new CustomEvent('switchClientsSection', {
+                                detail: { section, commentId }
+                            }));
+                        }
+                        if (commentId) {
+                            window.dispatchEvent(new CustomEvent('scrollToComment', {
+                                detail: { commentId }
+                            }));
+                        }
+                    }, 200);
                 }
             }
         };
@@ -1252,7 +1344,7 @@ const Clients = React.memo(() => {
                 unsubscribe();
             }
         };
-    }, [viewMode]);
+    }, [viewMode, clients, leads, handleOpenClient, handleOpenLead]);
 
     // Modal callbacks no longer needed - modals own their state
     

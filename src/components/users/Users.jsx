@@ -64,15 +64,15 @@ const Users = () => {
         loadInvitations();
     }, []);
     
-    // Listen for route changes to reset selected user when navigating to base users page
+    // Listen for route changes to handle user navigation and URL-based user opening
     useEffect(() => {
         if (!window.RouteState) return;
         
-        const handleRouteChange = (route) => {
-            // If we're on the users page and there are no segments, reset selected user and close modals
-            // Only close modals if we're actually navigating away (not just opening them)
-            if (route?.page === 'users' && (!route.segments || route.segments.length === 0)) {
-                // Use functional updates to access current state values
+        const handleRouteChange = async (route) => {
+            if (route?.page !== 'users') return;
+            
+            // If no segments, reset selected user and close modals
+            if (!route.segments || route.segments.length === 0) {
                 setSelectedUser(prev => {
                     if (prev) {
                         return null;
@@ -91,6 +91,39 @@ const Users = () => {
                     }
                     return prev;
                 });
+                return;
+            }
+            
+            // URL contains a user ID - open that user
+            const userId = route.segments[0];
+            if (userId) {
+                const user = users.find(u => String(u.id) === String(userId));
+                if (user) {
+                    setSelectedUser(user);
+                    setShowUserModal(true);
+                } else {
+                    // User not in cache, try to fetch it
+                    try {
+                        const token = window.storage?.getToken?.();
+                        if (token) {
+                            const response = await fetch(`/api/users/${userId}`, {
+                                headers: {
+                                    'Authorization': `Bearer ${token}`
+                                }
+                            });
+                            if (response.ok) {
+                                const data = await response.json();
+                                const userData = data.data?.user || data.user || data.data;
+                                if (userData) {
+                                    setSelectedUser(userData);
+                                    setShowUserModal(true);
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Failed to load user from URL:', error);
+                    }
+                }
             }
         };
         
@@ -106,7 +139,7 @@ const Users = () => {
                 unsubscribe();
             }
         };
-    }, []); // Empty dependency array - only run on mount/unmount
+    }, [users]);
 
     // Debug: Log when showInviteModal changes
     useEffect(() => {
@@ -214,6 +247,15 @@ const Users = () => {
     const handleEditUser = (user) => {
         setSelectedUser(user);
         setShowUserModal(true);
+        
+        // Update URL to reflect the selected user
+        if (window.RouteState && user?.id) {
+            window.RouteState.setPageSubpath('users', [String(user.id)], {
+                replace: false,
+                preserveSearch: false,
+                preserveHash: false
+            });
+        }
     };
 
     const handleDeleteUser = async (user) => {
