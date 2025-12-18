@@ -302,15 +302,52 @@ const ProjectsDatabaseFirst = () => {
     }, [showProgressTracker, trackerAvailable, waitingForTracker]);
 
     // Load projects from database
-    const loadProjects = async () => {
+    const loadProjects = async (retryCount = 0) => {
+        // Ensure loading state is set
+        setIsLoading(true);
+        
+        // Add timeout wrapper to prevent infinite loading
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => {
+                reject(new Error('Request timeout: Projects failed to load after 30 seconds. Please check your connection and try again.'));
+            }, 30000); // 30 second timeout
+        });
+
         try {
+            console.log('🔄 Loading projects from database...', { retryCount });
+            
             const token = window.storage?.getToken?.();
             if (!token) {
+                console.warn('⚠️ No authentication token found');
+                setIsLoading(false);
                 window.location.hash = '#/login';
                 return [];
             }
 
-            const response = await window.api.getProjects();
+            // Check if API is available
+            if (!window.api || typeof window.api.getProjects !== 'function') {
+                console.error('❌ window.api.getProjects is not available', {
+                    hasApi: !!window.api,
+                    hasGetProjects: !!(window.api && typeof window.api.getProjects === 'function')
+                });
+                setIsLoading(false);
+                alert('API not available. Please refresh the page.');
+                return [];
+            }
+
+            console.log('📡 Making API request to get projects...');
+            
+            // Race between the actual request and timeout
+            const response = await Promise.race([
+                window.api.getProjects(),
+                timeoutPromise
+            ]);
+            
+            console.log('✅ Received response from API:', {
+                hasData: !!response?.data,
+                hasProjects: !!response?.data?.projects,
+                responseKeys: response ? Object.keys(response) : []
+            });
             
             let apiProjects = [];
             if (response?.data?.projects) {
@@ -329,6 +366,8 @@ const ProjectsDatabaseFirst = () => {
                 apiProjects = [];
             }
             
+            console.log(`✅ Loaded ${apiProjects.length} projects from database`);
+            
             const processedProjects = apiProjects
                 .map(normalizeProject)
                 .filter(Boolean);
@@ -337,15 +376,47 @@ const ProjectsDatabaseFirst = () => {
             setIsLoading(false);
             return processedProjects;
         } catch (error) {
-            console.error('❌ Failed to load projects from database:', error);
+            console.error('❌ Failed to load projects from database:', {
+                message: error?.message,
+                code: error?.code,
+                status: error?.status,
+                stack: error?.stack?.substring(0, 200)
+            });
+            
             setIsLoading(false);
+            
+            // Handle specific error types
             if (error?.message?.includes?.('Unauthorized') || error?.message?.includes?.('401')) {
+                console.warn('⚠️ Unauthorized - redirecting to login');
                 window.storage?.removeToken?.();
                 window.storage?.removeUser?.();
                 window.location.hash = '#/login';
+            } else if (error?.message?.includes?.('timeout') || error?.message?.includes?.('Request timeout')) {
+                // Retry once on timeout
+                if (retryCount < 1) {
+                    console.log('🔄 Retrying after timeout...');
+                    return loadProjects(retryCount + 1);
+                }
+                alert('Request timed out. Please check your connection and try again.');
+            } else if (error?.code === 'DATABASE_CONNECTION_ERROR' || error?.isDatabaseError) {
+                // Retry once on database connection error
+                if (retryCount < 1) {
+                    console.log('🔄 Retrying after database connection error...');
+                    setTimeout(() => loadProjects(retryCount + 1), 2000);
+                    return [];
+                }
+                alert('Database connection error. Please try again in a moment.');
             } else {
-                alert('Failed to load projects from database. Please try again.');
+                const errorMsg = error?.message || 'Unknown error';
+                console.error('Full error details:', error);
+                // Only show alert if not retrying
+                if (retryCount >= 1) {
+                    alert(`Failed to load projects from database: ${errorMsg}. Please try again.`);
+                }
             }
+            
+            // Set empty array to show "no projects" state instead of infinite loading
+            setProjects([]);
             return [];
         }
     };
