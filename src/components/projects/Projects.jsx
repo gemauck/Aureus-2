@@ -1176,6 +1176,7 @@ const Projects = () => {
     };
 
     const handleViewProject = async (project) => {
+        console.log('🔵 handleViewProject called with project:', project?.id, project?.name);
         
         // BULLETPROOF: ALWAYS check if ProjectDetail is loaded AND initialized
         // The lazy loader might say it's loaded, but initialization might still be waiting for dependencies
