@@ -1378,25 +1378,38 @@ const Projects = () => {
             
             // Update URL FIRST, before setting viewingProject
             // This ensures URL is updated even if ProjectDetail isn't loaded yet
-            if (window.RouteState && normalizedProject.id) {
-                console.log('🔗 Updating URL for project:', normalizedProject.id);
-                try {
-                    window.RouteState.setPageSubpath('projects', [String(normalizedProject.id)], {
-                        replace: false,
-                        preserveSearch: false,
-                        preserveHash: false
-                    });
-                    console.log('✅ URL updated to:', window.location.pathname);
-                } catch (error) {
-                    console.error('❌ Error updating URL:', error);
+            // Wait for RouteState if not immediately available (it loads asynchronously)
+            const updateUrl = async () => {
+                if (normalizedProject.id) {
+                    // Wait up to 2 seconds for RouteState to load
+                    let attempts = 0;
+                    while (!window.RouteState && attempts < 20) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        attempts++;
+                    }
+                    
+                    if (window.RouteState) {
+                        console.log('🔗 Updating URL for project:', normalizedProject.id);
+                        try {
+                            window.RouteState.setPageSubpath('projects', [String(normalizedProject.id)], {
+                                replace: false,
+                                preserveSearch: false,
+                                preserveHash: false
+                            });
+                            console.log('✅ URL updated to:', window.location.pathname);
+                        } catch (error) {
+                            console.error('❌ Error updating URL:', error);
+                        }
+                    } else if (window.EntityUrl) {
+                        // Fallback to EntityUrl if RouteState not available after waiting
+                        console.log('⚠️ RouteState not available after waiting, using EntityUrl fallback');
+                        window.EntityUrl.navigateToEntity('project', String(normalizedProject.id));
+                    } else {
+                        console.warn('⚠️ Neither RouteState nor EntityUrl available for URL update');
+                    }
                 }
-            } else if (window.EntityUrl && normalizedProject.id) {
-                // Fallback to EntityUrl if RouteState not available
-                console.log('⚠️ RouteState not available, using EntityUrl fallback');
-                window.EntityUrl.navigateToEntity('project', String(normalizedProject.id));
-            } else {
-                console.warn('⚠️ Neither RouteState nor EntityUrl available for URL update');
-            }
+            };
+            updateUrl(); // Fire and forget - don't block the rest of the function
             
             // Only set viewingProject if ProjectDetail is available
             if (window.ProjectDetail) {
