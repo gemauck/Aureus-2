@@ -1399,14 +1399,19 @@ const Projects = () => {
                 
                 // Update URL to reflect the selected project
                 if (window.RouteState && normalizedProject.id) {
+                    console.log('🔗 Updating URL for project:', normalizedProject.id);
                     window.RouteState.setPageSubpath('projects', [String(normalizedProject.id)], {
                         replace: false,
                         preserveSearch: false,
                         preserveHash: false
                     });
+                    console.log('✅ URL updated to:', window.location.pathname);
                 } else if (window.EntityUrl && normalizedProject.id) {
                     // Fallback to EntityUrl if RouteState not available
+                    console.log('⚠️ RouteState not available, using EntityUrl fallback');
                     window.EntityUrl.navigateToEntity('project', String(normalizedProject.id));
+                } else {
+                    console.warn('⚠️ Neither RouteState nor EntityUrl available for URL update');
                 }
             } else {
                 console.error('❌ ProjectDetail still not available after loading attempt');
@@ -1425,6 +1430,17 @@ const Projects = () => {
                     }
                     return normalizedProject;
                 });
+                
+                // Update URL even if ProjectDetail isn't loaded yet
+                if (window.RouteState && normalizedProject.id) {
+                    console.log('🔗 Updating URL for project (ProjectDetail not loaded yet):', normalizedProject.id);
+                    window.RouteState.setPageSubpath('projects', [String(normalizedProject.id)], {
+                        replace: false,
+                        preserveSearch: false,
+                        preserveHash: false
+                    });
+                    console.log('✅ URL updated to:', window.location.pathname);
+                }
                 // The render will show the loading state
             }
         } catch (error) {
