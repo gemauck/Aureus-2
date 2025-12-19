@@ -289,7 +289,17 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
             
             if (needsCacheBusting) {
                 const separator = scriptSrc.includes('?') ? '&' : '?';
-                scriptSrc = scriptSrc + separator + 'v=20251112-list-view-' + Date.now();
+                // Use build version from build-version.json if available, otherwise use timestamp
+                let cacheVersion = Date.now();
+                try {
+                    // Try to get build version synchronously from a global variable set in index.html
+                    if (window.BUILD_VERSION) {
+                        cacheVersion = window.BUILD_VERSION + '-' + Date.now();
+                    }
+                } catch (e) {
+                    // Fallback to timestamp if build version not available
+                }
+                scriptSrc = scriptSrc + separator + 'v=' + cacheVersion;
                 console.log(`🔄 Cache-busting applied to: ${scriptSrc}`);
             }
             
