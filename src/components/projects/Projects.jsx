@@ -1375,6 +1375,28 @@ const Projects = () => {
                 });
             };
             
+            // Update URL FIRST, before setting viewingProject
+            // This ensures URL is updated even if ProjectDetail isn't loaded yet
+            if (window.RouteState && normalizedProject.id) {
+                console.log('🔗 Updating URL for project:', normalizedProject.id);
+                try {
+                    window.RouteState.setPageSubpath('projects', [String(normalizedProject.id)], {
+                        replace: false,
+                        preserveSearch: false,
+                        preserveHash: false
+                    });
+                    console.log('✅ URL updated to:', window.location.pathname);
+                } catch (error) {
+                    console.error('❌ Error updating URL:', error);
+                }
+            } else if (window.EntityUrl && normalizedProject.id) {
+                // Fallback to EntityUrl if RouteState not available
+                console.log('⚠️ RouteState not available, using EntityUrl fallback');
+                window.EntityUrl.navigateToEntity('project', String(normalizedProject.id));
+            } else {
+                console.warn('⚠️ Neither RouteState nor EntityUrl available for URL update');
+            }
+            
             // Only set viewingProject if ProjectDetail is available
             if (window.ProjectDetail) {
                 // Only update if the project actually changed (prevent unnecessary re-renders)
@@ -1396,23 +1418,6 @@ const Projects = () => {
                     }
                     return { ...normalizedProject };
                 });
-                
-                // Update URL to reflect the selected project
-                if (window.RouteState && normalizedProject.id) {
-                    console.log('🔗 Updating URL for project:', normalizedProject.id);
-                    window.RouteState.setPageSubpath('projects', [String(normalizedProject.id)], {
-                        replace: false,
-                        preserveSearch: false,
-                        preserveHash: false
-                    });
-                    console.log('✅ URL updated to:', window.location.pathname);
-                } else if (window.EntityUrl && normalizedProject.id) {
-                    // Fallback to EntityUrl if RouteState not available
-                    console.log('⚠️ RouteState not available, using EntityUrl fallback');
-                    window.EntityUrl.navigateToEntity('project', String(normalizedProject.id));
-                } else {
-                    console.warn('⚠️ Neither RouteState nor EntityUrl available for URL update');
-                }
             } else {
                 console.error('❌ ProjectDetail still not available after loading attempt');
                 console.error('🔍 Debug info:', {
