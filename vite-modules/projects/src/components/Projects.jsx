@@ -1307,20 +1307,44 @@ export function Projects({ onProjectClick }) {
                 setViewingProject(normalized);
             };
             
+            // Update URL BEFORE setting viewingProject to ensure it happens early
+            const updateUrl = async () => {
+                if (normalizedProject.id) {
+                    // Wait up to 2 seconds for RouteState to load
+                    let attempts = 0;
+                    while (!window.RouteState && attempts < 20) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        attempts++;
+                    }
+
+                    if (window.RouteState) {
+                        console.log('🔗 Updating URL for project:', normalizedProject.id);
+                        try {
+                            window.RouteState.setPageSubpath('projects', [String(normalizedProject.id)], {
+                                replace: false,
+                                preserveSearch: false,
+                                preserveHash: false
+                            });
+                            console.log('✅ URL updated to:', window.location.pathname);
+                        } catch (error) {
+                            console.error('❌ Error updating URL:', error);
+                        }
+                    } else if (window.EntityUrl) {
+                        // Fallback to EntityUrl if RouteState not available after waiting
+                        console.log('⚠️ RouteState not available after waiting, using EntityUrl fallback');
+                        window.EntityUrl.navigateToEntity('project', String(normalizedProject.id));
+                    } else {
+                        console.warn('⚠️ Neither RouteState nor EntityUrl available for URL update');
+                    }
+                }
+            };
+            updateUrl(); // Fire and forget - don't block the rest of the function
+            
             // Only set viewingProject if ProjectDetail is available
             if (window.ProjectDetail) {
                 console.log('✅ ProjectDetail is available, setting viewingProject');
                 // Create a new object reference to ensure React detects the change
                 setViewingProject({ ...normalizedProject });
-                
-                // Update URL to reflect the selected project
-                if (window.RouteState && normalizedProject.id) {
-                    window.RouteState.setPageSubpath('projects', [String(normalizedProject.id)], {
-                        replace: false,
-                        preserveSearch: false,
-                        preserveHash: false
-                    });
-                }
             } else {
                 console.error('❌ ProjectDetail still not available after loading attempt');
                 console.error('🔍 Debug info:', {
@@ -1332,15 +1356,6 @@ export function Projects({ onProjectClick }) {
                 });
                 // Still set viewingProject so the loading UI can show
                 setViewingProject(normalizedProject);
-                
-                // Update URL even if ProjectDetail isn't loaded yet
-                if (window.RouteState && normalizedProject.id) {
-                    window.RouteState.setPageSubpath('projects', [String(normalizedProject.id)], {
-                        replace: false,
-                        preserveSearch: false,
-                        preserveHash: false
-                    });
-                }
                 // The render will show the loading state
             }
         } catch (error) {
