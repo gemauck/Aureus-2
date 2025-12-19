@@ -2447,9 +2447,14 @@ const Projects = () => {
                                         }, 100);
                                     }}
                                     onClick={(e) => {
+                                        console.log('🟢 Project card clicked:', project?.id, project?.name);
+                                        console.log('🟢 draggedProject:', draggedProject);
+                                        console.log('🟢 mouseDownRef:', mouseDownRef.current);
+                                        
                                         // Only handle click if we didn't drag
                                         // If draggedProject is set, we just finished a drag, so ignore click
                                         if (draggedProject !== null) {
+                                            console.log('⚠️ Click ignored - drag in progress');
                                             return;
                                         }
                                         
@@ -2459,15 +2464,23 @@ const Projects = () => {
                                             const deltaY = Math.abs(e.clientY - mouseDownRef.current.y);
                                             const deltaTime = Date.now() - mouseDownRef.current.time;
                                             
+                                            console.log('🟢 Mouse movement check:', { deltaX, deltaY, deltaTime });
+                                            
                                             // If mouse moved more than 5px or took longer than 200ms, it was likely a drag attempt
                                             if (deltaX > 5 || deltaY > 5 || deltaTime > 200) {
+                                                console.log('⚠️ Click ignored - mouse moved too much or took too long');
                                                 mouseDownRef.current = null;
                                                 return;
                                             }
                                         }
                                         
                                         // It's a click - open the project
-                                        handleViewProject(project);
+                                        console.log('✅ Calling handleViewProject for project:', project?.id);
+                                        try {
+                                            handleViewProject(project);
+                                        } catch (error) {
+                                            console.error('❌ Error in handleViewProject:', error);
+                                        }
                                         mouseDownRef.current = null;
                                     }}
                                     className="bg-white rounded-lg border border-gray-200 hover:border-primary-300 hover:shadow-md transition-all p-4 cursor-pointer"
