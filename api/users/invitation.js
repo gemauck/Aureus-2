@@ -9,12 +9,16 @@ import { getAppUrl } from '../_lib/getAppUrl.js'
 import crypto from 'crypto'
 
 async function handler(req, res) {
+    console.log('🔄 Invitation handler called - Method:', req.method, 'URL:', req.url);
     // Extract invitation ID from Express route params or URL
     let invitationId = req.params?.id
+    console.log('🔄 Extracted invitationId from params:', invitationId);
     if (!invitationId) {
         const urlPart = req.url.split('/').pop()
         invitationId = urlPart ? urlPart.split('?')[0] : null
+        console.log('🔄 Extracted invitationId from URL:', invitationId);
     }
+    console.log('🔄 Final invitationId:', invitationId);
     
     // Update invitation (PUT)
     if (req.method === 'PUT') {
