@@ -165,18 +165,23 @@ async function sendViaSendGridAPI(mailOptions, apiKey) {
             errorDetails = JSON.stringify(errorJson, null, 2);
             // Check for common SendGrid errors
             if (errorJson.errors) {
+                console.error('❌ SendGrid API errors:', errorJson.errors);
                 errorJson.errors.forEach(err => {
                     if (err.message && err.message.includes('verified')) {
                         console.error('❌ SENDER VERIFICATION ERROR: The email address must be verified in SendGrid!');
                         console.error('   Go to: https://app.sendgrid.com/settings/sender_auth');
                         console.error('   Verify: ' + fromEmail);
                     }
+                    if (err.message) {
+                        console.error('❌ SendGrid error:', err.message);
+                    }
                 });
             }
         } catch (e) {
             // Not JSON, use as-is
+            console.error('❌ SendGrid API non-JSON error response:', errorText);
         }
-        console.error('❌ SendGrid API error response:', errorDetails);
+        console.error('❌ SendGrid API error response (status ' + response.status + '):', errorDetails);
         throw new Error(`SendGrid API error: ${response.status} ${response.statusText} - ${errorDetails}`);
     }
 
@@ -417,12 +422,17 @@ export const sendInvitationEmail = async (invitationData) => {
         let result;
         if (resendKey && resendKey.startsWith('re_')) {
             // Use Resend if API key is set, regardless of transporter state
+            console.log('📧 Using Resend API to send invitation email to:', email);
             mailOptions.fromName = 'Abcotronics';
             result = await sendViaResendAPI(mailOptions, resendKey);
+            console.log('✅ Resend API email sent successfully. Message ID:', result.messageId);
         } else if (sendGridKey && (useSendGridHTTP || emailTransporter.provider === 'sendgrid')) {
+            console.log('📧 Using SendGrid API to send invitation email to:', email);
             mailOptions.fromName = 'Abcotronics';
             result = await sendViaSendGridAPI(mailOptions, sendGridKey);
+            console.log('✅ SendGrid API email sent successfully. Message ID:', result.messageId);
         } else if (emailTransporter && typeof emailTransporter.sendMail === 'function') {
+            console.log('📧 Using SMTP to send invitation email to:', email);
             // Only try SMTP if we have a valid transporter
             // Use Promise.race to prevent long timeouts
             const sendPromise = emailTransporter.sendMail(mailOptions);

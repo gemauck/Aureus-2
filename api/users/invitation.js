@@ -143,11 +143,21 @@ async function handler(req, res) {
             
             // Send email
             let emailSent = false
+            let emailErrorDetails = null
             try {
                 // Always use the token from the database (updated.token) as source of truth
                 const emailLink = updated.token 
                     ? `${getAppUrl()}/accept-invitation?token=${updated.token}`
                     : invitationLink
+                
+                console.log('📧 Attempting to resend invitation email...')
+                console.log('📧 Email config check:', {
+                    hasResendKey: !!process.env.RESEND_API_KEY,
+                    hasSendGridKey: !!process.env.SENDGRID_API_KEY,
+                    emailFrom: process.env.EMAIL_FROM,
+                    recipient: invitation.email
+                })
+                
                 await sendInvitationEmail({
                     email: invitation.email,
                     name: invitation.name,
@@ -155,8 +165,11 @@ async function handler(req, res) {
                     invitationLink: emailLink
                 })
                 emailSent = true
+                console.log('✅ Invitation email resent successfully to:', invitation.email)
             } catch (emailError) {
+                emailErrorDetails = emailError.message
                 console.error('❌ Failed to resend invitation email:', emailError.message)
+                console.error('❌ Email error stack:', emailError.stack)
             }
             
             return ok(res, {
@@ -166,7 +179,8 @@ async function handler(req, res) {
                 invitationLink: updated.token 
                     ? `${getAppUrl()}/accept-invitation?token=${updated.token}`
                     : invitationLink,
-                emailSent
+                emailSent,
+                emailError: emailErrorDetails || null
             })
             
         } catch (error) {
