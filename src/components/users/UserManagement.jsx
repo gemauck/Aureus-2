@@ -600,18 +600,47 @@ const UserManagement = () => {
 
     const handleResendInvitation = async (invitationId) => {
         console.log('🔄 Frontend: Resend invitation called for ID:', invitationId);
+        
+        if (!invitationId) {
+            console.error('❌ Frontend: No invitation ID provided');
+            alert('Error: Invitation ID is missing');
+            return;
+        }
+        
         try {
             const token = window.storage?.getToken?.();
+            if (!token) {
+                console.error('❌ Frontend: No authentication token found');
+                alert('Error: You must be logged in to resend invitations');
+                return;
+            }
+            
             console.log('🔄 Frontend: Making POST request to /api/users/invitation/' + invitationId);
-            const response = await fetch(`/api/users/invitation/${invitationId}`, {
+            const url = `/api/users/invitation/${invitationId}`;
+            console.log('🔄 Frontend: Request URL:', url);
+            console.log('🔄 Frontend: Request method: POST');
+            console.log('🔄 Frontend: Has token:', !!token);
+            
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
                 }
             });
 
             console.log('🔄 Frontend: Response status:', response.status);
-            const data = await response.json();
+            console.log('🔄 Frontend: Response ok:', response.ok);
+            
+            let data;
+            try {
+                data = await response.json();
+            } catch (jsonError) {
+                const text = await response.text();
+                console.error('❌ Frontend: Failed to parse JSON response:', text);
+                throw new Error('Invalid response from server: ' + text.substring(0, 100));
+            }
+            
             console.log('🔄 Frontend: Response data:', data);
 
             if (response.ok) {
@@ -622,10 +651,11 @@ const UserManagement = () => {
                 loadUsers();
             } else {
                 console.error('❌ Frontend: Resend failed:', data);
-                alert(data.message || 'Failed to resend invitation');
+                alert(data.message || data.error || 'Failed to resend invitation');
             }
         } catch (error) {
             console.error('❌ Frontend: Error resending invitation:', error);
+            console.error('❌ Frontend: Error stack:', error.stack);
             alert('Failed to resend invitation: ' + error.message);
         }
     };
@@ -1120,9 +1150,21 @@ const UserManagement = () => {
                                                 </button>
                                                 <button
                                                     onClick={(e) => {
-                                                        e.preventDefault();
-                                                        e.stopPropagation();
-                                                        handleResendInvitation(invitation.id);
+                                                        try {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            console.log('🔄 Button clicked, invitation:', invitation);
+                                                            if (!invitation || !invitation.id) {
+                                                                console.error('❌ No invitation ID found:', invitation);
+                                                                alert('Error: Invitation ID is missing');
+                                                                return;
+                                                            }
+                                                            console.log('🔄 Calling handleResendInvitation with ID:', invitation.id);
+                                                            handleResendInvitation(invitation.id);
+                                                        } catch (error) {
+                                                            console.error('❌ Error in resend button click:', error);
+                                                            alert('Error: ' + error.message);
+                                                        }
                                                     }}
                                                     className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300 px-2 py-1 rounded hover:bg-green-50 dark:hover:bg-green-900/20"
                                                     title="Resend"
