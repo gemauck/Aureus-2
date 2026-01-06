@@ -599,8 +599,10 @@ const UserManagement = () => {
     };
 
     const handleResendInvitation = async (invitationId) => {
+        console.log('🔄 Frontend: Resend invitation called for ID:', invitationId);
         try {
             const token = window.storage?.getToken?.();
+            console.log('🔄 Frontend: Making POST request to /api/users/invitation/' + invitationId);
             const response = await fetch(`/api/users/invitation/${invitationId}`, {
                 method: 'POST',
                 headers: {
@@ -608,17 +610,23 @@ const UserManagement = () => {
                 }
             });
 
+            console.log('🔄 Frontend: Response status:', response.status);
             const data = await response.json();
+            console.log('🔄 Frontend: Response data:', data);
 
             if (response.ok) {
                 alert(data.message || 'Invitation resent successfully');
+                if (data.emailSent === false) {
+                    alert('⚠️ Warning: Invitation updated but email sending failed. Check server logs.');
+                }
                 loadUsers();
             } else {
+                console.error('❌ Frontend: Resend failed:', data);
                 alert(data.message || 'Failed to resend invitation');
             }
         } catch (error) {
-            console.error('Error resending invitation:', error);
-            alert('Failed to resend invitation');
+            console.error('❌ Frontend: Error resending invitation:', error);
+            alert('Failed to resend invitation: ' + error.message);
         }
     };
 
