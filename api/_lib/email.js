@@ -415,7 +415,8 @@ export const sendInvitationEmail = async (invitationData) => {
         // Use Resend HTTP API if configured (preferred)
         // Priority: Resend > SendGrid > SMTP
         let result;
-        if (resendKey && resendKey.startsWith('re_') && (useResendHTTP || emailTransporter.provider === 'resend')) {
+        if (resendKey && resendKey.startsWith('re_')) {
+            // Use Resend if API key is set, regardless of transporter state
             mailOptions.fromName = 'Abcotronics';
             result = await sendViaResendAPI(mailOptions, resendKey);
         } else if (sendGridKey && (useSendGridHTTP || emailTransporter.provider === 'sendgrid')) {
@@ -517,7 +518,8 @@ export const sendPasswordResetEmail = async ({ email, name, resetLink }) => {
         // Use Resend HTTP API if configured (preferred)
         // Priority: Resend > SendGrid > SMTP
         let result;
-        if (resendKey && resendKey.startsWith('re_') && (useResendHTTP || emailTransporter.provider === 'resend')) {
+        if (resendKey && resendKey.startsWith('re_')) {
+            // Use Resend if API key is set, regardless of transporter state
             mailOptions.fromName = 'Abcotronics';
             result = await sendViaResendAPI(mailOptions, resendKey);
         } else if (sendGridKey && (useSendGridHTTP || emailTransporter.provider === 'sendgrid')) {
@@ -727,7 +729,8 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
         // Use Resend HTTP API if configured (preferred)
         // Priority: Resend > SendGrid > SMTP
         let result;
-        if (resendKey && resendKey.startsWith('re_') && (useResendHTTP || emailTransporter?.provider === 'resend')) {
+        if (resendKey && resendKey.startsWith('re_')) {
+            // Use Resend if API key is set, regardless of transporter state
             mailOptions.fromName = 'Abcotronics';
             result = await sendViaResendAPI(mailOptions, resendKey);
         } else if (sendGridKey && (useSendGridHTTP || emailTransporter?.provider === 'sendgrid')) {
