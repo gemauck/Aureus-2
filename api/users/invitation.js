@@ -100,15 +100,23 @@ async function handler(req, res) {
     
     // Resend invitation (POST)
     if (req.method === 'POST') {
+        console.log('🔄 Resend invitation endpoint called')
+        console.log('🔄 Invitation ID:', invitationId)
+        console.log('🔄 Request URL:', req.url)
+        console.log('🔄 Request method:', req.method)
         try {
             if (!invitationId) {
+                console.error('❌ No invitation ID provided')
                 return badRequest(res, 'Invitation ID is required')
             }
             
+            console.log('🔍 Looking up invitation:', invitationId)
             // Find invitation
             const invitation = await prisma.invitation.findUnique({
                 where: { id: invitationId }
             })
+            
+            console.log('🔍 Invitation found:', invitation ? { id: invitation.id, email: invitation.email, status: invitation.status } : 'NOT FOUND')
             
             if (!invitation) {
                 return badRequest(res, 'Invitation not found')
