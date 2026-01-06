@@ -37,6 +37,11 @@ async function handler(req, res) {
     // List Opportunities (GET /api/opportunities)
     if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'opportunities') {
       try {
+        // Add pagination support to prevent loading all opportunities
+        const page = parseInt(req.query?.page) || 1
+        const limit = parseInt(req.query?.limit) || 100 // Default limit of 100
+        const skip = (page - 1) * limit
+        
         const opportunities = await prisma.opportunity.findMany({ 
           include: {
             client: {
@@ -53,7 +58,9 @@ async function handler(req, res) {
               }
             } : {})
           },
-          orderBy: { createdAt: 'desc' } 
+          orderBy: { createdAt: 'desc' },
+          take: limit,
+          skip: skip
         })
         const normalized = opportunities.map(opportunity => {
           const { starredBy, ...rest } = opportunity

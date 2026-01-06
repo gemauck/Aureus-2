@@ -234,6 +234,18 @@ const DataProvider = ({ children }) => {
 
         } catch (error) {
             const errorMessage = error?.message || String(error);
+            const isUnauthorized = error?.status === 401 || errorMessage.includes('401') || 
+                                  errorMessage.includes('Unauthorized') || errorMessage.includes('UNAUTHORIZED');
+            
+            // If unauthorized, clear token and throw to stop loading
+            if (isUnauthorized) {
+                console.warn('⚠️ Unauthorized error in fetchData - clearing token');
+                if (window.storage?.removeToken) {
+                    window.storage.removeToken();
+                }
+                // Re-throw so it can be caught by initialLoad
+                throw error;
+            }
             
             // Check if it's a database connection error (expected when DB is down)
             const isDatabaseError = errorMessage.includes('Database connection failed') ||
@@ -356,6 +368,21 @@ const DataProvider = ({ children }) => {
                             const isDatabaseError = errorMessage.includes('Database connection failed') ||
                                                   errorMessage.includes('unreachable');
                             const isRateLimitError = err?.status === 429 || err?.code === 'RATE_LIMIT_EXCEEDED';
+                            const isUnauthorized = err?.status === 401 || errorMessage.includes('401') || 
+                                                  errorMessage.includes('Unauthorized') || errorMessage.includes('UNAUTHORIZED');
+                            
+                            // If unauthorized, stop loading immediately - token is invalid
+                            if (isUnauthorized) {
+                                console.warn('⚠️ Unauthorized - stopping data load');
+                                // Clear invalid token
+                                if (window.storage?.removeToken) {
+                                    window.storage.removeToken();
+                                }
+                                // Stop loading and let app show login page
+                                setInitialLoadComplete(true);
+                                setGlobalLoading(false);
+                                return null;
+                            }
                             
                             // Don't log rate limit errors (they're handled by RateLimitManager)
                             if (!isDatabaseError && !isRateLimitError) {
@@ -374,6 +401,18 @@ const DataProvider = ({ children }) => {
                 }
                 
             } catch (error) {
+                const errorMessage = error?.message || String(error);
+                const isUnauthorized = error?.status === 401 || errorMessage.includes('401') || 
+                                      errorMessage.includes('Unauthorized') || errorMessage.includes('UNAUTHORIZED');
+                
+                // If unauthorized, stop loading immediately
+                if (isUnauthorized) {
+                    console.warn('⚠️ Unauthorized during initial load - stopping');
+                    setInitialLoadComplete(true);
+                    setGlobalLoading(false);
+                    return;
+                }
+                
                 console.error('❌ Initial load error:', error);
             } finally {
                 setGlobalLoading(false);

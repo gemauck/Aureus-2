@@ -8,10 +8,92 @@ import { getAppUrl } from './getAppUrl.js';
 // - or granular: SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS
 // - or GMAIL_USER, GMAIL_APP_PASSWORD for Gmail App Password auth
 // - For SendGrid: Use HTTP API when SMTP_HOST=smtp.sendgrid.net (avoids port blocking)
+// - For Resend: Use HTTP API when RESEND_API_KEY is set (preferred, modern API)
 
 let transporter = null;
 let transporterInitialized = false;
 let useSendGridHTTP = false;
+let useResendHTTP = false;
+
+// Send email via Resend HTTP API (modern, developer-friendly, bypasses SMTP port blocking)
+async function sendViaResendAPI(mailOptions, apiKey) {
+    // Extract email from "Name <email>" format if needed
+    let fromEmail = mailOptions.from;
+    let fromName = mailOptions.fromName || 'Abcotronics';
+    
+    if (mailOptions.from.includes('<')) {
+        const match = mailOptions.from.match(/^(.+?)\s*<(.+)>$/);
+        if (match) {
+            fromName = match[1].trim() || fromName;
+            fromEmail = match[2].trim();
+        }
+    }
+    
+    // Resend API payload structure
+    const payload = {
+        from: `${fromName} <${fromEmail}>`,
+        to: [mailOptions.to],
+        subject: mailOptions.subject
+    };
+    
+    // Add reply_to if provided
+    if (mailOptions.replyTo) {
+        const replyEmail = mailOptions.replyTo.includes('<') 
+            ? mailOptions.replyTo.match(/<(.+)>/)?.[1] || mailOptions.replyTo
+            : mailOptions.replyTo;
+        payload.reply_to = [replyEmail];
+    }
+    
+    // Resend supports both html and text
+    if (mailOptions.html) {
+        payload.html = mailOptions.html;
+    }
+    
+    if (mailOptions.text) {
+        payload.text = mailOptions.text;
+    } else if (mailOptions.html) {
+        // If no text but we have HTML, create text version
+        payload.text = mailOptions.html.replace(/<[^>]*>/g, '').replace(/\n\s*\n/g, '\n\n');
+    }
+    
+    const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        let errorDetails = errorText;
+        try {
+            const errorJson = JSON.parse(errorText);
+            errorDetails = JSON.stringify(errorJson, null, 2);
+            // Check for common Resend errors
+            if (errorJson.message) {
+                console.error('❌ Resend API error:', errorJson.message);
+                if (errorJson.message.includes('domain') || errorJson.message.includes('verify')) {
+                    console.error('❌ DOMAIN VERIFICATION ERROR: Your sending domain must be verified in Resend!');
+                    console.error('   Go to: https://resend.com/domains');
+                    console.error('   Verify: ' + fromEmail.split('@')[1]);
+                }
+            }
+        } catch (e) {
+            // Not JSON, use as-is
+        }
+        console.error('❌ Resend API error response:', errorDetails);
+        throw new Error(`Resend API error: ${response.status} ${response.statusText} - ${errorDetails}`);
+    }
+
+    const result = await response.json();
+    return {
+        success: true,
+        messageId: result.id || `resend-${Date.now()}`,
+        response: result
+    };
+}
 
 // Send email via SendGrid HTTP API (bypasses SMTP port blocking)
 async function sendViaSendGridAPI(mailOptions, apiKey) {
@@ -110,9 +192,20 @@ function getTransporter() {
     if (!transporterInitialized) {
         transporterInitialized = true;
         
+        // Priority: Resend > SendGrid > SMTP
+        const resendKey = process.env.RESEND_API_KEY;
         const host = process.env.SMTP_HOST || 'smtp.gmail.com';
         const pass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || process.env.SENDGRID_API_KEY;
-        const sendGridKey = process.env.SENDGRID_API_KEY || pass;
+        const sendGridKey = process.env.SENDGRID_API_KEY || 
+                           (pass && pass.startsWith('SG.') ? pass : null);
+        
+        // Use Resend HTTP API if API key is set (preferred - modern, developer-friendly)
+        if (resendKey && resendKey.startsWith('re_')) {
+            useResendHTTP = true;
+            transporter = { useHTTP: true, provider: 'resend', apiKey: resendKey };
+            console.log('📧 Using Resend HTTP API (modern, bypasses SMTP port blocking)');
+            return transporter;
+        }
         
         // Use SendGrid HTTP API if:
         // 1. Explicit SENDGRID_API_KEY is set, OR
@@ -122,7 +215,8 @@ function getTransporter() {
         
         if (isSendGrid) {
             useSendGridHTTP = true;
-            transporter = { useHTTP: true, apiKey: sendGridKey }; // Flag to use HTTP API
+            transporter = { useHTTP: true, provider: 'sendgrid', apiKey: sendGridKey };
+            console.log('📧 Using SendGrid HTTP API (bypasses SMTP port blocking)');
             return transporter;
         }
         
@@ -174,7 +268,14 @@ function getTransporter() {
 }
 
 function checkEmailConfiguration() {
-    // Check for SendGrid API key first (preferred for production)
+    // Priority: Resend > SendGrid > SMTP
+    // Check for Resend API key first (preferred - modern, developer-friendly)
+    const resendKey = process.env.RESEND_API_KEY;
+    if (resendKey && resendKey.startsWith('re_')) {
+        return true;
+    }
+    
+    // Check for SendGrid API key
     const sendGridKey = process.env.SENDGRID_API_KEY || 
                        (process.env.SMTP_PASS && process.env.SMTP_PASS.startsWith('SG.') ? process.env.SMTP_PASS : null);
     
@@ -188,7 +289,7 @@ function checkEmailConfiguration() {
     const pass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
     
     if (!user || !pass) {
-        throw new Error('Email configuration incomplete. Either:\n  - Set SENDGRID_API_KEY (or SMTP_PASS with SendGrid key starting with SG.), OR\n  - Set SMTP_USER and SMTP_PASS (or GMAIL_USER and GMAIL_APP_PASSWORD)');
+        throw new Error('Email configuration incomplete. Either:\n  - Set RESEND_API_KEY (recommended, starts with re_), OR\n  - Set SENDGRID_API_KEY (or SMTP_PASS with SendGrid key starting with SG.), OR\n  - Set SMTP_USER and SMTP_PASS (or GMAIL_USER and GMAIL_APP_PASSWORD)');
     }
     
     return true;
@@ -291,13 +392,15 @@ export const sendInvitationEmail = async (invitationData) => {
     try {
         const emailTransporter = getTransporter();
 
-        // Get SendGrid API key - check multiple sources
+        // Priority: Resend > SendGrid > SMTP
+        const resendKey = process.env.RESEND_API_KEY;
         const sendGridKey = process.env.SENDGRID_API_KEY || 
                            (emailTransporter.apiKey && emailTransporter.apiKey.startsWith('SG.') ? emailTransporter.apiKey : null) ||
                            (process.env.SMTP_PASS && process.env.SMTP_PASS.startsWith('SG.') ? process.env.SMTP_PASS : null);
         
         // Early exit if no email configuration at all
         const hasAnyConfig = !!(
+            process.env.RESEND_API_KEY ||
             process.env.SENDGRID_API_KEY || 
             (process.env.SMTP_USER && process.env.SMTP_PASS) ||
             (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) ||
@@ -305,14 +408,17 @@ export const sendInvitationEmail = async (invitationData) => {
         );
         
         if (!hasAnyConfig) {
-            throw new Error('Email configuration not available. Please configure SENDGRID_API_KEY or SMTP settings in your .env file.');
+            throw new Error('Email configuration not available. Please configure RESEND_API_KEY (recommended), SENDGRID_API_KEY, or SMTP settings in your .env file.');
         }
         
         
-        // Use SendGrid HTTP API if configured
-        // Priority: SendGrid API key takes precedence over SMTP
+        // Use Resend HTTP API if configured (preferred)
+        // Priority: Resend > SendGrid > SMTP
         let result;
-        if (sendGridKey && (useSendGridHTTP || emailTransporter.useHTTP)) {
+        if (resendKey && resendKey.startsWith('re_') && (useResendHTTP || emailTransporter.provider === 'resend')) {
+            mailOptions.fromName = 'Abcotronics';
+            result = await sendViaResendAPI(mailOptions, resendKey);
+        } else if (sendGridKey && (useSendGridHTTP || emailTransporter.provider === 'sendgrid')) {
             mailOptions.fromName = 'Abcotronics';
             result = await sendViaSendGridAPI(mailOptions, sendGridKey);
         } else if (emailTransporter && typeof emailTransporter.sendMail === 'function') {
@@ -325,7 +431,7 @@ export const sendInvitationEmail = async (invitationData) => {
             result = await Promise.race([sendPromise, timeoutPromise]);
         } else {
             // No valid email configuration
-            throw new Error('No email transporter available. Please configure SENDGRID_API_KEY or SMTP settings.');
+            throw new Error('No email transporter available. Please configure RESEND_API_KEY (recommended), SENDGRID_API_KEY, or SMTP settings.');
         }
         
         return { success: true, messageId: result.messageId };
@@ -344,6 +450,13 @@ export const sendInvitationEmail = async (invitationData) => {
             errorMessage = 'Email authentication failed. Please check your SMTP username and password (app password for Gmail).';
         } else if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
             errorMessage = 'Email connection failed. Please check your network connection and SMTP server settings.';
+        } else if (error.message.includes('Resend API error')) {
+            // Extract Resend-specific errors
+            if (error.message.includes('domain') || error.message.includes('verify')) {
+                errorMessage = 'Resend domain not verified. Please verify your sending domain in Resend dashboard (https://resend.com/domains).';
+            } else {
+                errorMessage = error.message;
+            }
         } else if (error.message.includes('SendGrid API error')) {
             // Extract SendGrid-specific errors
             if (error.message.includes('verified')) {
@@ -395,15 +508,19 @@ export const sendPasswordResetEmail = async ({ email, name, resetLink }) => {
         checkEmailConfiguration();
         const emailTransporter = getTransporter();
         
-        // Get SendGrid API key - check multiple sources
+        // Priority: Resend > SendGrid > SMTP
+        const resendKey = process.env.RESEND_API_KEY;
         const sendGridKey = process.env.SENDGRID_API_KEY || 
                            (emailTransporter.apiKey && emailTransporter.apiKey.startsWith('SG.') ? emailTransporter.apiKey : null) ||
                            (process.env.SMTP_PASS && process.env.SMTP_PASS.startsWith('SG.') ? process.env.SMTP_PASS : null);
         
-        // Use SendGrid HTTP API if configured
-        // Priority: SendGrid API key takes precedence over SMTP
+        // Use Resend HTTP API if configured (preferred)
+        // Priority: Resend > SendGrid > SMTP
         let result;
-        if (sendGridKey && (useSendGridHTTP || emailTransporter.useHTTP)) {
+        if (resendKey && resendKey.startsWith('re_') && (useResendHTTP || emailTransporter.provider === 'resend')) {
+            mailOptions.fromName = 'Abcotronics';
+            result = await sendViaResendAPI(mailOptions, resendKey);
+        } else if (sendGridKey && (useSendGridHTTP || emailTransporter.provider === 'sendgrid')) {
             mailOptions.fromName = 'Abcotronics';
             result = await sendViaSendGridAPI(mailOptions, sendGridKey);
         } else {
@@ -585,13 +702,15 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
         
         const emailTransporter = getTransporter();
         
-        // Get SendGrid API key - check multiple sources
+        // Priority: Resend > SendGrid > SMTP
+        const resendKey = process.env.RESEND_API_KEY;
         const sendGridKey = process.env.SENDGRID_API_KEY || 
                            (emailTransporter?.apiKey && emailTransporter.apiKey.startsWith('SG.') ? emailTransporter.apiKey : null) ||
                            (process.env.SMTP_PASS && process.env.SMTP_PASS.startsWith('SG.') ? process.env.SMTP_PASS : null);
         
         // Check if we have any email configuration
         const hasAnyConfig = !!(
+            process.env.RESEND_API_KEY ||
             process.env.SENDGRID_API_KEY || 
             (process.env.SMTP_USER && process.env.SMTP_PASS) ||
             (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) ||
@@ -599,16 +718,19 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
         );
         
         if (!hasAnyConfig) {
-            const errorMsg = 'Email configuration not available. Please configure SENDGRID_API_KEY or SMTP settings in your .env file.';
+            const errorMsg = 'Email configuration not available. Please configure RESEND_API_KEY (recommended), SENDGRID_API_KEY, or SMTP settings in your .env file.';
             console.error('❌', errorMsg);
             throw new Error(errorMsg);
         }
         
         
-        // Use SendGrid HTTP API if configured
-        // Priority: SendGrid API key takes precedence over SMTP
+        // Use Resend HTTP API if configured (preferred)
+        // Priority: Resend > SendGrid > SMTP
         let result;
-        if (sendGridKey && (useSendGridHTTP || emailTransporter?.useHTTP)) {
+        if (resendKey && resendKey.startsWith('re_') && (useResendHTTP || emailTransporter?.provider === 'resend')) {
+            mailOptions.fromName = 'Abcotronics';
+            result = await sendViaResendAPI(mailOptions, resendKey);
+        } else if (sendGridKey && (useSendGridHTTP || emailTransporter?.provider === 'sendgrid')) {
             mailOptions.fromName = 'Abcotronics';
             // Extract email from "Name <email>" format if needed
             const fromEmail = mailOptions.from.includes('<') 
@@ -624,7 +746,7 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
             );
             result = await Promise.race([sendPromise, timeoutPromise]);
         } else {
-            const errorMsg = 'No email transporter available. Please configure SENDGRID_API_KEY or SMTP settings.';
+            const errorMsg = 'No email transporter available. Please configure RESEND_API_KEY (recommended), SENDGRID_API_KEY, or SMTP settings.';
             console.error('❌', errorMsg);
             throw new Error(errorMsg);
         }
@@ -648,6 +770,13 @@ export const sendNotificationEmail = async (to, subject, message, options = {}) 
             errorMessage = 'Email authentication failed. Please check your SMTP username and password (app password for Gmail).';
         } else if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
             errorMessage = 'Email connection failed. Please check your network connection and SMTP server settings.';
+        } else if (error.message && error.message.includes('Resend API error')) {
+            // Extract Resend-specific errors
+            if (error.message.includes('domain') || error.message.includes('verify')) {
+                errorMessage = 'Resend domain not verified. Please verify your sending domain in Resend dashboard (https://resend.com/domains).';
+            } else {
+                errorMessage = error.message;
+            }
         } else if (error.message && error.message.includes('SendGrid API error')) {
             // Extract SendGrid-specific errors
             if (error.message.includes('verified')) {

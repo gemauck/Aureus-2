@@ -628,6 +628,140 @@ function initializeProjectDetail() {
         }
     }, [project?.id]);
     
+    // Helper function to update URL with task and/or comment parameters
+    // CRITICAL: Always ensures project ID is in the path, not just query params
+    // Moved here to avoid temporal dead zone error - must be defined before use in useEffect
+    const updateUrl = useCallback((options = {}) => {
+        if (!project?.id) {
+            console.warn('⚠️ ProjectDetail: Cannot update URL - project.id is missing');
+            return;
+        }
+        
+        const { task: taskId = null, comment: commentId = null, clearTask = false, clearComment = false } = options;
+        
+        // Build search params
+        const searchParams = new URLSearchParams();
+        
+        // Update task parameter
+        if (taskId && !clearTask) {
+            searchParams.set('task', String(taskId));
+        }
+        
+        // Update comment parameter
+        if (commentId && !clearComment) {
+            searchParams.set('commentId', String(commentId));
+        }
+        
+        const searchString = searchParams.toString();
+        const newSearch = searchString ? `?${searchString}` : '';
+        const projectId = String(project.id);
+        
+        // ALWAYS ensure project ID is in the path - this is critical!
+        // CRITICAL: Always ensure project ID is in the path, not just query params
+        // Try multiple methods, but always fall back to direct URL manipulation if needed
+        let urlUpdated = false;
+        
+        if (window.updateProjectUrl && typeof window.updateProjectUrl === 'function') {
+            try {
+                // Use Projects component's update function (this should handle path + search)
+                const urlOptions = {};
+                if (taskId && !clearTask) {
+                    urlOptions.task = taskId;
+                } else if (clearTask) {
+                    // Explicitly remove task parameter by setting to null
+                    urlOptions.task = null;
+                }
+                if (commentId && !clearComment) {
+                    urlOptions.commentId = commentId;
+                } else if (clearComment) {
+                    urlOptions.commentId = null;
+                }
+                // window.updateProjectUrl only takes options, not projectId (it uses viewingProject.id internally)
+                window.updateProjectUrl(urlOptions);
+                urlUpdated = true;
+            } catch (e) {
+                console.warn('⚠️ updateProjectUrl failed, using fallback:', e);
+            }
+        }
+        
+        if (!urlUpdated && window.RouteState?.navigate) {
+            try {
+                // Use RouteState.navigate - explicitly set segments to include project ID
+                window.RouteState.navigate({
+                    page: 'projects',
+                    segments: [projectId], // CRITICAL: Always include project ID in segments
+                    search: newSearch,
+                    preserveSearch: false,
+                    preserveHash: false
+                });
+                urlUpdated = true;
+            } catch (e) {
+                console.warn('⚠️ RouteState.navigate failed, using fallback:', e);
+            }
+        }
+        
+        if (!urlUpdated && window.RouteState?.setPageSubpath) {
+            try {
+                // Use setPageSubpath - explicitly set segments to include project ID
+                window.RouteState.setPageSubpath('projects', [projectId], { // CRITICAL: Always include project ID
+                    replace: false,
+                    preserveSearch: false,
+                    preserveHash: false
+                });
+                urlUpdated = true;
+            } catch (e) {
+                console.warn('⚠️ RouteState.setPageSubpath failed, using fallback:', e);
+            }
+        }
+        
+        // ALWAYS use direct URL manipulation as final fallback to ensure it works
+        // This ensures the URL is ALWAYS updated, even if other methods fail
+        // CRITICAL: Always ensure project ID is in path, even if current URL is just /projects
+        const url = new URL(window.location.href);
+        const currentPath = url.pathname;
+        const expectedPath = `/projects/${projectId}`;
+        
+        // Always update if:
+        // 1. Pathname doesn't include project ID, OR
+        // 2. We have search params to add/update, OR  
+        // 3. Pathname doesn't match expected path exactly
+        const needsUpdate = 
+            !currentPath.includes(projectId) || 
+            currentPath !== expectedPath || 
+            newSearch !== url.search;
+        
+        if (needsUpdate) {
+            url.pathname = expectedPath; // CRITICAL: Always set pathname with project ID
+            url.search = newSearch;
+            
+            // Use pushState to update URL
+            try {
+                window.history.pushState({}, '', url);
+                console.log('✅ URL updated directly:', url.href, '(was:', window.location.href + ')');
+                
+                // Verify it actually updated
+                setTimeout(() => {
+                    const verifyUrl = window.location.href;
+                    if (!verifyUrl.includes(projectId) || (newSearch && !verifyUrl.includes(newSearch.replace('?', '')))) {
+                        console.error('❌ URL update failed! Expected:', url.href, 'Got:', verifyUrl);
+                        // Try one more time with replaceState
+                        window.history.replaceState({}, '', url);
+                    }
+                }, 50);
+            } catch (e) {
+                console.error('❌ Error updating URL:', e);
+                // Last resort: try replaceState
+                try {
+                    window.history.replaceState({}, '', url);
+                } catch (e2) {
+                    console.error('❌ replaceState also failed:', e2);
+                }
+            }
+        } else {
+            console.log('ℹ️ URL already correct, no update needed');
+        }
+    }, [project]);
+    
     // Initialize taskLists with project-specific data
     const [taskLists, setTaskLists] = useState(
         project.taskLists || [
@@ -666,12 +800,52 @@ function initializeProjectDetail() {
         }
     }, [project?.id]); // Only depend on project ID, not tasks array (which may be recreated on every render)
     
+    // CRITICAL: Ensure project ID is always in URL when ProjectDetail is rendered
+    useEffect(() => {
+        if (!project?.id) return;
+        
+        const currentUrl = window.location.href;
+        const expectedPath = `/projects/${project.id}`;
+        
+        // If URL doesn't have project ID in path, fix it immediately
+        if (!currentUrl.includes(project.id) || !window.location.pathname.includes(project.id)) {
+            console.log('🔧 ProjectDetail: URL missing project ID, fixing...', {
+                currentUrl,
+                expectedPath,
+                currentPathname: window.location.pathname
+            });
+            
+            // Preserve any existing search params (like task=)
+            const currentSearch = window.location.search;
+            const url = new URL(window.location.href);
+            url.pathname = expectedPath;
+            // Keep existing search params
+            if (currentSearch) {
+                url.search = currentSearch;
+            }
+            
+            try {
+                window.history.replaceState({}, '', url);
+                console.log('✅ ProjectDetail: URL fixed to include project ID:', url.href);
+            } catch (e) {
+                console.error('❌ Failed to fix URL:', e);
+            }
+        }
+    }, [project?.id]); // Run whenever project ID changes
+    
     // Listen for openTask event (for programmatic task opening) - MUST be after tasks state is declared
     useEffect(() => {
         if (!project?.id || !tasks || tasks.length === 0) return;
         
         const handleOpenTask = async (event) => {
             if (!event.detail || !event.detail.taskId) return;
+            
+            // CRITICAL: Don't open task if it was manually closed
+            // This prevents the modal from reopening after the user explicitly closed it
+            if (taskManuallyClosedRef.current) {
+                console.log('⏸️ ProjectDetail: handleOpenTask - task was manually closed, ignoring openTask event');
+                return;
+            }
             
             const taskId = event.detail.taskId;
             const tab = event.detail.tab || 'details';
@@ -696,12 +870,57 @@ function initializeProjectDetail() {
                 }
                 
                 if (foundTask) {
-                    // Ensure task detail modal is loaded
-                    await ensureTaskDetailModalLoaded();
+                    // Double-check before opening (in case flag was set during async operations)
+                    if (taskManuallyClosedRef.current) {
+                        console.log('⏸️ ProjectDetail: handleOpenTask - task was manually closed (double-check), ignoring');
+                        return;
+                    }
                     
-                    setViewingTask(foundTask);
-                    setViewingTaskParent(foundParent);
-                    setShowTaskDetailModal(true);
+                    // Don't reopen the specific task that was just closed
+                    if (closedTaskIdRef.current && (foundTask.id === closedTaskIdRef.current || String(foundTask.id) === String(closedTaskIdRef.current))) {
+                        console.log('⏸️ ProjectDetail: handleOpenTask - this specific task was manually closed, ignoring:', closedTaskIdRef.current);
+                        return;
+                    }
+                    
+                    // OPTIMIZED: Check if modal is ready immediately, don't wait if it's already loaded
+                    const modalReady = typeof window.TaskDetailModal === 'function';
+                    if (modalReady) {
+                        // Modal is ready, open immediately without waiting
+                        // Final check before actually opening
+                        if (taskManuallyClosedRef.current) {
+                            console.log('⏸️ ProjectDetail: handleOpenTask - task was manually closed (final check), ignoring');
+                            return;
+                        }
+                        
+                        // Final check for closed task ID
+                        if (closedTaskIdRef.current && (foundTask.id === closedTaskIdRef.current || String(foundTask.id) === String(closedTaskIdRef.current))) {
+                            console.log('⏸️ ProjectDetail: handleOpenTask - this specific task was manually closed (final check), ignoring');
+                            return;
+                        }
+                        
+                        setViewingTask(foundTask);
+                        setViewingTaskParent(foundParent);
+                        setShowTaskDetailModal(true);
+                    } else {
+                        // Modal not ready, ensure it's loaded (but this should be rare)
+                        await ensureTaskDetailModalLoaded();
+                        
+                        // Final check before actually opening
+                        if (taskManuallyClosedRef.current) {
+                            console.log('⏸️ ProjectDetail: handleOpenTask - task was manually closed (final check), ignoring');
+                            return;
+                        }
+                        
+                        // Final check for closed task ID
+                        if (closedTaskIdRef.current && (foundTask.id === closedTaskIdRef.current || String(foundTask.id) === String(closedTaskIdRef.current))) {
+                            console.log('⏸️ ProjectDetail: handleOpenTask - this specific task was manually closed (final check), ignoring');
+                            return;
+                        }
+                        
+                        setViewingTask(foundTask);
+                        setViewingTaskParent(foundParent);
+                        setShowTaskDetailModal(true);
+                    }
                 }
             } catch (error) {
                 console.warn('⚠️ ProjectDetail: failed to open task from event:', error);
@@ -749,15 +968,13 @@ function initializeProjectDetail() {
     useEffect(() => {
         const handleScrollToComment = (event) => {
             if (!event.detail || !event.detail.commentId) return;
-            const { commentId } = event.detail;
+            const { commentId, taskId } = event.detail;
             
-            // Update URL with commentId
-            if (window.updateProjectUrl && project?.id) {
-                window.updateProjectUrl({
-                    tab: activeSection,
-                    commentId: commentId
-                });
-            }
+            // Update URL with commentId (and taskId if provided)
+            updateUrl({ 
+                task: taskId || undefined,
+                comment: commentId 
+            });
             
             // Try to scroll to the comment element
             setTimeout(() => {
@@ -775,7 +992,7 @@ function initializeProjectDetail() {
         
         window.addEventListener('scrollToComment', handleScrollToComment);
         return () => window.removeEventListener('scrollToComment', handleScrollToComment);
-    }, [activeSection, project?.id]);
+    }, [activeSection, project?.id, updateUrl]);
     
     // Ensure we are on the overview tab when switching to a different project.
     useEffect(() => {
@@ -812,8 +1029,36 @@ function initializeProjectDetail() {
     useEffect(() => {
         if (!project?.id || !tasks || tasks.length === 0) return;
         
+        // CRITICAL: Don't run deep-link handler if task was manually closed
+        // Also check if URL actually has a task parameter - if not, don't run
+        // This prevents the effect from reopening the modal after closing
+        if (taskManuallyClosedRef.current) {
+            console.log('⏸️ ProjectDetail: useEffect - task was manually closed, skipping deep-link handler');
+            return;
+        }
+        
+        // Double-check: If URL doesn't have task parameter, don't run deep-link handler
+        // This prevents unnecessary processing when effect re-runs due to dependency changes
+        const currentSearch = window.location.search || '';
+        const currentHash = window.location.hash || '';
+        const currentParams = new URLSearchParams(currentSearch);
+        const hashParams = currentHash.includes('?') ? new URLSearchParams(currentHash.split('?')[1]) : null;
+        const urlHasTask = currentParams.get('task') || (hashParams && hashParams.get('task'));
+        
+        if (!urlHasTask) {
+            // No task in URL, so no need to run deep-link handler
+            // This is normal when modal is closed or when just viewing project
+            return;
+        }
+        
         const handleDeepLink = async () => {
             try {
+                // CRITICAL: Check if task was manually closed first
+                if (taskManuallyClosedRef.current) {
+                    console.log('⏸️ ProjectDetail: handleDeepLink - task was manually closed, skipping');
+                    return;
+                }
+                
                 // Check both window.location.search (for regular URLs) and hash query params (for hash-based routing)
                 let taskId = null;
                 let params = null;
@@ -837,7 +1082,46 @@ function initializeProjectDetail() {
                     }
                 }
                 
+                // Double-check: If we found a taskId but the URL was just updated to remove it, don't open
+                // This handles race conditions where the handler runs before URL update completes
+                if (taskId && taskManuallyClosedRef.current) {
+                    console.log('⏸️ ProjectDetail: handleDeepLink - task was manually closed (double-check), skipping');
+                    return;
+                }
+                
+                // Also check for commentId in URL
+                let commentId = null;
+                if (params) {
+                    commentId = params.get('commentId');
+                } else {
+                    const search = window.location.search || '';
+                    if (search) {
+                        const searchParams = new URLSearchParams(search);
+                        commentId = searchParams.get('commentId');
+                    }
+                }
+                
                 if (taskId) {
+                    // Don't reopen task if it was manually closed
+                    if (taskManuallyClosedRef.current) {
+                        console.log('⏸️ ProjectDetail: Skipping task deep-link - task was manually closed');
+                        return;
+                    }
+                    
+                    // Re-check URL one more time - if it doesn't have task param now, it was just removed
+                    // This handles race conditions where URL was updated between when we read it and now
+                    const finalCheckSearch = window.location.search || '';
+                    const finalCheckHash = window.location.hash || '';
+                    const finalCheckParams = new URLSearchParams(finalCheckSearch);
+                    const finalCheckHashParams = finalCheckHash.includes('?') ? new URLSearchParams(finalCheckHash.split('?')[1]) : null;
+                    const finalUrlHasTask = finalCheckParams.get('task') || (finalCheckHashParams && finalCheckHashParams.get('task'));
+                    
+                    // If URL doesn't have task parameter now, it was just closed - don't reopen
+                    if (!finalUrlHasTask) {
+                        console.log('⏸️ ProjectDetail: Skipping task open - URL no longer has task parameter (was closed)');
+                        return;
+                    }
+                    
                     // Find the task in the tasks array (including subtasks)
                     let foundTask = tasks.find(t => t.id === taskId || String(t.id) === String(taskId));
                     let foundParent = null;
@@ -857,31 +1141,120 @@ function initializeProjectDetail() {
                     }
                     
                     if (foundTask) {
-                        // Ensure task detail modal is loaded before opening
-                        // Use a safe check to avoid TDZ issues
+                        // Don't reopen if task was manually closed
+                        if (taskManuallyClosedRef.current) {
+                            console.log('⏸️ ProjectDetail: Skipping task open - task was manually closed');
+                            return;
+                        }
+                        
+                        // Don't reopen the specific task that was just closed
+                        if (closedTaskIdRef.current && (foundTask.id === closedTaskIdRef.current || String(foundTask.id) === String(closedTaskIdRef.current))) {
+                            console.log('⏸️ ProjectDetail: Skipping task open - this specific task was manually closed:', closedTaskIdRef.current);
+                            return;
+                        }
+                        
+                        // Also check if modal is already closed (double-check)
+                        // If showTaskDetailModal is false and we're trying to open, respect the closed state
+                        // This prevents reopening immediately after closing
+                        
+                        // OPTIMIZED: Open task immediately if modal is ready, otherwise poll quickly
                         if (typeof window.TaskDetailModal === 'function') {
                             setViewingTask(foundTask);
                             setViewingTaskParent(foundParent);
                             setShowTaskDetailModal(true);
+                            
+                            // If commentId is also in URL, open comments for this task
+                            if (commentId) {
+                                // Reduced delay for comments (was 500ms, now 200ms)
+                                setTimeout(() => {
+                                    // Dispatch event to scroll to comment (which will also open comments popup)
+                                    window.dispatchEvent(new CustomEvent('scrollToComment', {
+                                        detail: { commentId, taskId: foundTask.id }
+                                    }));
+                                }, 200);
+                            }
                         } else {
-                            // If modal not loaded yet, wait a bit and try again
-                            setTimeout(() => {
+                            // If modal not loaded yet, poll quickly instead of fixed delay
+                            let pollCount = 0;
+                            const maxPolls = 20; // 1 second max (20 * 50ms)
+                            const pollInterval = setInterval(() => {
+                                pollCount++;
+                                
+                                // Check again if task was manually closed before opening
+                                if (taskManuallyClosedRef.current) {
+                                    clearInterval(pollInterval);
+                                    console.log('⏸️ ProjectDetail: Skipping delayed task open - task was manually closed');
+                                    return;
+                                }
+                                
                                 if (typeof window.TaskDetailModal === 'function') {
+                                    clearInterval(pollInterval);
+                                    
+                                    // Final check before opening
+                                    if (taskManuallyClosedRef.current) {
+                                        console.log('⏸️ ProjectDetail: Skipping task open - task was manually closed (final check)');
+                                        return;
+                                    }
+                                    
                                     setViewingTask(foundTask);
                                     setViewingTaskParent(foundParent);
                                     setShowTaskDetailModal(true);
+                                    
+                                    // If commentId is also in URL, open comments for this task
+                                    if (commentId) {
+                                        setTimeout(() => {
+                                            window.dispatchEvent(new CustomEvent('scrollToComment', {
+                                                detail: { commentId, taskId: foundTask.id }
+                                            }));
+                                        }, 200);
+                                    }
+                                } else if (pollCount >= maxPolls) {
+                                    clearInterval(pollInterval);
+                                    console.warn('⚠️ ProjectDetail: TaskDetailModal not available after polling');
                                 }
-                            }, 500);
+                            }, 50); // Check every 50ms for fast response (was 500ms fixed delay)
                         }
                         
-                        // Remove the task parameter from URL to clean it up
-                        if (params) {
-                            params.delete('task');
-                            const newSearch = params.toString();
-                            const newHash = window.location.hash.split('?')[0] + (newSearch ? `?${newSearch}` : '');
-                            if (window.history && window.history.replaceState) {
-                                window.history.replaceState(null, '', newHash);
-                            }
+                        // Keep task and comment parameters in URL - don't remove them
+                        // This allows URLs to be shareable and bookmarkable
+                    }
+                } else if (commentId && !taskId) {
+                    // If only commentId is in URL (no task), find the task that contains this comment
+                    for (const task of tasks) {
+                        const taskComments = task.comments || [];
+                        const hasComment = taskComments.some(c => 
+                            String(c.id) === String(commentId) || 
+                            String(c.commentId) === String(commentId)
+                        );
+                        
+                        if (hasComment) {
+                            // Open task and scroll to comment
+                            setTimeout(() => {
+                                // Check if task was manually closed before opening
+                                if (taskManuallyClosedRef.current) {
+                                    console.log('⏸️ ProjectDetail: Skipping comment task open - task was manually closed');
+                                    return;
+                                }
+                                
+                                if (typeof window.TaskDetailModal === 'function') {
+                                    // Final check before opening
+                                    if (taskManuallyClosedRef.current) {
+                                        console.log('⏸️ ProjectDetail: Skipping comment task open - task was manually closed (final check)');
+                                        return;
+                                    }
+                                    
+                                    setViewingTask(task);
+                                    setViewingTaskParent(null);
+                                    setShowTaskDetailModal(true);
+                                    
+                                    setTimeout(() => {
+                                        window.dispatchEvent(new CustomEvent('scrollToComment', {
+                                            detail: { commentId, taskId: task.id }
+                                        }));
+                                    }, 500);
+                                }
+                            }, 500);
+                            break;
                         }
                     }
                 }
@@ -891,6 +1264,38 @@ function initializeProjectDetail() {
         };
         
         handleDeepLink();
+        
+        // Also listen for hash changes to handle navigation from other pages
+        const handleHashChange = () => {
+            // Don't reopen task if it was manually closed
+            if (taskManuallyClosedRef.current) {
+                console.log('⏸️ ProjectDetail: Skipping hashchange task deep-link - task was manually closed');
+                return;
+            }
+            
+            // Check if URL still has task parameter - if not, don't try to open task
+            const currentSearch = window.location.search || '';
+            const currentHash = window.location.hash || '';
+            const currentParams = new URLSearchParams(currentSearch);
+            const hashParams = currentHash.includes('?') ? new URLSearchParams(currentHash.split('?')[1]) : null;
+            const urlHasTask = currentParams.get('task') || (hashParams && hashParams.get('task'));
+            
+            if (!urlHasTask && taskManuallyClosedRef.current) {
+                console.log('⏸️ ProjectDetail: Skipping hashchange - URL no longer has task parameter');
+                return;
+            }
+            
+            // Small delay to ensure route has updated
+            setTimeout(() => {
+                handleDeepLink();
+            }, 100);
+        };
+        
+        window.addEventListener('hashchange', handleHashChange);
+        
+        return () => {
+            window.removeEventListener('hashchange', handleHashChange);
+        };
     }, [project?.id, tasks]);
     
     // Track if document collection process exists
@@ -944,6 +1349,13 @@ function initializeProjectDetail() {
     const [creatingTaskWithStatus, setCreatingTaskWithStatus] = useState(null);
     const [viewMode, setViewMode] = useState('list'); // 'list' or 'kanban'
     const [editingDocument, setEditingDocument] = useState(null);
+    
+    // Track if task was manually closed to prevent deep-link from reopening it
+    const taskManuallyClosedRef = useRef(false);
+    // Track if close is in progress to prevent double-closing
+    const isClosingRef = useRef(false);
+    // Track which task ID was manually closed to prevent reopening that specific task
+    const closedTaskIdRef = useRef(null);
     
     // Comments popup state
     const [commentsPopup, setCommentsPopup] = useState(null); // {taskId, task, isSubtask, parentId, position}
@@ -2054,7 +2466,7 @@ function initializeProjectDetail() {
         return ordered;
     }, [statusOptions]);
 
-    const openTaskComments = useCallback(async (event, task, { parentTask = null, isSubtask = false } = {}) => {
+    const openTaskComments = useCallback(async (event, task, { parentTask = null, isSubtask = false, commentId = null } = {}) => {
         event.stopPropagation();
         const rect = event.currentTarget.getBoundingClientRect();
         const scrollX = window.scrollX ?? window.pageXOffset ?? 0;
@@ -2081,6 +2493,13 @@ function initializeProjectDetail() {
             isSubtask,
             parentId: parentTask ? parentTask.id : null,
             position
+        });
+        
+        // Update URL to include task and comment parameters
+        // Always include task when opening comments, and commentId if provided
+        updateUrl({ 
+            task: task.id, 
+            comment: commentId || undefined 
         });
     }, [ensureCommentsPopupLoaded]);
 
@@ -2177,18 +2596,350 @@ function initializeProjectDetail() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // ensureTaskDetailModalLoaded is stable from useCallback, no need in deps
 
+    // Monitor URL changes to detect if something is resetting it
+    useEffect(() => {
+        if (!project?.id) return;
+        
+        let lastUrl = window.location.href;
+        const checkInterval = setInterval(() => {
+            const currentUrl = window.location.href;
+            if (currentUrl !== lastUrl) {
+                console.log('🔍 URL changed detected:', lastUrl, '→', currentUrl);
+                lastUrl = currentUrl;
+                
+                // If URL lost project ID or task parameter when task is open, fix it
+                // BUT: Don't restore task if it was manually closed OR if the closed task ID matches
+                if (viewingTask?.id && !taskManuallyClosedRef.current) {
+                    // Also check if this is the task that was manually closed
+                    const isClosedTask = closedTaskIdRef.current && 
+                                       (viewingTask.id === closedTaskIdRef.current || 
+                                        String(viewingTask.id) === String(closedTaskIdRef.current));
+                    
+                    if (isClosedTask) {
+                        console.log('⏸️ URL monitoring: Skipping restore - this task was manually closed');
+                        return;
+                    }
+                    
+                    const hasProjectId = currentUrl.includes(project.id);
+                    const hasTask = currentUrl.includes(`task=${viewingTask.id}`);
+                    
+                    if (!hasProjectId || !hasTask) {
+                        console.warn('⚠️ URL lost project/task info, fixing...');
+                        updateUrl({ task: viewingTask.id });
+                    }
+                }
+            }
+        }, 500);
+        
+        return () => clearInterval(checkInterval);
+    }, [project?.id, viewingTask?.id, updateUrl]);
+
     const handleViewTaskDetail = useCallback(async (task, parentTask = null) => {
         const ready = await ensureTaskDetailModalLoaded();
         if (!ready) {
             alert('Task workspace is still loading. Please try again in a moment.');
             return;
         }
+        
+        if (!task?.id) {
+            console.warn('⚠️ handleViewTaskDetail: Task has no ID');
+            return;
+        }
+        
+        if (!project?.id) {
+            console.warn('⚠️ handleViewTaskDetail: Project has no ID');
+            return;
+        }
+        
+        console.log('🔗 Opening task:', task.id, 'for project:', project.id);
+        console.log('🔗 Current URL before update:', window.location.href);
+        
+        // Clear the manually closed flag since user is explicitly opening a task
+        // This allows normal task opening to work after closing
+        taskManuallyClosedRef.current = false;
+        isClosingRef.current = false;
+        // Clear the closed task ID ref since user is explicitly opening a (possibly different) task
+        closedTaskIdRef.current = null;
+        
         setViewingTask(task);
         setViewingTaskParent(parentTask);
         setCreatingTaskForList(null);
         setShowTaskDetailModal(true);
+        
+        // CRITICAL: Update URL to include task query parameter - ALWAYS update URL when opening task
+        // This MUST work regardless of RouteState or other systems
+        console.log('🔗 Opening task - Current URL:', window.location.href);
+        console.log('🔗 Task ID:', task.id, 'Project ID:', project.id);
+        
+        // Build the correct URL
+        const expectedPath = `/projects/${project.id}`;
+        const expectedSearch = `?task=${task.id}`;
+        const expectedUrl = `${window.location.origin}${expectedPath}${expectedSearch}`;
+        
+        // Method 1: Direct URL manipulation (ALWAYS works)
+        const url = new URL(window.location.href);
+        url.pathname = expectedPath; // Always set pathname with project ID
+        url.search = expectedSearch; // Always set search with task ID
+        
+        // Update immediately - this is the most reliable method
+        try {
+            window.history.pushState({}, '', url);
+            console.log('✅ URL updated via pushState:', url.href);
+        } catch (e) {
+            console.error('❌ pushState failed, trying replaceState:', e);
+            try {
+                window.history.replaceState({}, '', url);
+                console.log('✅ URL updated via replaceState:', url.href);
+            } catch (e2) {
+                console.error('❌ Both pushState and replaceState failed:', e2);
+            }
+        }
+        
+        // Method 2: Also try RouteState methods (if available) for consistency
+        updateUrl({ task: task.id, clearComment: true });
+        
+        // Method 3: Verify and force-fix after delay to ensure it sticks
+        setTimeout(() => {
+            const currentUrl = window.location.href;
+            const hasProjectId = currentUrl.includes(project.id);
+            const hasTask = currentUrl.includes(`task=${task.id}`);
+            
+            if (!hasProjectId || !hasTask) {
+                console.warn('⚠️ URL verification failed! Expected:', expectedUrl);
+                console.warn('⚠️ Got:', currentUrl);
+                console.warn('⚠️ Has project ID:', hasProjectId, 'Has task:', hasTask);
+                
+                // Force update one more time with replaceState
+                const fixUrl = new URL(window.location.href);
+                fixUrl.pathname = expectedPath;
+                fixUrl.search = expectedSearch;
+                window.history.replaceState({}, '', fixUrl);
+                console.log('✅ URL force-fixed:', fixUrl.href);
+            } else {
+                console.log('✅ URL correctly updated and verified:', window.location.href);
+            }
+        }, 300);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []); // ensureTaskDetailModalLoaded is stable from useCallback, no need in deps
+    }, [updateUrl, project?.id]); // ensureTaskDetailModalLoaded is stable from useCallback, no need in deps
+    
+    // Helper function to close task modal and update URL
+    const handleCloseTaskModal = useCallback(() => {
+        // Prevent double-closing: if already closing, ignore this call
+        if (isClosingRef.current) {
+            console.log('⏸️ ProjectDetail: handleCloseTaskModal - already closing, ignoring duplicate call');
+            return;
+        }
+        
+        // Mark as closing
+        isClosingRef.current = true;
+        
+        // CRITICAL: Set flag FIRST before any state changes or URL updates
+        // This prevents any handlers from reopening the modal
+        taskManuallyClosedRef.current = true;
+        
+        // Store the task ID that was closed to prevent reopening this specific task
+        const closedTaskId = viewingTask?.id || null;
+        closedTaskIdRef.current = closedTaskId;
+        console.log('🔒 ProjectDetail: Marking task as closed:', closedTaskId);
+        
+        // Clear task state immediately (before URL updates)
+        // This prevents URL monitoring effect from trying to restore task parameter
+        setViewingTask(null);
+        setViewingTaskParent(null);
+        setCreatingTaskForList(null);
+        setCreatingTaskWithStatus(null);
+        setShowTaskDetailModal(false);
+        
+        // CRITICAL: Navigate to clean project URL (without task parameter)
+        // This ensures the URL reflects that we're viewing the project, not a task
+        // Use RouteState.navigate as PRIMARY method to ensure routing system recognizes the change
+        const projectId = String(project?.id);
+        if (projectId) {
+            const cleanProjectUrl = `${window.location.origin}/projects/${projectId}`;
+            
+            // Method 1: RouteState.navigate (PRIMARY - ensures routing system recognizes navigation)
+            // Do this FIRST to ensure the routing system knows we've navigated away from the task
+            if (window.RouteState && typeof window.RouteState.navigate === 'function') {
+                try {
+                    window.RouteState.navigate({
+                        page: 'projects',
+                        segments: [projectId],
+                        search: '', // Explicitly empty - no task parameter
+                        preserveSearch: false,
+                        preserveHash: false,
+                        replace: true // Use replace to avoid adding to history
+                    });
+                    console.log('✅ ProjectDetail: RouteState.navigate called to clean project URL (PRIMARY METHOD)');
+                } catch (e) {
+                    console.warn('⚠️ Failed to update URL via RouteState:', e);
+                }
+            }
+            
+            // Method 2: Direct URL manipulation (synchronous backup)
+            try {
+                window.history.replaceState({}, '', cleanProjectUrl);
+                console.log('✅ ProjectDetail: URL updated directly to clean project URL:', cleanProjectUrl);
+            } catch (e) {
+                console.warn('⚠️ Failed to update URL directly:', e);
+            }
+            
+            // Method 3: Dispatch a route change event to notify other systems
+            // This ensures all routing listeners know we've navigated away from the task
+            try {
+                window.dispatchEvent(new CustomEvent('route:change', {
+                    detail: {
+                        page: 'projects',
+                        segments: [projectId],
+                        search: ''
+                    }
+                }));
+                console.log('✅ ProjectDetail: Dispatched route:change event');
+            } catch (e) {
+                console.warn('⚠️ Failed to dispatch route change event:', e);
+            }
+            
+            // Method 4: Also update via updateUrl function (for consistency with other handlers)
+            updateUrl({ clearTask: true });
+            
+            // Method 5: Set up a persistent monitor to prevent the closed task from being restored to URL
+            // This runs indefinitely to catch any delayed handlers or effects that try to restore the task
+            const startPersistentMonitor = () => {
+                const monitorInterval = setInterval(() => {
+                    if (!closedTaskIdRef.current) {
+                        // No closed task to monitor, stop checking
+                        clearInterval(monitorInterval);
+                        return;
+                    }
+                    
+                    const currentSearch = window.location.search || '';
+                    const currentHash = window.location.hash || '';
+                    const currentParams = new URLSearchParams(currentSearch);
+                    const hashParams = currentHash.includes('?') ? new URLSearchParams(currentHash.split('?')[1]) : null;
+                    const taskIdInUrl = currentParams.get('task') || (hashParams && hashParams.get('task'));
+                    
+                    // If URL has the closed task parameter, force remove it
+                    if (taskIdInUrl && (taskIdInUrl === closedTaskIdRef.current || String(taskIdInUrl) === String(closedTaskIdRef.current))) {
+                        console.warn('⚠️ Persistent monitor: Detected closed task in URL, forcing clean URL');
+                        window.history.replaceState({}, '', cleanProjectUrl);
+                        if (window.RouteState) {
+                            window.RouteState.navigate({
+                                page: 'projects',
+                                segments: [projectId],
+                                search: '',
+                                preserveSearch: false,
+                                preserveHash: false,
+                                replace: true
+                            });
+                        }
+                    }
+                }, 2000); // Check every 2 seconds
+                
+                // Store interval ID so we can clear it if needed (e.g., when opening a different task)
+                // For now, let it run indefinitely
+            };
+            
+            // Start the persistent monitor after a short delay
+            setTimeout(startPersistentMonitor, 1000);
+            
+            // Also do immediate verification checks
+            const verifyAndFix = (delay) => {
+                setTimeout(() => {
+                    const verifySearch = window.location.search || '';
+                    const verifyHash = window.location.hash || '';
+                    const verifyParams = new URLSearchParams(verifySearch);
+                    const verifyHashParams = verifyHash.includes('?') ? new URLSearchParams(verifyHash.split('?')[1]) : null;
+                    const urlHasTask = verifyParams.get('task') || (verifyHashParams && verifyHashParams.get('task'));
+                    
+                    if (urlHasTask && closedTaskIdRef.current) {
+                        const taskIdInUrl = verifyParams.get('task') || (verifyHashParams && verifyHashParams.get('task'));
+                        const isClosedTask = taskIdInUrl === closedTaskIdRef.current || 
+                                           String(taskIdInUrl) === String(closedTaskIdRef.current);
+                        
+                        if (isClosedTask) {
+                            console.warn('⚠️ URL has closed task parameter after', delay, 'ms, forcing clean URL');
+                            window.history.replaceState({}, '', cleanProjectUrl);
+                            if (window.RouteState) {
+                                window.RouteState.navigate({
+                                    page: 'projects',
+                                    segments: [projectId],
+                                    search: '',
+                                    preserveSearch: false,
+                                    preserveHash: false,
+                                    replace: true
+                                });
+                            }
+                        }
+                    } else if (!urlHasTask) {
+                        console.log('✅ ProjectDetail: URL verified clean after', delay, 'ms');
+                    }
+                }, delay);
+            };
+            
+            verifyAndFix(100);
+            verifyAndFix(500);
+            verifyAndFix(2000);
+            verifyAndFix(5000);
+        }
+        
+        // Keep the flag set for a longer period to prevent any delayed handlers from reopening
+        // The closedTaskIdRef will persist indefinitely - only cleared when user explicitly opens a different task
+        // This prevents the same task from being reopened via deep-link after being manually closed
+        const clearFlagAfterDelay = (delay) => {
+            setTimeout(() => {
+                // Only clear the general flag if the URL still doesn't have the task parameter
+                // This ensures we don't clear it if something added the task back to the URL
+                const currentSearch = window.location.search || '';
+                const currentHash = window.location.hash || '';
+                const currentParams = new URLSearchParams(currentSearch);
+                const hashParams = currentHash.includes('?') ? new URLSearchParams(currentHash.split('?')[1]) : null;
+                const urlHasTask = currentParams.get('task') || (hashParams && hashParams.get('task'));
+                
+                // Check if the task in URL is the closed one
+                if (urlHasTask && closedTaskIdRef.current) {
+                    const taskIdInUrl = currentParams.get('task') || (hashParams && hashParams.get('task'));
+                    const isClosedTask = taskIdInUrl === closedTaskIdRef.current || 
+                                       String(taskIdInUrl) === String(closedTaskIdRef.current);
+                    
+                    if (isClosedTask) {
+                        console.warn('⚠️ ProjectDetail: URL has closed task parameter, forcing clean URL and keeping flags');
+                        // Force clean the URL
+                        const cleanUrl = `${window.location.origin}/projects/${projectId}`;
+                        window.history.replaceState({}, '', cleanUrl);
+                        if (window.RouteState) {
+                            window.RouteState.navigate({
+                                page: 'projects',
+                                segments: [projectId],
+                                search: '',
+                                preserveSearch: false,
+                                preserveHash: false,
+                                replace: true
+                            });
+                        }
+                        // Keep flags set and retry
+                        clearFlagAfterDelay(delay * 2);
+                        return;
+                    }
+                }
+                
+                if (!urlHasTask) {
+                    taskManuallyClosedRef.current = false;
+                    isClosingRef.current = false; // Allow closing again after delay
+                    // Keep closedTaskIdRef set INDEFINITELY to prevent reopening the same task
+                    // Only clear it when a new task is explicitly opened (handled in handleViewTaskDetail)
+                    console.log('✅ ProjectDetail: Cleared taskManuallyClosedRef flag - URL confirmed clean');
+                    console.log('🔒 ProjectDetail: Keeping closedTaskIdRef set indefinitely for task:', closedTaskId);
+                } else {
+                    console.log('⚠️ ProjectDetail: Keeping taskManuallyClosedRef flag - URL still has task parameter, will retry');
+                    // Keep the flag set and try again later with exponential backoff
+                    clearFlagAfterDelay(delay * 2);
+                }
+            }, delay);
+        };
+        
+        // Start with 10 seconds to ensure all delayed handlers have completed
+        // Then verify URL is clean before clearing the general flag
+        clearFlagAfterDelay(10000);
+    }, [updateUrl, project?.id]);
 
     const handleUpdateTaskFromDetail = async (updatedTaskData) => {
         const isNewTask = !updatedTaskData.id || (!tasks.find(t => t.id === updatedTaskData.id) && 
@@ -2428,10 +3179,7 @@ function initializeProjectDetail() {
             // Don't block UI - the debounced save will retry
         }
         
-        setShowTaskDetailModal(false);
-        setViewingTask(null);
-        setViewingTaskParent(null);
-        setCreatingTaskForList(null);
+        handleCloseTaskModal();
     };
 
     const handleDeleteTask = async (taskId) => {
@@ -3421,7 +4169,11 @@ function initializeProjectDetail() {
                     isSubtask={commentsPopup.isSubtask}
                     parentId={commentsPopup.parentId}
                     onAddComment={handleAddComment}
-                    onClose={() => setCommentsPopup(null)}
+                    onClose={() => {
+                        setCommentsPopup(null);
+                        // Remove comment from URL when closing (but keep task if present)
+                        updateUrl({ clearComment: true });
+                    }}
                     position={commentsPopup.position}
                 />
             )}
@@ -3440,7 +4192,11 @@ function initializeProjectDetail() {
                         <div className="mt-4">
                             <button
                                 type="button"
-                                onClick={() => setCommentsPopup(null)}
+                                onClick={() => {
+                                    setCommentsPopup(null);
+                                    // Remove comment from URL when closing (but keep task if present)
+                                    updateUrl({ clearComment: true });
+                                }}
                                 className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
                             >
                                 Close
@@ -3630,13 +4386,7 @@ function initializeProjectDetail() {
                     onViewSubtask={handleViewTaskDetail}
                     onDeleteSubtask={handleDeleteSubtask}
                     onDeleteTask={handleDeleteTask}
-                    onClose={() => {
-                        setShowTaskDetailModal(false);
-                        setViewingTask(null);
-                        setViewingTaskParent(null);
-                        setCreatingTaskForList(null);
-                        setCreatingTaskWithStatus(null);
-                    }}
+                    onClose={handleCloseTaskModal}
                 />
             )}
 
@@ -3654,13 +4404,7 @@ function initializeProjectDetail() {
                         <div className="mt-4">
                             <button
                                 type="button"
-                                onClick={() => {
-                                    setShowTaskDetailModal(false);
-                                    setViewingTask(null);
-                                    setViewingTaskParent(null);
-                                    setCreatingTaskForList(null);
-                                    setCreatingTaskWithStatus(null);
-                                }}
+                                onClick={handleCloseTaskModal}
                                 className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
                             >
                                 Close

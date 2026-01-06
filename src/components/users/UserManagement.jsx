@@ -290,9 +290,10 @@ const UserManagement = () => {
         // Determine if there's an actual error vs just missing config
         const hasActualError = emailError && emailError !== null && emailError !== '';
         const hasConfig = emailConfig && (
+            emailConfig.RESEND_API_KEY !== 'NOT_SET' ||
+            emailConfig.SENDGRID_API_KEY !== 'NOT_SET' ||
             emailConfig.SMTP_HOST !== 'NOT_SET' || 
-            emailConfig.SMTP_USER !== 'NOT_SET' || 
-            emailConfig.SENDGRID_API_KEY !== 'NOT_SET'
+            emailConfig.SMTP_USER !== 'NOT_SET'
         );
 
         const modal = document.createElement('div');
@@ -334,7 +335,7 @@ const UserManagement = () => {
                                         <p class="text-red-800 dark:text-red-200 text-xs font-medium mb-1">Possible causes:</p>
                                         <ul class="text-red-700 dark:text-red-300 text-xs list-disc list-inside space-y-1">
                                             <li>Invalid email configuration (check server logs)</li>
-                                            <li>SendGrid API key invalid or expired</li>
+                                            <li>Resend or SendGrid API key invalid or expired</li>
                                             <li>Network connectivity issues</li>
                                             <li>Email service temporarily unavailable</li>
                                         </ul>
@@ -351,7 +352,7 @@ const UserManagement = () => {
                                         ⚠️ Invitation created but email not sent
                                     </p>
                                     <p class="text-yellow-700 dark:text-yellow-300 text-xs">
-                                        ${hasConfig ? 'Email configuration is set, but email sending failed. Check server logs for details.' : 'Email configuration not available. Please configure SMTP settings in your .env file.'}
+                                        ${hasConfig ? 'Email configuration is set, but email sending failed. Check server logs for details.' : 'Email configuration not available. Please configure RESEND_API_KEY (recommended), SENDGRID_API_KEY, or SMTP settings in your .env file.'}
                                     </p>
                                 </div>
                             </div>
@@ -418,6 +419,8 @@ const UserManagement = () => {
                                 <i class="fas fa-cog mr-2"></i>Email Configuration Status:
                             </h4>
                             <div class="space-y-1 text-xs text-orange-800 dark:text-orange-300 font-mono">
+                                <div>RESEND_API_KEY: ${emailConfig.RESEND_API_KEY}</div>
+                                <div>SENDGRID_API_KEY: ${emailConfig.SENDGRID_API_KEY}</div>
                                 <div>SMTP_HOST: ${emailConfig.SMTP_HOST}</div>
                                 <div>SMTP_PORT: ${emailConfig.SMTP_PORT}</div>
                                 <div>SMTP_USER: ${emailConfig.SMTP_USER}</div>
@@ -426,7 +429,7 @@ const UserManagement = () => {
                             </div>
                             <p class="text-orange-700 dark:text-orange-300 text-xs mt-3">
                                 <i class="fas fa-lightbulb mr-1"></i>
-                                <strong>To enable email sending:</strong> Configure SMTP settings in your .env file and restart the server.
+                                <strong>To enable email sending:</strong> Configure RESEND_API_KEY (recommended), SENDGRID_API_KEY, or SMTP settings in your .env file and restart the server.
                             </p>
                         </div>
                     ` : ''}

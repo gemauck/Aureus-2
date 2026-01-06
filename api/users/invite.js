@@ -199,11 +199,12 @@ async function handler(req, res) {
                 emailError: emailError ? emailError.message : null,
                 emailErrorDetails: emailErrorDetails,
                 emailConfig: {
+                    RESEND_API_KEY: process.env.RESEND_API_KEY ? 'SET' : 'NOT_SET',
+                    SENDGRID_API_KEY: process.env.SENDGRID_API_KEY ? 'SET' : 'NOT_SET',
                     SMTP_HOST: process.env.SMTP_HOST || 'NOT_SET',
                     SMTP_PORT: process.env.SMTP_PORT || 'NOT_SET',
                     SMTP_USER: process.env.SMTP_USER ? 'SET' : 'NOT_SET',
                     SMTP_PASS: process.env.SMTP_PASS ? 'SET' : 'NOT_SET',
-                    SENDGRID_API_KEY: process.env.SENDGRID_API_KEY ? 'SET' : 'NOT_SET',
                     EMAIL_FROM: process.env.EMAIL_FROM || 'NOT_SET'
                 },
                 timestamp: new Date().toISOString()

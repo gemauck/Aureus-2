@@ -114,8 +114,13 @@ const MainLayout = () => {
                 const fullPath = `/${nextPage}/${route.segments.join('/')}`;
                 const parsed = window.EntityUrl.parseEntityUrl(fullPath);
                 if (parsed) {
-                    // Dispatch event to open entity
-                    setTimeout(() => {
+                    // OPTIMIZED: Dispatch immediately for tasks (no delay), use minimal delay for others
+                    // Tasks need to open instantly, other entities can have a tiny delay for stability
+                    const hasTask = route.search?.get('task') || parsed.options?.task;
+                    const delay = hasTask ? 0 : 50; // No delay for tasks, 50ms for others
+                    
+                    if (delay === 0) {
+                        // Immediate dispatch for tasks
                         window.dispatchEvent(new CustomEvent('openEntityDetail', {
                             detail: {
                                 entityType: parsed.entityType,
@@ -123,14 +128,34 @@ const MainLayout = () => {
                                 url: fullPath,
                                 options: {
                                     ...parsed.options,
-                                    // Parse query params for tab/section
+                                    // Parse query params for tab/section/task
                                     tab: route.search?.get('tab') || parsed.options?.tab,
                                     section: route.search?.get('section') || parsed.options?.section,
-                                    commentId: route.search?.get('commentId') || parsed.options?.commentId
+                                    commentId: route.search?.get('commentId') || parsed.options?.commentId,
+                                    task: route.search?.get('task') || parsed.options?.task
                                 }
                             }
                         }));
-                    }, 100);
+                    } else {
+                        // Small delay for non-task entities
+                        setTimeout(() => {
+                            window.dispatchEvent(new CustomEvent('openEntityDetail', {
+                                detail: {
+                                    entityType: parsed.entityType,
+                                    entityId: parsed.entityId,
+                                    url: fullPath,
+                                    options: {
+                                        ...parsed.options,
+                                        // Parse query params for tab/section/task
+                                        tab: route.search?.get('tab') || parsed.options?.tab,
+                                        section: route.search?.get('section') || parsed.options?.section,
+                                        commentId: route.search?.get('commentId') || parsed.options?.commentId,
+                                        task: route.search?.get('task') || parsed.options?.task
+                                    }
+                                }
+                            }));
+                        }, delay);
+                    }
                 }
             }
         };
@@ -156,7 +181,8 @@ const MainLayout = () => {
                                     ...parsed.options,
                                     tab: currentRoute.search?.get('tab') || parsed.options?.tab,
                                     section: currentRoute.search?.get('section') || parsed.options?.section,
-                                    commentId: currentRoute.search?.get('commentId') || parsed.options?.commentId
+                                    commentId: currentRoute.search?.get('commentId') || parsed.options?.commentId,
+                                    task: currentRoute.search?.get('task') || parsed.options?.task
                                 }
                             }
                         }));
@@ -458,6 +484,62 @@ const MainLayout = () => {
             </div>
         );
     }, [taskManagementReady, isDark]);
+
+    // My Notes component loading state
+    const [myNotesReady, setMyNotesReady] = React.useState(
+        !!(window.MyNotes && typeof window.MyNotes === 'function')
+    );
+
+    React.useEffect(() => {
+        if (myNotesReady) {
+            return;
+        }
+
+        const handleMyNotesReady = () => {
+            if (window.MyNotes && typeof window.MyNotes === 'function') {
+                setMyNotesReady(true);
+            }
+        };
+
+        window.addEventListener('myNotesComponentReady', handleMyNotesReady);
+
+        const interval = setInterval(() => {
+            if (window.MyNotes && typeof window.MyNotes === 'function') {
+                setMyNotesReady(true);
+                clearInterval(interval);
+                clearTimeout(timeout);
+            }
+        }, 200);
+
+        const timeout = setTimeout(() => {
+            clearInterval(interval);
+        }, 10000);
+
+        if (window.MyNotes && typeof window.MyNotes === 'function') {
+            setMyNotesReady(true);
+            clearInterval(interval);
+            clearTimeout(timeout);
+        }
+
+        return () => {
+            window.removeEventListener('myNotesComponentReady', handleMyNotesReady);
+            clearInterval(interval);
+            clearTimeout(timeout);
+        };
+    }, [myNotesReady]);
+
+    const MyNotesComponent = React.useMemo(() => {
+        if (window.MyNotes && typeof window.MyNotes === 'function') {
+            return window.MyNotes;
+        }
+
+        return () => (
+            <div className={`${isDark ? 'bg-gray-800 border-gray-700 text-gray-300' : 'bg-white border-gray-200 text-gray-600'} border rounded-lg p-6 text-center`}>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mb-4"></div>
+                <p>Loading My Notes...</p>
+            </div>
+        );
+    }, [myNotesReady, isDark]);
 
     // Always check at render time - only use main Clients component
     const getClientsComponent = React.useCallback(() => {
@@ -875,6 +957,7 @@ const MainLayout = () => {
         { id: 'documents', label: 'Documents', icon: 'fa-folder-open', permission: null }, // Always accessible
         { id: 'reports', label: 'Reports', icon: 'fa-chart-bar', permission: 'ACCESS_REPORTS' },
         { id: 'my-tasks', label: 'My Tasks', icon: 'fa-check-square', permission: null },
+        { id: 'my-notes', label: 'My Notes', icon: 'fa-sticky-note', permission: null },
     ];
 
     const [refreshingRole, setRefreshingRole] = React.useState(false);
@@ -905,7 +988,7 @@ const MainLayout = () => {
         
         // Guest users can only see Projects
         if (userRole === 'guest') {
-            return allMenuItems.filter(item => ['projects', 'my-tasks'].includes(item.id));
+            return allMenuItems.filter(item => ['projects', 'my-tasks', 'my-notes'].includes(item.id));
         }
         
         // Filter menu items based on permissions
@@ -950,8 +1033,12 @@ const MainLayout = () => {
         return menuItems.find(item => item.id === 'my-tasks') || null;
     }, [menuItems]);
 
+    const myNotesMenuItem = React.useMemo(() => {
+        return menuItems.find(item => item.id === 'my-notes') || null;
+    }, [menuItems]);
+
     const primaryMenuItems = React.useMemo(() => {
-        return menuItems.filter(item => item.id !== 'my-tasks');
+        return menuItems.filter(item => item.id !== 'my-tasks' && item.id !== 'my-notes');
     }, [menuItems]);
 
     const isAdmin = React.useMemo(() => {
@@ -1062,6 +1149,8 @@ const MainLayout = () => {
                     return <ErrorBoundary key="reports"><Reports /></ErrorBoundary>;
                 case 'my-tasks':
                     return <ErrorBoundary key="my-tasks"><TaskManagementComponent /></ErrorBoundary>;
+                case 'my-notes':
+                    return <ErrorBoundary key="my-notes"><MyNotesComponent /></ErrorBoundary>;
                 case 'settings': 
                     return <ErrorBoundary key="settings"><Settings /></ErrorBoundary>;
                 case 'documents': 
@@ -1085,7 +1174,7 @@ const MainLayout = () => {
                 </div>
             );
         }
-    }, [currentPage, Dashboard, Projects, Teams, Users, Account, TimeTracking, LeavePlatform, Manufacturing, ServiceAndMaintenance, Tools, Reports, TaskManagementComponent, Settings, ErrorBoundary, isAdmin, getClientsComponent, mainClientsAvailable]);
+    }, [currentPage, Dashboard, Projects, Teams, Users, Account, TimeTracking, LeavePlatform, Manufacturing, ServiceAndMaintenance, Tools, Reports, TaskManagementComponent, MyNotesComponent, Settings, ErrorBoundary, isAdmin, getClientsComponent, mainClientsAvailable, permissionChecker]);
 
     React.useEffect(() => {
         window.currentPage = currentPage;
@@ -1194,6 +1283,11 @@ const MainLayout = () => {
                     {myTasksMenuItem && (
                         <div className={sidebarOpen ? 'mt-4' : 'mt-2'}>
                             {renderMenuButton(myTasksMenuItem)}
+                        </div>
+                    )}
+                    {myNotesMenuItem && (
+                        <div className={sidebarOpen ? 'mt-2' : 'mt-2'}>
+                            {renderMenuButton(myNotesMenuItem)}
                         </div>
                     )}
                 </nav>

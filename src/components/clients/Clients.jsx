@@ -19,6 +19,29 @@ const safeStorage = {
     setProjects: (data) => {
         const s = window.storage || {};
         return typeof s.setProjects === 'function' ? s.setProjects(data) : null;
+    },
+    getGroups: () => {
+        try {
+            const cached = localStorage.getItem('abcotronics_groups');
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                // Always return cached data for instant display, even if expired
+                // The API will refresh it in the background
+                return parsed;
+            }
+            return null;
+        } catch (e) {
+            console.warn('Error loading groups from cache:', e);
+            return null;
+        }
+    },
+    setGroups: (data) => {
+        try {
+            localStorage.setItem('abcotronics_groups', JSON.stringify(data));
+            localStorage.setItem('abcotronics_groups_timestamp', Date.now().toString());
+        } catch (e) {
+            console.warn('Error saving groups to cache:', e);
+        }
     }
 };
 
@@ -639,7 +662,11 @@ const Clients = React.memo(() => {
     const isNewPipelineAvailable = Boolean(PipelineComponent);
     const [clients, setClients] = useState([]);
     const [leads, setLeads] = useState([]);
-    const [groups, setGroups] = useState([]);
+    // Initialize groups from cache immediately for instant loading
+    const [groups, setGroups] = useState(() => {
+        const cachedGroups = safeStorage.getGroups();
+        return cachedGroups || [];
+    });
     const [isLoadingGroups, setIsLoadingGroups] = useState(false);
     const [selectedGroup, setSelectedGroup] = useState(null);
     const [groupMembers, setGroupMembers] = useState([]);
@@ -4582,9 +4609,21 @@ const Clients = React.memo(() => {
     // Load groups from API
     const isLoadingGroupsRef = useRef(false);
     const loadGroups = useCallback(async (forceRefresh = false) => {
-        if (isLoadingGroupsRef.current) {
+        if (isLoadingGroupsRef.current && !forceRefresh) {
             console.log('⏸️ loadGroups already in progress, skipping...');
             return;
+        }
+        
+        // If not forcing refresh, try cache first for instant loading
+        if (!forceRefresh) {
+            const cachedGroups = safeStorage.getGroups();
+            if (cachedGroups && cachedGroups.length > 0) {
+                console.log(`⚡ Loaded ${cachedGroups.length} groups from cache (instant)`);
+                setGroups(cachedGroups);
+                groupsLoadedRef.current = true;
+                // Still fetch in background to update cache
+                forceRefresh = true;
+            }
         }
         
         try {
@@ -4619,6 +4658,8 @@ const Clients = React.memo(() => {
                     const groupsList = data?.data?.groups || data?.groups || [];
                     console.log(`✅ Loaded ${groupsList.length} groups from API:`, groupsList.map(g => ({ id: g.id, name: g.name, type: g.type, members: (g._count?.childCompanies || 0) + (g._count?.groupChildren || 0) })));
                     setGroups(groupsList); // Always set groups, even if empty
+                    // Save to cache for instant loading next time
+                    safeStorage.setGroups(groupsList);
                     console.log(`✅ Groups state updated: ${groupsList.length} groups`);
                     groupsLoadedRef.current = true;
                 } else {
@@ -4638,8 +4679,11 @@ const Clients = React.memo(() => {
                     } else {
                         console.error('❌ Failed to load groups:', response.status, response.statusText, errorText);
                     }
-                    // Set empty array on error to show empty state
-                    setGroups([]);
+                    // Don't clear groups on error if we have cached data
+                    const cachedGroups = safeStorage.getGroups();
+                    if (!cachedGroups || cachedGroups.length === 0) {
+                        setGroups([]);
+                    }
                     groupsLoadedRef.current = true; // Mark as loaded even on error to prevent retry loops
                 }
             };
@@ -4652,8 +4696,11 @@ const Clients = React.memo(() => {
             }
         } catch (error) {
             console.error('❌ Error loading groups:', error);
-            // Set empty array on error to show empty state
-            setGroups([]);
+            // Don't clear groups on error if we have cached data
+            const cachedGroups = safeStorage.getGroups();
+            if (!cachedGroups || cachedGroups.length === 0) {
+                setGroups([]);
+            }
             groupsLoadedRef.current = true; // Mark as loaded even on error to prevent retry loops
         } finally {
             isLoadingGroupsRef.current = false;
@@ -4797,22 +4844,37 @@ const Clients = React.memo(() => {
     const lastLoadedViewModeRef = useRef(null);
     const groupsLoadedRef = useRef(false);
     
-    // Load groups on mount to show count in tab
+    // Load groups immediately on mount (from cache first, then API in background)
+    // This ensures groups count is available instantly when clicking CRM
     useEffect(() => {
-        if (!groupsLoadedRef.current && groups.length === 0) {
-            groupsLoadedRef.current = true;
-            loadGroups(true);
+        // Always try to load from cache first for instant display
+        // This runs synchronously on mount to ensure count appears instantly
+        const cachedGroups = safeStorage.getGroups();
+        if (cachedGroups && cachedGroups.length > 0) {
+            // Set groups from cache immediately for instant count display
+            // Check if current groups don't match cache to avoid unnecessary updates
+            if (groups.length !== cachedGroups.length || 
+                JSON.stringify(groups.map(g => g.id).sort()) !== JSON.stringify(cachedGroups.map(g => g.id).sort())) {
+                setGroups(cachedGroups);
+                console.log(`⚡ Groups count updated from cache: ${cachedGroups.length} groups (instant)`);
+            }
         }
+        
+        // Then refresh from API in background (regardless of cache)
+        // Use setTimeout to ensure cache update happens first
+        setTimeout(() => {
+            loadGroups(false); // Will use cache if available, then refresh from API
+        }, 0);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Run once on mount
     
-    // Load groups when Groups tab is active (if not already loaded)
+    // Load groups when Groups tab is active (refresh from API if needed)
     useEffect(() => {
         if (viewMode === 'groups' && lastLoadedViewModeRef.current !== 'groups') {
             lastLoadedViewModeRef.current = 'groups';
-            if (!groupsLoadedRef.current || groups.length === 0) {
-                loadGroups(true);
-            }
+            // Always refresh from API when tab is clicked to ensure fresh data
+            // But groups should already be loaded from cache, so this is just a background update
+            loadGroups(true);
         } else if (viewMode !== 'groups') {
             lastLoadedViewModeRef.current = null;
         }
@@ -5979,7 +6041,7 @@ const Clients = React.memo(() => {
                             <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
                                 <tr>
                                     <th 
-                                        className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                        className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer`}
                                         onClick={() => {
                                             if (sortField === 'name') {
                                                 setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -5997,7 +6059,7 @@ const Clients = React.memo(() => {
                                         </div>
                                     </th>
                                     <th 
-                                        className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                        className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer`}
                                         onClick={() => {
                                             if (sortField === 'industry') {
                                                 setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -6015,7 +6077,7 @@ const Clients = React.memo(() => {
                                         </div>
                                     </th>
                                     <th 
-                                        className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                        className={`px-6 py-2 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer`}
                                         onClick={() => {
                                             if (sortField === 'members') {
                                                 setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -7751,8 +7813,8 @@ const Clients = React.memo(() => {
                         viewMode === 'groups' 
                             ? 'bg-blue-600 text-white shadow-sm' 
                             : isDark 
-                                ? 'text-gray-300 hover:text-gray-100 hover:bg-gray-700' 
-                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                ? 'text-gray-300' 
+                                : 'text-gray-600'
                     }`}
                 >
                     <i className="fas fa-layer-group mr-2"></i>

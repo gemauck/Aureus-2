@@ -52,7 +52,8 @@ const WidgetWrapper = ({ widgetDef, dashboardData }) => {
 
 // MyProjectTasksWidget - Separate component to properly use hooks
 const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
-    const [tasks, setTasks] = React.useState([]);
+    const [projectTasks, setProjectTasks] = React.useState([]);
+    const [userTasks, setUserTasks] = React.useState([]);
     const [isLoading, setIsLoading] = React.useState(true);
     const [error, setError] = React.useState(null);
 
@@ -60,28 +61,216 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
         const loadTasks = async () => {
             setIsLoading(true);
             setError(null);
-            try {
-                const token = window.storage?.getToken?.();
-                if (!token || !window.DatabaseAPI) {
-                    setTasks([]);
-                    setIsLoading(false);
-                    return;
-                }
+            
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                console.warn('⚠️ No token available for task loading');
+                setProjectTasks([]);
+                setUserTasks([]);
+                setIsLoading(false);
+                return;
+            }
+            
+            console.log('🔑 Token available, loading tasks...');
 
-                const response = await window.DatabaseAPI.getTasks();
-                const tasksData = response?.data?.tasks || [];
-                setTasks(tasksData);
-            } catch (err) {
-                console.error('Error loading tasks:', err);
-                setError('Failed to load tasks');
-                setTasks([]);
-            } finally {
+            // Get current user ID
+            const user = window.storage?.getUser?.();
+            const userId = user?.id || user?.email || 'anonymous';
+            const offlineUserTasksKey = `offline_user_tasks_${userId}`;
+            const offlineProjectTasksKey = `offline_project_tasks_${userId}`;
+            
+            // STEP 1: Load cached data immediately for instant display
+            let cachedUserTasks = [];
+            let cachedProjectTasks = [];
+            try {
+                const offlineUserTasks = localStorage.getItem(offlineUserTasksKey);
+                if (offlineUserTasks) {
+                    const parsed = JSON.parse(offlineUserTasks);
+                    if (Array.isArray(parsed)) {
+                        cachedUserTasks = parsed;
+                        setUserTasks(cachedUserTasks); // Show cached data immediately
+                    }
+                }
+                
+                const offlineProjectTasks = localStorage.getItem(offlineProjectTasksKey);
+                if (offlineProjectTasks) {
+                    const parsed = JSON.parse(offlineProjectTasks);
+                    if (Array.isArray(parsed)) {
+                        cachedProjectTasks = parsed;
+                        setProjectTasks(cachedProjectTasks); // Show cached project tasks immediately
+                        console.log('📋 Loaded cached project tasks:', cachedProjectTasks.length);
+                    }
+                }
+            } catch (e) {
+                console.warn('Error reading offline tasks:', e);
+            }
+            
+            // IMMEDIATE: Hide loading spinner if we have any cached data
+            // This makes the widget appear instantly on page refresh
+            if (cachedUserTasks.length > 0 || cachedProjectTasks.length > 0) {
                 setIsLoading(false);
             }
+
+            // Helper function to add timeout to promises
+            const withTimeout = (promise, timeoutMs = 5000) => {
+                return Promise.race([
+                    promise,
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Request timeout')), timeoutMs)
+                    )
+                ]);
+            };
+
+            // STEP 2: Load fresh data in parallel with timeouts
+            const loadPromises = [];
+
+            // Load project tasks (lightweight mode for dashboard)
+            loadPromises.push(
+                withTimeout(
+                    fetch('/api/tasks?lightweight=true', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    })
+                        .then(async response => {
+                            if (!response.ok) {
+                                const errorText = await response.text();
+                                console.warn('Project tasks API error:', response.status, errorText);
+                                throw new Error(`HTTP ${response.status}: ${errorText}`);
+                            }
+                            const data = await response.json();
+                            const tasks = Array.isArray(data?.data?.tasks)
+                                ? data.data.tasks
+                                : Array.isArray(data?.tasks)
+                                    ? data.tasks
+                                    : [];
+                            // Save to localStorage for offline use
+                            if (tasks.length > 0) {
+                                try {
+                                    const user = window.storage?.getUser?.();
+                                    const userId = user?.id || user?.email || 'anonymous';
+                                    const projectTasksKey = `offline_project_tasks_${userId}`;
+                                    localStorage.setItem(projectTasksKey, JSON.stringify(tasks));
+                                } catch (e) {
+                                    console.warn('Error saving project tasks to localStorage:', e);
+                                }
+                            }
+                            
+                            return {
+                                type: 'project',
+                                data: tasks
+                            };
+                        })
+                        .catch(err => {
+                            console.warn('Error loading project tasks:', err.message || err);
+                            // Use cached project tasks if API fails (for local development)
+                            if (cachedProjectTasks.length > 0) {
+                                return { type: 'project', data: cachedProjectTasks };
+                            }
+                            return { type: 'project', data: [] };
+                        }),
+                    10000 // 10 second timeout (increased for database issues)
+                )
+            );
+
+            // Load user tasks from API (lightweight mode for dashboard)
+            loadPromises.push(
+                withTimeout(
+                    fetch('/api/user-tasks?lightweight=true', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    })
+                        .then(async response => {
+                            if (!response.ok) {
+                                throw new Error(`HTTP ${response.status}`);
+                            }
+                            const data = await response.json();
+                            const apiTasks = Array.isArray(data?.data?.tasks)
+                                ? data.data.tasks
+                                : Array.isArray(data?.tasks)
+                                    ? data.tasks
+                                    : Array.isArray(data?.items)
+                                        ? data.items
+                                        : [];
+                            
+                            // Save to localStorage for next time
+                            if (apiTasks.length > 0) {
+                                try {
+                                    localStorage.setItem(offlineUserTasksKey, JSON.stringify(apiTasks));
+                                } catch (e) {
+                                    console.warn('Error saving tasks to localStorage:', e);
+                                }
+                            }
+                            
+                            return {
+                                type: 'user',
+                                data: apiTasks
+                            };
+                        })
+                        .catch(err => {
+                            console.warn('Error loading user tasks from API:', err);
+                            // Keep cached data if API fails
+                            return { type: 'user', data: cachedUserTasks };
+                        }),
+                    5000 // 5 second timeout
+                )
+            );
+
+            // STEP 3: Update with fresh data in background (non-blocking)
+            // If we already have cached data, this runs in the background
+            // If we don't have cached data, this will update when complete
+            Promise.allSettled(loadPromises).then((results) => {
+                results.forEach(result => {
+                    if (result.status === 'fulfilled') {
+                        const { type, data } = result.value;
+                        if (type === 'project') {
+                            setProjectTasks(data);
+                        } else if (type === 'user') {
+                            // Only update if we got fresh data (not just cached)
+                            if (data.length > 0 || cachedUserTasks.length === 0) {
+                                setUserTasks(data);
+                            }
+                        }
+                    }
+                });
+                // Only set loading to false here if we didn't have cached data
+                // (if we had cached data, loading was already set to false above)
+                if (cachedUserTasks.length === 0 && cachedProjectTasks.length === 0) {
+                    setIsLoading(false);
+                }
+            }).catch(err => {
+                console.error('Error loading tasks:', err);
+                setError('Failed to load some tasks');
+                // Make sure loading is false even on error
+                setIsLoading(false);
+            });
         };
 
         loadTasks();
     }, []);
+
+    // Combine and sort tasks
+    const allTasks = React.useMemo(() => {
+        const combined = [
+            ...projectTasks.map(t => ({ ...t, type: 'project' })),
+            ...userTasks.map(t => ({ ...t, type: 'user', id: t.id || `user-task-${Date.now()}-${Math.random()}` }))
+        ];
+        
+        // Sort by due date (overdue first, then by date)
+        return combined.sort((a, b) => {
+            const aDate = a.dueDate ? new Date(a.dueDate) : new Date('9999-12-31');
+            const bDate = b.dueDate ? new Date(b.dueDate) : new Date('9999-12-31');
+            const now = new Date();
+            
+            // Overdue tasks first
+            const aOverdue = aDate < now && aDate.getFullYear() !== 9999;
+            const bOverdue = bDate < now && bDate.getFullYear() !== 9999;
+            
+            if (aOverdue && !bOverdue) return -1;
+            if (!aOverdue && bOverdue) return 1;
+            if (aOverdue && bOverdue) return aDate - bDate; // Earlier overdue first
+            
+            // Then by due date
+            return aDate - bDate;
+        });
+    }, [projectTasks, userTasks]);
 
     const getStatusColor = (status) => {
         switch (status?.toLowerCase()) {
@@ -114,73 +303,157 @@ const MyProjectTasksWidget = ({ cardBase, headerText, subText, isDark }) => {
     };
 
     const handleTaskClick = (task) => {
-        if (task.projectId && window.RouteState) {
-            window.RouteState.setPageSubpath('projects', [task.projectId]);
+        if (task.type === 'project' && task.projectId && window.RouteState) {
+            // Navigate to the project with the task ID as a query parameter
+            // MainLayout will detect the route change and dispatch openEntityDetail event
+            // which will open the project and then the task
+            const taskId = task.id || task.taskId;
+            if (taskId) {
+                // IMMEDIATE: Dispatch openTask event right away (before navigation)
+                // This ensures the event is queued and will be handled as soon as ProjectDetail loads
+                const openTaskEvent = new CustomEvent('openTask', {
+                    detail: { 
+                        taskId: taskId,
+                        tab: 'details'
+                    }
+                });
+                
+                // Dispatch immediately and multiple times to ensure it's caught
+                window.dispatchEvent(openTaskEvent);
+                
+                // Navigate to the project page with task parameter
+                window.RouteState.navigate({
+                    page: 'projects',
+                    segments: [task.projectId],
+                    search: `?task=${encodeURIComponent(taskId)}`,
+                    preserveSearch: false,
+                    preserveHash: false
+                });
+                
+                // AGGRESSIVE POLLING: Check very frequently for ProjectDetail to be ready
+                // This opens the task as soon as possible - much faster than waiting
+                let checkCount = 0;
+                const maxChecks = 60; // 3 seconds max (60 * 50ms)
+                const checkInterval = setInterval(() => {
+                    checkCount++;
+                    
+                    // Check if ProjectDetail is loaded and we're on the right page
+                    const currentUrl = window.location.href || '';
+                    const isOnProjectPage = currentUrl.includes(`/projects/${task.projectId}`);
+                    
+                    if (isOnProjectPage && window.ProjectDetail) {
+                        // ProjectDetail is loaded, dispatch openTask immediately
+                        clearInterval(checkInterval);
+                        window.dispatchEvent(new CustomEvent('openTask', {
+                            detail: { 
+                                taskId: taskId,
+                                tab: 'details'
+                            }
+                        }));
+                    } else if (checkCount >= maxChecks) {
+                        // Final fallback: dispatch one more time
+                        clearInterval(checkInterval);
+                        window.dispatchEvent(new CustomEvent('openTask', {
+                            detail: { 
+                                taskId: taskId,
+                                tab: 'details'
+                            }
+                        }));
+                    }
+                }, 50); // Check every 50ms for ultra-fast response (was 100ms)
+            } else {
+                // Fallback: just navigate to project if no task ID
+                window.RouteState.setPageSubpath('projects', [task.projectId]);
+            }
+        } else if (task.type === 'user') {
+            // Navigate to My Tasks page
+            window.dispatchEvent(new CustomEvent('navigateToPage', { 
+                detail: { page: 'my-tasks' } 
+            }));
         }
     };
 
     return (
-        <div className={`${cardBase} border rounded-lg p-4`}>
-            <div className="flex items-center justify-between mb-3">
-                <h3 className={`text-sm font-semibold ${headerText}`}>My Project Tasks</h3>
+        <div className={`${cardBase} border rounded-lg p-4 flex flex-col h-full`}>
+            <div className="flex items-center justify-between mb-3 flex-shrink-0">
+                <h3 className={`text-sm font-semibold ${headerText}`}>My Tasks</h3>
                 <i className="fas fa-tasks text-teal-500"></i>
             </div>
             
             {isLoading ? (
-                <div className="text-center py-4">
+                <div className="text-center py-4 flex-shrink-0">
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-teal-600 mx-auto mb-2"></div>
                     <p className={`text-xs ${subText}`}>Loading tasks...</p>
                 </div>
             ) : error ? (
-                <div className={`text-sm ${subText} text-center py-2`}>{error}</div>
-            ) : tasks.length === 0 ? (
-                <div className={`text-sm ${subText} text-center py-2`}>No tasks assigned to you.</div>
+                <div className={`text-sm ${subText} text-center py-2 flex-shrink-0`}>{error}</div>
+            ) : allTasks.length === 0 ? (
+                <div className={`text-sm ${subText} text-center py-2 flex-shrink-0`}>No tasks assigned to you.</div>
             ) : (
-                <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {tasks.slice(0, 10).map(task => {
-                        const dueDateInfo = getDueDateStatus(task.dueDate);
-                        return (
-                            <div
-                                key={task.id}
-                                onClick={() => handleTaskClick(task)}
-                                className={`p-2 rounded border ${isDark ? 'border-gray-700 hover:border-gray-600' : 'border-gray-200 hover:border-gray-300'} cursor-pointer transition-colors`}
-                                title={`Click to view project: ${task.project?.name || 'Unknown'}`}
-                            >
-                                <div className="flex items-start justify-between gap-2">
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className={`text-xs px-1.5 py-0.5 rounded ${getStatusColor(task.status)}`}>
-                                                {task.status || 'todo'}
-                                            </span>
-                                            {task.project && (
-                                                <span className={`text-xs ${subText} truncate`} title={task.project.name}>
-                                                    <i className="fas fa-project-diagram mr-1"></i>
-                                                    {task.project.name}
+                <div className="flex-1 overflow-hidden flex flex-col">
+                    <div className="space-y-2 overflow-y-auto pr-1 flex-1" style={{ maxHeight: '400px', scrollbarWidth: 'thin' }}>
+                        {allTasks.map(task => {
+                            const dueDateInfo = getDueDateStatus(task.dueDate);
+                            const isProjectTask = task.type === 'project';
+                            const isUserTask = task.type === 'user';
+                            
+                            return (
+                                <div
+                                    key={task.id || `task-${Math.random()}`}
+                                    onClick={() => handleTaskClick(task)}
+                                    className={`p-2 rounded border ${isDark ? 'border-gray-700 hover:border-gray-600' : 'border-gray-200 hover:border-gray-300'} cursor-pointer transition-colors`}
+                                    title={isProjectTask ? `Click to view project: ${task.project?.name || 'Unknown'}` : 'Click to view in My Tasks'}
+                                >
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className={`text-xs px-1.5 py-0.5 rounded ${getStatusColor(task.status)}`}>
+                                                    {task.status || 'todo'}
                                                 </span>
+                                                {isProjectTask && task.project && (
+                                                    <span className={`text-xs ${subText} truncate`} title={task.project.name}>
+                                                        <i className="fas fa-project-diagram mr-1"></i>
+                                                        {task.project.name}
+                                                    </span>
+                                                )}
+                                                {isUserTask && (
+                                                    <span className={`text-xs ${subText} truncate`}>
+                                                        <i className="fas fa-check-square mr-1"></i>
+                                                        My Task
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className={`text-sm ${headerText} font-medium truncate`} title={task.title || task.name}>
+                                                {task.title || task.name}
+                                            </p>
+                                            {isProjectTask && task.project?.clientName && (
+                                                <p className={`text-xs ${subText} truncate`} title={task.project.clientName}>
+                                                    {task.project.clientName}
+                                                </p>
                                             )}
                                         </div>
-                                        <p className={`text-sm ${headerText} font-medium truncate`} title={task.title}>
-                                            {task.title}
-                                        </p>
-                                        {task.project?.clientName && (
-                                            <p className={`text-xs ${subText} truncate`} title={task.project.clientName}>
-                                                {task.project.clientName}
-                                            </p>
-                                        )}
                                     </div>
+                                    {dueDateInfo && (
+                                        <div className={`text-xs mt-1 ${dueDateInfo.color}`}>
+                                            <i className="fas fa-calendar-alt mr-1"></i>
+                                            {dueDateInfo.text}
+                                        </div>
+                                    )}
                                 </div>
-                                {dueDateInfo && (
-                                    <div className={`text-xs mt-1 ${dueDateInfo.color}`}>
-                                        <i className="fas fa-calendar-alt mr-1"></i>
-                                        {dueDateInfo.text}
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
-                    {tasks.length > 10 && (
-                        <div className={`text-xs ${subText} text-center pt-2 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                            Showing 10 of {tasks.length} tasks
+                            );
+                        })}
+                    </div>
+                    {allTasks.length > 0 && (
+                        <div className={`text-xs ${subText} text-center pt-2 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'} flex-shrink-0 mt-2`}>
+                            {projectTasks.length > 0 && userTasks.length > 0 && (
+                                <span>{projectTasks.length} project task{projectTasks.length !== 1 ? 's' : ''} • {userTasks.length} personal task{userTasks.length !== 1 ? 's' : ''}</span>
+                            )}
+                            {projectTasks.length > 0 && userTasks.length === 0 && (
+                                <span>{projectTasks.length} project task{projectTasks.length !== 1 ? 's' : ''}</span>
+                            )}
+                            {projectTasks.length === 0 && userTasks.length > 0 && (
+                                <span>{userTasks.length} personal task{userTasks.length !== 1 ? 's' : ''}</span>
+                            )}
                         </div>
                     )}
                 </div>
@@ -407,33 +680,6 @@ const DashboardLive = () => {
         
         return [
             {
-                id: 'sales-overview',
-                group: 'Sales',
-                title: 'Sales Overview',
-                render: (data) => (
-                    <div className={`${cardBase} border rounded-lg p-4`}>
-                        <div className="flex items-center justify-between mb-2">
-                            <h3 className={`text-sm font-semibold ${headerText}`}>Sales Overview</h3>
-                            <i className="fas fa-chart-line text-blue-500"></i>
-                        </div>
-                        <div className="grid grid-cols-3 gap-4">
-                            <div>
-                                <div className={`text-xs ${subText}`}>Leads</div>
-                                <div className="text-xl font-bold">{data.stats.totalLeads}</div>
-                            </div>
-                            <div>
-                                <div className={`text-xs ${subText}`}>Clients</div>
-                                <div className="text-xl font-bold">{data.stats.totalClients}</div>
-                            </div>
-                            <div>
-                                <div className={`text-xs ${subText}`}>Weighted Pipeline</div>
-                                <div className="text-xl font-bold">{formatCurrency(data.stats.weightedPipeline)}</div>
-                            </div>
-                        </div>
-                    </div>
-                )
-            },
-            {
                 id: 'leads-by-stage',
                 group: 'Sales',
                 title: 'Leads by Stage',
@@ -467,68 +713,9 @@ const DashboardLive = () => {
                 }
             },
             {
-                id: 'projects-overview',
-                group: 'Projects',
-                title: 'Projects Overview',
-                render: (data) => (
-                    <div className={`${cardBase} border rounded-lg p-4`}>
-                        <div className="flex items-center justify-between mb-2">
-                            <h3 className={`text-sm font-semibold ${headerText}`}>Projects Overview</h3>
-                            <i className="fas fa-project-diagram text-green-500"></i>
-                        </div>
-                        <div className="grid grid-cols-3 gap-4">
-                            <div>
-                                <div className={`text-xs ${subText}`}>Projects</div>
-                                <div className="text-xl font-bold">{data.stats.totalProjects}</div>
-                            </div>
-                            <div>
-                                <div className={`text-xs ${subText}`}>Active</div>
-                                <div className="text-xl font-bold">{data.stats.activeProjects}</div>
-                            </div>
-                            <div>
-                                <div className={`text-xs ${subText}`}>Due This Week</div>
-                                <div className="text-xl font-bold">
-                                    {(data.projects || []).filter(p => {
-                                        const due = p.dueDate ? new Date(p.dueDate) : null;
-                                        if (!due) return false;
-                                        const now = new Date();
-                                        const in7 = new Date();
-                                        in7.setDate(now.getDate() + 7);
-                                        return due >= now && due <= in7;
-                                    }).length}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )
-            },
-            {
-                id: 'time-overview',
-                group: 'Time',
-                title: 'Time This Month',
-                render: (data) => (
-                    <div className={`${cardBase} border rounded-lg p-4`}>
-                        <div className="flex items-center justify-between mb-2">
-                            <h3 className={`text-sm font-semibold ${headerText}`}>Time This Month</h3>
-                            <i className="fas fa-stopwatch text-orange-500"></i>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <div className={`text-xs ${subText}`}>Hours</div>
-                                <div className="text-2xl font-bold">{Math.round(data.stats.hoursThisMonth)}</div>
-                            </div>
-                            <div>
-                                <div className={`text-xs ${subText}`}>Last Month</div>
-                                <div className="text-2xl font-bold">{Math.round(data.stats.hoursLastMonth)}</div>
-                            </div>
-                        </div>
-                    </div>
-                )
-            },
-            {
                 id: 'my-project-tasks',
                 group: 'Projects',
-                title: 'My Project Tasks',
+                title: 'My Tasks',
                 render: () => <MyProjectTasksWidget cardBase={cardBase} headerText={headerText} subText={subText} isDark={isDark} />
             },
             {
@@ -574,26 +761,6 @@ const DashboardLive = () => {
                         </div>
                     );
                 }
-            },
-            {
-                id: 'calendar',
-                group: 'Calendar',
-                title: 'Calendar',
-                render: () => {
-                    const CalendarComponent = window.Calendar;
-                    return (
-                        <div className={`${cardBase} border rounded-lg p-4`}>
-                            {CalendarComponent && typeof CalendarComponent === 'function' ? (
-                                <CalendarComponent />
-                            ) : (
-                                <div className="text-center">
-                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                                    <p className={`text-sm ${subText}`}>Loading calendar...</p>
-                                </div>
-                            )}
-                        </div>
-                    );
-                }
             }
         ];
     }, [isDark]);
@@ -635,13 +802,9 @@ const DashboardLive = () => {
         if (existing) return existing;
         
         // Default sizes: 1x1 (small), 2x1 (medium), 2x2 (large)
-        // Most widgets start as 1x1, calendar and tasks can be larger
+        // Most widgets start as 1x1, tasks can be larger
         const defaultSizes = {
-            'calendar': { w: 2, h: 2 },
             'my-project-tasks': { w: 2, h: 1 },
-            'sales-overview': { w: 1, h: 1 },
-            'projects-overview': { w: 1, h: 1 },
-            'time-overview': { w: 1, h: 1 },
             'leads-by-stage': { w: 1, h: 1 },
             'recent-activity': { w: 1, h: 1 }
         };
@@ -671,7 +834,7 @@ const DashboardLive = () => {
                 }
                 setSelectedWidgets(valid);
             } else {
-                const defaults = ['sales-overview', 'projects-overview', 'my-project-tasks', 'time-overview', 'calendar'];
+                const defaults = ['my-project-tasks'];
                 const validDefaults = defaults.filter(id => widgetRegistry.some(w => w.id === id));
                 setSelectedWidgets(validDefaults);
             }
@@ -681,7 +844,7 @@ const DashboardLive = () => {
             setWidgetLayouts(layouts);
         } catch (_) {
             setAvailableWidgets(widgetRegistry);
-            setSelectedWidgets(['sales-overview', 'projects-overview', 'my-project-tasks', 'time-overview', 'calendar']);
+            setSelectedWidgets(['my-project-tasks']);
             setWidgetLayouts({});
         }
     }, [widgetRegistry]);
@@ -706,7 +869,7 @@ const DashboardLive = () => {
     };
 
     const handleResetWidgets = () => {
-        const defaults = ['sales-overview', 'projects-overview', 'my-project-tasks', 'time-overview', 'calendar'];
+        const defaults = ['my-project-tasks'];
         setSelectedWidgets(defaults);
         persistWidgets(defaults);
         setWidgetLayouts({});

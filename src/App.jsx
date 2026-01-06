@@ -10,21 +10,122 @@ const checkInvitationRoute = () => {
 };
 
 const AppContent = () => {
-    // Check invitation route FIRST, before any auth/data loading
-    // Use lowercase comparison for mobile browser compatibility
+    // CRITICAL: ALL hooks must be called at the top, in the same order, before ANY conditional returns
+    // This is required by React's rules of hooks - hooks cannot be called conditionally
+    
+    // Get route info first (not a hook, just variable)
     const pathname = (window.location.pathname || '').toLowerCase();
     const urlParams = new URLSearchParams(window.location.search);
     const isInvitationPage = pathname === '/accept-invitation' && urlParams.get('token');
     const isResetPage = pathname === '/reset-password' && urlParams.get('token');
+    const isPublicJobCardPage = pathname === '/job-card' || pathname === '/jobcard';
     
-    // NOTE: Public job card route check moved earlier to prevent MainLayout from loading
+    // Call ALL useState hooks first (must be in same order every render)
+    const [jobCardFormLoaded, setJobCardFormLoaded] = window.React.useState(!!window.JobCardFormPublic);
+    const [loginPageReady, setLoginPageReady] = window.React.useState(!!window.LoginPage);
     
-    // Show invitation page immediately if token is present - bypass all auth checks
+    // Get auth state - always call this hook
+    let user = null;
+    let authLoading = true;
+    try {
+        const authState = window.useAuth();
+        user = authState?.user || null;
+        authLoading = authState?.loading !== undefined ? authState.loading : false;
+    } catch (authError) {
+        console.error('❌ AppContent: Error calling useAuth:', authError);
+        user = null;
+        authLoading = false;
+    }
+    
+    // Get data state - always call this hook
+    let initialLoadComplete = true;
+    let globalLoading = false;
+    try {
+        const dataState = window.useData();
+        initialLoadComplete = dataState?.initialLoadComplete !== undefined ? dataState.initialLoadComplete : true;
+        globalLoading = dataState?.globalLoading !== undefined ? dataState.globalLoading : false;
+    } catch (dataError) {
+        console.error('❌ AppContent: Error calling useData:', dataError);
+        initialLoadComplete = true;
+        globalLoading = false;
+    }
+    
+    // Call ALL useEffect hooks (must be in same order every render)
+    // Toggle a body class so mobile CSS can avoid affecting the login page
+    window.React.useEffect(() => {
+        const body = document.body;
+        if (!user) {
+            body.classList.add('login-page');
+        } else {
+            body.classList.remove('login-page');
+        }
+        return () => {
+            body.classList.remove('login-page');
+        };
+    }, [user]);
+    
+    // Job card form loading effect
+    window.React.useEffect(() => {
+        if (isPublicJobCardPage && !window.JobCardFormPublic) {
+            const checkInterval = setInterval(() => {
+                if (window.JobCardFormPublic) {
+                    setJobCardFormLoaded(true);
+                    clearInterval(checkInterval);
+                }
+            }, 100);
+            setTimeout(() => clearInterval(checkInterval), 5000);
+            return () => clearInterval(checkInterval);
+        }
+    }, [isPublicJobCardPage, setJobCardFormLoaded]);
+    
+    // LoginPage loading effect
+    window.React.useEffect(() => {
+        if (loginPageReady || user) return; // Already ready or user is logged in
+        
+        // Wait for LoginPage to load
+        const checkLoginPage = () => {
+            if (window.LoginPage) {
+                setLoginPageReady(true);
+                return true;
+            }
+            return false;
+        };
+        
+        // Check immediately
+        if (checkLoginPage()) return;
+        
+        // Listen for component loaded event
+        const handleComponentLoaded = (e) => {
+            if (e.detail?.component === 'LoginPage' || window.LoginPage) {
+                setLoginPageReady(true);
+            }
+        };
+        
+        window.addEventListener('componentLoaded', handleComponentLoaded);
+        
+        // Poll as fallback
+        let attempts = 0;
+        const maxAttempts = 50; // 5 seconds
+        const interval = setInterval(() => {
+            attempts++;
+            if (checkLoginPage() || attempts >= maxAttempts) {
+                clearInterval(interval);
+                window.removeEventListener('componentLoaded', handleComponentLoaded);
+            }
+        }, 100);
+        
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('componentLoaded', handleComponentLoaded);
+        };
+    }, [loginPageReady, user]);
+    
+    // NOW handle conditional rendering AFTER all hooks are called
+    // Handle public routes
     if (isInvitationPage) {
         if (window.AcceptInvitation) {
             return <window.AcceptInvitation />;
         } else {
-            // Component not loaded yet - show loading
             return (
                 <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-blue-700">
                     <div className="text-white text-center">
@@ -35,6 +136,7 @@ const AppContent = () => {
             );
         }
     }
+    
     if (isResetPage) {
         if (window.ResetPassword) {
             return <window.ResetPassword />;
@@ -49,28 +151,6 @@ const AppContent = () => {
             );
         }
     }
-
-    // Check public routes FIRST, before any auth/data loading
-    // Use lowercase comparison for mobile browser compatibility
-    // Reuse pathname already declared at top of AppContent
-    const isPublicJobCardPage = pathname === '/job-card' || pathname === '/jobcard';
-    
-    // If this is a public job card page, handle it immediately without auth
-    // Use React hooks directly
-    const [jobCardFormLoaded, setJobCardFormLoaded] = window.React.useState(!!window.JobCardFormPublic);
-    
-    window.React.useEffect(() => {
-        if (isPublicJobCardPage && !window.JobCardFormPublic) {
-            const checkInterval = setInterval(() => {
-                if (window.JobCardFormPublic) {
-                    setJobCardFormLoaded(true);
-                    clearInterval(checkInterval);
-                }
-            }, 100);
-            setTimeout(() => clearInterval(checkInterval), 5000);
-            return () => clearInterval(checkInterval);
-        }
-    }, [isPublicJobCardPage]);
     
     if (isPublicJobCardPage) {
         if (window.JobCardFormPublic && jobCardFormLoaded) {
@@ -86,23 +166,9 @@ const AppContent = () => {
             );
         }
     }
-    
-    const { user, loading: authLoading } = window.useAuth();
-    // Toggle a body class so mobile CSS can avoid affecting the login page
-    window.React.useEffect(() => {
-        const body = document.body;
-        if (!user) {
-            body.classList.add('login-page');
-        } else {
-            body.classList.remove('login-page');
-        }
-        return () => {
-            body.classList.remove('login-page');
-        };
-    }, [user]);
-    const { initialLoadComplete, globalLoading } = window.useData();
 
-    // Show loading screen during auth check OR initial data load
+    // Show loading screen during auth check OR initial data load (only if user exists)
+    // DataContext handles no-user case by setting initialLoadComplete=true immediately
     if (authLoading || (user && !initialLoadComplete)) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -143,7 +209,67 @@ const AppContent = () => {
         );
     }
 
-    return user ? <window.MainLayout /> : <window.LoginPage />;
+    // Show loading screen during auth check OR initial data load (only if user exists)
+    // DataContext handles no-user case by setting initialLoadComplete=true immediately
+    if (authLoading || (user && !initialLoadComplete)) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+                <div className="text-center">
+                    <div className="relative">
+                        {/* Animated logo/icon */}
+                        <div className="w-20 h-20 mx-auto mb-6 relative">
+                            <div className="absolute inset-0 bg-gradient-to-tr from-blue-500 to-blue-600 rounded-2xl animate-pulse"></div>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <i className="fas fa-database text-white text-3xl"></i>
+                            </div>
+                        </div>
+                        
+                        {/* Loading spinner */}
+                        <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
+                    </div>
+                    
+                    {/* Loading text */}
+                    <div className="space-y-2">
+                        <p className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                            {authLoading ? 'Authenticating...' : 'Loading your workspace...'}
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                            {authLoading ? 'Verifying credentials' : 'Preparing clients, projects, and data'}
+                        </p>
+                    </div>
+
+                    {/* Progress indicator */}
+                    {!authLoading && user && (
+                        <div className="mt-6 max-w-xs mx-auto">
+                            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                <div className="h-full bg-gradient-to-r from-blue-500 to-blue-600 animate-[loading_1.5s_ease-in-out_infinite]"></div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    }
+    
+    // Handle rendering based on user state
+    if (!user) {
+        if (window.LoginPage && loginPageReady) {
+            return <window.LoginPage />;
+        } else {
+            // LoginPage not loaded yet - show loading
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+                    <div className="text-center">
+                        <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
+                        <p className="text-xl font-semibold text-gray-900 dark:text-gray-100">Loading login...</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">Please wait</p>
+                    </div>
+                </div>
+            );
+        }
+    }
+    
+    return <window.MainLayout />;
 };
 
 // App wrapper with all providers

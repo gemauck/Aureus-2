@@ -44,7 +44,10 @@
     "android:sync": "npx cap sync android",
     "android:open": "npx cap open android",
     "android:build": "npm run build && npm run android:sync",
-    "android:run": "npm run android:build && npx cap run android"
+    "android:run": "npm run android:build && npx cap run android",
+    "setup:local-prod": "bash scripts/setup-local-production.sh",
+    "start:local-prod": "bash scripts/start-local-production.sh",
+    "start:local-prod:pm2": "bash scripts/start-local-production-pm2.sh"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",

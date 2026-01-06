@@ -144,6 +144,103 @@ const ProjectsDatabaseFirst = () => {
     // Sort state for list view
     const [sortColumn, setSortColumn] = useState('name'); // Default sort by name
     const [sortDirection, setSortDirection] = useState('asc'); // 'asc' or 'desc'
+    
+    // IMMEDIATE route check on mount - opens project from URL directly
+    useEffect(() => {
+        console.log('🚀 ProjectsDatabaseFirst: IMMEDIATE route check on mount');
+        
+        // Parse URL directly - check both pathname and hash
+        const urlPath = window.location.pathname || '';
+        const urlHash = window.location.hash || '';
+        const urlSearch = window.location.search || '';
+        const urlParams = new URLSearchParams(urlSearch);
+        
+        let projectId = null;
+        let taskId = null;
+        
+        // Check pathname first
+        if (urlPath.includes('/projects/')) {
+            const pathParts = urlPath.split('/projects/')[1].split('/');
+            projectId = pathParts[0];
+            taskId = urlParams.get('task');
+        }
+        
+        // Also check hash (for hash-based routing)
+        if (!projectId && urlHash.includes('/projects/')) {
+            const hashParts = urlHash.split('/projects/')[1].split('/');
+            projectId = hashParts[0].split('?')[0];
+            if (urlHash.includes('?')) {
+                const hashQuery = urlHash.split('?')[1];
+                const hashParams = new URLSearchParams(hashQuery);
+                taskId = hashParams.get('task') || urlParams.get('task');
+            } else {
+                taskId = urlParams.get('task');
+            }
+        }
+        
+        if (projectId) {
+            console.log('✅ ProjectsDatabaseFirst: IMMEDIATE - Found project in URL:', { projectId, taskId });
+            
+            // Fetch and open project immediately
+            const fetchAndOpen = async () => {
+                if (window.DatabaseAPI?.getProject) {
+                    try {
+                        console.log('📡 ProjectsDatabaseFirst: IMMEDIATE - Fetching project:', projectId);
+                        const response = await window.DatabaseAPI.getProject(projectId);
+                        const projectData = response?.data?.project || response?.project || response?.data;
+                        
+                        if (projectData) {
+                            const fetchedProject = normalizeProject(projectData);
+                            console.log('✅ ProjectsDatabaseFirst: IMMEDIATE - Opening project:', fetchedProject.name);
+                            
+                            // Add to projects array
+                            setProjects(prev => {
+                                const exists = prev.find(p => String(p.id) === String(projectId));
+                                return exists ? prev : [...prev, fetchedProject];
+                            });
+                            
+                            // Open immediately
+                            setSelectedProject(fetchedProject);
+                            setShowModal(false);
+                            
+                            // Update URL if RouteState is available
+                            if (taskId && window.RouteState) {
+                                try {
+                                    window.RouteState.navigate({
+                                        page: 'projects',
+                                        segments: [projectId],
+                                        search: `?task=${encodeURIComponent(taskId)}`,
+                                        preserveSearch: false,
+                                        preserveHash: false
+                                    });
+                                } catch (e) {
+                                    console.warn('⚠️ ProjectsDatabaseFirst: Failed to update URL:', e);
+                                }
+                            }
+                            
+                            // Open task with retry
+                            if (taskId) {
+                                console.log('📋 ProjectsDatabaseFirst: IMMEDIATE - Opening task:', taskId);
+                                const dispatchTask = (attempt = 1) => {
+                                    window.dispatchEvent(new CustomEvent('openTask', {
+                                        detail: { taskId: taskId, tab: 'details' }
+                                    }));
+                                    if (attempt < 5) {
+                                        setTimeout(() => dispatchTask(attempt + 1), 1000 * attempt);
+                                    }
+                                };
+                                setTimeout(() => dispatchTask(1), 1000);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('❌ ProjectsDatabaseFirst: IMMEDIATE - Failed to fetch:', error);
+                    }
+                }
+            };
+            
+            fetchAndOpen();
+        }
+    }, []); // Run ONLY on mount
     // Monitor availability of ProjectDetail component
     useEffect(() => {
         if (projectDetailComponent) {

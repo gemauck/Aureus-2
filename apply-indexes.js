@@ -72,6 +72,39 @@ async function applyIndexes() {
     await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "User_role_idx" ON "User"("role")`
     console.log('  ✅ User_role_idx (for filtering by role)')
     
+    // Task table indexes (CRITICAL for tasks API performance)
+    console.log('')
+    console.log('📊 Creating Task table indexes...')
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "Task_assigneeId_idx" ON "Task"("assigneeId")`
+    console.log('  ✅ Task_assigneeId_idx (CRITICAL for loading tasks by user)')
+    
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "Task_projectId_idx" ON "Task"("projectId")`
+    console.log('  ✅ Task_projectId_idx')
+    
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "Task_status_idx" ON "Task"("status")`
+    console.log('  ✅ Task_status_idx')
+    
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "Task_dueDate_idx" ON "Task"("dueDate")`
+    console.log('  ✅ Task_dueDate_idx')
+    
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "Task_createdAt_idx" ON "Task"("createdAt")`
+    console.log('  ✅ Task_createdAt_idx')
+    
+    // Opportunity table additional indexes
+    console.log('')
+    console.log('📊 Creating additional Opportunity table indexes...')
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "Opportunity_ownerId_idx" ON "Opportunity"("ownerId")`
+    console.log('  ✅ Opportunity_ownerId_idx')
+    
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "Opportunity_status_idx" ON "Opportunity"("status")`
+    console.log('  ✅ Opportunity_status_idx')
+    
+    // Project table additional index
+    console.log('')
+    console.log('📊 Creating additional Project table index...')
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "Project_updatedAt_idx" ON "Project"("updatedAt")`
+    console.log('  ✅ Project_updatedAt_idx (for tasks query optimization)')
+    
     // Verify indexes were created
     console.log('')
     console.log('🔍 Verifying indexes...')
@@ -103,6 +136,13 @@ async function applyIndexes() {
       ORDER BY indexname
     `
     
+    const taskIndexes = await prisma.$queryRaw`
+      SELECT indexname 
+      FROM pg_indexes 
+      WHERE tablename = 'Task' AND indexname LIKE 'Task_%'
+      ORDER BY indexname
+    `
+    
     console.log('')
     console.log(`✅ Successfully created ${clientIndexes.length} Client indexes:`)
     clientIndexes.forEach(idx => console.log(`   - ${idx.indexname}`))
@@ -118,6 +158,10 @@ async function applyIndexes() {
     console.log('')
     console.log(`✅ Successfully created ${userIndexes.length} User indexes:`)
     userIndexes.forEach(idx => console.log(`   - ${idx.indexname}`))
+    
+    console.log('')
+    console.log(`✅ Successfully created ${taskIndexes.length} Task indexes:`)
+    taskIndexes.forEach(idx => console.log(`   - ${idx.indexname}`))
     
     console.log('')
     console.log('✨ Performance indexes applied successfully!')

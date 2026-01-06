@@ -57,7 +57,25 @@ function initializePrisma() {
     }
     
     // Force use of process.env.DATABASE_URL - ensure it's the correct one
-    const databaseUrl = process.env.DATABASE_URL
+    let databaseUrl = process.env.DATABASE_URL
+    
+    // Remove quotes if present
+    if (databaseUrl && (databaseUrl.startsWith('"') || databaseUrl.startsWith("'"))) {
+      databaseUrl = databaseUrl.slice(1, -1)
+    }
+    
+    // Add connection_limit to prevent connection pool exhaustion
+    // Parse existing query params and add/update connection_limit
+    try {
+      const url = new URL(databaseUrl)
+      url.searchParams.set('connection_limit', '3') // Limit to 3 connections max (very conservative)
+      url.searchParams.set('pool_timeout', '10') // 10 second timeout
+      databaseUrl = url.toString()
+    } catch (e) {
+      // If URL parsing fails, append connection_limit manually
+      const separator = databaseUrl.includes('?') ? '&' : '?'
+      databaseUrl = `${databaseUrl}${separator}connection_limit=3&pool_timeout=10`
+    }
     
     // Check for valid database hostname (allow multiple valid hostnames)
     const validHostnames = [

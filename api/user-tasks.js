@@ -56,7 +56,13 @@ async function handler(req, res) {
       try {
         // Safely parse query parameters - handle empty query strings
         const queryParams = req.query || {}
-        const { status, category, clientId, projectId, tagId, priority, view } = queryParams
+        const { status, category, clientId, projectId, tagId, priority, view, includeTags, includeCategories, includeStats } = queryParams
+        
+        // For dashboard widget, skip expensive operations by default
+        const lightweight = queryParams.lightweight === 'true' || queryParams.lightweight === true
+        const shouldIncludeTags = includeTags === 'true' || includeTags === true || !lightweight
+        const shouldIncludeCategories = includeCategories === 'true' || includeCategories === true || !lightweight
+        const shouldIncludeStats = includeStats === 'true' || includeStats === true || !lightweight
         
         const where = { ownerId: userId }
         
@@ -73,53 +79,87 @@ async function handler(req, res) {
           }
         }
 
+        // Build include object conditionally
+        const include = {}
+        if (shouldIncludeTags) {
+          include.tags = {
+            include: {
+              tag: true
+            }
+          }
+        }
+
+        // Add pagination support to prevent loading all tasks
+        const page = parseInt(queryParams.page) || 1
+        const limit = parseInt(queryParams.limit) || (lightweight ? 50 : 200) // Smaller limit for lightweight mode
+        const skip = (page - 1) * limit
+        
         const tasks = await prisma.userTask.findMany({
           where,
-          include: {
-            tags: {
-              include: {
-                tag: true
-              }
-            }
-          },
+          ...(Object.keys(include).length > 0 ? { include } : {}),
           orderBy: {
             createdAt: 'desc'
-          }
+          },
+          take: limit,
+          skip: skip
         })
 
         const parsedTasks = tasks.map(parseUserTaskJsonFields)
         
-        // Get categories for filter - use groupBy instead of distinct
+        // Get categories for filter - only if requested (expensive query)
+        // Optimized: Use fallback method first (faster) instead of expensive groupBy
         let categories = []
-        try {
-          const categoryGroups = await prisma.userTask.groupBy({
-            by: ['category'],
-            where: { 
-              ownerId: userId,
-              category: { not: null }
+        if (shouldIncludeCategories) {
+          try {
+            // Use fallback method (extract from tasks) - much faster than groupBy
+            const categorySet = new Set()
+            parsedTasks.forEach(task => {
+              if (task.category) categorySet.add(task.category)
+            })
+            categories = Array.from(categorySet)
+            
+            // Only use groupBy if we need ALL categories (not just from current page)
+            // For lightweight mode, fallback is sufficient
+            if (!lightweight && categories.length === 0) {
+              const categoryGroups = await prisma.userTask.groupBy({
+                by: ['category'],
+                where: { 
+                  ownerId: userId,
+                  category: { not: null }
+                }
+              })
+              categories = categoryGroups.map(c => c.category).filter(Boolean)
             }
-          })
-          categories = categoryGroups.map(c => c.category).filter(Boolean)
-        } catch (error) {
-          // Fallback: extract unique categories from tasks
-          console.warn('⚠️ Failed to group categories, using fallback:', error.message)
-          const categorySet = new Set()
-          parsedTasks.forEach(task => {
-            if (task.category) categorySet.add(task.category)
-          })
-          categories = Array.from(categorySet)
+          } catch (error) {
+            // Fallback already handled above
+            categories = []
+          }
         }
 
-        return ok(res, {
-          tasks: parsedTasks,
-          categories: categories,
-          stats: {
+        // Calculate stats - only if requested
+        let stats = null
+        if (shouldIncludeStats) {
+          stats = {
             total: parsedTasks.length,
             todo: parsedTasks.filter(t => t.status === 'todo').length,
             inProgress: parsedTasks.filter(t => t.status === 'in-progress').length,
             completed: parsedTasks.filter(t => t.status === 'completed').length
           }
-        })
+        }
+
+        const response = {
+          tasks: parsedTasks
+        }
+        
+        if (shouldIncludeCategories) {
+          response.categories = categories
+        }
+        
+        if (stats) {
+          response.stats = stats
+        }
+
+        return ok(res, response)
       } catch (error) {
         console.error('Error fetching tasks:', error)
         return serverError(res, 'Failed to fetch tasks', error.message)

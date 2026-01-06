@@ -92,6 +92,7 @@ ENV_VARS_TO_SYNC=(
   DATABASE_URL
   JWT_SECRET
   APP_URL
+  RESEND_API_KEY
   SENDGRID_API_KEY
   EMAIL_FROM
   EMAIL_REPLY_TO
@@ -126,10 +127,12 @@ if ! grep -q "^JWT_SECRET=" .env 2>/dev/null; then
     exit 1
 fi
 
-if grep -q "^SENDGRID_API_KEY=" .env 2>/dev/null; then
+if grep -q "^RESEND_API_KEY=" .env 2>/dev/null; then
+    echo "✅ Resend API key detected in .env"
+elif grep -q "^SENDGRID_API_KEY=" .env 2>/dev/null; then
     echo "✅ SendGrid API key detected in .env"
 else
-    echo "⚠️  SENDGRID_API_KEY not provided. Email delivery may fail until set."
+    echo "⚠️  RESEND_API_KEY or SENDGRID_API_KEY not provided. Email delivery may fail until set."
 fi
 
 # Generate Prisma client

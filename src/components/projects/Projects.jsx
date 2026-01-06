@@ -61,6 +61,12 @@ const useAuthSafe = () => {
 };
 
 const Projects = () => {
+    console.log('🚀 Projects: Component rendering/mounting', { 
+        currentUrl: window.location.href,
+        hash: window.location.hash,
+        pathname: window.location.pathname,
+        search: window.location.search 
+    });
     // CRITICAL: Always call useAuthSafe() unconditionally at the top level
     // This ensures hooks are always called in the same order on every render
     const { logout } = useAuthSafe();
@@ -72,6 +78,7 @@ const Projects = () => {
     const [trackerFocus, setTrackerFocus] = useState(null);
     const [draggedProject, setDraggedProject] = useState(null);
     const mouseDownRef = useRef(null);
+    const handleViewProjectRef = useRef(null);
     const [selectedClient, setSelectedClient] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
@@ -197,15 +204,21 @@ const Projects = () => {
         const segments = [String(projectId)];
         const searchParams = new URLSearchParams();
         
-        if (options.tab) {
+        // Only add parameters if they're explicitly provided and not null
+        // If a parameter is null, it means we want to remove it (don't add it to searchParams)
+        if (options.tab !== undefined && options.tab !== null) {
             searchParams.set('tab', options.tab);
         }
-        if (options.section) {
+        if (options.section !== undefined && options.section !== null) {
             searchParams.set('section', options.section);
         }
-        if (options.commentId) {
+        if (options.commentId !== undefined && options.commentId !== null) {
             searchParams.set('commentId', options.commentId);
         }
+        if (options.task !== undefined && options.task !== null) {
+            searchParams.set('task', options.task);
+        }
+        // If task is explicitly null, don't add it (effectively removes it from URL)
         
         const search = searchParams.toString();
         // Use navigate directly to support search parameter
@@ -234,15 +247,41 @@ const Projects = () => {
     // Listen for entity navigation events (from notifications, comments, etc.)
     useEffect(() => {
         const handleEntityNavigation = async (event) => {
+            console.log('📥 Projects: Received openEntityDetail event:', event.detail);
             if (!event.detail) return;
             
             const { entityType, entityId, options } = event.detail;
-            if (!entityType || !entityId) return;
+            if (!entityType || !entityId) {
+                console.log('⚠️ Projects: openEntityDetail event missing entityType or entityId');
+                return;
+            }
+            
+            console.log('🔍 Projects: Processing openEntityDetail:', { entityType, entityId, options, projectsCount: projects.length });
             
             // Handle project and task entities
             if (entityType === 'project') {
                 // Find the project in our data
-                const project = projects.find(p => p.id === entityId || String(p.id) === String(entityId));
+                let project = projects.find(p => p.id === entityId || String(p.id) === String(entityId));
+                console.log('🔍 Projects: Looking for project:', entityId, 'Found in cache:', !!project);
+                
+                // If project not found in cache, try to fetch it
+                if (!project && window.DatabaseAPI?.getProject) {
+                    console.log('📡 Projects: Project not in cache, fetching from API...');
+                    try {
+                        const response = await window.DatabaseAPI.getProject(entityId);
+                        const projectData = response?.data?.project || response?.project;
+                        if (projectData) {
+                            project = projectData;
+                            console.log('✅ Projects: Fetched project from API:', project.name);
+                            // Add to projects array if not already there
+                            if (!projects.find(p => String(p.id) === String(entityId))) {
+                                setProjects(prev => [...prev, project]);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('❌ Projects: Failed to fetch project:', error);
+                    }
+                }
                 
                 if (project) {
                     setSelectedProject(project);
@@ -252,8 +291,21 @@ const Projects = () => {
                     // Update URL with project ID and any options
                     updateProjectUrl(entityId, options);
                     
-                    // Handle tab navigation if specified
-                    if (options?.tab) {
+                    // Handle task opening if specified
+                    if (options?.task) {
+                        console.log('📋 Projects: Task specified in openEntityDetail event, will open task:', options.task);
+                        // Wait for ProjectDetail to load and tasks to be available, then dispatch openTask event
+                        setTimeout(() => {
+                            console.log('📋 Projects: Dispatching openTask event for task:', options.task);
+                            window.dispatchEvent(new CustomEvent('openTask', {
+                                detail: { 
+                                    taskId: options.task,
+                                    tab: options.tab || 'details'
+                                }
+                            }));
+                        }, 1000); // Increased delay to ensure ProjectDetail is loaded and tasks are available
+                    } else if (options?.tab) {
+                        // Handle tab navigation if specified
                         // ProjectDetail component will handle tab switching
                         setTimeout(() => {
                             window.dispatchEvent(new CustomEvent('switchProjectTab', {
@@ -277,8 +329,21 @@ const Projects = () => {
                                 // Update URL with project ID and any options
                                 updateProjectUrl(entityId, options);
                                 
-                                // Handle tab navigation if specified
-                                if (options?.tab) {
+                                // Handle task opening if specified
+                                if (options?.task) {
+                                    console.log('📋 Projects: Task specified in openEntityDetail event (API fetch), will open task:', options.task);
+                                    // Wait for ProjectDetail to load and tasks to be available, then dispatch openTask event
+                                    setTimeout(() => {
+                                        console.log('📋 Projects: Dispatching openTask event for task:', options.task);
+                                        window.dispatchEvent(new CustomEvent('openTask', {
+                                            detail: { 
+                                                taskId: options.task,
+                                                tab: options.tab || 'details'
+                                            }
+                                        }));
+                                    }, 1000); // Increased delay to ensure ProjectDetail is loaded and tasks are available
+                                } else if (options?.tab) {
+                                    // Handle tab navigation if specified
                                     setTimeout(() => {
                                         window.dispatchEvent(new CustomEvent('switchProjectTab', {
                                             detail: { tab: options.tab, section: options.section, commentId: options.commentId }
@@ -351,9 +416,22 @@ const Projects = () => {
     
     // Listen for route changes to handle project navigation and URL-based project opening
     useEffect(() => {
-        if (!window.RouteState) return;
+        console.log('🔍 Projects: Route change handler useEffect running, RouteState available:', !!window.RouteState, 'projects loaded:', projects.length);
+        if (!window.RouteState) {
+            console.log('⚠️ Projects: RouteState not available yet, will retry...');
+            // Retry after a short delay
+            const retryTimeout = setTimeout(() => {
+                if (window.RouteState) {
+                    console.log('✅ Projects: RouteState now available, re-running effect');
+                    // Re-run this effect by updating a dependency
+                    setForceRender(prev => prev + 1);
+                }
+            }, 500);
+            return () => clearTimeout(retryTimeout);
+        }
         
         const handleRouteChange = async (route) => {
+            console.log('🔍 Projects: Route change detected:', route);
             // If we're on the projects page
             if (route?.page === 'projects') {
                 // If there are no segments, reset selected project
@@ -365,15 +443,39 @@ const Projects = () => {
                 } else {
                     // URL contains a project ID - open that project
                     const projectId = route.segments[0];
+                    const taskId = route.search?.get('task');
+                    console.log('🔍 Projects: Opening project from route:', { projectId, taskId, projectsLoaded: projects.length > 0 });
+                    
                     if (projectId) {
                         // Check if we're already viewing this project
                         if (viewingProject && String(viewingProject.id) === String(projectId)) {
-                            // Already viewing this project, but check if we need to handle tab/section
+                            console.log('✅ Projects: Already viewing this project, checking for task parameter');
+                            // Already viewing this project, but check if we need to handle tab/section/task
                             const tab = route.search?.get('tab');
                             const section = route.search?.get('section');
                             const commentId = route.search?.get('commentId');
                             
-                            if (tab || section || commentId) {
+                            if (taskId) {
+                                console.log('📋 Projects: Will open task with retry logic:', taskId);
+                                // Use retry logic to ensure ProjectDetail catches the event
+                                const dispatchOpenTask = (attempt = 1) => {
+                                    console.log(`📋 Projects: Dispatching openTask event (attempt ${attempt}) for task:`, taskId);
+                                    window.dispatchEvent(new CustomEvent('openTask', {
+                                        detail: { 
+                                            taskId: taskId,
+                                            tab: tab || 'details'
+                                        }
+                                    }));
+                                    
+                                    // Retry up to 5 times with increasing delays
+                                    if (attempt < 5) {
+                                        setTimeout(() => dispatchOpenTask(attempt + 1), 1000 * attempt);
+                                    }
+                                };
+                                
+                                // Start after 1 second, then retry at 2s, 3s, 4s, 5s
+                                setTimeout(() => dispatchOpenTask(1), 1000);
+                            } else if (tab || section || commentId) {
                                 // Dispatch event to ProjectDetail to switch tab/section
                                 setTimeout(() => {
                                     if (tab) {
@@ -399,20 +501,83 @@ const Projects = () => {
                         // Find project in cache or fetch it
                         const cachedProject = projects.find(p => String(p.id) === String(projectId));
                         if (cachedProject) {
-                            // Use handleViewProject to ensure proper loading and normalization
-                            handleViewProject(cachedProject);
+                            console.log('✅ Projects: Found project in cache, opening:', cachedProject.name);
+                            // Directly set state to open the project - more reliable than using ref
+                            setSelectedProject(cachedProject);
+                            setViewingProject(cachedProject);
+                            setShowModal(false);
+                            
+                            // Check if there's a task parameter in the URL to open
+                            if (taskId) {
+                                console.log('📋 Projects: Task parameter found, will open task with retry logic:', taskId);
+                                // Use retry logic to ensure ProjectDetail catches the event
+                                const dispatchOpenTask = (attempt = 1) => {
+                                    console.log(`📋 Projects: Dispatching openTask event (attempt ${attempt}) for task:`, taskId);
+                                    window.dispatchEvent(new CustomEvent('openTask', {
+                                        detail: { 
+                                            taskId: taskId,
+                                            tab: 'details'
+                                        }
+                                    }));
+                                    
+                                    // Retry up to 5 times with increasing delays
+                                    if (attempt < 5) {
+                                        setTimeout(() => dispatchOpenTask(attempt + 1), 1000 * attempt);
+                                    }
+                                };
+                                
+                                // Start after 1 second, then retry at 2s, 3s, 4s, 5s
+                                setTimeout(() => dispatchOpenTask(1), 1000);
+                            }
                         } else {
+                            console.log('⚠️ Projects: Project not in cache, fetching from API:', projectId);
                             // Project not in cache, try to fetch it
                             try {
                                 if (window.DatabaseAPI?.getProject) {
                                     const response = await window.DatabaseAPI.getProject(projectId);
                                     const projectData = response?.data?.project || response?.project || response?.data;
                                     if (projectData) {
-                                        handleViewProject(projectData);
+                                        console.log('✅ Projects: Fetched project from API, opening:', projectData.name);
+                                        // Directly set state to open the project - more reliable than using ref
+                                        setSelectedProject(projectData);
+                                        setViewingProject(projectData);
+                                        setShowModal(false);
+                                        
+                                        // Add to projects array if not already there
+                                        if (!projects.find(p => String(p.id) === String(projectId))) {
+                                            setProjects(prev => [...prev, projectData]);
+                                        }
+                                        
+                                        // Check if there's a task parameter in the URL to open
+                                        if (taskId) {
+                                            console.log('📋 Projects: Task parameter found, will open task with retry logic:', taskId);
+                                            // Use retry logic to ensure ProjectDetail catches the event
+                                            const dispatchOpenTask = (attempt = 1) => {
+                                                console.log(`📋 Projects: Dispatching openTask event (attempt ${attempt}) for task:`, taskId);
+                                                window.dispatchEvent(new CustomEvent('openTask', {
+                                                    detail: { 
+                                                        taskId: taskId,
+                                                        tab: 'details'
+                                                    }
+                                                }));
+                                                
+                                                // Retry up to 5 times with increasing delays
+                                                if (attempt < 5) {
+                                                    setTimeout(() => dispatchOpenTask(attempt + 1), 1000 * attempt);
+                                                }
+                                            };
+                                            
+                                            // Start after 1 second, then retry at 2s, 3s, 4s, 5s
+                                            setTimeout(() => dispatchOpenTask(1), 1000);
+                                        }
+                                    } else {
+                                        console.warn('⚠️ Projects: API did not return project data for:', projectId);
                                     }
+                                } else {
+                                    console.warn('⚠️ Projects: DatabaseAPI.getProject not available');
                                 }
                             } catch (error) {
-                                console.error('Failed to load project from URL:', error);
+                                console.error('❌ Projects: Failed to load project from URL:', error);
                             }
                         }
                     }
@@ -420,17 +585,113 @@ const Projects = () => {
             }
         };
         
-        // Check initial route
-        const currentRoute = window.RouteState.getRoute();
-        handleRouteChange(currentRoute);
+        // Check initial route immediately - this is critical for handling navigation from other pages
+        // This will run every time the effect runs (when projects load, etc.)
+        const checkAndHandleRoute = () => {
+            // ALWAYS check window.location directly first as primary method
+            const urlPath = window.location.pathname || '';
+            const urlSearch = window.location.search || '';
+            const urlParams = new URLSearchParams(urlSearch);
+            
+            // Parse project ID and task from URL directly
+            let projectId = null;
+            let taskId = null;
+            
+            if (urlPath.includes('/projects/')) {
+                const pathParts = urlPath.split('/projects/')[1].split('/');
+                projectId = pathParts[0];
+                taskId = urlParams.get('task');
+            }
+            
+            // If we found a project ID in the URL, handle it immediately
+            if (projectId) {
+                console.log('✅ Projects: Detected project ID from URL directly:', { projectId, taskId, urlPath });
+                // Create a route-like object
+                const route = {
+                    page: 'projects',
+                    segments: [projectId],
+                    search: urlParams
+                };
+                handleRouteChange(route);
+                return; // Don't check RouteState if we already handled it
+            }
+            
+            // Fallback to RouteState if available
+            if (window.RouteState) {
+                const currentRoute = window.RouteState.getRoute();
+                console.log('🔍 Projects: Checking route via RouteState (projects loaded:', projects.length, '):', currentRoute);
+                
+                if (currentRoute?.page === 'projects' && currentRoute.segments && currentRoute.segments.length > 0) {
+                    // We're on a project page - handle it
+                    console.log('✅ Projects: On project page, handling route via RouteState');
+                    handleRouteChange(currentRoute);
+                }
+            } else {
+                console.log('⏳ Projects: RouteState not available yet, will retry...');
+                setTimeout(checkAndHandleRoute, 200);
+            }
+        };
         
-        // Subscribe to route changes
-        const unsubscribe = window.RouteState.subscribe(handleRouteChange);
+        // Check route immediately
+        checkAndHandleRoute();
+        
+        // Subscribe to route changes (if RouteState is available)
+        let unsubscribe = null;
+        if (window.RouteState && typeof window.RouteState.subscribe === 'function') {
+            unsubscribe = window.RouteState.subscribe((route) => {
+                console.log('🔔 Projects: Route change subscription triggered:', route);
+                handleRouteChange(route);
+            });
+        }
+        
+        // Also listen for popstate events (browser back/forward)
+        const handlePopState = () => {
+            const route = window.RouteState.getRoute();
+            console.log('🔔 Projects: PopState event, route:', route);
+            handleRouteChange(route);
+        };
+        window.addEventListener('popstate', handlePopState);
+        
+        // Also listen for custom route:change events (dispatched by MainLayout)
+        const handleRouteChangeEvent = (event) => {
+            const route = event.detail || window.RouteState?.getRoute();
+            console.log('🔔 Projects: route:change event received, route:', route);
+            if (route) {
+                handleRouteChange(route);
+            }
+        };
+        window.addEventListener('route:change', handleRouteChangeEvent);
+        
+        // Set up an interval to periodically check the route (fallback for missed events)
+        const routeCheckInterval = setInterval(() => {
+            // Check URL directly first
+            const urlPath = window.location.pathname || '';
+            let projectId = null;
+            
+            if (urlPath.includes('/projects/')) {
+                const pathParts = urlPath.split('/projects/')[1].split('/');
+                projectId = pathParts[0];
+            } else if (window.RouteState) {
+                const currentRoute = window.RouteState.getRoute();
+                if (currentRoute?.page === 'projects' && currentRoute.segments && currentRoute.segments.length > 0) {
+                    projectId = currentRoute.segments[0];
+                }
+            }
+            
+            // Only check if we're not already viewing this project
+            if (projectId && (!viewingProject || String(viewingProject.id) !== String(projectId))) {
+                console.log('🔍 Projects: Periodic route check - project not open, opening:', projectId);
+                checkAndHandleRoute();
+            }
+        }, 1000); // Check every second
         
         return () => {
             if (unsubscribe && typeof unsubscribe === 'function') {
                 unsubscribe();
             }
+            window.removeEventListener('popstate', handlePopState);
+            window.removeEventListener('route:change', handleRouteChangeEvent);
+            clearInterval(routeCheckInterval);
         };
     }, [selectedProject, viewingProject, projects]);
     
@@ -678,15 +939,99 @@ const Projects = () => {
                     
                     // Check if there's a project to open immediately after loading
                     const projectIdToOpen = sessionStorage.getItem('openProjectId');
+                    const taskIdToOpen = sessionStorage.getItem('openTaskId');
                     if (projectIdToOpen) {
-                        const project = apiProjects.find(p => p.id === parseInt(projectIdToOpen));
+                        console.log('🔍 Projects: Checking sessionStorage for project to open:', projectIdToOpen);
+                        let project = apiProjects.find(p => String(p.id) === String(projectIdToOpen));
+                        
+                        // If project not found in loaded projects, try to fetch it from API
+                        if (!project && window.DatabaseAPI?.getProject) {
+                            console.log('📡 Projects: Project not in loaded list, fetching from API...');
+                            window.DatabaseAPI.getProject(projectIdToOpen)
+                                .then(response => {
+                                    const projectData = response?.data?.project || response?.project;
+                                    if (projectData) {
+                                        const fetchedProject = {
+                                            ...projectData,
+                                            client: projectData.clientName || projectData.client || ''
+                                        };
+                                        console.log('✅ Projects: Fetched project from API:', fetchedProject.name);
+                                        // Add to projects array
+                                        setProjects(prev => {
+                                            const exists = prev.find(p => String(p.id) === String(projectIdToOpen));
+                                            if (!exists) {
+                                                return [...prev, fetchedProject];
+                                            }
+                                            return prev;
+                                        });
+                                        // Open the project
+                                        setViewingProject(fetchedProject);
+                                        setShowModal(false);
+                                        if (taskIdToOpen) {
+                                            // Use retry logic to ensure ProjectDetail catches the event
+                                            const dispatchOpenTask = (attempt = 1) => {
+                                                console.log(`📋 Projects: Dispatching openTask event (attempt ${attempt}) for task:`, taskIdToOpen);
+                                                window.dispatchEvent(new CustomEvent('openTask', {
+                                                    detail: { taskId: taskIdToOpen, tab: 'details' }
+                                                }));
+                                                
+                                                // Retry up to 5 times with increasing delays
+                                                if (attempt < 5) {
+                                                    setTimeout(() => dispatchOpenTask(attempt + 1), 1000 * attempt);
+                                                }
+                                            };
+                                            
+                                            // Start after 1 second, then retry at 2s, 3s, 4s, 5s
+                                            setTimeout(() => dispatchOpenTask(1), 1000);
+                                        }
+                                    }
+                                })
+                                .catch(error => {
+                                    console.error('❌ Projects: Failed to fetch project from API:', error);
+                                });
+                            // Continue with project opening logic below
+                            return;
+                        }
+                        
                         if (project) {
+                            console.log('✅ Projects: Opening project from sessionStorage:', project.name);
                             // Open the project immediately
                             setViewingProject(project);
-                            // Clear the flag
+                            setShowModal(false);
+                            // Clear the flags
                             sessionStorage.removeItem('openProjectId');
+                            
+                            // If there's a task ID, dispatch openTask event after ProjectDetail loads
+                            if (taskIdToOpen) {
+                                console.log('📋 Projects: Task ID found in sessionStorage, will open task:', taskIdToOpen);
+                                sessionStorage.removeItem('openTaskId');
+                                
+                                // Use retry logic to ensure ProjectDetail catches the event
+                                const dispatchOpenTask = (attempt = 1) => {
+                                    console.log(`📋 Projects: Dispatching openTask event (attempt ${attempt}) for task:`, taskIdToOpen);
+                                    window.dispatchEvent(new CustomEvent('openTask', {
+                                        detail: { 
+                                            taskId: taskIdToOpen,
+                                            tab: 'details'
+                                        }
+                                    }));
+                                    
+                                    // Retry up to 5 times with increasing delays
+                                    if (attempt < 5) {
+                                        setTimeout(() => dispatchOpenTask(attempt + 1), 1000 * attempt);
+                                    }
+                                };
+                                
+                                // Start after 1 second, then retry at 2s, 3s, 4s, 5s
+                                setTimeout(() => dispatchOpenTask(1), 1000);
+                            }
+                        } else {
+                            console.warn('⚠️ Projects: Project not found in loaded projects and API fetch failed:', projectIdToOpen);
+                            sessionStorage.removeItem('openProjectId');
+                            sessionStorage.removeItem('openTaskId');
                         }
                     }
+                    
                 }
             } catch (error) {
                 console.error('❌ Projects: Error loading projects from database:', error);
@@ -727,6 +1072,519 @@ const Projects = () => {
             isMounted = false;
         };
     }, []); // Only run once on initial mount
+
+    // Check route immediately on mount - this handles navigation from other pages
+    // This runs ONCE on mount to catch immediate navigation
+    // IMMEDIATE route check - runs FIRST on mount, before projects load
+    useEffect(() => {
+        console.log('🚀 Projects: IMMEDIATE route check on mount');
+        
+        // Parse URL directly - check both pathname and hash (for hash-based routing)
+        const urlPath = window.location.pathname || '';
+        const urlHash = window.location.hash || '';
+        const urlSearch = window.location.search || '';
+        const urlParams = new URLSearchParams(urlSearch);
+        
+        let projectId = null;
+        let taskId = null;
+        
+        // Check pathname first
+        if (urlPath.includes('/projects/')) {
+            const pathParts = urlPath.split('/projects/')[1].split('/');
+            projectId = pathParts[0];
+            taskId = urlParams.get('task');
+        }
+        
+        // Also check hash (for hash-based routing like #/projects/123?task=456)
+        if (!projectId && urlHash.includes('/projects/')) {
+            const hashParts = urlHash.split('/projects/')[1].split('/');
+            projectId = hashParts[0].split('?')[0]; // Remove query params from ID
+            // Check for task in hash query params
+            if (urlHash.includes('?')) {
+                const hashQuery = urlHash.split('?')[1];
+                const hashParams = new URLSearchParams(hashQuery);
+                taskId = hashParams.get('task') || urlParams.get('task');
+            } else {
+                taskId = urlParams.get('task');
+            }
+        }
+        
+        if (projectId) {
+            console.log('✅ Projects: IMMEDIATE - Found project in URL:', { projectId, taskId });
+            
+            // Fetch and open project immediately
+            const fetchAndOpen = async () => {
+                if (window.DatabaseAPI?.getProject) {
+                    try {
+                        console.log('📡 Projects: IMMEDIATE - Fetching project:', projectId);
+                        const response = await window.DatabaseAPI.getProject(projectId);
+                        const projectData = response?.data?.project || response?.project || response?.data;
+                        
+                        if (projectData) {
+                            const fetchedProject = {
+                                ...projectData,
+                                client: projectData.clientName || projectData.client || ''
+                            };
+                            console.log('✅ Projects: IMMEDIATE - Opening project:', fetchedProject.name);
+                            
+                            // Add to projects array
+                            setProjects(prev => {
+                                const exists = prev.find(p => String(p.id) === String(projectId));
+                                return exists ? prev : [...prev, fetchedProject];
+                            });
+                            
+                            // Open immediately
+                            setViewingProject(fetchedProject);
+                            setSelectedProject(fetchedProject);
+                            setShowModal(false);
+                            
+                            // Update URL (use RouteState directly since updateProjectUrl might not be defined yet)
+                            if (taskId && window.RouteState) {
+                                try {
+                                    window.RouteState.navigate({
+                                        page: 'projects',
+                                        segments: [projectId],
+                                        search: `?task=${encodeURIComponent(taskId)}`,
+                                        preserveSearch: false,
+                                        preserveHash: false
+                                    });
+                                } catch (e) {
+                                    console.warn('⚠️ Projects: Failed to update URL:', e);
+                                }
+                            }
+                            
+                            // Open task with retry
+                            if (taskId) {
+                                console.log('📋 Projects: IMMEDIATE - Opening task:', taskId);
+                                const dispatchTask = (attempt = 1) => {
+                                    window.dispatchEvent(new CustomEvent('openTask', {
+                                        detail: { taskId: taskId, tab: 'details' }
+                                    }));
+                                    if (attempt < 5) {
+                                        setTimeout(() => dispatchTask(attempt + 1), 1000 * attempt);
+                                    }
+                                };
+                                setTimeout(() => dispatchTask(1), 1000);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('❌ Projects: IMMEDIATE - Failed to fetch:', error);
+                    }
+                }
+            };
+            
+            fetchAndOpen();
+        }
+    }, []); // Run ONLY on mount
+    
+    useEffect(() => {
+        console.log('🔍 Projects: Mount-time route check STARTING', {
+            url: window.location.href,
+            pathname: window.location.pathname,
+            search: window.location.search,
+            hash: window.location.hash,
+            RouteStateAvailable: !!window.RouteState
+        });
+        
+        // Also check sessionStorage in case it was set by the global listener
+        const storedProjectId = sessionStorage.getItem('openProjectId');
+        const storedTaskId = sessionStorage.getItem('openTaskId');
+        if (storedProjectId) {
+            console.log('📦 Projects: Found project ID in sessionStorage on mount:', storedProjectId);
+        }
+        
+        const tryOpenProjectFromRoute = async () => {
+            // First check sessionStorage (set by global listener or previous attempt)
+            const sessionProjectId = sessionStorage.getItem('openProjectId');
+            const sessionTaskId = sessionStorage.getItem('openTaskId');
+            
+            let projectId = null;
+            let taskId = null;
+            
+            // Try to get from RouteState first
+            if (window.RouteState) {
+                const currentRoute = window.RouteState.getRoute();
+                console.log('🔍 Projects: RouteState available on mount, checking route:', currentRoute);
+                
+                if (currentRoute?.page === 'projects' && currentRoute.segments && currentRoute.segments.length > 0) {
+                    projectId = currentRoute.segments[0];
+                    taskId = currentRoute.search?.get('task');
+                    console.log('✅ Projects: Found project in route on mount:', { projectId, taskId });
+                }
+            } else {
+                console.log('⏸️ Projects: RouteState not available yet, checking sessionStorage...');
+                // Use sessionStorage if RouteState not available
+                if (sessionProjectId) {
+                    projectId = sessionProjectId;
+                    taskId = sessionTaskId;
+                    console.log('📦 Projects: Using project ID from sessionStorage:', projectId);
+                } else {
+                    // Retry after a short delay
+                    setTimeout(tryOpenProjectFromRoute, 200);
+                    return;
+                }
+            }
+            
+            // Store in sessionStorage immediately
+            if (projectId) {
+                sessionStorage.setItem('openProjectId', projectId);
+                if (taskId) {
+                    sessionStorage.setItem('openTaskId', taskId);
+                }
+                
+                // Try to fetch from API immediately (don't wait for projects to load)
+                if (window.DatabaseAPI?.getProject) {
+                    console.log('📡 Projects: Fetching project from API immediately on mount...', projectId);
+                    try {
+                        const response = await window.DatabaseAPI.getProject(projectId);
+                        const projectData = response?.data?.project || response?.project;
+                        if (projectData) {
+                            const fetchedProject = {
+                                ...projectData,
+                                client: projectData.clientName || projectData.client || ''
+                            };
+                            console.log('✅ Projects: Fetched project from API on mount:', fetchedProject.name);
+                            // Add to projects array
+                            setProjects(prev => {
+                                const exists = prev.find(p => String(p.id) === String(projectId));
+                                if (!exists) {
+                                    return [...prev, fetchedProject];
+                                }
+                                return prev;
+                            });
+                                // Open the project immediately
+                                console.log('🎯 Projects: Setting viewingProject to open project:', fetchedProject.name);
+                                setViewingProject(fetchedProject);
+                                setShowModal(false);
+                                
+                                // Update URL to include task parameter if present
+                                if (taskId && window.RouteState) {
+                                    updateProjectUrl(projectId, { task: taskId });
+                                }
+                                
+                                if (taskId) {
+                                    console.log('📋 Projects: Will open task with retry logic:', taskId);
+                                    // Dispatch multiple times with increasing delays to ensure ProjectDetail catches it
+                                    // ProjectDetail needs time to mount and load tasks
+                                    const dispatchOpenTask = (attempt = 1) => {
+                                        console.log(`📋 Projects: Dispatching openTask event (attempt ${attempt}) for task:`, taskId);
+                                        window.dispatchEvent(new CustomEvent('openTask', {
+                                            detail: { taskId: taskId, tab: 'details' }
+                                        }));
+                                        
+                                        // Retry up to 5 times with increasing delays
+                                        if (attempt < 5) {
+                                            setTimeout(() => dispatchOpenTask(attempt + 1), 1000 * attempt);
+                                        }
+                                    };
+                                    
+                                    // Start after 1 second, then retry at 2s, 3s, 4s, 5s
+                                    setTimeout(() => dispatchOpenTask(1), 1000);
+                                }
+                                return;
+                        } else {
+                            console.warn('⚠️ Projects: API returned no project data for ID:', projectId);
+                        }
+                    } catch (error) {
+                        console.error('❌ Projects: Failed to fetch project from API on mount:', error);
+                    }
+                } else {
+                    console.warn('⚠️ Projects: DatabaseAPI.getProject not available');
+                }
+            } else {
+                console.log('⏸️ Projects: No project ID found in route or sessionStorage');
+            }
+        };
+        
+        // Try immediately
+        tryOpenProjectFromRoute();
+    }, []); // Only run once on mount
+    
+    // Check route when projects load or viewingProject changes - this handles cases where projects weren't loaded yet
+    useEffect(() => {
+        console.log('🔍 Projects: Route check after projects/viewingProject change, projects loaded:', projects.length);
+        
+        const tryOpenProjectFromRoute = async () => {
+            if (!window.RouteState) {
+                console.log('⏸️ Projects: RouteState not available yet, will retry...');
+                setTimeout(tryOpenProjectFromRoute, 200);
+                return;
+            }
+            
+            const currentRoute = window.RouteState.getRoute();
+            console.log('🔍 Projects: RouteState available, checking route:', currentRoute);
+            
+            if (currentRoute?.page === 'projects' && currentRoute.segments && currentRoute.segments.length > 0) {
+                const projectId = currentRoute.segments[0];
+                const taskId = currentRoute.search?.get('task');
+                console.log('✅ Projects: Found project in route:', { projectId, taskId });
+                
+                // Store in sessionStorage for later use
+                if (projectId) {
+                    sessionStorage.setItem('openProjectId', projectId);
+                    if (taskId) {
+                        sessionStorage.setItem('openTaskId', taskId);
+                    }
+                    
+                    // Helper function to dispatch openTask with retry logic
+                    const dispatchOpenTaskWithRetry = (taskIdToOpen) => {
+                        console.log('📋 Projects: Will open task with retry logic:', taskIdToOpen);
+                        const dispatchOpenTask = (attempt = 1) => {
+                            console.log(`📋 Projects: Dispatching openTask event (attempt ${attempt}) for task:`, taskIdToOpen);
+                            window.dispatchEvent(new CustomEvent('openTask', {
+                                detail: { taskId: taskIdToOpen, tab: 'details' }
+                            }));
+                            
+                            // Retry up to 5 times with increasing delays
+                            if (attempt < 5) {
+                                setTimeout(() => dispatchOpenTask(attempt + 1), 1000 * attempt);
+                            }
+                        };
+                        
+                        // Start after 1 second, then retry at 2s, 3s, 4s, 5s
+                        setTimeout(() => dispatchOpenTask(1), 1000);
+                    };
+                    
+                    // Check if we're already viewing this project
+                    if (viewingProject && String(viewingProject.id) === String(projectId)) {
+                        if (taskId) {
+                            console.log('📋 Projects: Already viewing project, opening task:', taskId);
+                            dispatchOpenTaskWithRetry(taskId);
+                        }
+                        return;
+                    }
+                    
+                    // Try to find project in already loaded projects
+                    const existingProject = projects.find(p => String(p.id) === String(projectId));
+                    if (existingProject) {
+                        console.log('✅ Projects: Project found in loaded projects, opening immediately:', existingProject.name);
+                        setViewingProject(existingProject);
+                        setShowModal(false);
+                        
+                        // Update URL to include task parameter if present
+                        if (taskId && window.RouteState) {
+                            updateProjectUrl(projectId, { task: taskId });
+                        }
+                        
+                        if (taskId) {
+                            dispatchOpenTaskWithRetry(taskId);
+                        }
+                        return;
+                    }
+                    
+                    // If project not in loaded list, try to fetch it from API
+                    if (window.DatabaseAPI?.getProject) {
+                        console.log('📡 Projects: Project not in loaded list, fetching from API...');
+                        try {
+                            const response = await window.DatabaseAPI.getProject(projectId);
+                            const projectData = response?.data?.project || response?.project;
+                            if (projectData) {
+                                const fetchedProject = {
+                                    ...projectData,
+                                    client: projectData.clientName || projectData.client || ''
+                                };
+                                console.log('✅ Projects: Fetched project from API:', fetchedProject.name);
+                                // Add to projects array
+                                setProjects(prev => {
+                                    const exists = prev.find(p => String(p.id) === String(projectId));
+                                    if (!exists) {
+                                        return [...prev, fetchedProject];
+                                    }
+                                    return prev;
+                                });
+                                // Open the project immediately
+                                setViewingProject(fetchedProject);
+                                setShowModal(false);
+                                
+                                // Update URL to include task parameter if present
+                                if (taskId && window.RouteState) {
+                                    updateProjectUrl(projectId, { task: taskId });
+                                }
+                                
+                                if (taskId) {
+                                    dispatchOpenTaskWithRetry(taskId);
+                                }
+                                return;
+                            }
+                        } catch (error) {
+                            console.error('❌ Projects: Failed to fetch project from API:', error);
+                        }
+                    }
+                }
+            }
+        };
+        
+        // Try immediately
+        tryOpenProjectFromRoute();
+    }, [projects, viewingProject]); // Run when projects load or viewingProject changes
+
+    // Check route after projects are loaded to open project from URL
+    useEffect(() => {
+        console.log('🔍 Projects: Route check after projects load useEffect running, projects:', projects.length, 'RouteState:', !!window.RouteState, 'viewingProject:', !!viewingProject);
+        
+        // Wait for RouteState to be available
+        if (!window.RouteState) {
+            console.log('⏸️ Projects: RouteState not available yet, will retry...');
+            const retryTimeout = setTimeout(() => {
+                if (window.RouteState) {
+                    // Re-trigger this effect by checking again
+                    const currentRoute = window.RouteState.getRoute();
+                    if (currentRoute?.page === 'projects' && currentRoute.segments && currentRoute.segments.length > 0) {
+                        console.log('✅ Projects: RouteState now available, processing route:', currentRoute);
+                        // Process route if projects are loaded
+                        if (projects.length > 0) {
+                            const projectId = currentRoute.segments[0];
+                            const taskId = currentRoute.search?.get('task');
+                            const projectToOpen = projects.find(p => String(p.id) === String(projectId));
+                            if (projectToOpen && (!viewingProject || String(viewingProject.id) !== String(projectId))) {
+                                console.log('✅ Projects: Opening project from route (retry):', projectToOpen.name);
+                                setViewingProject(projectToOpen);
+                                setShowModal(false);
+                                if (taskId) {
+                                    setTimeout(() => {
+                                        window.dispatchEvent(new CustomEvent('openTask', {
+                                            detail: { taskId: taskId, tab: 'details' }
+                                        }));
+                                    }, 1500);
+                                }
+                            }
+                        }
+                    }
+                }
+            }, 500);
+            return () => clearTimeout(retryTimeout);
+        }
+        
+        const currentRoute = window.RouteState.getRoute();
+        console.log('🔍 Projects: Checking route, projects loaded:', projects.length, 'route:', currentRoute);
+        
+        // Get project ID from route or sessionStorage
+        let projectId = null;
+        let taskId = null;
+        
+        if (currentRoute?.page === 'projects' && currentRoute.segments && currentRoute.segments.length > 0) {
+            projectId = currentRoute.segments[0];
+            taskId = currentRoute.search?.get('task');
+        } else {
+            // Check sessionStorage as fallback
+            const storedProjectId = sessionStorage.getItem('openProjectId');
+            const storedTaskId = sessionStorage.getItem('openTaskId');
+            if (storedProjectId) {
+                projectId = storedProjectId;
+                taskId = storedTaskId;
+                console.log('📦 Projects: Using project ID from sessionStorage:', projectId);
+            }
+        }
+        
+        if (!projectId) {
+            console.log('⏸️ Projects: No project ID found in route or sessionStorage');
+            return;
+        }
+        
+        // Check if we're already viewing this project
+        if (viewingProject && String(viewingProject.id) === String(projectId)) {
+            // Already viewing - just handle task parameter if present
+            if (taskId) {
+                console.log('📋 Projects: Already viewing project, dispatching openTask for task:', taskId);
+                setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('openTask', {
+                        detail: { taskId: taskId, tab: 'details' }
+                    }));
+                }, 500);
+            }
+            return;
+        }
+        
+        // If projects haven't loaded yet, store in sessionStorage and wait
+        if (projects.length === 0) {
+            console.log('⏸️ Projects: Projects not loaded yet, storing project ID in sessionStorage');
+            if (projectId) {
+                sessionStorage.setItem('openProjectId', projectId);
+                if (taskId) {
+                    sessionStorage.setItem('openTaskId', taskId);
+                }
+            }
+            return;
+        }
+        
+        // Find project in loaded projects
+        let projectToOpen = projects.find(p => String(p.id) === String(projectId));
+        
+        // If project not found, try to fetch it from API
+        if (!projectToOpen && window.DatabaseAPI?.getProject) {
+            console.log('📡 Projects: Project not in loaded list, fetching from API...');
+            window.DatabaseAPI.getProject(projectId)
+                .then(response => {
+                    const projectData = response?.data?.project || response?.project;
+                    if (projectData) {
+                        const fetchedProject = {
+                            ...projectData,
+                            client: projectData.clientName || projectData.client || ''
+                        };
+                        console.log('✅ Projects: Fetched project from API:', fetchedProject.name);
+                        // Add to projects array
+                        setProjects(prev => {
+                            const exists = prev.find(p => String(p.id) === String(projectId));
+                            if (!exists) {
+                                return [...prev, fetchedProject];
+                            }
+                            return prev;
+                        });
+                        // Open the project
+                        setViewingProject(fetchedProject);
+                        setShowModal(false);
+                        if (taskId) {
+                            setTimeout(() => {
+                                window.dispatchEvent(new CustomEvent('openTask', {
+                                    detail: { taskId: taskId, tab: 'details' }
+                                }));
+                            }, 2000);
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('❌ Projects: Failed to fetch project from API:', error);
+                });
+            // Return early - will open project in .then() above
+            return;
+        }
+        
+        if (projectToOpen) {
+            console.log('✅ Projects: Found project, opening from URL:', projectToOpen.name);
+            // Directly set viewingProject - this is the simplest and most reliable way
+            console.log('✅ Projects: Setting viewingProject directly from route check');
+            setViewingProject(projectToOpen);
+            setShowModal(false);
+            
+            // Handle task opening if specified
+            if (taskId) {
+                console.log('📋 Projects: Task ID found in route, will open task:', taskId);
+                setTimeout(() => {
+                    console.log('📋 Projects: Dispatching openTask event for task:', taskId);
+                    window.dispatchEvent(new CustomEvent('openTask', {
+                        detail: { 
+                            taskId: taskId,
+                            tab: 'details'
+                        }
+                    }));
+                }, 2000); // Give ProjectDetail time to load
+            }
+        } else {
+            console.log('⚠️ Projects: Project not found in loaded projects and API fetch failed, route:', projectId, 'Available project IDs:', projects.map(p => p.id));
+        }
+    }, [projects, viewingProject]); // Run when projects load or viewingProject changes
+
+    // Update handleViewProject ref when it's defined (after component fully renders)
+    useEffect(() => {
+        // Set the ref after a short delay to ensure handleViewProject is defined
+        const timer = setTimeout(() => {
+            if (typeof handleViewProject === 'function') {
+                handleViewProjectRef.current = handleViewProject;
+                console.log('✅ Projects: handleViewProject ref set');
+            }
+        }, 100);
+        return () => clearTimeout(timer);
+    }, []); // Only run once after component mounts
 
     // Proactively load ProjectDetail component when Projects component mounts
     useEffect(() => {
@@ -1177,6 +2035,8 @@ const Projects = () => {
 
     const handleViewProject = async (project) => {
         console.log('🔵 handleViewProject called with project:', project?.id, project?.name);
+        // Update ref so it can be accessed from other useEffects
+        handleViewProjectRef.current = handleViewProject;
         
         // BULLETPROOF: ALWAYS check if ProjectDetail is loaded AND initialized
         // The lazy loader might say it's loaded, but initialization might still be waiting for dependencies
@@ -2672,6 +3532,32 @@ try {
     window.Projects = Projects;
     window.Projects._version = '20251112-list-view';
     window.Projects._hasListView = true;
+    
+    // Set up a global event listener for openEntityDetail that works even before Projects component mounts
+    // This ensures navigation from dashboard works immediately
+    if (typeof window.addEventListener === 'function' && !window._projectsGlobalListenerSet) {
+        window._projectsGlobalListenerSet = true;
+        const globalHandler = async (event) => {
+            if (!event.detail || event.detail.entityType !== 'project') return;
+            
+            const { entityId, options } = event.detail;
+            if (!entityId) return;
+            
+            console.log('🌐 Projects: Global openEntityDetail handler triggered:', { entityId, options });
+            
+            // Store in sessionStorage so Projects component can pick it up when it mounts
+            if (entityId) {
+                sessionStorage.setItem('openProjectId', entityId);
+                if (options?.task) {
+                    sessionStorage.setItem('openTaskId', options.task);
+                }
+                console.log('💾 Projects: Stored project ID in sessionStorage for later opening:', entityId);
+            }
+        };
+        
+        window.addEventListener('openEntityDetail', globalHandler, true); // Use capture phase
+        console.log('✅ Projects: Global openEntityDetail listener registered');
+    }
     
     // Dispatch event to notify that Projects component is ready
     if (typeof window.dispatchEvent === 'function') {

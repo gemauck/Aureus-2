@@ -1079,6 +1079,46 @@ app.all('/api/user-task-tags/:id', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for user notes list and create operations (GET, POST /api/user-notes)
+app.all('/api/user-notes', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'user-notes.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
+// Explicit mapping for user note share operations (POST /api/user-notes/[id]/share)
+app.all('/api/user-notes/:id/share', async (req, res, next) => {
+  try {
+    req.params = req.params || {}
+    req.params.id = req.params.id || req.url.split('/').slice(-2, -1)[0]
+    const handler = await loadHandler(path.join(apiDir, 'user-notes.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
+// Explicit mapping for user note operations with ID (GET, PUT, DELETE /api/user-notes/[id])
+app.all('/api/user-notes/:id', async (req, res, next) => {
+  try {
+    // Skip if it's a share route
+    const urlPath = req.url.split('?')[0].split('#')[0]
+    if (urlPath.includes('/share')) {
+      return next()
+    }
+    const handler = await loadHandler(path.join(apiDir, 'user-notes.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
 // Explicit mapping for leave application operations with ID (GET, PATCH, PUT, DELETE /api/leave-platform/applications/:id)
 // Must be before specific action routes (approve, reject, cancel) to avoid conflicts
 app.all('/api/leave-platform/applications/:id', async (req, res, next) => {

@@ -72,6 +72,8 @@ model User {
   twoFactor                 TwoFactor?
   userTasks                 UserTask[]              @relation("UserTaskOwner")
   userTaskTags              UserTaskTag[]           @relation("UserTaskTagOwner")
+  userNotes                 UserNote[]              @relation("UserNoteOwner")
+  sharedNotes               UserNoteShare[]         @relation("UserNoteSharedWith")
 }
 
 model Team {
@@ -235,6 +237,11 @@ model Opportunity {
   status    String               @default("Potential")
   client    Client               @relation(fields: [clientId], references: [id])
   starredBy StarredOpportunity[]
+
+  @@index([clientId])
+  @@index([createdAt])
+  @@index([ownerId])
+  @@index([status])
 }
 
 model SalesOrder {
@@ -303,6 +310,12 @@ model Task {
   parentTask   Task?     @relation("Subtasks", fields: [parentTaskId], references: [id])
   subtasks     Task[]    @relation("Subtasks")
   project      Project   @relation(fields: [projectId], references: [id])
+
+  @@index([assigneeId])
+  @@index([projectId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([createdAt])
 }
 
 model TimeEntry {
@@ -1258,4 +1271,33 @@ model DocumentCollectionTemplate {
   @@index([isDefault])
   @@index([ownerId])
   @@index([createdAt])
+}
+
+model UserNote {
+  id          String            @id @default(cuid())
+  title       String
+  content     String            @default("")
+  tags        String            @default("[]")  // JSON array of tag strings
+  ownerId     String
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  owner       User               @relation("UserNoteOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  sharedWith  UserNoteShare[]
+
+  @@index([ownerId])
+  @@index([createdAt])
+  @@index([updatedAt])
+}
+
+model UserNoteShare {
+  id        String    @id @default(cuid())
+  noteId    String
+  userId    String
+  createdAt DateTime  @default(now())
+  note      UserNote  @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  user      User      @relation("UserNoteSharedWith", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([noteId, userId])
+  @@index([noteId])
+  @@index([userId])
 }

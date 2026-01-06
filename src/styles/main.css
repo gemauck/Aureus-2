@@ -274,3 +274,14 @@ h1.abcotronics-logo.dark {
 .dark .highlight-comment {
     animation: highlightCommentDark 2s ease-in-out;
 }
+
+/* Prevent grey hover effects on headings */
+h1:hover,
+h2:hover,
+h3:hover,
+h4:hover,
+h5:hover,
+h6:hover {
+    background-color: transparent !important;
+    color: inherit !important;
+}

@@ -77,7 +77,27 @@ async function handler(req, res) {
       console.error('❌ Me endpoint: Error stack:', dbError.stack)
       
       // Check if it's a connection error using utility
-      if (isConnectionError(dbError) || dbError.message?.includes('timeout')) {
+      if (isConnectionError(dbError) || dbError.message?.includes('timeout') || dbError.message?.includes('Too many database connections')) {
+        // For local development, return a fallback user instead of 503
+        if (process.env.NODE_ENV !== 'production' || process.env.DEV_LOCAL_NO_DB === 'true') {
+          console.warn('⚠️ Database connection issue - returning fallback user for local dev')
+          const fallbackUser = {
+            id: req.user.sub || 'dev-user',
+            email: req.user.email || 'dev@example.com',
+            name: req.user.name || 'Dev User',
+            role: req.user.role || 'admin',
+            provider: 'local',
+            lastLoginAt: new Date().toISOString(),
+            mustChangePassword: false,
+            phone: '',
+            department: '',
+            jobTitle: '',
+            permissions: req.user.permissions || '[]',
+            accessibleProjectIds: '[]'
+          }
+          return ok(res, { user: fallbackUser })
+        }
+        
         // Return 503 (Service Unavailable) instead of 500 for connection issues
         // This is more semantically correct and can be handled differently by clients
         return res.status(503).json({
