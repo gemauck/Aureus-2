@@ -56,6 +56,14 @@ async function sendViaResendAPI(mailOptions, apiKey) {
         payload.text = mailOptions.html.replace(/<[^>]*>/g, '').replace(/\n\s*\n/g, '\n\n');
     }
     
+    console.log('📧 Resend API payload:', JSON.stringify({
+        from: payload.from,
+        to: payload.to,
+        subject: payload.subject,
+        hasHtml: !!payload.html,
+        hasText: !!payload.text
+    }, null, 2));
+    
     const response = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
@@ -65,11 +73,14 @@ async function sendViaResendAPI(mailOptions, apiKey) {
         body: JSON.stringify(payload)
     });
 
+    const responseText = await response.text();
+    console.log('📧 Resend API response status:', response.status, response.statusText);
+    console.log('📧 Resend API response body:', responseText);
+
     if (!response.ok) {
-        const errorText = await response.text();
-        let errorDetails = errorText;
+        let errorDetails = responseText;
         try {
-            const errorJson = JSON.parse(errorText);
+            const errorJson = JSON.parse(responseText);
             errorDetails = JSON.stringify(errorJson, null, 2);
             // Check for common Resend errors
             if (errorJson.message) {
@@ -82,12 +93,14 @@ async function sendViaResendAPI(mailOptions, apiKey) {
             }
         } catch (e) {
             // Not JSON, use as-is
+            console.error('❌ Resend API non-JSON error response:', responseText);
         }
         console.error('❌ Resend API error response:', errorDetails);
         throw new Error(`Resend API error: ${response.status} ${response.statusText} - ${errorDetails}`);
     }
 
-    const result = await response.json();
+    const result = JSON.parse(responseText);
+    console.log('✅ Resend API success! Message ID:', result.id);
     return {
         success: true,
         messageId: result.id || `resend-${Date.now()}`,
