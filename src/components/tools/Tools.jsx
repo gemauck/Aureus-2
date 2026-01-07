@@ -10,6 +10,7 @@ const Tools = () => {
         TankSizeCalculator: null,
         DieselRefundEvidenceEvaluator: null
     });
+    const [toolsVersion, setToolsVersion] = useState(0); // Force re-render when components change
 
     // Wait for tool components to load from window
     useEffect(() => {
@@ -29,8 +30,13 @@ const Tools = () => {
             
             // Always update toolComponents state (even if not all loaded) so UI can show available tools
             setToolComponents(prev => {
-                // Always update to ensure we detect late-loading components
-                // React will handle re-rendering efficiently
+                // Check if anything actually changed
+                const hasChanged = Object.keys(components).some(key => 
+                    !!components[key] !== !!prev[key]
+                );
+                if (hasChanged) {
+                    setToolsVersion(v => v + 1); // Force re-render
+                }
                 return components;
             });
             
@@ -76,7 +82,15 @@ const Tools = () => {
                 TankSizeCalculator: window.TankSizeCalculator,
                 DieselRefundEvidenceEvaluator: window.DieselRefundEvidenceEvaluator
             };
-            setToolComponents(components); // Always update to detect late-loading components
+            setToolComponents(prev => {
+                const hasChanged = Object.keys(components).some(key => 
+                    !!components[key] !== !!prev[key]
+                );
+                if (hasChanged) {
+                    setToolsVersion(v => v + 1); // Force re-render
+                }
+                return components;
+            });
         }, 2000); // Check every 2 seconds
         
         // Cleanup
@@ -139,7 +153,7 @@ const Tools = () => {
             allComponents: Object.keys(toolComponents).map(k => ({ key: k, exists: !!toolComponents[k] }))
         });
         return toolsArray;
-    }, [toolComponents]);
+    }, [toolComponents, toolsVersion]); // Include toolsVersion to force recalculation
 
     const renderToolContent = () => {
         if (!currentTool) {
