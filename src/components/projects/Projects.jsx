@@ -2247,6 +2247,17 @@ const Projects = () => {
                     if (!hasChanges) {
                         return prev; // Return previous object to prevent re-render
                     }
+                    
+                    // Also update the projects array to keep it in sync
+                    setProjects(prevProjects => {
+                        return prevProjects.map(p => {
+                            if (String(p.id) === String(normalized.id)) {
+                                return normalized;
+                            }
+                            return p;
+                        });
+                    });
+                    
                     return normalized;
                 });
             };
