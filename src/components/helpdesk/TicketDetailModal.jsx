@@ -751,14 +751,24 @@ const TicketDetailModal = ({
                                                     // Update current customFields state immediately
                                                     setCurrentCustomFields(customFields);
                                                     
-                                                    // Reload ticket to get updated data (but don't close modal)
-                                                    await loadTicketDetails();
-                                                    
                                                     // Show success feedback
                                                     console.log('✅ Notes saved successfully');
+                                                    
+                                                    // Reload ticket to get updated data (but don't close modal)
+                                                    // Only reload if ticket still exists
+                                                    if (ticket?.id) {
+                                                        try {
+                                                            await loadTicketDetails();
+                                                        } catch (reloadError) {
+                                                            console.warn('⚠️ Could not reload ticket details:', reloadError);
+                                                            // Don't show error to user, notes are already saved
+                                                        }
+                                                    }
                                                 } catch (error) {
-                                                    console.error('Error saving notes:', error);
-                                                    alert(`Failed to save notes: ${error.message}`);
+                                                    console.error('❌ Error saving notes:', error);
+                                                    // Don't redirect or close modal on error
+                                                    alert(`Failed to save notes: ${error.message}\n\nPlease try again.`);
+                                                    return; // Stop execution on error
                                                 }
                                             } else {
                                                 // For new tickets, just update the state - notes will be saved when ticket is created
