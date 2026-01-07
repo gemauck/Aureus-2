@@ -117,6 +117,101 @@ const ServiceAndMaintenance = () => {
     };
   }, []);
 
+  // Read job card ID from URL and load the job card
+  useEffect(() => {
+    const loadJobCardFromUrl = async () => {
+      try {
+        // Get job card ID from route
+        let jobCardId = null;
+        
+        if (window.RouteState) {
+          const route = window.RouteState.getRoute();
+          if (route.page === 'service-maintenance' && route.segments && route.segments.length > 0) {
+            jobCardId = route.segments[0];
+          }
+        } else {
+          // Fallback: parse from URL pathname
+          const pathname = window.location.pathname || '';
+          const segments = pathname.split('/').filter(Boolean);
+          const serviceIndex = segments.indexOf('service-maintenance');
+          if (serviceIndex >= 0 && segments[serviceIndex + 1]) {
+            jobCardId = segments[serviceIndex + 1];
+          }
+        }
+
+        if (jobCardId) {
+          // Check if we already have this job card loaded
+          if (selectedJobCard && (selectedJobCard.id === jobCardId || selectedJobCard.jobCardNumber === jobCardId)) {
+            // Already showing the correct job card
+            if (!showJobCardDetail) {
+              setShowJobCardDetail(true);
+            }
+            return;
+          }
+
+          // Load the job card from API
+          const token = window.storage?.getToken?.();
+          if (!token) {
+            return;
+          }
+
+          try {
+            const response = await fetch(`/api/jobcards/${encodeURIComponent(jobCardId)}`, {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              const jobCard = data.jobCard || data.data?.jobCard || data.data || data;
+              if (jobCard && jobCard.id) {
+                setSelectedJobCard(jobCard);
+                setShowJobCardDetail(true);
+              }
+            } else if (response.status === 404) {
+              console.warn(`Job card ${jobCardId} not found`);
+              // Clear the detail view if job card not found
+              setShowJobCardDetail(false);
+              setSelectedJobCard(null);
+            }
+          } catch (error) {
+            console.error('Error loading job card from URL:', error);
+          }
+        } else {
+          // No job card ID in URL - close detail view if open
+          if (showJobCardDetail) {
+            setShowJobCardDetail(false);
+            setSelectedJobCard(null);
+          }
+        }
+      } catch (error) {
+        console.error('Error reading job card ID from URL:', error);
+      }
+    };
+
+    loadJobCardFromUrl();
+
+    // Listen for route changes
+    const handleRouteChange = () => {
+      loadJobCardFromUrl();
+    };
+
+    if (window.RouteState && window.RouteState.subscribe) {
+      const unsubscribe = window.RouteState.subscribe(handleRouteChange);
+      return () => {
+        if (unsubscribe) unsubscribe();
+      };
+    } else {
+      // Fallback: listen to popstate events
+      window.addEventListener('popstate', handleRouteChange);
+      return () => {
+        window.removeEventListener('popstate', handleRouteChange);
+      };
+    }
+  }, [showJobCardDetail, selectedJobCard]);
+
   const handleCopyLink = async () => {
     const shareUrl = `${window.location.origin}/job-card`;
     try {
