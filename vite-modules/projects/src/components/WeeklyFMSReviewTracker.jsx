@@ -104,9 +104,6 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         'July', 'August', 'September', 'October', 'November', 'December'
     ];
     
-    // Generate weeks for the selected year
-    const weeks = React.useMemo(() => generateWeeksForYear(selectedYear), [selectedYear]);
-    
     const commentInputAvailable = typeof window !== 'undefined' && typeof window.CommentInputWithMentions === 'function';
 
     // Year selection with persistence
@@ -123,6 +120,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     };
     
     const [selectedYear, setSelectedYear] = useState(getInitialSelectedYear);
+    
+    // Generate weeks for the selected year (must be after selectedYear is declared)
+    const weeks = React.useMemo(() => generateWeeksForYear(selectedYear), [selectedYear]);
     
     // Parse documentSections safely (legacy flat array support)
     const parseSections = (data) => {
