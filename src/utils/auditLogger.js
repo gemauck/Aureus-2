@@ -95,21 +95,24 @@ const AuditLogger = {
         try {
             const localLogs = JSON.parse(localStorage.getItem('auditLogs') || '[]');
             if (localLogs.length === 0) {
-                return;
+                return { migrated: 0, total: 0 };
             }
             
             const token = window.storage?.getToken?.();
             if (!token) {
                 console.warn('⚠️ No auth token available, cannot migrate logs');
-                return;
+                return { migrated: 0, total: localLogs.length };
             }
             
             console.log(`🔄 Migrating ${localLogs.length} logs from localStorage to backend...`);
             
+            let migrated = 0;
+            let failed = 0;
+            
             // Migrate logs in batches
             for (const log of localLogs.slice(0, 100)) { // Limit to 100 to avoid overwhelming the server
                 try {
-                    await fetch('/api/audit-logs', {
+                    const response = await fetch('/api/audit-logs', {
                         method: 'POST',
                         headers: {
                             'Authorization': `Bearer ${token}`,
@@ -117,14 +120,25 @@ const AuditLogger = {
                         },
                         body: JSON.stringify(log)
                     });
+                    
+                    if (response.ok) {
+                        migrated++;
+                    } else {
+                        const errorText = await response.text();
+                        console.warn('⚠️ Failed to migrate log:', log.id, response.status, errorText);
+                        failed++;
+                    }
                 } catch (err) {
                     console.warn('⚠️ Failed to migrate log:', log.id, err);
+                    failed++;
                 }
             }
             
-            console.log('✅ Migration complete');
+            console.log(`✅ Migration complete: ${migrated} migrated, ${failed} failed`);
+            return { migrated, failed, total: localLogs.length };
         } catch (error) {
             console.error('❌ Error migrating logs:', error);
+            return { migrated: 0, failed: 0, total: 0, error: error.message };
         }
     },
     
@@ -151,10 +165,25 @@ const AuditLogger = {
                         const localLogs = JSON.parse(localStorage.getItem('auditLogs') || '[]');
                         if (localLogs.length > 0) {
                             console.log('🔄 No backend logs found, but localStorage has logs. Migrating...');
-                            // Migrate in background (don't await)
-                            AuditLogger.migrateLocalStorageLogs().catch(err => {
-                                console.error('❌ Migration failed:', err);
-                            });
+                            // Migrate and wait for completion, then re-fetch
+                            const migrationResult = await AuditLogger.migrateLocalStorageLogs();
+                            if (migrationResult && migrationResult.migrated > 0) {
+                                console.log(`✅ Migrated ${migrationResult.migrated} logs, re-fetching from backend...`);
+                                // Re-fetch after migration
+                                const retryResponse = await fetch('/api/audit-logs', {
+                                    method: 'GET',
+                                    headers: {
+                                        'Authorization': `Bearer ${token}`,
+                                        'Content-Type': 'application/json'
+                                    }
+                                });
+                                if (retryResponse.ok) {
+                                    const retryData = await retryResponse.json();
+                                    const retryLogCount = retryData.logs?.length || 0;
+                                    console.log('✅ Re-fetched audit logs from backend after migration:', retryLogCount, 'logs');
+                                    return retryData.logs || [];
+                                }
+                            }
                         }
                     }
                     
