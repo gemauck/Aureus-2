@@ -576,24 +576,43 @@ const ProjectsDatabaseFirst = () => {
 
             if (nextProject) {
                 if (selectedProject) {
+                    // Updating existing project - update in place
                     setProjects(prev => prev.map(p => (p.id === nextProject.id ? nextProject : p)));
                     setSelectedProject(nextProject);
+                    // For edits, optionally refresh to get latest server state (but not immediately)
+                    setTimeout(async () => {
+                        try {
+                            const refreshedProjects = await loadProjects();
+                            const refreshedProject = refreshedProjects.find(p => p.id === nextProject.id);
+                            if (refreshedProject) {
+                                setSelectedProject(refreshedProject);
+                            }
+                        } catch (error) {
+                            console.warn('⚠️ Failed to refresh project after edit:', error);
+                            // Ignore - we already updated locally
+                        }
+                    }, 1000); // Small delay to let UI update first
                 } else {
-                    setProjects(prev => [...prev, nextProject].filter(Boolean));
+                    // Creating new project - add immediately to state (NO reload needed)
+                    console.log('✅ Adding new project to list immediately:', nextProject.name);
+                    setProjects(prev => {
+                        // Check if project already exists (avoid duplicates)
+                        const exists = prev.find(p => p.id === nextProject.id);
+                        if (exists) {
+                            console.log('ℹ️ Project already in list, updating instead');
+                            return prev.map(p => (p.id === nextProject.id ? nextProject : p));
+                        }
+                        // Add new project to the beginning of the list (most recent first)
+                        return [nextProject, ...prev].filter(Boolean);
+                    });
                     setShowModal(false);
                     setSelectedProject(null);
+                    // Don't reload for new projects - we already added it to state
+                    console.log('✅ New project added to list, no reload needed');
                 }
             } else if (!selectedProject) {
                 setShowModal(false);
                 setSelectedProject(null);
-            }
-
-            const refreshedProjects = await loadProjects();
-            if (selectedProject && nextProject?.id) {
-                const refreshedProject = refreshedProjects.find(p => p.id === nextProject.id);
-                if (refreshedProject) {
-                    setSelectedProject(refreshedProject);
-                }
             }
             
         } catch (error) {
