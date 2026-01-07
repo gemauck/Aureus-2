@@ -45,9 +45,18 @@ const TicketDetailModal = ({
 
     const loadTicketDetails = async () => {
         try {
-            if (!window.DatabaseAPI) return;
+            let response;
+            if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
+                response = await window.DatabaseAPI.makeRequest(`/api/helpdesk/${ticket.id}`, { method: 'GET' });
+            } else {
+                const fetchResponse = await fetch(`/api/helpdesk/${ticket.id}`, {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                if (!fetchResponse.ok) throw new Error(`HTTP error! status: ${fetchResponse.status}`);
+                response = await fetchResponse.json();
+            }
             
-            const response = await window.DatabaseAPI.get(`/api/helpdesk/${ticket.id}`);
             if (response?.ticket) {
                 const t = response.ticket;
                 setFormData({
@@ -95,6 +104,51 @@ const TicketDetailModal = ({
             
             if (onSave) {
                 await onSave(ticketData);
+            } else {
+                // Fallback: save directly if onSave not provided
+                let response;
+                if (ticketData.id) {
+                    // Update
+                    if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
+                        response = await window.DatabaseAPI.makeRequest(`/api/helpdesk/${ticketData.id}`, {
+                            method: 'PATCH',
+                            body: JSON.stringify(ticketData),
+                            headers: { 'Content-Type': 'application/json' }
+                        });
+                    } else {
+                        const fetchResponse = await fetch(`/api/helpdesk/${ticketData.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify(ticketData)
+                        });
+                        if (!fetchResponse.ok) throw new Error(`HTTP error! status: ${fetchResponse.status}`);
+                        response = await fetchResponse.json();
+                    }
+                } else {
+                    // Create
+                    if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
+                        response = await window.DatabaseAPI.makeRequest('/api/helpdesk', {
+                            method: 'POST',
+                            body: JSON.stringify(ticketData),
+                            headers: { 'Content-Type': 'application/json' }
+                        });
+                    } else {
+                        const fetchResponse = await fetch('/api/helpdesk', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify(ticketData)
+                        });
+                        if (!fetchResponse.ok) throw new Error(`HTTP error! status: ${fetchResponse.status}`);
+                        response = await fetchResponse.json();
+                    }
+                }
+                
+                if (response?.ticket) {
+                    await loadTicketDetails();
+                    setIsEditing(false);
+                }
             }
         } catch (error) {
             console.error('Error saving ticket:', error);
@@ -109,10 +163,6 @@ const TicketDetailModal = ({
         if (!newComment.trim()) return;
 
         try {
-            if (!window.DatabaseAPI) {
-                throw new Error('DatabaseAPI not available');
-            }
-
             const comment = {
                 message: newComment,
                 userId: window.useAuth?.()?.user?.id,
@@ -123,7 +173,21 @@ const TicketDetailModal = ({
 
             // Add comment via API
             if (ticket?.id) {
-                await window.DatabaseAPI.post(`/api/helpdesk/${ticket.id}/comments`, { message: newComment });
+                if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
+                    await window.DatabaseAPI.makeRequest(`/api/helpdesk/${ticket.id}/comments`, {
+                        method: 'POST',
+                        body: JSON.stringify({ message: newComment }),
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                } else {
+                    const fetchResponse = await fetch(`/api/helpdesk/${ticket.id}/comments`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ message: newComment })
+                    });
+                    if (!fetchResponse.ok) throw new Error(`HTTP error! status: ${fetchResponse.status}`);
+                }
             }
 
             // Update local state
@@ -178,11 +242,16 @@ const TicketDetailModal = ({
 
     const loadUsers = async () => {
         try {
-            if (window.DatabaseAPI) {
-                const response = await window.DatabaseAPI.get('/api/users');
-                if (response?.users) {
-                    setUsers(response.users);
-                }
+            let response;
+            if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
+                response = await window.DatabaseAPI.makeRequest('/api/users', { method: 'GET' });
+            } else {
+                const fetchResponse = await fetch('/api/users', { method: 'GET', credentials: 'include' });
+                if (!fetchResponse.ok) return;
+                response = await fetchResponse.json();
+            }
+            if (response?.users) {
+                setUsers(response.users);
             }
         } catch (error) {
             console.error('Error loading users:', error);
@@ -191,11 +260,17 @@ const TicketDetailModal = ({
 
     const loadProjectsForClient = async (clientId) => {
         try {
-            if (window.DatabaseAPI && clientId) {
-                const response = await window.DatabaseAPI.get(`/api/projects?clientId=${clientId}`);
-                if (response?.projects) {
-                    setProjects(response.projects);
-                }
+            if (!clientId) return;
+            let response;
+            if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
+                response = await window.DatabaseAPI.makeRequest(`/api/projects?clientId=${clientId}`, { method: 'GET' });
+            } else {
+                const fetchResponse = await fetch(`/api/projects?clientId=${clientId}`, { method: 'GET', credentials: 'include' });
+                if (!fetchResponse.ok) return;
+                response = await fetchResponse.json();
+            }
+            if (response?.projects) {
+                setProjects(response.projects);
             }
         } catch (error) {
             console.error('Error loading projects:', error);
@@ -204,11 +279,16 @@ const TicketDetailModal = ({
 
     const loadClients = async () => {
         try {
-            if (window.DatabaseAPI) {
-                const response = await window.DatabaseAPI.get('/api/clients');
-                if (response?.clients) {
-                    setClients(response.clients);
-                }
+            let response;
+            if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
+                response = await window.DatabaseAPI.makeRequest('/api/clients', { method: 'GET' });
+            } else {
+                const fetchResponse = await fetch('/api/clients', { method: 'GET', credentials: 'include' });
+                if (!fetchResponse.ok) return;
+                response = await fetchResponse.json();
+            }
+            if (response?.clients) {
+                setClients(response.clients);
             }
         } catch (error) {
             console.error('Error loading clients:', error);

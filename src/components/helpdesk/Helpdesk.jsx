@@ -69,12 +69,6 @@ const Helpdesk = () => {
     
     // Load tickets
     const loadTickets = useCallback(async () => {
-        if (!window.DatabaseAPI) {
-            setLoadError('DatabaseAPI not available');
-            setIsLoading(false);
-            return;
-        }
-
         try {
             setIsLoading(true);
             setLoadError(null);
@@ -88,7 +82,25 @@ const Helpdesk = () => {
             const queryString = params.toString();
             const url = `/api/helpdesk${queryString ? `?${queryString}` : ''}`;
             
-            const response = await window.DatabaseAPI.get(url);
+            // Use DatabaseAPI.makeRequest if available, otherwise use fetch
+            let response;
+            if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
+                response = await window.DatabaseAPI.makeRequest(url, { method: 'GET' });
+            } else {
+                const fetchResponse = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'include'
+                });
+                
+                if (!fetchResponse.ok) {
+                    throw new Error(`HTTP error! status: ${fetchResponse.status}`);
+                }
+                
+                response = await fetchResponse.json();
+            }
             
             if (response && response.tickets) {
                 setTickets(response.tickets);
@@ -124,21 +136,49 @@ const Helpdesk = () => {
     // Handle save ticket
     const handleSaveTicket = useCallback(async (ticketData) => {
         try {
-            if (!window.DatabaseAPI) {
-                throw new Error('DatabaseAPI not available');
-            }
-
             let savedTicket;
             if (ticketData.id) {
                 // Update existing ticket
-                const response = await window.DatabaseAPI.patch(`/api/helpdesk/${ticketData.id}`, ticketData);
+                let response;
+                if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
+                    response = await window.DatabaseAPI.makeRequest(`/api/helpdesk/${ticketData.id}`, {
+                        method: 'PATCH',
+                        body: JSON.stringify(ticketData),
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                } else {
+                    const fetchResponse = await fetch(`/api/helpdesk/${ticketData.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify(ticketData)
+                    });
+                    if (!fetchResponse.ok) throw new Error(`HTTP error! status: ${fetchResponse.status}`);
+                    response = await fetchResponse.json();
+                }
                 savedTicket = response.ticket;
                 
                 // Update in local state
                 setTickets(prev => prev.map(t => t.id === savedTicket.id ? savedTicket : t));
             } else {
                 // Create new ticket
-                const response = await window.DatabaseAPI.post('/api/helpdesk', ticketData);
+                let response;
+                if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
+                    response = await window.DatabaseAPI.makeRequest('/api/helpdesk', {
+                        method: 'POST',
+                        body: JSON.stringify(ticketData),
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                } else {
+                    const fetchResponse = await fetch('/api/helpdesk', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify(ticketData)
+                    });
+                    if (!fetchResponse.ok) throw new Error(`HTTP error! status: ${fetchResponse.status}`);
+                    response = await fetchResponse.json();
+                }
                 savedTicket = response.ticket;
                 
                 // Add to local state
@@ -163,11 +203,15 @@ const Helpdesk = () => {
         }
 
         try {
-            if (!window.DatabaseAPI) {
-                throw new Error('DatabaseAPI not available');
+            if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
+                await window.DatabaseAPI.makeRequest(`/api/helpdesk/${ticketId}`, { method: 'DELETE' });
+            } else {
+                const fetchResponse = await fetch(`/api/helpdesk/${ticketId}`, {
+                    method: 'DELETE',
+                    credentials: 'include'
+                });
+                if (!fetchResponse.ok) throw new Error(`HTTP error! status: ${fetchResponse.status}`);
             }
-
-            await window.DatabaseAPI.delete(`/api/helpdesk/${ticketId}`);
             
             // Remove from local state
             setTickets(prev => prev.filter(t => t.id !== ticketId));
