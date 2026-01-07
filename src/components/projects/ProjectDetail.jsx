@@ -3397,7 +3397,15 @@ function initializeProjectDetail() {
                     subtasks: [],
                     status: updatedTaskData.status || 'To Do'
                 };
+                console.log('➕ Creating new task:', {
+                    taskId: newTask.id,
+                    title: newTask.title,
+                    status: newTask.status,
+                    listId: newTask.listId,
+                    currentTasksCount: tasks.length
+                });
                 updatedTasks = [...tasks, newTask];
+                console.log('✅ New task added to array. Updated tasks count:', updatedTasks.length);
             }
         } else {
             if (viewingTaskParent) {
@@ -3428,17 +3436,27 @@ function initializeProjectDetail() {
         }
         
         // Update state with the new tasks array
+        console.log('🔄 Updating tasks state. New tasks count:', updatedTasks.length);
         setTasks(updatedTasks);
+        tasksRef.current = updatedTasks; // Also update ref immediately
         
         // Immediately save to database to ensure checklist and other changes persist
         // Don't wait for the debounced useEffect - save immediately
         try {
+            console.log('💾 Persisting task update to database...');
             await persistProjectData({ nextTasks: updatedTasks });
+            console.log('✅ Task update persisted successfully');
         } catch (error) {
             console.error('❌ Failed to save task update:', error);
+            console.error('❌ Error details:', {
+                message: error.message,
+                stack: error.stack,
+                updatedTasksCount: updatedTasks.length
+            });
             // Don't block UI - the debounced save will retry
         }
         
+        console.log('🔒 Closing task modal...');
         handleCloseTaskModal();
     };
 
