@@ -2275,6 +2275,17 @@ const Clients = React.memo(() => {
         }
     }, [clearAllCaches]); // Only run once on mount
 
+    // Ensure alphabetical sorting by default when switching to leads view
+    useEffect(() => {
+        if (viewMode === 'leads') {
+            // Default to alphabetical sorting by name if not already set
+            if (leadSortField !== 'name' || leadSortDirection !== 'asc') {
+                setLeadSortField('name');
+                setLeadSortDirection('asc');
+            }
+        }
+    }, [viewMode, leadSortField, leadSortDirection]);
+
     // PERFORMANCE FIX: Optimize view mode switching - only refresh if data is stale
     // Skip if user is editing to prevent data loss
     useEffect(() => {
