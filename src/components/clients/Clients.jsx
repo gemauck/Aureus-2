@@ -141,6 +141,8 @@ let lastLiveDataSyncTime = 0;
 let lastLiveDataClientsHash = null;
 let isLeadsLoading = false; // Prevent concurrent loadLeads calls
 let isClientsLoading = false; // Prevent concurrent loadClients calls
+let lastGroupsApiCallTimestamp = 0; // Throttle groups API calls
+const GROUPS_API_CALL_INTERVAL = 30000; // Only call groups API every 30 seconds max
 const CACHE_DURATION = 60000; // 60 seconds
 const API_CALL_INTERVAL = 30000; // Only call API every 30 seconds max (increased to prevent 429 errors)
 const FORCE_REFRESH_MIN_INTERVAL = 5000; // Minimum 5 seconds between force refresh calls (increased)
@@ -4670,6 +4672,19 @@ const Clients = React.memo(() => {
             return;
         }
         
+        // Throttle API calls - prevent too frequent requests
+        const now = Date.now();
+        const timeSinceLastCall = now - lastGroupsApiCallTimestamp;
+        if (!forceRefresh && timeSinceLastCall < GROUPS_API_CALL_INTERVAL) {
+            console.log(`⏸️ Skipping loadGroups - too soon since last call (${Math.round(timeSinceLastCall / 1000)}s ago)`);
+            // Still show cached data if available
+            const cachedGroups = safeStorage.getGroups();
+            if (cachedGroups && cachedGroups.length > 0) {
+                setGroups(cachedGroups);
+            }
+            return;
+        }
+        
         // If not forcing refresh, try cache first for instant loading
         if (!forceRefresh) {
             const cachedGroups = safeStorage.getGroups();
@@ -4677,8 +4692,12 @@ const Clients = React.memo(() => {
                 console.log(`⚡ Loaded ${cachedGroups.length} groups from cache (instant)`);
                 setGroups(cachedGroups);
                 groupsLoadedRef.current = true;
-                // Still fetch in background to update cache
-                forceRefresh = true;
+                // Still fetch in background to update cache, but only if enough time has passed
+                if (timeSinceLastCall >= GROUPS_API_CALL_INTERVAL) {
+                    forceRefresh = true;
+                } else {
+                    return; // Skip API call if too soon
+                }
             }
         }
         
@@ -4743,6 +4762,9 @@ const Clients = React.memo(() => {
                     groupsLoadedRef.current = true; // Mark as loaded even on error to prevent retry loops
                 }
             };
+            
+            // Update timestamp before making the call to prevent concurrent requests
+            lastGroupsApiCallTimestamp = Date.now();
             
             // Use RateLimitManager to throttle the request
             if (window.RateLimitManager) {
