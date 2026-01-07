@@ -169,31 +169,67 @@ const Helpdesk = () => {
                 }
             } else {
                 // Create new ticket
+                console.log('➕ Creating new ticket with data:', {
+                    title: ticketData.title,
+                    type: ticketData.type,
+                    status: ticketData.status,
+                    priority: ticketData.priority,
+                    category: ticketData.category
+                });
+                
                 let response;
-                if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
-                    response = await window.DatabaseAPI.makeRequest('/helpdesk', {
-                        method: 'POST',
-                        body: JSON.stringify(ticketData),
-                        headers: { 'Content-Type': 'application/json' }
-                    });
-                } else {
-                    const fetchResponse = await fetch('/api/helpdesk', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'include',
-                        body: JSON.stringify(ticketData)
-                    });
-                    if (!fetchResponse.ok) throw new Error(`HTTP error! status: ${fetchResponse.status}`);
-                    response = await fetchResponse.json();
+                try {
+                    if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
+                        console.log('📡 Using DatabaseAPI.makeRequest to create ticket...');
+                        response = await window.DatabaseAPI.makeRequest('/helpdesk', {
+                            method: 'POST',
+                            body: JSON.stringify(ticketData),
+                            headers: { 'Content-Type': 'application/json' }
+                        });
+                        console.log('✅ DatabaseAPI response:', response);
+                    } else {
+                        console.log('📡 Using fetch to create ticket...');
+                        const fetchResponse = await fetch('/api/helpdesk', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify(ticketData)
+                        });
+                        console.log('📡 Fetch response status:', fetchResponse.status, fetchResponse.statusText);
+                        if (!fetchResponse.ok) {
+                            const errorText = await fetchResponse.text();
+                            console.error('❌ Fetch error response:', errorText);
+                            throw new Error(`HTTP error! status: ${fetchResponse.status}, body: ${errorText}`);
+                        }
+                        response = await fetchResponse.json();
+                        console.log('✅ Fetch response data:', response);
+                    }
+                } catch (apiError) {
+                    console.error('❌ API call failed:', apiError);
+                    throw apiError;
                 }
+                
                 // Handle response format: API returns { data: { ticket: ... } }
+                console.log('🔍 Parsing response. Full response:', response);
                 savedTicket = response?.ticket || response?.data?.ticket;
+                console.log('🎫 Extracted ticket:', savedTicket);
                 
                 if (savedTicket) {
+                    console.log('✅ Ticket created successfully. Adding to list...');
                     // Add to local state
-                    setTickets(prev => [savedTicket, ...prev]);
+                    setTickets(prev => {
+                        const updated = [savedTicket, ...prev];
+                        console.log('📋 Updated tickets list. New count:', updated.length);
+                        return updated;
+                    });
                 } else {
                     console.error('❌ No ticket in create response:', response);
+                    console.error('❌ Response structure:', {
+                        hasTicket: !!response?.ticket,
+                        hasDataTicket: !!response?.data?.ticket,
+                        responseKeys: response ? Object.keys(response) : [],
+                        fullResponse: response
+                    });
                     throw new Error('No ticket data in response');
                 }
             }
@@ -204,7 +240,16 @@ const Helpdesk = () => {
             // Reload to get fresh data
             await loadTickets();
         } catch (error) {
-            console.error('Error saving ticket:', error);
+            console.error('❌ Error saving ticket:', error);
+            console.error('❌ Error details:', {
+                message: error.message,
+                stack: error.stack,
+                ticketData: ticketData ? {
+                    title: ticketData.title,
+                    type: ticketData.type,
+                    hasId: !!ticketData.id
+                } : null
+            });
             alert(`Failed to save ticket: ${error.message}`);
         }
     }, [loadTickets]);
