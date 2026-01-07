@@ -678,8 +678,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
     // Handle job card click - navigate to full job card detail page
     const handleJobCardClick = (jobCard) => {
-        // Navigate to service-maintenance page with job card ID
-        const jobCardId = jobCard.id || jobCard.jobCardNumber;
+        // Always use database ID for faster lookup (not jobCardNumber)
+        const jobCardId = jobCard.id;
         if (jobCardId) {
             // Use the navigation event system to navigate to the full job card detail page
             window.dispatchEvent(new CustomEvent('navigateToPage', { 
