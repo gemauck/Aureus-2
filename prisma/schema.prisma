@@ -1209,6 +1209,7 @@ model UserTask {
   ownerId        String
   clientId       String?
   projectId      String?
+  leadId         String?
   checklist      String                @default("[]")
   photos         String                @default("[]")
   files          String                @default("[]")
@@ -1225,6 +1226,7 @@ model UserTask {
   @@index([dueDate])
   @@index([clientId])
   @@index([projectId])
+  @@index([leadId])
   @@index([createdAt])
 }
 

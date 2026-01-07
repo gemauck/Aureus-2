@@ -10,6 +10,7 @@ const TaskManagement = () => {
     const [tags, setTags] = useState([]);
     const [clients, setClients] = useState([]);
     const [projects, setProjects] = useState([]);
+    const [leads, setLeads] = useState([]);
     const [loading, setLoading] = useState(true);
     const [errorMessage, setErrorMessage] = useState(null);
     const [offlineMode, setOfflineMode] = useState(false);
@@ -84,6 +85,7 @@ const TaskManagement = () => {
         loadTags();
         loadClients();
         loadProjects();
+        loadLeads();
     }, []);
 
     const loadTasks = async () => {
@@ -247,6 +249,34 @@ const TaskManagement = () => {
             }
         } catch (error) {
             console.error('Error loading projects:', error);
+        }
+    };
+
+    const loadLeads = async () => {
+        try {
+            const token = storage?.getToken?.();
+            if (!token) return;
+
+            const response = await fetch('/api/leads', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                const leadsFromApi = Array.isArray(data?.data?.leads)
+                    ? data.data.leads
+                    : Array.isArray(data?.leads)
+                        ? data.leads
+                        : Array.isArray(data?.items)
+                            ? data.items
+                            : [];
+                setLeads(leadsFromApi);
+            } else {
+                console.warn('TaskManagement: Failed to load leads', response.status, response.statusText);
+                setLeads([]);
+            }
+        } catch (error) {
+            console.error('Error loading leads:', error);
         }
     };
 
@@ -863,6 +893,7 @@ const TaskManagement = () => {
                     onTagCreated={loadTags}
                     clients={clients}
                     projects={projects}
+                    leads={leads}
                     tags={tags}
                     categories={categories}
                 />
@@ -1119,7 +1150,7 @@ const CalendarView = ({ tasks, isDark, onEdit, onDelete, clients, projects, tags
 };
 
 // Task Modal Component
-const TaskModal = ({ task, isDark, onClose, onSave, onTagCreated, clients, projects, tags: tagsProp, categories }) => {
+const TaskModal = ({ task, isDark, onClose, onSave, onTagCreated, clients, projects, leads, tags: tagsProp, categories }) => {
     const authHook = window.useAuth || (() => ({ user: null }));
     const { user: authUser } = authHook();
     const getCurrentUserId = () => {
@@ -1156,6 +1187,7 @@ const TaskModal = ({ task, isDark, onClose, onSave, onTagCreated, clients, proje
         dueDate: '',
         clientId: '',
         projectId: '',
+        leadId: '',
         checklist: [],
         photos: [],
         files: [],
@@ -1187,6 +1219,7 @@ const TaskModal = ({ task, isDark, onClose, onSave, onTagCreated, clients, proje
                 dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
                 clientId: task.clientId || '',
                 projectId: task.projectId || '',
+                leadId: task.leadId || '',
                 checklist: task.checklist || [],
                 photos: task.photos || [],
                 files: task.files || [],
@@ -1764,6 +1797,22 @@ const TaskModal = ({ task, isDark, onClose, onSave, onTagCreated, clients, proje
                                 ))}
                             </select>
                         </div>
+                    </div>
+
+                    <div>
+                        <label className={`block text-sm font-medium mb-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                            Lead
+                        </label>
+                        <select
+                            value={formData.leadId}
+                            onChange={(e) => setFormData(prev => ({ ...prev, leadId: e.target.value }))}
+                            className={`w-full px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                        >
+                            <option value="">None</option>
+                            {leads.map(lead => (
+                                <option key={lead.id} value={lead.id}>{lead.name}</option>
+                            ))}
+                        </select>
                     </div>
 
                     <div>

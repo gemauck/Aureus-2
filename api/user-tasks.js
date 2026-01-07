@@ -51,12 +51,21 @@ async function handler(req, res) {
       return badRequest(res, 'User not authenticated')
     }
 
+    // Ensure database schema supports leadId on UserTask (runtime safe)
+    try {
+      await prisma.$executeRaw`ALTER TABLE "UserTask" ADD COLUMN IF NOT EXISTS "leadId" TEXT`
+      // Best-effort index creation
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "UserTask_leadId_idx" ON "UserTask"("leadId")`)
+    } catch (schemaError) {
+      // Non-fatal if this fails; subsequent operations may still work if column already exists
+    }
+
     // GET /api/user-tasks - List all tasks for the user
     if (req.method === 'GET' && !taskId) {
       try {
         // Safely parse query parameters - handle empty query strings
         const queryParams = req.query || {}
-        const { status, category, clientId, projectId, tagId, priority, view, includeTags, includeCategories, includeStats } = queryParams
+        const { status, category, clientId, projectId, leadId, tagId, priority, view, includeTags, includeCategories, includeStats } = queryParams
         
         // For dashboard widget, skip expensive operations by default
         const lightweight = queryParams.lightweight === 'true' || queryParams.lightweight === true
@@ -70,6 +79,7 @@ async function handler(req, res) {
         if (category) where.category = category
         if (clientId) where.clientId = clientId
         if (projectId) where.projectId = projectId
+        if (leadId) where.leadId = leadId
         if (priority) where.priority = priority
         if (tagId) {
           where.tags = {
@@ -207,6 +217,7 @@ async function handler(req, res) {
           dueDate,
           clientId,
           projectId,
+          leadId,
           checklist = [],
           photos = [],
           files = [],
@@ -232,6 +243,7 @@ async function handler(req, res) {
           ...(dueDate && { dueDate: new Date(dueDate) }),
           ...(clientId && { clientId }),
           ...(projectId && { projectId }),
+          ...(leadId && { leadId }),
           ...(googleEventId && { googleEventId }),
           ...(googleEventUrl && { googleEventUrl })
         }
@@ -282,6 +294,7 @@ async function handler(req, res) {
           dueDate,
           clientId,
           projectId,
+          leadId,
           checklist,
           photos,
           files,
@@ -320,6 +333,7 @@ async function handler(req, res) {
         if (dueDate !== undefined) updateData.dueDate = dueDate ? new Date(dueDate) : null
         if (clientId !== undefined) updateData.clientId = clientId || null
         if (projectId !== undefined) updateData.projectId = projectId || null
+        if (leadId !== undefined) updateData.leadId = leadId || null
         if (checklist !== undefined) updateData.checklist = JSON.stringify(Array.isArray(checklist) ? checklist : [])
         if (photos !== undefined) updateData.photos = JSON.stringify(Array.isArray(photos) ? photos : [])
         if (files !== undefined) updateData.files = JSON.stringify(Array.isArray(files) ? files : [])
