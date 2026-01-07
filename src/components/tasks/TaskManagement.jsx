@@ -766,22 +766,37 @@ const TaskManagement = () => {
                             <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>No tasks found</p>
                         </div>
                     ) : (
-                        filteredTasks.map(task => (
-                            <TaskCard
-                                key={task.id}
-                                task={task}
-                                isDark={isDark}
-                                onEdit={handleEditTask}
-                                onDelete={handleDeleteTask}
-                                onQuickStatusToggle={handleQuickStatusToggle}
-                                clients={clients}
-                                projects={projects}
-                                tags={tags}
-                                getPriorityColor={getPriorityColor}
-                                getPriorityTextColor={getPriorityTextColor}
-                                getStatusColor={getStatusColor}
-                            />
-                        ))
+                        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border overflow-hidden`}>
+                            {/* Header */}
+                            <div className={`${isDark ? 'bg-gray-900/40 text-gray-300 border-gray-700' : 'bg-gray-50 text-gray-600 border-gray-200'} border-b px-4 py-2 text-xs font-semibold`}>
+                                <div className="grid grid-cols-12 gap-3 items-center">
+                                    <div className="col-span-4">Task</div>
+                                    <div className="col-span-2">Status</div>
+                                    <div className="col-span-3">Client / Lead</div>
+                                    <div className="col-span-2">Due Date</div>
+                                    <div className="col-span-1 text-right">Priority</div>
+                                </div>
+                            </div>
+
+                            {/* Rows */}
+                            <div className="divide-y divide-gray-200/10">
+                                {filteredTasks.map(task => (
+                                    <TaskListRow
+                                        key={task.id}
+                                        task={task}
+                                        isDark={isDark}
+                                        onEdit={handleEditTask}
+                                        onDelete={handleDeleteTask}
+                                        onQuickStatusToggle={handleQuickStatusToggle}
+                                        clients={clients}
+                                        leads={leads}
+                                        getPriorityColor={getPriorityColor}
+                                        getPriorityTextColor={getPriorityTextColor}
+                                        getStatusColor={getStatusColor}
+                                    />
+                                ))}
+                            </div>
+                        </div>
                     )}
                 </div>
             )}
@@ -1051,6 +1066,118 @@ const TaskCard = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clients
                             </span>
                         )}
                     </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// List Row Component (for List view column layout)
+const TaskListRow = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clients, leads, getPriorityColor, getPriorityTextColor, getStatusColor }) => {
+    const client = clients?.find(c => c.id === task.clientId);
+    const lead = leads?.find(l => l.id === task.leadId);
+
+    const statusLabel = (() => {
+        const map = {
+            'todo': 'To Do',
+            'in-progress': 'In Progress',
+            'completed': 'Completed',
+            'cancelled': 'Cancelled'
+        };
+        return map[task.status] || task.status || '—';
+    })();
+
+    const due = task.dueDate ? new Date(task.dueDate) : null;
+    const isOverdue = due ? (due < new Date() && task.status !== 'completed') : false;
+    const dueLabel = due ? due.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+
+    const priority = (task.priority || 'medium').toLowerCase();
+
+    const handleRowClick = () => onEdit(task);
+
+    const handleStatusClick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!onQuickStatusToggle) return;
+        const statusMap = {
+            'todo': 'in-progress',
+            'in-progress': 'completed',
+            'completed': 'todo',
+            'cancelled': 'todo'
+        };
+        const next = statusMap[task.status] || 'todo';
+        onQuickStatusToggle(task, next);
+    };
+
+    return (
+        <div
+            onClick={handleRowClick}
+            className={`px-4 py-3 cursor-pointer transition-colors ${isDark ? 'hover:bg-gray-700/40' : 'hover:bg-gray-50'}`}
+        >
+            <div className="grid grid-cols-12 gap-3 items-center">
+                {/* Task */}
+                <div className="col-span-4 min-w-0">
+                    <div className={`font-medium truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {task.title}
+                    </div>
+                    {task.description ? (
+                        <div className={`text-xs truncate ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {task.description}
+                        </div>
+                    ) : null}
+                </div>
+
+                {/* Status */}
+                <div className="col-span-2">
+                    <button
+                        type="button"
+                        onClick={handleStatusClick}
+                        className={`inline-flex items-center gap-2 px-2 py-1 rounded-md text-xs font-semibold ${getStatusColor(task.status)} ${isDark ? 'text-gray-100' : 'text-gray-800'}`}
+                        title="Click to advance status"
+                    >
+                        <span className="capitalize">{statusLabel}</span>
+                    </button>
+                </div>
+
+                {/* Client / Lead */}
+                <div className="col-span-3 min-w-0">
+                    <div className={`text-sm truncate ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                        {client?.name || '—'}
+                    </div>
+                    <div className={`text-xs truncate ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {lead?.name || (task.leadId ? `Lead: ${task.leadId}` : '—')}
+                    </div>
+                </div>
+
+                {/* Due Date */}
+                <div className={`col-span-2 text-sm ${isOverdue ? 'text-red-600 font-semibold' : isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                    {dueLabel}
+                </div>
+
+                {/* Priority + Actions */}
+                <div className="col-span-1 flex items-center justify-end gap-2">
+                    <span
+                        className={`px-2 py-1 rounded text-xs font-semibold ${getPriorityColor(priority)} ${getPriorityTextColor(priority)}`}
+                        title={`Priority: ${priority}`}
+                    >
+                        {priority}
+                    </span>
+                    <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onEdit(task); }}
+                        className={`p-1.5 rounded ${isDark ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-100 text-gray-600'}`}
+                        title="Edit"
+                    >
+                        <i className="fas fa-edit"></i>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
+                        className={`p-1.5 rounded ${isDark ? 'hover:bg-gray-700 text-red-400' : 'hover:bg-gray-100 text-red-500'}`}
+                        title="Delete"
+                    >
+                        <i className="fas fa-trash"></i>
+                    </button>
                 </div>
             </div>
         </div>
