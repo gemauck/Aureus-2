@@ -16,6 +16,7 @@ const Tools = () => {
         let timeoutId = null;
         let retryCount = 0;
         const maxRetries = 200; // Stop after 20 seconds (200 * 100ms)
+        let isChecking = true;
         
         const checkComponents = () => {
             const components = {
@@ -26,22 +27,23 @@ const Tools = () => {
                 DieselRefundEvidenceEvaluator: window.DieselRefundEvidenceEvaluator
             };
             
-            // Log current status for debugging
-            const loadedCount = Object.values(components).filter(comp => comp !== undefined && comp !== null).length;
-            if (retryCount % 10 === 0) { // Log every second
-            }
+            // Always update toolComponents state (even if not all loaded) so UI can show available tools
+            setToolComponents(prev => {
+                // Only update if something changed
+                const hasChanged = Object.keys(components).some(key => 
+                    !!components[key] !== !!prev[key]
+                );
+                return hasChanged ? components : prev;
+            });
             
             // Check if any component is missing
             const allLoaded = Object.values(components).every(comp => comp !== undefined && comp !== null);
             
-            // Always update toolComponents state (even if not all loaded) so UI can show available tools
-            setToolComponents(components);
-            
-            if (!allLoaded && retryCount < maxRetries) {
+            if (!allLoaded && retryCount < maxRetries && isChecking) {
                 // Components not loaded yet, wait a bit and check again
                 retryCount++;
                 timeoutId = setTimeout(checkComponents, 100);
-            } else if (!allLoaded) {
+            } else if (!allLoaded && retryCount >= maxRetries) {
                 // Max retries reached - log which components are missing
                 console.warn('⚠️ Tools: Some tool components failed to load after maximum retries', {
                     TankSizeCalculator: !!components.TankSizeCalculator,
@@ -50,6 +52,7 @@ const Tools = () => {
                     HandwritingToWord: !!components.HandwritingToWord,
                     DieselRefundEvidenceEvaluator: !!components.DieselRefundEvidenceEvaluator
                 });
+                isChecking = false;
             }
         };
         
@@ -66,9 +69,29 @@ const Tools = () => {
             window.addEventListener('load', checkComponents);
         }
         
+        // Continue checking periodically even after max retries (in case components load late)
+        const periodicCheck = setInterval(() => {
+            if (isChecking) return; // Only check if we've stopped the main loop
+            const components = {
+                PDFToWordConverter: window.PDFToWordConverter,
+                HandwritingToWord: window.HandwritingToWord,
+                UnitConverter: window.UnitConverter,
+                TankSizeCalculator: window.TankSizeCalculator,
+                DieselRefundEvidenceEvaluator: window.DieselRefundEvidenceEvaluator
+            };
+            setToolComponents(prev => {
+                const hasChanged = Object.keys(components).some(key => 
+                    !!components[key] !== !!prev[key]
+                );
+                return hasChanged ? components : prev;
+            });
+        }, 2000); // Check every 2 seconds
+        
         // Cleanup
         return () => {
+            isChecking = false;
             if (timeoutId) clearTimeout(timeoutId);
+            clearInterval(periodicCheck);
             window.removeEventListener('load', checkComponents);
         };
     }, []);
@@ -127,13 +150,15 @@ const Tools = () => {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {tools.map(tool => (
+                        {tools.map(tool => {
+                            const hasComponent = tool.component !== null && tool.component !== undefined;
+                            return (
                             <button
                                 key={tool.id}
-                                onClick={() => !tool.comingSoon && setCurrentTool(tool)}
-                                disabled={tool.comingSoon}
+                                onClick={() => hasComponent && !tool.comingSoon && setCurrentTool(tool)}
+                                disabled={tool.comingSoon || !hasComponent}
                                 className={`bg-white rounded-lg border border-gray-200 p-4 text-left transition-all hover:shadow-md ${
-                                    tool.comingSoon 
+                                    tool.comingSoon || !hasComponent
                                         ? 'opacity-60 cursor-not-allowed' 
                                         : 'hover:border-gray-300 cursor-pointer'
                                 }`}
