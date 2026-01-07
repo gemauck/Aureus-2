@@ -5266,17 +5266,28 @@ const Clients = React.memo(() => {
         // Ensure projectId is a string/number
         const projectIdStr = String(projectId);
         
-        // Use sessionStorage to pass the project ID to the Projects component
-        // This is more reliable than events because it persists across navigation
-        // The Projects component checks for this after loading projects and opens it automatically
-        // Industry standard: sessionStorage for cross-component communication during navigation
+        // Store in sessionStorage as backup (Projects component checks this)
         sessionStorage.setItem('openProjectId', projectIdStr);
         
-        // Navigate to projects page using the standard navigation event
-        // This ensures MainLayout handles the navigation properly
-        window.dispatchEvent(new CustomEvent('navigateToPage', { 
-            detail: { page: 'projects' } 
-        }));
+        // Navigate directly to the project detail page using RouteState
+        // This includes the project ID in the URL so the Projects component opens the specific project
+        if (window.RouteState && window.RouteState.navigate) {
+            window.RouteState.navigate({
+                page: 'projects',
+                segments: [projectIdStr],
+                search: '',
+                hash: '',
+                replace: false,
+                preserveSearch: false,
+                preserveHash: false
+            });
+        } else {
+            // Fallback: Navigate to projects page using the standard navigation event
+            // The Projects component will check sessionStorage and open the project
+            window.dispatchEvent(new CustomEvent('navigateToPage', { 
+                detail: { page: 'projects' } 
+            }));
+        }
     };
 
     const convertLeadToClient = (lead) => {
