@@ -1456,30 +1456,45 @@ function initializeProjectDetail() {
     
     // Sync hasWeeklyFMSReviewProcess when project prop changes
     const hasWeeklyFMSReviewProcessChangedRef = useRef(false);
+    const lastProjectIdRef = useRef(project?.id);
+    const lastSyncedValueRef = useRef(hasWeeklyFMSReviewProcess);
+    
     useEffect(() => {
         const normalizedValue = normalizeHasWeeklyFMSReviewProcess(project.hasWeeklyFMSReviewProcess);
-        // Always sync when project.id changes (navigating to different project)
-        // OR when project.hasWeeklyFMSReviewProcess changes and ref is not set
-        if (normalizedValue !== hasWeeklyFMSReviewProcess) {
-            if (!hasWeeklyFMSReviewProcessChangedRef.current) {
-                // Safe to sync - user hasn't explicitly changed it
-                setHasWeeklyFMSReviewProcess(normalizedValue);
-            } else {
-                // User changed it, but check if project prop has a different value
-                // This handles the case where we navigate back and project prop has the saved value
-                // Reset the ref so future changes can sync
+        const projectIdChanged = lastProjectIdRef.current !== project?.id;
+        const valueChanged = normalizedValue !== hasWeeklyFMSReviewProcess;
+        const propValueChanged = normalizedValue !== lastSyncedValueRef.current;
+        
+        // Always sync when:
+        // 1. Project ID changed (navigating to different project) - always sync
+        // 2. Project prop value changed (parent updated the prop) - always sync
+        // 3. Value changed and ref is not set (safe to sync)
+        if (projectIdChanged || propValueChanged || (valueChanged && !hasWeeklyFMSReviewProcessChangedRef.current)) {
+            setHasWeeklyFMSReviewProcess(normalizedValue);
+            lastSyncedValueRef.current = normalizedValue;
+            if (projectIdChanged) {
+                lastProjectIdRef.current = project?.id;
                 hasWeeklyFMSReviewProcessChangedRef.current = false;
-                setHasWeeklyFMSReviewProcess(normalizedValue);
+            } else if (propValueChanged) {
+                // Project prop was updated (e.g., from database refresh) - reset ref to allow future syncs
+                hasWeeklyFMSReviewProcessChangedRef.current = false;
             }
+        } else if (projectIdChanged) {
+            // Even if value is same, update refs for new project
+            lastProjectIdRef.current = project?.id;
+            lastSyncedValueRef.current = normalizedValue;
+            hasWeeklyFMSReviewProcessChangedRef.current = false;
         }
-    }, [project.hasWeeklyFMSReviewProcess, project.id]);
+    }, [project.hasWeeklyFMSReviewProcess, project.id, hasWeeklyFMSReviewProcess]);
     
-    // Always sync when project.id changes (navigating to different project)
+    // Force sync when project.id changes (navigating to different project)
     useEffect(() => {
         const normalizedValue = normalizeHasWeeklyFMSReviewProcess(project.hasWeeklyFMSReviewProcess);
         setHasWeeklyFMSReviewProcess(normalizedValue);
+        lastSyncedValueRef.current = normalizedValue;
         // Reset ref when project changes
         hasWeeklyFMSReviewProcessChangedRef.current = false;
+        lastProjectIdRef.current = project?.id;
     }, [project.id]);
     
     // Sync hasDocumentCollectionProcess when project prop changes (e.g., after reloading from database)
