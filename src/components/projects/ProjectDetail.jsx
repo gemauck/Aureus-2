@@ -3205,29 +3205,28 @@ function initializeProjectDetail() {
     };
 
     const handleDeleteSubtask = async (parentTaskId, subtaskId) => {
-        if (confirm('Delete this subtask?')) {
-            const updatedTasks = tasks.map(t => {
-                if (t.id === parentTaskId) {
-                    return {
-                        ...t,
-                        subtasks: (t.subtasks || []).filter(st => st.id !== subtaskId)
-                    };
-                }
-                return t;
-            });
-            
-            // Update local state
-            setTasks(updatedTasks);
-            
-            // Persist to database immediately
-            try {
-                await persistProjectData({ nextTasks: updatedTasks });
-            } catch (error) {
-                console.error('❌ Failed to delete subtask:', error);
-                alert('Failed to delete subtask: ' + error.message);
-                // Revert on error
-                setTasks(tasks);
+        // Confirmation is handled by the modal UI, so we proceed directly
+        const updatedTasks = tasks.map(t => {
+            if (t.id === parentTaskId) {
+                return {
+                    ...t,
+                    subtasks: (t.subtasks || []).filter(st => st.id !== subtaskId)
+                };
             }
+            return t;
+        });
+        
+        // Update local state
+        setTasks(updatedTasks);
+        
+        // Persist to database immediately
+        try {
+            await persistProjectData({ nextTasks: updatedTasks });
+        } catch (error) {
+            console.error('❌ Failed to delete subtask:', error);
+            alert('Failed to delete subtask: ' + error.message);
+            // Revert on error
+            setTasks(tasks);
         }
     };
 

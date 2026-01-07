@@ -1419,12 +1419,21 @@ const TaskDetailModal = ({
                 {/* Footer */}
                 <div className="border-t border-gray-200 px-4 py-2.5 flex justify-between items-center">
                     <div>
-                        {!isCreating && onDeleteTask && (
+                        {!isCreating && (isSubtask ? onDeleteSubtask : onDeleteTask) && (
                             <button
                                 onClick={() => {
-                                    if (confirm('Delete this task and all its subtasks?')) {
-                                        onDeleteTask(task.id);
-                                        onClose();
+                                    if (isSubtask) {
+                                        // Delete subtask
+                                        if (confirm('Delete this subtask?')) {
+                                            onDeleteSubtask(parentTask.id, task.id);
+                                            onClose();
+                                        }
+                                    } else {
+                                        // Delete regular task
+                                        if (confirm('Delete this task and all its subtasks?')) {
+                                            onDeleteTask(task.id);
+                                            onClose();
+                                        }
                                     }
                                 }}
                                 className="px-3 py-1.5 text-xs bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
