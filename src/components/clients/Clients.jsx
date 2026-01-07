@@ -1274,13 +1274,13 @@ const Clients = React.memo(() => {
             
             // If no segments, ensure we're showing a valid list view
             if (!route.segments || route.segments.length === 0) {
-                const validListViews = ['clients', 'leads', 'pipeline', 'groups'];
+                const validListViews = ['clients', 'leads', 'pipeline', 'groups', 'news-feed'];
                 const validDetailViews = ['client-detail', 'lead-detail', 'opportunity-detail'];
                 const isValidView = validListViews.includes(viewMode) || validDetailViews.includes(viewMode);
                 
-                // If viewMode is 'news-feed' or invalid, reset to 'clients' (the default list view)
-                if (viewMode === 'news-feed' || !isValidView) {
-                    console.log('🔄 Resetting viewMode to "clients" - invalid or news-feed viewMode detected:', viewMode);
+                // If viewMode is invalid, reset to 'clients' (the default list view)
+                if (!isValidView) {
+                    console.log('🔄 Resetting viewMode to "clients" - invalid viewMode detected:', viewMode);
                     setViewMode('clients');
                     selectedClientRef.current = null;
                     selectedLeadRef.current = null;
