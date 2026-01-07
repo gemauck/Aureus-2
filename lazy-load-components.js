@@ -97,6 +97,10 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
         './src/components/manufacturing/Manufacturing.jsx',
         './src/components/service-maintenance/ServiceAndMaintenance.jsx',
         
+        // Helpdesk
+        './src/components/helpdesk/TicketDetailModal.jsx',
+        './src/components/helpdesk/Helpdesk.jsx',
+        
         // Invoicing
         './src/components/invoicing/InvoicingDatabaseFirst.jsx',
         './src/components/invoicing/RecurringInvoices.jsx',

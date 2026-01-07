@@ -17,6 +17,12 @@ export const PERMISSIONS = {
     ACCESS_MANUFACTURING: 'access_manufacturing',
     ACCESS_DOCUMENTS: 'access_documents',
     ACCESS_SERVICE_MAINTENANCE: 'access_service_maintenance',
+    ACCESS_HELPDESK: 'access_helpdesk',
+    HELPDESK_CREATE: 'helpdesk_create',
+    HELPDESK_EDIT: 'helpdesk_edit',
+    HELPDESK_DELETE: 'helpdesk_delete',
+    HELPDESK_ASSIGN: 'helpdesk_assign',
+    HELPDESK_ADMIN: 'helpdesk_admin',
     ACCESS_TOOL: 'access_tool',
     ACCESS_REPORTS: 'access_reports',
     ACCESS_LEAVE_PLATFORM: 'access_leave_platform',
@@ -150,6 +156,13 @@ export const PERMISSION_CATEGORIES = {
         description: 'Service & Maintenance Operations',
         adminOnly: false
     },
+    HELPDESK: {
+        id: 'helpdesk',
+        label: 'Helpdesk',
+        permission: PERMISSIONS.ACCESS_HELPDESK,
+        description: 'Helpdesk & Ticketing System',
+        adminOnly: false
+    },
     LEAVE_PLATFORM: {
         id: 'leave_platform',
         label: 'Leave Platform',
@@ -274,6 +287,10 @@ export class PermissionChecker {
             PERMISSIONS.ACCESS_MANUFACTURING,
             PERMISSIONS.ACCESS_DOCUMENTS,
             PERMISSIONS.ACCESS_SERVICE_MAINTENANCE,
+            PERMISSIONS.ACCESS_HELPDESK,
+            PERMISSIONS.HELPDESK_CREATE,
+            PERMISSIONS.HELPDESK_EDIT,
+            PERMISSIONS.HELPDESK_ASSIGN,
             PERMISSIONS.ACCESS_TOOL,
             PERMISSIONS.ACCESS_REPORTS,
             // Legacy permissions for backward compatibility
@@ -364,6 +381,26 @@ export class PermissionChecker {
 
     canAccessServiceMaintenance() {
         return this.hasPermission(PERMISSIONS.ACCESS_SERVICE_MAINTENANCE);
+    }
+
+    canAccessHelpdesk() {
+        return this.hasPermission(PERMISSIONS.ACCESS_HELPDESK);
+    }
+
+    canCreateTicket() {
+        return this.hasPermission(PERMISSIONS.HELPDESK_CREATE);
+    }
+
+    canEditTicket() {
+        return this.hasPermission(PERMISSIONS.HELPDESK_EDIT);
+    }
+
+    canDeleteTicket() {
+        return this.hasPermission(PERMISSIONS.HELPDESK_DELETE);
+    }
+
+    canAssignTicket() {
+        return this.hasPermission(PERMISSIONS.HELPDESK_ASSIGN);
     }
 
     canAccessTool() {

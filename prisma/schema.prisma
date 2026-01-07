@@ -74,6 +74,8 @@ model User {
   userTaskTags              UserTaskTag[]           @relation("UserTaskTagOwner")
   userNotes                 UserNote[]              @relation("UserNoteOwner")
   sharedNotes               UserNoteShare[]         @relation("UserNoteSharedWith")
+  createdTickets            Ticket[]                @relation("TicketCreator")
+  assignedTickets           Ticket[]                @relation("TicketAssignee")
 }
 
 model Team {
@@ -132,6 +134,7 @@ model Client {
   projects      Project[]
   salesOrders   SalesOrder[]
   starredBy     StarredClient[]
+  tickets       Ticket[]
   
   // Company Group fields (Multiple group memberships)
   groupMemberships    ClientCompanyGroup[]   @relation("ClientGroups")
@@ -217,6 +220,7 @@ model Project {
   owner                        User?       @relation("ProjectOwner", fields: [ownerId], references: [id])
   tasks                        Task[]
   timeEntries                  TimeEntry[]
+  tickets                      Ticket[]
 
   @@index([clientId])
   @@index([status])
@@ -392,6 +396,64 @@ model FeedbackReply {
   @@index([feedbackId])
   @@index([userId])
   @@index([createdAt])
+}
+
+model Ticket {
+  id              String          @id @default(cuid())
+  ticketNumber    String          @unique
+  title           String
+  description     String          @default("")
+  status          String          @default("open")
+  priority        String          @default("medium")
+  category        String          @default("general")
+  type            String          @default("internal")
+  
+  // Relationships
+  createdById     String
+  assignedToId    String?
+  clientId        String?
+  projectId       String?
+  relatedTicketId String?
+  
+  // Metadata
+  tags            String          @default("[]")
+  attachments    String          @default("[]")
+  comments        String          @default("[]")
+  activityLog     String          @default("[]")
+  customFields    String          @default("{}")
+  
+  // Timestamps
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  resolvedAt      DateTime?
+  closedAt        DateTime?
+  dueDate         DateTime?
+  firstResponseAt DateTime?
+  
+  // SLA Tracking
+  responseTimeMinutes    Int?
+  resolutionTimeMinutes   Int?
+  targetResponseMinutes   Int?
+  targetResolutionMinutes Int?
+  
+  // Relations
+  createdBy      User            @relation("TicketCreator", fields: [createdById], references: [id])
+  assignedTo     User?           @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  client         Client?         @relation(fields: [clientId], references: [id])
+  project        Project?        @relation(fields: [projectId], references: [id])
+  relatedTicket  Ticket?        @relation("RelatedTickets", fields: [relatedTicketId], references: [id])
+  relatedTickets Ticket[]       @relation("RelatedTickets")
+  
+  @@index([status])
+  @@index([priority])
+  @@index([category])
+  @@index([createdById])
+  @@index([assignedToId])
+  @@index([clientId])
+  @@index([projectId])
+  @@index([createdAt])
+  @@index([dueDate])
+  @@index([ticketNumber])
 }
 
 model TeamDocument {

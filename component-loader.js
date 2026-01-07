@@ -184,6 +184,10 @@
         'components/service-maintenance/ServiceAndMaintenance.jsx',
         'components/service-maintenance/ServiceFormsManager.jsx',
         
+        // Helpdesk
+        'components/helpdesk/Helpdesk.jsx',
+        'components/helpdesk/TicketDetailModal.jsx',
+        
         // Tools
         'components/tools/TankSizeCalculator.jsx',
         'components/tools/PDFToWordConverter.jsx',

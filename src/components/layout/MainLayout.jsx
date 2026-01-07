@@ -3,7 +3,7 @@ if (window.debug && !window.debug.performanceMode) {
 }
 const { useState } = React;
 
-const VALID_PAGES = ['dashboard', 'clients', 'projects', 'tasks', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking', 'my-tasks'];
+const VALID_PAGES = ['dashboard', 'clients', 'projects', 'tasks', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'helpdesk', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking', 'my-tasks'];
 const PUBLIC_ROUTES = ['/job-card', '/jobcard', '/accept-invitation', '/reset-password'];
 
 const MainLayout = () => {
@@ -947,6 +947,72 @@ const MainLayout = () => {
     const ServiceAndMaintenance = serviceMaintenanceReady && window.ServiceAndMaintenance && typeof window.ServiceAndMaintenance === 'function'
         ? window.ServiceAndMaintenance
         : ServiceAndMaintenanceFallback;
+    
+    // Helpdesk component loading
+    const [helpdeskReady, setHelpdeskReady] = React.useState(
+        !!(window.Helpdesk && typeof window.Helpdesk === 'function')
+    );
+
+    React.useEffect(() => {
+        const checkHelpdesk = () => {
+            const component = window.Helpdesk;
+            if (component && typeof component === 'function') {
+                if (!helpdeskReady) {
+                    setHelpdeskReady(true);
+                }
+                return true;
+            }
+            return false;
+        };
+
+        const handleComponentReady = () => {
+            setHelpdeskReady(true);
+        };
+
+        window.addEventListener('componentLoaded', (e) => {
+            if (e.detail?.component === 'Helpdesk') {
+                handleComponentReady();
+            }
+        });
+
+        if (checkHelpdesk()) {
+            return () => {
+                window.removeEventListener('componentLoaded', handleComponentReady);
+            };
+        }
+
+        const interval = setInterval(() => {
+            if (checkHelpdesk()) {
+                clearInterval(interval);
+            }
+        }, 200);
+
+        const timeout = setTimeout(() => {
+            clearInterval(interval);
+            if (!helpdeskReady) {
+                console.warn('⚠️ MainLayout: Helpdesk component not loaded after 10 seconds');
+            }
+        }, 10000);
+
+        return () => {
+            clearInterval(interval);
+            clearTimeout(timeout);
+        };
+    }, [helpdeskReady]);
+
+    const HelpdeskFallback = React.useMemo(() => () => (
+        <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mb-4"></div>
+                <p className="text-gray-500">Loading Helpdesk...</p>
+            </div>
+        </div>
+    ), []);
+
+    const Helpdesk = helpdeskReady && window.Helpdesk && typeof window.Helpdesk === 'function'
+        ? window.Helpdesk
+        : HelpdeskFallback;
+    
     const Tools = window.Tools || (() => <div className="text-center py-12 text-gray-500">Tools loading...</div>);
     const Reports = window.Reports || (() => <div className="text-center py-12 text-gray-500">Reports loading...</div>);
     const Settings = window.Settings || (() => <div className="text-center py-12 text-gray-500">Settings loading...</div>);
@@ -1023,6 +1089,7 @@ const MainLayout = () => {
         { id: 'leave-platform', label: 'Leave Platform', icon: 'fa-calendar-alt', permission: 'ACCESS_LEAVE_PLATFORM' },
         { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry', permission: 'ACCESS_MANUFACTURING' },
         { id: 'service-maintenance', label: 'Service & Maintenance', icon: 'fa-wrench', permission: 'ACCESS_SERVICE_MAINTENANCE' },
+        { id: 'helpdesk', label: 'Helpdesk', icon: 'fa-headset', permission: 'ACCESS_HELPDESK' },
         { id: 'tools', label: 'Tools', icon: 'fa-toolbox', permission: 'ACCESS_TOOL' },
         { id: 'documents', label: 'Documents', icon: 'fa-folder-open', permission: null }, // Always accessible
         { id: 'reports', label: 'Reports', icon: 'fa-chart-bar', permission: 'ACCESS_REPORTS' },
@@ -1213,6 +1280,8 @@ const MainLayout = () => {
                     return <ErrorBoundary key="manufacturing"><Manufacturing /></ErrorBoundary>;
                 case 'service-maintenance': 
                     return <ErrorBoundary key="service-maintenance"><ServiceAndMaintenance /></ErrorBoundary>;
+                case 'helpdesk': 
+                    return <ErrorBoundary key="helpdesk"><Helpdesk /></ErrorBoundary>;
                 case 'tools': 
                     return <ErrorBoundary key="tools"><Tools /></ErrorBoundary>;
                 case 'reports': 
@@ -1244,7 +1313,7 @@ const MainLayout = () => {
                 </div>
             );
         }
-    }, [currentPage, Dashboard, Projects, Teams, Users, Account, TimeTracking, LeavePlatform, Manufacturing, ServiceAndMaintenance, Tools, Reports, TaskManagementComponent, MyNotesComponent, Settings, ErrorBoundary, isAdmin, getClientsComponent, mainClientsAvailable, permissionChecker]);
+    }, [currentPage, Dashboard, Projects, Teams, Users, Account, TimeTracking, LeavePlatform, Manufacturing, ServiceAndMaintenance, Helpdesk, Tools, Reports, TaskManagementComponent, MyNotesComponent, Settings, ErrorBoundary, isAdmin, getClientsComponent, mainClientsAvailable, permissionChecker]);
 
     React.useEffect(() => {
         window.currentPage = currentPage;
