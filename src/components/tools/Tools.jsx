@@ -1,5 +1,5 @@
 // Use React from window
-const { useState, useEffect } = React;
+const { useState, useEffect, useMemo } = React;
 
 const Tools = () => {
     const [currentTool, setCurrentTool] = useState(null);
@@ -7,7 +7,8 @@ const Tools = () => {
         PDFToWordConverter: null,
         HandwritingToWord: null,
         UnitConverter: null,
-        TankSizeCalculator: null
+        TankSizeCalculator: null,
+        DieselRefundEvidenceEvaluator: null
     });
 
     // Wait for tool components to load from window
@@ -21,7 +22,8 @@ const Tools = () => {
                 PDFToWordConverter: window.PDFToWordConverter,
                 HandwritingToWord: window.HandwritingToWord,
                 UnitConverter: window.UnitConverter,
-                TankSizeCalculator: window.TankSizeCalculator
+                TankSizeCalculator: window.TankSizeCalculator,
+                DieselRefundEvidenceEvaluator: window.DieselRefundEvidenceEvaluator
             };
             
             // Log current status for debugging
@@ -45,7 +47,8 @@ const Tools = () => {
                         TankSizeCalculator: !!components.TankSizeCalculator,
                         UnitConverter: !!components.UnitConverter,
                         PDFToWordConverter: !!components.PDFToWordConverter,
-                        HandwritingToWord: !!components.HandwritingToWord
+                        HandwritingToWord: !!components.HandwritingToWord,
+                        DieselRefundEvidenceEvaluator: !!components.DieselRefundEvidenceEvaluator
                     });
                 }
             }
@@ -71,8 +74,8 @@ const Tools = () => {
         };
     }, []);
 
-    // Build tools array with components
-    const tools = [
+    // Build tools array with components - use useMemo to recalculate when toolComponents changes
+    const tools = useMemo(() => [
         {
             id: 'tank-calculator',
             name: 'Tank Size Calculator',
@@ -104,8 +107,16 @@ const Tools = () => {
             icon: 'fa-pen-fancy',
             color: 'purple',
             component: toolComponents.HandwritingToWord
+        },
+        {
+            id: 'diesel-refund-evaluator',
+            name: 'Diesel Refund Evidence Evaluator',
+            description: 'Evaluate any data to determine if it qualifies as evidence for diesel refund claims',
+            icon: 'fa-file-invoice-dollar',
+            color: 'green',
+            component: toolComponents.DieselRefundEvidenceEvaluator
         }
-    ];
+    ], [toolComponents]);
 
     const renderToolContent = () => {
         if (!currentTool) {

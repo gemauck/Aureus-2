@@ -193,6 +193,7 @@
         'components/tools/PDFToWordConverter.jsx',
         'components/tools/HandwritingToWord.jsx',
         'components/tools/UnitConverter.jsx',
+        'components/tools/DieselRefundEvidenceEvaluator.jsx',
         'components/tools/Tools.jsx',
         
         // Reports
