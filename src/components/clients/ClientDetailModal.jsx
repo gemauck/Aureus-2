@@ -507,23 +507,45 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Job cards state
     const [jobCards, setJobCards] = useState([]);
     const [loadingJobCards, setLoadingJobCards] = useState(false);
+    
+    // Refs to prevent duplicate loading calls
+    const isLoadingJobCardsRef = useRef(false);
+    const lastLoadedClientIdRef = useRef(null);
+    const lastLoadedClientNameRef = useRef(null);
+    
     // Load job cards for this client - MUST be defined before useEffect hooks that use it
     const loadJobCards = useCallback(async () => {
         if (!client?.id) {
             setJobCards([]);
+            lastLoadedClientIdRef.current = null;
+            lastLoadedClientNameRef.current = null;
             return;
         }
         
+        const clientId = String(client.id);
+        const clientName = client?.name || null;
+        
+        // Prevent duplicate calls: if already loading or same client already loaded, skip
+        if (isLoadingJobCardsRef.current) {
+            return;
+        }
+        
+        if (lastLoadedClientIdRef.current === clientId && 
+            lastLoadedClientNameRef.current === clientName) {
+            // Same client already loaded, skip
+            return;
+        }
+        
+        isLoadingJobCardsRef.current = true;
         setLoadingJobCards(true);
+        
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
                 setLoadingJobCards(false);
+                isLoadingJobCardsRef.current = false;
                 return;
             }
-            
-            const clientId = String(client.id);
-            
             
             // First, try fetching by clientId (most reliable)
             let response = await fetch(`/api/jobcards?clientId=${encodeURIComponent(clientId)}&pageSize=1000`, {
@@ -539,21 +561,24 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 data = await response.json();
                 // Handle both response structures: { jobCards: [...] } and { data: { jobCards: [...] } }
                 const jobCards = data.jobCards || data.data?.jobCards || [];
-                console.log(`📋 Job cards found by clientId: ${jobCards.length}`);
+                // Only log once per successful load to reduce console noise
+                if (jobCards.length > 0) {
+                    console.log(`📋 Job cards found by clientId: ${jobCards.length}`);
+                }
                 
                 if (jobCards.length > 0) {
                     setJobCards(jobCards);
+                    lastLoadedClientIdRef.current = clientId;
+                    lastLoadedClientNameRef.current = clientName;
                     setLoadingJobCards(false);
+                    isLoadingJobCardsRef.current = false;
                     return;
                 }
-            } else {
-                console.warn('⚠️ API filter by clientId failed, trying clientName fallback...');
             }
             
             // Fallback 1: Try filtering by clientName (in case job cards only have clientName set)
-            if (client?.name) {
-                console.log('📡 Trying to fetch job cards by clientName:', client.name);
-                response = await fetch(`/api/jobcards?clientName=${encodeURIComponent(client.name)}&pageSize=1000`, {
+            if (clientName) {
+                response = await fetch(`/api/jobcards?clientName=${encodeURIComponent(clientName)}&pageSize=1000`, {
                     headers: { 
                         'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json'
@@ -564,11 +589,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     data = await response.json();
                     // Handle both response structures
                     const jobCards = data.jobCards || data.data?.jobCards || [];
-                    console.log(`📋 Job cards found by clientName: ${jobCards.length}`);
                     
                     if (jobCards.length > 0) {
+                        console.log(`📋 Job cards found by clientName: ${jobCards.length}`);
                         setJobCards(jobCards);
+                        lastLoadedClientIdRef.current = clientId;
+                        lastLoadedClientNameRef.current = clientName;
                         setLoadingJobCards(false);
+                        isLoadingJobCardsRef.current = false;
                         return;
                     }
                 }
@@ -576,7 +604,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             
             // Fallback 2: Fetch all job cards and filter by clientId/clientName client-side
             // This handles cases where API filtering might not work correctly
-            console.log('📡 Fetching all job cards for client-side filtering...');
             response = await fetch(`/api/jobcards?pageSize=1000`, {
                 headers: { 
                     'Authorization': `Bearer ${token}`,
@@ -595,8 +622,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 );
                 
                 // If no matches by clientId, try matching by clientName
-                if (matchingJobCards.length === 0 && client?.name) {
-                    const normalizedClientName = (client.name || '').trim().toLowerCase();
+                if (matchingJobCards.length === 0 && clientName) {
+                    const normalizedClientName = (clientName || '').trim().toLowerCase();
                     matchingJobCards = allJobCards.filter(jc => {
                         const jobCardClientName = (jc.clientName || '').trim().toLowerCase();
                         // Match if clientName contains the client name or vice versa
@@ -606,15 +633,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     });
                 }
                 
-                
                 if (matchingJobCards.length > 0) {
                     setJobCards(matchingJobCards);
                 } else {
-                    // Log for debugging if job cards exist but don't match
-                    if (allJobCards.length > 0) {
-                    }
                     setJobCards([]);
                 }
+                
+                lastLoadedClientIdRef.current = clientId;
+                lastLoadedClientNameRef.current = clientName;
             } else {
                 const errorText = await response.text().catch(() => 'Unknown error');
                 console.error('❌ Failed to load job cards:', response.status, errorText);
@@ -625,6 +651,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             setJobCards([]);
         } finally {
             setLoadingJobCards(false);
+            isLoadingJobCardsRef.current = false;
         }
     }, [client?.id, client?.name]);
     
@@ -634,12 +661,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             loadJobCards();
         } else {
             setJobCards([]);
-}
+            lastLoadedClientIdRef.current = null;
+            lastLoadedClientNameRef.current = null;
+        }
     }, [client?.id, loadJobCards]);
 
     // Reload job cards when Service & Maintenance tab becomes active
     useEffect(() => {
         if (activeTab === 'service-maintenance' && client?.id) {
+            // Reset refs to allow reload when tab becomes active
+            lastLoadedClientIdRef.current = null;
+            lastLoadedClientNameRef.current = null;
             loadJobCards();
         }
     }, [activeTab, client?.id, loadJobCards]);
