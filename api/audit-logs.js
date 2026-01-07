@@ -100,6 +100,7 @@ async function handler(req, res) {
       };
 
       try {
+        console.log('📝 Creating audit log with data:', JSON.stringify(auditLogData, null, 2));
         const auditLog = await prisma.auditLog.create({
           data: auditLogData,
           include: {
@@ -113,10 +114,21 @@ async function handler(req, res) {
             }
           }
         });
-        console.log('✅ Audit log created:', auditLog.id, 'for user:', user.id);
+        console.log('✅ Audit log created:', auditLog.id, 'for user:', user.id, 'action:', auditLogData.action, 'entity:', auditLogData.entity);
+        
+        // Verify the log was saved by reading it back
+        const verifyLog = await prisma.auditLog.findUnique({ where: { id: auditLog.id } });
+        if (verifyLog) {
+          console.log('✅ Verified audit log exists in database:', verifyLog.id);
+        } else {
+          console.error('❌ CRITICAL: Audit log was created but cannot be found in database!');
+        }
+        
         return created(res, { auditLog });
       } catch (dbError) {
         console.error('❌ Database error creating audit log:', dbError);
+        console.error('❌ Error code:', dbError.code);
+        console.error('❌ Error message:', dbError.message);
         console.error('❌ Audit log data:', JSON.stringify(auditLogData, null, 2));
         return serverError(res, 'Failed to create audit log', dbError.message);
       }
