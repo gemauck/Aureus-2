@@ -195,9 +195,22 @@ const TicketDetailModal = ({
                     }
                 }
                 
-                if (response?.ticket) {
+                // Handle response format: API returns { data: { ticket: ... } }
+                const ticket = response?.ticket || response?.data?.ticket;
+                if (ticket) {
+                    // Refresh the ticket list if onSave callback is provided
+                    if (onSave) {
+                        await onSave(ticket);
+                    }
                     await loadTicketDetails();
                     setIsEditing(false);
+                    if (onClose && !ticket?.id) {
+                        // If creating new ticket, close modal after successful creation
+                        onClose();
+                    }
+                } else {
+                    console.error('❌ No ticket in response:', response);
+                    alert('Failed to create ticket: No ticket data in response');
                 }
             }
         } catch (error) {
