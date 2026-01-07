@@ -483,9 +483,11 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         // Also check if there are unsaved changes - don't refresh if user is still editing
         // This provides additional protection even if the timestamp check passes
+        // BUT: Allow refresh if currentSnapshot is empty (fresh load, not editing)
         const currentSnapshot = serializeSections(sectionsRef.current);
+        const isEmptySnapshot = currentSnapshot === '{}' || currentSnapshot === '';
         const hasUnsavedChanges = currentSnapshot !== lastSavedSnapshotRef.current;
-        if (!forceUpdate && hasUnsavedChanges && timeSinceLastChange < 20000) {
+        if (!forceUpdate && hasUnsavedChanges && !isEmptySnapshot && timeSinceLastChange < 20000) {
             console.log('⏸️ Refresh skipped: unsaved changes detected (will not overwrite)', {
                 hasUnsavedChanges: true,
                 timeSinceLastChange: `${timeSinceLastChange}ms`
@@ -596,7 +598,9 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 // CRITICAL: Never update if we have unsaved local changes, regardless of snapshot matching
                 // This prevents overwriting local changes before they're saved to the database
                 // The only exception is forceUpdate, which should only be used after a successful save
-                if (hasUnsavedChanges && !forceUpdate) {
+                // ALSO: Allow refresh if currentSnapshot is empty (fresh load, not editing)
+                const isEmptySnapshot = currentSnapshot === '{}' || currentSnapshot === '';
+                if (hasUnsavedChanges && !forceUpdate && !isEmptySnapshot) {
                     console.log('⏸️ Refresh skipped: unsaved local changes detected (will not overwrite)', {
                         hasUnsavedChanges: true,
                         isSaving: isSavingRef.current,
