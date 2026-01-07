@@ -247,6 +247,8 @@ async function handler(req, res) {
         const ticketType = (body.type && body.type.trim() !== '') ? body.type.trim() : 'internal'
         
         // Build ticket data - support both manual and email creation
+        // Note: Email fields are only included if provided (for email-created tickets)
+        // They won't be in the object for manual tickets, which is fine since they're optional
         const ticketData = {
           ticketNumber,
           title: body.title.trim(),
@@ -274,38 +276,12 @@ async function handler(req, res) {
           dueDate: body.dueDate ? new Date(body.dueDate) : null
         }
 
-        // Email fields - only add if provided AND columns exist in database
-        // These fields may not exist until migration runs, so we check if they're provided
-        // and only add them if they are (for email-created tickets)
-        if (body.sourceEmail) {
-          try {
-            ticketData.sourceEmail = body.sourceEmail
-          } catch (e) {
-            // Column doesn't exist yet, skip it
-            console.warn('⚠️ sourceEmail column not available yet, skipping')
-          }
-        }
-        if (body.emailThreadId) {
-          try {
-            ticketData.emailThreadId = body.emailThreadId
-          } catch (e) {
-            console.warn('⚠️ emailThreadId column not available yet, skipping')
-          }
-        }
-        if (body.emailMessageId) {
-          try {
-            ticketData.emailMessageId = body.emailMessageId
-          } catch (e) {
-            console.warn('⚠️ emailMessageId column not available yet, skipping')
-          }
-        }
-        if (body.emailSubject) {
-          try {
-            ticketData.emailSubject = body.emailSubject
-          } catch (e) {
-            console.warn('⚠️ emailSubject column not available yet, skipping')
-          }
-        }
+        // Only add email fields if they're provided (email-created tickets)
+        // These fields may not exist in DB until migration runs, but Prisma will handle null/undefined gracefully
+        if (body.sourceEmail) ticketData.sourceEmail = body.sourceEmail
+        if (body.emailThreadId) ticketData.emailThreadId = body.emailThreadId
+        if (body.emailMessageId) ticketData.emailMessageId = body.emailMessageId
+        if (body.emailSubject) ticketData.emailSubject = body.emailSubject
 
         console.log('📝 Creating ticket with data:', {
           ticketNumber: ticketData.ticketNumber,
