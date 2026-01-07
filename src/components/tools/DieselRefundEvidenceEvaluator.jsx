@@ -1,7 +1,21 @@
-// Get React hooks from window
-const { useState, useRef } = React;
+// Wait for React to be available
+(function() {
+    // Wait for React
+    function waitForReact(callback, maxAttempts = 50) {
+        if (window.React && window.React.useState && window.React.useRef) {
+            callback();
+        } else if (maxAttempts > 0) {
+            setTimeout(() => waitForReact(callback, maxAttempts - 1), 100);
+        } else {
+            console.error('❌ DieselRefundEvidenceEvaluator: React not available after maximum attempts');
+        }
+    }
+    
+    waitForReact(() => {
+        // Get React hooks from window
+        const { useState, useRef } = window.React;
 
-const DieselRefundEvidenceEvaluator = () => {
+        const DieselRefundEvidenceEvaluator = () => {
     const [inputData, setInputData] = useState('');
     const [evaluationResult, setEvaluationResult] = useState(null);
     const [isEvaluating, setIsEvaluating] = useState(false);
@@ -398,10 +412,12 @@ const DieselRefundEvidenceEvaluator = () => {
             )}
         </div>
     );
-};
-
-// Register component on window
-if (typeof window !== 'undefined') {
-    window.DieselRefundEvidenceEvaluator = DieselRefundEvidenceEvaluator;
-}
+    
+        // Register component on window
+        if (typeof window !== 'undefined') {
+            window.DieselRefundEvidenceEvaluator = DieselRefundEvidenceEvaluator;
+            console.log('✅ DieselRefundEvidenceEvaluator component registered');
+        }
+    });
+})();
 
