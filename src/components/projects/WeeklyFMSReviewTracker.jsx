@@ -61,6 +61,12 @@ const generateWeeksForYear = (year) => {
 };
 
 const WeeklyFMSReviewTracker = ({ project, onBack }) => {
+    console.log('🚀 WeeklyFMSReviewTracker component mounted/rendered', {
+        projectId: project?.id,
+        hasProject: !!project,
+        hasWeeklyFMSReviewSections: !!project?.weeklyFMSReviewSections
+    });
+    
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth(); // 0-11
     const currentWeek = Math.ceil(new Date().getDate() / 7); // Approximate current week
