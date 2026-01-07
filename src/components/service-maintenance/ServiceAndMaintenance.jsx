@@ -15,6 +15,7 @@ const ServiceAndMaintenance = () => {
   const [copyStatus, setCopyStatus] = useState('Copy share link');
   const [selectedJobCard, setSelectedJobCard] = useState(null);
   const [showJobCardDetail, setShowJobCardDetail] = useState(false);
+  const [loadingJobCard, setLoadingJobCard] = useState(false);
   const [showFormsManager, setShowFormsManager] = useState(false);
   const [formsManagerReady, setFormsManagerReady] = useState(
     typeof window !== 'undefined' && !!window.ServiceFormsManager
@@ -117,116 +118,140 @@ const ServiceAndMaintenance = () => {
     };
   }, []);
 
-  // Read job card ID from URL and load the job card
+  // Read job card ID from URL and load the job card - optimized for speed
   useEffect(() => {
     let isCancelled = false;
+    let currentJobCardId = null;
+    
+    // Fast route reading function
+    const getJobCardIdFromRoute = () => {
+      if (window.RouteState) {
+        const route = window.RouteState.getRoute();
+        if (route.page === 'service-maintenance' && route.segments?.[0]) {
+          return route.segments[0];
+        }
+      }
+      // Fast fallback: check hash first (most common)
+      const hash = window.location.hash || '';
+      if (hash.includes('service-maintenance')) {
+        const hashSegments = hash.replace('#', '').split('/').filter(Boolean);
+        const idx = hashSegments.indexOf('service-maintenance');
+        if (idx >= 0 && hashSegments[idx + 1]) {
+          return hashSegments[idx + 1];
+        }
+      }
+      // Check pathname
+      const pathname = window.location.pathname || '';
+      const segments = pathname.split('/').filter(Boolean);
+      const idx = segments.indexOf('service-maintenance');
+      if (idx >= 0 && segments[idx + 1]) {
+        return segments[idx + 1];
+      }
+      return null;
+    };
     
     const loadJobCardFromUrl = async () => {
       if (isCancelled) return;
       
+      const jobCardId = getJobCardIdFromRoute();
+      
+      // No job card ID in URL
+      if (!jobCardId) {
+        if (showJobCardDetail) {
+          setShowJobCardDetail(false);
+          setSelectedJobCard(null);
+        }
+        setLoadingJobCard(false);
+        return;
+      }
+
+      // Already loading or showing this job card
+      if (currentJobCardId === jobCardId) {
+        if (selectedJobCard && selectedJobCard.id === jobCardId && !showJobCardDetail) {
+          setShowJobCardDetail(true);
+        }
+        return;
+      }
+
+      // Check if we already have this job card loaded
+      if (selectedJobCard && selectedJobCard.id === jobCardId) {
+        if (!showJobCardDetail) {
+          setShowJobCardDetail(true);
+        }
+        setLoadingJobCard(false);
+        return;
+      }
+
+      // Start loading
+      currentJobCardId = jobCardId;
+      setLoadingJobCard(true);
+
+      const token = window.storage?.getToken?.();
+      if (!token) {
+        setLoadingJobCard(false);
+        return;
+      }
+
       try {
-        // Get job card ID from route
-        let jobCardId = null;
-        
-        if (window.RouteState) {
-          const route = window.RouteState.getRoute();
-          if (route.page === 'service-maintenance' && route.segments && route.segments.length > 0) {
-            jobCardId = route.segments[0];
+        const response = await fetch(`/api/jobcards/${encodeURIComponent(jobCardId)}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
           }
-        } else {
-          // Fallback: parse from URL pathname
-          const pathname = window.location.pathname || '';
-          const hash = window.location.hash || '';
-          const segments = pathname.split('/').filter(Boolean);
-          const serviceIndex = segments.indexOf('service-maintenance');
-          if (serviceIndex >= 0 && segments[serviceIndex + 1]) {
-            jobCardId = segments[serviceIndex + 1];
-          } else {
-            // Also check hash
-            const hashSegments = hash.replace('#', '').split('/').filter(Boolean);
-            const hashServiceIndex = hashSegments.indexOf('service-maintenance');
-            if (hashServiceIndex >= 0 && hashSegments[hashServiceIndex + 1]) {
-              jobCardId = hashSegments[hashServiceIndex + 1];
-            }
-          }
+        });
+
+        if (isCancelled) {
+          setLoadingJobCard(false);
+          return;
         }
 
-        if (jobCardId) {
-          // Check if we already have this job card loaded
-          if (selectedJobCard && selectedJobCard.id === jobCardId) {
-            // Already showing the correct job card
-            if (!showJobCardDetail) {
-              setShowJobCardDetail(true);
-            }
-            return;
+        if (response.ok) {
+          const data = await response.json();
+          const jobCard = data.jobCard || data.data?.jobCard || data.data || data;
+          if (jobCard && jobCard.id) {
+            setSelectedJobCard(jobCard);
+            setShowJobCardDetail(true);
           }
-
-          // Load the job card from API (always use database ID for fast lookup)
-          const token = window.storage?.getToken?.();
-          if (!token) {
-            return;
-          }
-
-          try {
-            const response = await fetch(`/api/jobcards/${encodeURIComponent(jobCardId)}`, {
-              headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json'
-              }
-            });
-
-            if (isCancelled) return;
-
-            if (response.ok) {
-              const data = await response.json();
-              const jobCard = data.jobCard || data.data?.jobCard || data.data || data;
-              if (jobCard && jobCard.id) {
-                setSelectedJobCard(jobCard);
-                setShowJobCardDetail(true);
-              }
-            } else if (response.status === 404) {
-              // Clear the detail view if job card not found
-              setShowJobCardDetail(false);
-              setSelectedJobCard(null);
-            }
-          } catch (error) {
-            if (!isCancelled) {
-              console.error('Error loading job card from URL:', error);
-            }
-          }
-        } else {
-          // No job card ID in URL - close detail view if open
-          if (showJobCardDetail) {
-            setShowJobCardDetail(false);
-            setSelectedJobCard(null);
-          }
+        } else if (response.status === 404) {
+          setShowJobCardDetail(false);
+          setSelectedJobCard(null);
         }
       } catch (error) {
         if (!isCancelled) {
-          console.error('Error reading job card ID from URL:', error);
+          console.error('Error loading job card:', error);
+        }
+      } finally {
+        if (!isCancelled) {
+          setLoadingJobCard(false);
         }
       }
     };
 
+    // Load immediately
     loadJobCardFromUrl();
 
-    // Listen for route changes (debounced to avoid excessive calls)
+    // Listen for route changes (optimized - only on actual route changes)
     let routeChangeTimeout;
     const handleRouteChange = () => {
       clearTimeout(routeChangeTimeout);
       routeChangeTimeout = setTimeout(() => {
         if (!isCancelled) {
-          loadJobCardFromUrl();
+          const newJobCardId = getJobCardIdFromRoute();
+          if (newJobCardId !== currentJobCardId) {
+            currentJobCardId = null; // Reset to allow reload
+            loadJobCardFromUrl();
+          }
         }
-      }, 100); // Small delay to batch rapid route changes
+      }, 50); // Reduced delay
     };
 
     let unsubscribe;
     if (window.RouteState && window.RouteState.subscribe) {
       unsubscribe = window.RouteState.subscribe(handleRouteChange);
     } else {
-      // Fallback: listen to popstate events
       window.addEventListener('popstate', handleRouteChange);
+      // Also listen to hashchange for hash-based routing
+      window.addEventListener('hashchange', handleRouteChange);
     }
 
     return () => {
@@ -236,9 +261,10 @@ const ServiceAndMaintenance = () => {
         unsubscribe();
       } else {
         window.removeEventListener('popstate', handleRouteChange);
+        window.removeEventListener('hashchange', handleRouteChange);
       }
     };
-  }, [showJobCardDetail, selectedJobCard]);
+  }, []); // Empty deps - only run on mount and route changes
 
   const handleCopyLink = async () => {
     const shareUrl = `${window.location.origin}/job-card`;
@@ -1068,6 +1094,14 @@ const JobCardFormsSection = ({ jobCard }) => {
       </div>
 
       {/* Full-area job card detail overlay (within main content, not over sidebar) */}
+      {loadingJobCard && !selectedJobCard && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-slate-800 rounded-lg p-8 text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
+            <p className="text-gray-700 dark:text-slate-200">Loading job card...</p>
+          </div>
+        </div>
+      )}
       {showJobCardDetail && selectedJobCard && (
         <div className="absolute inset-0 z-40 flex flex-col bg-slate-950/80 backdrop-blur-sm">
           {/* Top bar */}
