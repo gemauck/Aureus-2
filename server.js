@@ -700,10 +700,22 @@ app.all('/api/helpdesk/:id?/:action?', async (req, res, next) => {
       console.error('❌ Helpdesk handler not found')
       return res.status(404).json({ error: 'API endpoint not found' })
     }
-    return handler(req, res)
+    
+    // Ensure handler result is awaited
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') {
+      await result
+    }
+    return result
   } catch (e) {
-    console.error('❌ Error in helpdesk handler:', e)
-    if (!res.headersSent) {
+    console.error('❌ Error in helpdesk handler:', {
+      error: e.message,
+      errorName: e.name,
+      stack: e.stack,
+      url: req.url,
+      method: req.method
+    })
+    if (!res.headersSent && !res.writableEnded) {
       return res.status(500).json({ 
         error: 'Internal server error',
         message: process.env.NODE_ENV === 'development' ? e.message : 'Failed to process helpdesk request',
@@ -722,10 +734,22 @@ app.all('/api/helpdesk/stats', async (req, res, next) => {
       console.error('❌ Helpdesk handler not found')
       return res.status(404).json({ error: 'API endpoint not found' })
     }
-    return handler(req, res)
+    
+    // Ensure handler result is awaited
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') {
+      await result
+    }
+    return result
   } catch (e) {
-    console.error('❌ Error in helpdesk stats handler:', e)
-    if (!res.headersSent) {
+    console.error('❌ Error in helpdesk stats handler:', {
+      error: e.message,
+      errorName: e.name,
+      stack: e.stack,
+      url: req.url,
+      method: req.method
+    })
+    if (!res.headersSent && !res.writableEnded) {
       return res.status(500).json({ 
         error: 'Internal server error',
         message: process.env.NODE_ENV === 'development' ? e.message : 'Failed to process helpdesk request',
