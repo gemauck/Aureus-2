@@ -29,11 +29,9 @@ const Tools = () => {
             
             // Always update toolComponents state (even if not all loaded) so UI can show available tools
             setToolComponents(prev => {
-                // Only update if something changed
-                const hasChanged = Object.keys(components).some(key => 
-                    !!components[key] !== !!prev[key]
-                );
-                return hasChanged ? components : prev;
+                // Always update to ensure we detect late-loading components
+                // React will handle re-rendering efficiently
+                return components;
             });
             
             // Check if any component is missing
