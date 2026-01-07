@@ -2148,8 +2148,26 @@ const DatabaseAPI = {
                         };
                         return duplicateResponse;
                     }
+                    // If we can't find existing notes, return a response indicating duplicate anyway
+                    // This prevents unhandled promise rejections
+                    console.warn('⚠️ Could not find existing weekly notes, but server confirmed they exist. Returning duplicate response.');
+                    return {
+                        data: {
+                            weeklyNotes: null,
+                            duplicate: true
+                        },
+                        duplicate: true
+                    };
                 } catch (fetchError) {
                     console.error('❌ Failed to load existing weekly notes after duplicate detection:', fetchError);
+                    // Return a duplicate response instead of throwing to prevent unhandled promise rejection
+                    return {
+                        data: {
+                            weeklyNotes: null,
+                            duplicate: true
+                        },
+                        duplicate: true
+                    };
                 }
             }
             throw error;

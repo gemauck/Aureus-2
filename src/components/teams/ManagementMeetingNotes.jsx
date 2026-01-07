@@ -1940,10 +1940,15 @@ const ManagementMeetingNotes = () => {
                 weekDetails.weekEnd.toISOString()
             );
 
-            console.log('✅ Weekly notes created successfully:', createResponse);
+            const isDuplicate = createResponse?.duplicate === true;
+            if (isDuplicate) {
+                console.log('ℹ️ Weekly notes already exist (duplicate detected):', createResponse);
+            } else {
+                console.log('✅ Weekly notes created successfully:', createResponse);
+            }
 
-            // Send notifications to all users in the monthly notes
-            if (window.DatabaseAPI && targetMonth?.userAllocations && targetMonth.userAllocations.length > 0) {
+            // Send notifications to all users in the monthly notes (only if not a duplicate)
+            if (!isDuplicate && window.DatabaseAPI && targetMonth?.userAllocations && targetMonth.userAllocations.length > 0) {
                 const currentUser = window.storage?.getUserInfo() || {};
                 const authorName = currentUser.name || currentUser.email || 'System';
                 const weekStartStr = weekDetails.weekStart.toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' });
