@@ -663,14 +663,14 @@ const ProjectsDatabaseFirst = () => {
                 }
             }
             
-            // Update local state (remove project even if server said 404)
+            // Update local state immediately (remove project even if server said 404)
+            // No need to reload - we already removed it from state
+            console.log('✅ Removing project from list immediately:', projectId);
             setProjects(prev => prev.filter(p => p.id !== projectId));
             setSelectedProject(null);
             
-            // Only reload if we successfully deleted (not if it was already gone)
-            if (projectToDelete) {
-                await loadProjects();
-            }
+            // Don't reload - we already removed it from state
+            // This ensures the project disappears immediately
             
         } catch (error) {
             console.error('❌ Failed to delete project from database:', {
