@@ -77,6 +77,10 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [modalData, setModalData] = useState(null); // {project, month, field, currentValue, tempValue}
     
+    // Inline editing state for compliance and data fields
+    const [editingCell, setEditingCell] = useState(null); // {projectId, month, field}
+    const [editingValue, setEditingValue] = useState('');
+    
     // Refs
     const tableRef = useRef(null);
     const [focusedCellKey, setFocusedCellKey] = useState(null);
