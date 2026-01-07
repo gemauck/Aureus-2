@@ -328,9 +328,6 @@ async function handler(req, res) {
             hasTitle: !!body?.title,
             hasType: !!body?.type
           }
-            type: ticketData?.type,
-            createdById: ticketData?.createdById
-          }
         })
         return serverError(res, 'Failed to create ticket', error.message)
       }
