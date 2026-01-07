@@ -71,7 +71,6 @@ const Tools = () => {
         
         // Continue checking periodically even after max retries (in case components load late)
         const periodicCheck = setInterval(() => {
-            if (isChecking) return; // Only check if we've stopped the main loop
             const components = {
                 PDFToWordConverter: window.PDFToWordConverter,
                 HandwritingToWord: window.HandwritingToWord,
@@ -83,6 +82,7 @@ const Tools = () => {
                 const hasChanged = Object.keys(components).some(key => 
                     !!components[key] !== !!prev[key]
                 );
+                // Always return new components if changed, otherwise return prev to avoid unnecessary re-renders
                 return hasChanged ? components : prev;
             });
         }, 2000); // Check every 2 seconds
