@@ -323,9 +323,11 @@ async function handler(req, res) {
           message: error.message,
           code: error.code,
           meta: error.meta,
-          ticketData: {
-            ticketNumber: ticketData?.ticketNumber,
-            title: ticketData?.title,
+          body: {
+            title: body?.title,
+            hasTitle: !!body?.title,
+            hasType: !!body?.type
+          }
             type: ticketData?.type,
             createdById: ticketData?.createdById
           }
