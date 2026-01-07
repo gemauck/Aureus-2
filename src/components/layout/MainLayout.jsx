@@ -86,25 +86,87 @@ const MainLayout = () => {
             return;
         }
 
+        // Guard to prevent infinite loops
+        let isNavigating = false;
+        let lastProcessedRoute = null;
+        let navigationTimeout = null;
+        let routeChangeCallCount = 0;
+        const MAX_ROUTE_CHANGE_CALLS = 5; // Maximum calls per second
+
         const handleRouteChange = (route) => {
+            // Prevent infinite loops by checking if we're already processing this route
+            const routeKey = `${route?.page || 'dashboard'}-${JSON.stringify(route?.segments || [])}`;
+            
+            // Clear any pending navigation timeout
+            if (navigationTimeout) {
+                clearTimeout(navigationTimeout);
+                navigationTimeout = null;
+            }
+            
+            // Increment call count and reset after 1 second
+            routeChangeCallCount++;
+            setTimeout(() => {
+                routeChangeCallCount = Math.max(0, routeChangeCallCount - 1);
+            }, 1000);
+            
+            // If too many calls in quick succession, ignore
+            if (routeChangeCallCount > MAX_ROUTE_CHANGE_CALLS) {
+                console.warn('🚨 Too many route change calls detected, ignoring:', { routeKey, callCount: routeChangeCallCount });
+                return;
+            }
+            
+            if (isNavigating) {
+                return;
+            }
+            
+            // Prevent processing the same route twice in quick succession
+            if (lastProcessedRoute === routeKey) {
+                return;
+            }
+
             let nextPage = route?.page || 'dashboard';
+            const currentPath = window.location.pathname;
+            const currentPage = currentPath.split('/').filter(Boolean)[0] || 'dashboard';
+            
             // Map 'crm' to 'clients' for backward compatibility
             if (nextPage === 'crm') {
                 nextPage = 'clients';
-                // Update the URL to reflect the correct page
-                if (window.RouteState) {
+                // Only update URL if we're not already on the correct path
+                if (window.RouteState && currentPage !== 'clients') {
+                    isNavigating = true;
+                    lastProcessedRoute = routeKey;
                     window.RouteState.setPageSubpath('clients', route.segments || [], { replace: true });
+                    // Reset flag after a longer delay to allow route change to complete
+                    navigationTimeout = setTimeout(() => {
+                        isNavigating = false;
+                        lastProcessedRoute = null;
+                    }, 500); // Increased to 500ms to match routeState.js lock duration
+                    return; // Exit early, will be called again with new route
                 }
             }
+            
             if (!VALID_PAGES.includes(nextPage)) {
                 const pathname = (window.location.pathname || '').toLowerCase();
                 const isPublicRoute = PUBLIC_ROUTES.some(routePath => pathname.startsWith(routePath));
                 if (!isPublicRoute) {
-                    routeState.setPageSubpath('dashboard', [], { replace: true, preserveSearch: false, preserveHash: false });
+                    // Only navigate if we're not already on dashboard
+                    if (currentPage !== 'dashboard' && currentPath !== '/') {
+                        isNavigating = true;
+                        lastProcessedRoute = routeKey;
+                        routeState.setPageSubpath('dashboard', [], { replace: true, preserveSearch: false, preserveHash: false });
+                        // Reset flag after a longer delay
+                        navigationTimeout = setTimeout(() => {
+                            isNavigating = false;
+                            lastProcessedRoute = null;
+                        }, 500); // Increased to 500ms to match routeState.js lock duration
+                        return; // Exit early, will be called again with new route
+                    }
                     setCurrentPage('dashboard');
                 }
                 return;
             }
+            
+            lastProcessedRoute = routeKey;
             setCurrentPage(nextPage);
             
             // Check if route contains an entity ID and open it
@@ -191,7 +253,14 @@ const MainLayout = () => {
             }
         }
         
-        return routeState.subscribe(handleRouteChange);
+        const unsubscribe = routeState.subscribe(handleRouteChange);
+        
+        return () => {
+            unsubscribe();
+            if (navigationTimeout) {
+                clearTimeout(navigationTimeout);
+            }
+        };
     }, []);
     
     const [sidebarOpen, setSidebarOpen] = useState(false); // Start closed on mobile
