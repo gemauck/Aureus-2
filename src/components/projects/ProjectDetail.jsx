@@ -311,6 +311,136 @@ function initializeProjectDetail() {
             return propsEqual; // Return true if equal (skip re-render), false if different (re-render)
         });
     })();
+    
+    // Extract WeeklyFMSReviewProcessSection outside ProjectDetail to prevent recreation on every render
+    const WeeklyFMSReviewProcessSection = (() => {
+        const { useState: useStateSection, useEffect: useEffectSection, memo } = window.React;
+        
+        const WeeklyFMSReviewProcessSectionInner = ({
+            project,
+            hasWeeklyFMSReviewProcess,
+            activeSection,
+            onBack
+        }) => {
+            
+            // Track component lifecycle
+            useEffectSection(() => {
+                return () => {
+                };
+            }, []);
+
+            const handleBackToOverview = typeof onBack === 'function' ? onBack : () => {};
+            const WeeklyFMSReviewTracker = window.WeeklyFMSReviewTracker;
+            const [trackerReady, setTrackerReady] = useStateSection(() => !!WeeklyFMSReviewTracker);
+            const [loadAttempts, setLoadAttempts] = useStateSection(0);
+            const maxAttempts = 50; // 5 seconds (50 * 100ms)
+
+            useEffectSection(() => {
+                if (trackerReady) return;
+
+                const checkComponent = () => {
+                    if (window.WeeklyFMSReviewTracker && typeof window.WeeklyFMSReviewTracker === 'function') {
+                        setTrackerReady(true);
+                        return true;
+                    }
+                    return false;
+                };
+
+                if (checkComponent()) return;
+
+                const handleViteReady = () => {
+                    if (checkComponent()) {
+                        window.removeEventListener('viteProjectsReady', handleViteReady);
+                    }
+                };
+                window.addEventListener('viteProjectsReady', handleViteReady);
+
+                const interval = setInterval(() => {
+                    setLoadAttempts(prev => {
+                        const newAttempts = prev + 1;
+                        if (newAttempts >= maxAttempts) {
+                            clearInterval(interval);
+                            window.removeEventListener('viteProjectsReady', handleViteReady);
+                            console.warn('⚠️ WeeklyFMSReviewTracker failed to load after', maxAttempts, 'attempts');
+                            return newAttempts;
+                        }
+                        if (checkComponent()) {
+                            clearInterval(interval);
+                            window.removeEventListener('viteProjectsReady', handleViteReady);
+                        }
+                        return newAttempts;
+                    });
+                }, 100);
+
+                return () => {
+                    clearInterval(interval);
+                    window.removeEventListener('viteProjectsReady', handleViteReady);
+                };
+            }, [trackerReady]);
+
+
+            if (!trackerReady || !WeeklyFMSReviewTracker) {
+                return (
+                    <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                        <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">Loading Component...</h3>
+                        <p className="text-sm text-gray-600 mb-4">
+                            {loadAttempts < maxAttempts 
+                                ? `The Weekly FMS Review Tracker is loading... (${loadAttempts * 100}ms)`
+                                : 'The component failed to load. Please try reloading the page.'}
+                        </p>
+                        {loadAttempts >= maxAttempts && (
+                            <div className="flex gap-2 justify-center">
+                                <button
+                                    onClick={() => window.location.reload()}
+                                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
+                                >
+                                    <i className="fas fa-sync-alt mr-2"></i>
+                                    Reload Page
+                                </button>
+                                <button
+                                    onClick={handleBackToOverview}
+                                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+                                >
+                                    <i className="fas fa-arrow-left mr-2"></i>
+                                    Back to Overview
+                                </button>
+                            </div>
+                        )}
+                        <div className="mt-4 text-xs text-gray-500">
+                            <p>Debug Info: window.WeeklyFMSReviewTracker = {String(typeof WeeklyFMSReviewTracker)}</p>
+                            <p>Module Status: {typeof window.ViteProjects !== 'undefined' ? 'Loaded' : 'Not loaded'}</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            // Only render WeeklyFMSReviewTracker when activeSection is weeklyFMSReview
+            if (activeSection !== 'weeklyFMSReview') {
+                return null;
+            }
+            
+            return (
+                <WeeklyFMSReviewTracker
+                    key={`tracker-${project?.id || 'default'}`}
+                    project={project}
+                    onBack={handleBackToOverview}
+                />
+            );
+        };
+        
+        // Wrap with React.memo to prevent unnecessary re-renders when props haven't changed
+        return memo(WeeklyFMSReviewProcessSectionInner, (prevProps, nextProps) => {
+            const projectIdEqual = prevProps.project?.id === nextProps.project?.id;
+            const hasWeeklyFMSReviewEqual = prevProps.hasWeeklyFMSReviewProcess === nextProps.hasWeeklyFMSReviewProcess;
+            const activeSectionEqual = prevProps.activeSection === nextProps.activeSection;
+            const onBackEqual = prevProps.onBack === nextProps.onBack;
+            
+            const propsEqual = projectIdEqual && hasWeeklyFMSReviewEqual && activeSectionEqual && onBackEqual;
+            
+            return propsEqual;
+        });
+    })();
 
     const parseDocumentSections = (data) => {
         if (!data) return [];
@@ -1313,6 +1443,31 @@ function initializeProjectDetail() {
         normalizeHasDocumentCollectionProcess(project.hasDocumentCollectionProcess)
     );
     
+    // Track if weekly FMS review process exists
+    const normalizeHasWeeklyFMSReviewProcess = (value) => {
+        if (value === true || value === 'true' || value === 1) return true;
+        if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+        return false;
+    };
+    
+    const [hasWeeklyFMSReviewProcess, setHasWeeklyFMSReviewProcess] = useState(() => 
+        normalizeHasWeeklyFMSReviewProcess(project.hasWeeklyFMSReviewProcess)
+    );
+    
+    // Sync hasWeeklyFMSReviewProcess when project prop changes
+    const hasWeeklyFMSReviewProcessChangedRef = useRef(false);
+    useEffect(() => {
+        const normalizedValue = normalizeHasWeeklyFMSReviewProcess(project.hasWeeklyFMSReviewProcess);
+        if (normalizedValue !== hasWeeklyFMSReviewProcess && !hasWeeklyFMSReviewProcessChangedRef.current) {
+            setHasWeeklyFMSReviewProcess(normalizedValue);
+        }
+    }, [project.hasWeeklyFMSReviewProcess, project.id]);
+    
+    useEffect(() => {
+        const normalizedValue = normalizeHasWeeklyFMSReviewProcess(project.hasWeeklyFMSReviewProcess);
+        setHasWeeklyFMSReviewProcess(normalizedValue);
+    }, [project.id]);
+    
     // Sync hasDocumentCollectionProcess when project prop changes (e.g., after reloading from database)
     // But only if it hasn't been explicitly changed by the user recently
     useEffect(() => {
@@ -1551,8 +1706,11 @@ function initializeProjectDetail() {
         nextCustomFieldDefinitions,
         nextDocuments,
         nextHasDocumentCollectionProcess,
+        nextHasWeeklyFMSReviewProcess,
         excludeHasDocumentCollectionProcess = false,
-        excludeDocumentSections = true  // Default to true: don't overwrite documentSections managed by MonthlyDocumentCollectionTracker
+        excludeHasWeeklyFMSReviewProcess = false,
+        excludeDocumentSections = true,  // Default to true: don't overwrite documentSections managed by MonthlyDocumentCollectionTracker
+        excludeWeeklyFMSReviewSections = true  // Default to true: don't overwrite weeklyFMSReviewSections managed by WeeklyFMSReviewTracker
     } = {}) => {
         // Use provided values or fall back to current state from ref (avoids TDZ issues)
         const tasksToSave = nextTasks !== undefined ? nextTasks : tasksRef.current;
@@ -1560,6 +1718,7 @@ function initializeProjectDetail() {
         const customFieldDefinitionsToSave = nextCustomFieldDefinitions !== undefined ? nextCustomFieldDefinitions : customFieldDefinitions;
         const documentsToSave = nextDocuments !== undefined ? nextDocuments : documents;
         const hasDocumentCollectionProcessToSave = nextHasDocumentCollectionProcess !== undefined ? nextHasDocumentCollectionProcess : hasDocumentCollectionProcess;
+        const hasWeeklyFMSReviewProcessToSave = nextHasWeeklyFMSReviewProcess !== undefined ? nextHasWeeklyFMSReviewProcess : hasWeeklyFMSReviewProcess;
         
         try {
             
@@ -1581,6 +1740,11 @@ function initializeProjectDetail() {
             // This prevents overwriting the database value when we don't want to save it
             if (!excludeHasDocumentCollectionProcess) {
                 updatePayload.hasDocumentCollectionProcess = hasDocumentCollectionProcessToSave;
+            }
+            
+            // Only include hasWeeklyFMSReviewProcess if not excluded
+            if (!excludeHasWeeklyFMSReviewProcess) {
+                updatePayload.hasWeeklyFMSReviewProcess = hasWeeklyFMSReviewProcessToSave;
             }
             
             
@@ -3386,6 +3550,67 @@ function initializeProjectDetail() {
         setShowDocumentModal(true);
         setShowDocumentProcessDropdown(false);
     };
+    
+    const handleAddWeeklyFMSReviewProcess = async () => {
+        try {
+            // Cancel any pending debounced saves to prevent overwriting
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
+            }
+            
+            // Set flag to skip the useEffect save to prevent duplicates
+            skipNextSaveRef.current = true;
+            // Mark that hasWeeklyFMSReviewProcess was explicitly changed
+            hasWeeklyFMSReviewProcessChangedRef.current = true;
+            
+            // Update state first
+            setHasWeeklyFMSReviewProcess(true);
+            switchSection('weeklyFMSReview');
+            setShowDocumentProcessDropdown(false);
+            
+            // Immediately save to database to ensure persistence
+            const updatePayload = {
+                hasWeeklyFMSReviewProcess: true,
+                weeklyFMSReviewSections: '[]'
+            };
+            
+            const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
+            
+            // Update local data service if available
+            if (window.dataService && typeof window.dataService.getProjects === 'function') {
+                const savedProjects = await window.dataService.getProjects();
+                if (savedProjects) {
+                    const updatedProjects = savedProjects.map(p => {
+                        if (p.id !== project.id) return p;
+                        return { 
+                            ...p, 
+                            hasWeeklyFMSReviewProcess: true,
+                            weeklyFMSReviewSections: []
+                        };
+                    });
+                    if (window.dataService && typeof window.dataService.setProjects === 'function') {
+                        try {
+                            await window.dataService.setProjects(updatedProjects);
+                        } catch (saveError) {
+                            console.warn('Failed to save projects to dataService:', saveError);
+                        }
+                    }
+                }
+            }
+            
+            // Reset the flag after saving
+            hasWeeklyFMSReviewProcessChangedRef.current = false;
+            skipNextSaveRef.current = false;
+            
+        } catch (error) {
+            console.error('❌ Error adding Weekly FMS Review process:', error);
+            alert('Failed to add Weekly FMS Review process: ' + error.message);
+            // Revert state on error
+            setHasWeeklyFMSReviewProcess(false);
+            hasWeeklyFMSReviewProcessChangedRef.current = false;
+        }
+    };
 
     const handleEditDocument = (doc) => {
         setEditingDocument(doc);
@@ -4035,6 +4260,19 @@ function initializeProjectDetail() {
                             Document Collection
                         </button>
                     )}
+                    {hasWeeklyFMSReviewProcess && (
+                        <button
+                            onClick={() => switchSection('weeklyFMSReview')}
+                            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                                activeSection === 'weeklyFMSReview'
+                                    ? 'bg-primary-600 text-white'
+                                    : 'text-gray-700 hover:bg-gray-100'
+                            }`}
+                        >
+                            <i className="fas fa-calendar-week mr-1.5"></i>
+                            Weekly FMS Review
+                        </button>
+                    )}
                     <div className="relative">
                         <button
                             onClick={() => setShowDocumentProcessDropdown(!showDocumentProcessDropdown)}
@@ -4078,6 +4316,18 @@ function initializeProjectDetail() {
                                             <div className="text-[10px] text-gray-500">Recurring monthly data collection</div>
                                         </div>
                                     </button>
+                                    {!hasWeeklyFMSReviewProcess && (
+                                        <button
+                                            onClick={handleAddWeeklyFMSReviewProcess}
+                                            className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                                        >
+                                            <i className="fas fa-calendar-week text-primary-600 w-4"></i>
+                                            <div>
+                                                <div className="font-medium">Weekly FMS Review</div>
+                                                <div className="text-[10px] text-gray-500">Weekly FMS review per month</div>
+                                            </div>
+                                        </button>
+                                    )}
                                 </div>
                             </>
                         )}
@@ -4220,6 +4470,17 @@ function initializeProjectDetail() {
                     key={`doc-collection-${project?.id || 'default'}`}
                     project={project}
                     hasDocumentCollectionProcess={hasDocumentCollectionProcess}
+                    activeSection={activeSection}
+                    onBack={handleBackToOverview}
+                />
+            )}
+            
+            {/* Always render WeeklyFMSReviewProcessSection when hasWeeklyFMSReviewProcess is true */}
+            {hasWeeklyFMSReviewProcess && (
+                <WeeklyFMSReviewProcessSection
+                    key={`weekly-fms-review-${project?.id || 'default'}`}
+                    project={project}
+                    hasWeeklyFMSReviewProcess={hasWeeklyFMSReviewProcess}
                     activeSection={activeSection}
                     onBack={handleBackToOverview}
                 />
