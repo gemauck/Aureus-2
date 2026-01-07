@@ -1,17 +1,7 @@
-// Get React hooks from window (React should be available by the time components load)
-(function() {
-    // Check if React is available, if not wait briefly
-    function initComponent() {
-        if (!window.React || !window.React.useState || !window.React.useRef) {
-            // React not ready yet, wait a bit
-            setTimeout(initComponent, 50);
-            return;
-        }
-        
-        // Get React hooks from window
-        const { useState, useRef } = window.React;
+// Get React hooks from window
+const { useState, useRef } = React;
 
-        const DieselRefundEvidenceEvaluator = () => {
+const DieselRefundEvidenceEvaluator = () => {
             const [inputData, setInputData] = useState('');
     const [evaluationResult, setEvaluationResult] = useState(null);
     const [isEvaluating, setIsEvaluating] = useState(false);
@@ -410,14 +400,8 @@
         );
     };
     
-        // Register component on window
-        if (typeof window !== 'undefined') {
-            window.DieselRefundEvidenceEvaluator = DieselRefundEvidenceEvaluator;
-            console.log('✅ DieselRefundEvidenceEvaluator component registered');
-        }
-    }
-    
-    // Start initialization
-    initComponent();
-})();
+// Register component on window
+if (typeof window !== 'undefined') {
+    window.DieselRefundEvidenceEvaluator = DieselRefundEvidenceEvaluator;
+}
 
