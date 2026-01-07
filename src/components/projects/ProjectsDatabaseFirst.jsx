@@ -1251,13 +1251,12 @@ const ProjectsDatabaseFirst = () => {
                                             className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300 hover:bg-gray-600' : 'text-gray-700 hover:bg-gray-100'} uppercase tracking-wider cursor-pointer transition-colors select-none`}
                                             onClick={() => handleSort('name')}
                                         >
-                                            <div className="flex items-center space-x-1">
+                                            <div className="flex items-center space-x-2">
                                                 <span>Project</span>
-                                                {sortColumn === 'name' && (
-                                                    <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600`}></i>
-                                                )}
-                                                {sortColumn !== 'name' && (
-                                                    <i className={`fas fa-sort text-gray-400 opacity-50`}></i>
+                                                {sortColumn === 'name' ? (
+                                                    <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600 text-sm`}></i>
+                                                ) : (
+                                                    <i className={`fas fa-sort text-gray-400 opacity-50 text-sm`}></i>
                                                 )}
                                             </div>
                                         </th>
@@ -1265,13 +1264,12 @@ const ProjectsDatabaseFirst = () => {
                                             className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300 hover:bg-gray-600' : 'text-gray-700 hover:bg-gray-100'} uppercase tracking-wider cursor-pointer transition-colors select-none`}
                                             onClick={() => handleSort('client')}
                                         >
-                                            <div className="flex items-center space-x-1">
+                                            <div className="flex items-center space-x-2">
                                                 <span>Client</span>
-                                                {sortColumn === 'client' && (
-                                                    <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600`}></i>
-                                                )}
-                                                {sortColumn !== 'client' && (
-                                                    <i className={`fas fa-sort text-gray-400 opacity-50`}></i>
+                                                {sortColumn === 'client' ? (
+                                                    <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600 text-sm`}></i>
+                                                ) : (
+                                                    <i className={`fas fa-sort text-gray-400 opacity-50 text-sm`}></i>
                                                 )}
                                             </div>
                                         </th>
@@ -1279,13 +1277,12 @@ const ProjectsDatabaseFirst = () => {
                                             className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300 hover:bg-gray-600' : 'text-gray-700 hover:bg-gray-100'} uppercase tracking-wider cursor-pointer transition-colors select-none`}
                                             onClick={() => handleSort('type')}
                                         >
-                                            <div className="flex items-center space-x-1">
+                                            <div className="flex items-center space-x-2">
                                                 <span>Type</span>
-                                                {sortColumn === 'type' && (
-                                                    <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600`}></i>
-                                                )}
-                                                {sortColumn !== 'type' && (
-                                                    <i className={`fas fa-sort text-gray-400 opacity-50`}></i>
+                                                {sortColumn === 'type' ? (
+                                                    <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600 text-sm`}></i>
+                                                ) : (
+                                                    <i className={`fas fa-sort text-gray-400 opacity-50 text-sm`}></i>
                                                 )}
                                             </div>
                                         </th>
@@ -1293,13 +1290,12 @@ const ProjectsDatabaseFirst = () => {
                                             className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300 hover:bg-gray-600' : 'text-gray-700 hover:bg-gray-100'} uppercase tracking-wider cursor-pointer transition-colors select-none`}
                                             onClick={() => handleSort('status')}
                                         >
-                                            <div className="flex items-center space-x-1">
+                                            <div className="flex items-center space-x-2">
                                                 <span>Status</span>
-                                                {sortColumn === 'status' && (
-                                                    <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600`}></i>
-                                                )}
-                                                {sortColumn !== 'status' && (
-                                                    <i className={`fas fa-sort text-gray-400 opacity-50`}></i>
+                                                {sortColumn === 'status' ? (
+                                                    <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600 text-sm`}></i>
+                                                ) : (
+                                                    <i className={`fas fa-sort text-gray-400 opacity-50 text-sm`}></i>
                                                 )}
                                             </div>
                                         </th>
@@ -1307,13 +1303,12 @@ const ProjectsDatabaseFirst = () => {
                                             className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300 hover:bg-gray-600' : 'text-gray-700 hover:bg-gray-100'} uppercase tracking-wider cursor-pointer transition-colors select-none`}
                                             onClick={() => handleSort('dueDate')}
                                         >
-                                            <div className="flex items-center space-x-1">
+                                            <div className="flex items-center space-x-2">
                                                 <span>Due Date</span>
-                                                {sortColumn === 'dueDate' && (
-                                                    <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600`}></i>
-                                                )}
-                                                {sortColumn !== 'dueDate' && (
-                                                    <i className={`fas fa-sort text-gray-400 opacity-50`}></i>
+                                                {sortColumn === 'dueDate' ? (
+                                                    <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600 text-sm`}></i>
+                                                ) : (
+                                                    <i className={`fas fa-sort text-gray-400 opacity-50 text-sm`}></i>
                                                 )}
                                             </div>
                                         </th>
@@ -1321,13 +1316,12 @@ const ProjectsDatabaseFirst = () => {
                                             className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300 hover:bg-gray-600' : 'text-gray-700 hover:bg-gray-100'} uppercase tracking-wider cursor-pointer transition-colors select-none`}
                                             onClick={() => handleSort('assignedTo')}
                                         >
-                                            <div className="flex items-center space-x-1">
+                                            <div className="flex items-center space-x-2">
                                                 <span>Assigned To</span>
-                                                {sortColumn === 'assignedTo' && (
-                                                    <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600`}></i>
-                                                )}
-                                                {sortColumn !== 'assignedTo' && (
-                                                    <i className={`fas fa-sort text-gray-400 opacity-50`}></i>
+                                                {sortColumn === 'assignedTo' ? (
+                                                    <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600 text-sm`}></i>
+                                                ) : (
+                                                    <i className={`fas fa-sort text-gray-400 opacity-50 text-sm`}></i>
                                                 )}
                                             </div>
                                         </th>
