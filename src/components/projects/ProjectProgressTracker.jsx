@@ -1341,9 +1341,53 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         const displayValue = currentValue || '';
         const hasValue = displayValue && displayValue.trim().length > 0;
         
-        // Handle cell click - open modal
-        const handleCellClick = () => {
-            openEditModal(project, safeMonth, field);
+        // Handle cell click - open modal for comments, inline edit for compliance/data
+        const handleCellClick = async () => {
+            // If another cell is being edited, save it first
+            if (editingCell && (editingCell.projectId !== project.id || 
+                editingCell.month !== safeMonth || editingCell.field !== field)) {
+                const editingProject = safeProjects.find(p => String(p.id) === String(editingCell.projectId));
+                if (editingProject) {
+                    await saveProgressData(editingProject, editingCell.month, editingCell.field, editingValue);
+                }
+            }
+            
+            if (field === 'comments') {
+                // Close any inline editing before opening modal
+                setEditingCell(null);
+                setEditingValue('');
+                openEditModal(project, safeMonth, field);
+            } else {
+                // Start inline editing for compliance and data
+                setEditingCell({ projectId: project.id, month: safeMonth, field: field });
+                setEditingValue(displayValue);
+            }
+        };
+        
+        // Handle inline input change
+        const handleInlineInputChange = (e) => {
+            setEditingValue(e.target.value);
+        };
+        
+        // Handle inline input blur - save and stop editing
+        const handleInlineInputBlur = async () => {
+            if (editingCell && editingCell.projectId === project.id && 
+                editingCell.month === safeMonth && editingCell.field === field) {
+                await saveProgressData(project, safeMonth, field, editingValue);
+                setEditingCell(null);
+                setEditingValue('');
+            }
+        };
+        
+        // Handle inline input key down
+        const handleInlineInputKeyDown = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleInlineInputBlur();
+            } else if (e.key === 'Escape') {
+                setEditingCell(null);
+                setEditingValue('');
+            }
         };
         
         // Field-specific styling for better visual hierarchy
@@ -1384,15 +1428,20 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 ? 'rgba(59, 130, 246, 0.08)'
                 : defaultBgColor;
         
-        // Larger, more spacious cells
+        // Slimmer cells with reduced padding
+        const isEditing = editingCell && 
+            editingCell.projectId === project.id && 
+            editingCell.month === safeMonth && 
+            editingCell.field === field;
+        
         const cellStyle = {
-            padding: '10px',
+            padding: '6px',
             border: 'none',
             borderBottom: '1px solid #e5e7eb',
             borderRight: '1px solid #e5e7eb',
             backgroundColor: calculatedBackground,
-            minHeight: '90px',
-            height: '90px',
+            minHeight: '60px',
+            height: '60px',
             verticalAlign: 'top',
             width: '140px',
             minWidth: '140px',
@@ -1400,10 +1449,10 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             transition: 'all 0.2s ease',
             position: 'relative',
             boxShadow: isFocusedCell ? `0 0 0 2px ${config.color}40` : 'none',
-            cursor: 'pointer'
+            cursor: isEditing ? 'text' : (field === 'comments' ? 'pointer' : 'pointer')
         };
         
-        // Render clickable display cell with field-specific styling
+        // Render cell with inline editing for compliance/data, modal for comments
         return React.createElement('td', {
             key: cellIdentifier,
             style: cellStyle,
@@ -1413,15 +1462,13 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             'data-month-name': safeMonth,
             'data-month-index': monthIdx >= 0 ? String(monthIdx) : '',
             'data-field': field,
-            onClick: handleCellClick,
-            onMouseEnter: (e) => {
+            onClick: !isEditing ? handleCellClick : undefined,
+            onMouseEnter: !isEditing ? (e) => {
                 e.currentTarget.style.backgroundColor = config.bgColor;
-                e.currentTarget.style.transform = 'scale(1.02)';
-            },
-            onMouseLeave: (e) => {
+            } : undefined,
+            onMouseLeave: !isEditing ? (e) => {
                 e.currentTarget.style.backgroundColor = calculatedBackground;
-                e.currentTarget.style.transform = 'scale(1)';
-            }
+            } : undefined
         }, React.createElement('div', { 
             style: { 
                 position: 'relative', 
@@ -1429,7 +1476,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 height: '100%',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '6px'
+                gap: '4px'
             } 
         },
             // Field label with icon
@@ -1437,61 +1484,86 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 style: {
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '4px',
-                    fontSize: '9px',
+                    gap: '3px',
+                    fontSize: '8px',
                     fontWeight: '600',
                     textTransform: 'uppercase',
                     letterSpacing: '0.05em',
                     color: config.color,
-                    marginBottom: '2px'
+                    marginBottom: '1px'
                 }
             },
-                React.createElement('i', { className: `fas ${config.icon}`, style: { fontSize: '9px' } }),
+                React.createElement('i', { className: `fas ${config.icon}`, style: { fontSize: '8px' } }),
                 React.createElement('span', null, config.label)
             ),
-            // Content area
-            React.createElement('div', {
-                style: {
-                    width: '100%',
-                    flex: 1,
-                    padding: hasValue ? '8px' : '8px',
-                    fontSize: '11px',
-                    fontFamily: 'inherit',
-                    border: `1.5px solid ${hasValue ? config.borderColor : '#e5e7eb'}`,
-                    borderRadius: '6px',
-                    backgroundColor: hasValue ? '#ffffff' : config.bgColor,
-                    color: hasValue ? '#111827' : '#9ca3af',
-                    lineHeight: '1.4',
-                    transition: 'all 0.2s ease',
-                    whiteSpace: field === 'comments' ? 'pre-wrap' : 'nowrap',
-                    wordWrap: field === 'comments' ? 'break-word' : 'normal',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    display: field === 'comments' ? '-webkit-box' : 'flex',
-                    WebkitLineClamp: field === 'comments' ? 3 : undefined,
-                    WebkitBoxOrient: field === 'comments' ? 'vertical' : undefined,
-                    alignItems: field === 'comments' ? 'flex-start' : 'center',
-                    minHeight: '50px',
-                    position: 'relative'
-                },
-                className: hasValue ? 'hover:border-blue-400 hover:shadow-sm' : 'hover:border-gray-400',
-                title: hasValue ? displayValue : `Click to ${config.placeholder.toLowerCase()}`
-            }, 
-                hasValue ? (
-                    React.createElement('span', { style: { 
-                        display: 'block',
+            // Content area - inline input for compliance/data when editing, display otherwise
+            isEditing && (field === 'compliance' || field === 'data') ? (
+                React.createElement('input', {
+                    type: 'text',
+                    value: editingValue,
+                    onChange: handleInlineInputChange,
+                    onBlur: handleInlineInputBlur,
+                    onKeyDown: handleInlineInputKeyDown,
+                    placeholder: config.placeholder,
+                    autoFocus: true,
+                    style: {
                         width: '100%',
+                        flex: 1,
+                        padding: '4px 6px',
+                        fontSize: '11px',
+                        fontFamily: 'inherit',
+                        border: `1.5px solid ${config.borderColor}`,
+                        borderRadius: '4px',
+                        backgroundColor: '#ffffff',
+                        color: '#111827',
+                        outline: 'none',
+                        boxShadow: `0 0 0 2px ${config.color}40`
+                    }
+                })
+            ) : (
+                React.createElement('div', {
+                    style: {
+                        width: '100%',
+                        flex: 1,
+                        padding: '4px 6px',
+                        fontSize: '11px',
+                        fontFamily: 'inherit',
+                        border: `1.5px solid ${hasValue ? config.borderColor : '#e5e7eb'}`,
+                        borderRadius: '4px',
+                        backgroundColor: hasValue ? '#ffffff' : config.bgColor,
+                        color: hasValue ? '#111827' : '#9ca3af',
+                        lineHeight: '1.3',
+                        transition: 'all 0.2s ease',
+                        whiteSpace: field === 'comments' ? 'pre-wrap' : 'nowrap',
+                        wordWrap: field === 'comments' ? 'break-word' : 'normal',
                         overflow: 'hidden',
-                        textOverflow: 'ellipsis'
-                    } }, displayValue)
-                ) : (
-                    React.createElement('span', { 
-                        style: { 
-                            fontStyle: 'italic',
-                            fontSize: '10px',
-                            color: '#9ca3af'
-                        } 
-                    }, config.placeholder)
+                        textOverflow: 'ellipsis',
+                        display: field === 'comments' ? '-webkit-box' : 'flex',
+                        WebkitLineClamp: field === 'comments' ? 3 : undefined,
+                        WebkitBoxOrient: field === 'comments' ? 'vertical' : undefined,
+                        alignItems: field === 'comments' ? 'flex-start' : 'center',
+                        minHeight: '30px',
+                        position: 'relative'
+                    },
+                    className: field === 'comments' ? (hasValue ? 'hover:border-blue-400 hover:shadow-sm cursor-pointer' : 'hover:border-gray-400 cursor-pointer') : '',
+                    title: hasValue ? displayValue : `Click to ${config.placeholder.toLowerCase()}`
+                }, 
+                    hasValue ? (
+                        React.createElement('span', { style: { 
+                            display: 'block',
+                            width: '100%',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                        } }, displayValue)
+                    ) : (
+                        React.createElement('span', { 
+                            style: { 
+                                fontStyle: 'italic',
+                                fontSize: '10px',
+                                color: '#9ca3af'
+                            } 
+                        }, config.placeholder)
+                    )
                 )
             ),
             // Link icon for compliance/data fields
@@ -1966,7 +2038,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         const rowChildren = [
                             React.createElement('td', { 
                                 style: {
-                                    padding: '14px 16px',
+                                    padding: '10px 12px',
                                     fontSize: '13px',
                                     backgroundColor: rowBaseBgColor,
                                     border: 'none',
@@ -1981,7 +2053,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                 className: 'sticky left-0',
                                 'data-project-id': project.id
                             },
-                                React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
+                                React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
                                     React.createElement('span', { 
                                         style: { 
                                             fontWeight: '700', 

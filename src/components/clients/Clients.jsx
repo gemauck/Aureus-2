@@ -7813,8 +7813,8 @@ const Clients = React.memo(() => {
                         viewMode === 'groups' 
                             ? 'bg-blue-600 text-white shadow-sm' 
                             : isDark 
-                                ? 'text-gray-300' 
-                                : 'text-gray-600'
+                                ? 'text-gray-300 hover:text-gray-100 hover:bg-gray-700' 
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                     }`}
                 >
                     <i className="fas fa-layer-group mr-2"></i>

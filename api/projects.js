@@ -153,6 +153,7 @@ async function handler(req, res) {
     if (req.method === 'POST' && pathSegments.length === 1 && pathSegments[0] === 'projects') {
       let body = req.body
 
+      // If body is a string, parse it
       if (typeof body === 'string') {
         try {
           body = JSON.parse(body)
@@ -162,19 +163,28 @@ async function handler(req, res) {
         }
       }
 
-      if (!body || typeof body !== 'object' || Object.keys(body).length === 0) {
+      // Only try parseJsonBody if req.body is completely undefined
+      // If req.body exists (even if empty), Express has already parsed it
+      if (body === undefined) {
         body = await parseJsonBody(req)
       }
 
+      // Ensure body is an object
       body = body || {}
 
+      // Enhanced logging for debugging
       if (!body.name) {
         console.error('❌ No name provided in request body')
         console.error('❌ Full request details:', {
           method: req.method,
           url: req.url,
           headers: req.headers,
-          bodyKeys: Object.keys(body)
+          bodyKeys: Object.keys(body),
+          bodyType: typeof body,
+          bodyValue: body,
+          reqBodyExists: req.body !== undefined,
+          reqBodyType: typeof req.body,
+          reqBodyKeys: req.body ? Object.keys(req.body) : []
         })
         return badRequest(res, 'name required')
       }
@@ -348,7 +358,9 @@ async function handler(req, res) {
           priority: body.priority,
           type: body.type,
           assignedTo: body.assignedTo,
-          tasksList: typeof body.tasksList === 'string' ? body.tasksList : JSON.stringify(body.tasksList),
+          tasksList: body.tasksList !== undefined && body.tasksList !== null 
+            ? (typeof body.tasksList === 'string' ? body.tasksList : JSON.stringify(body.tasksList))
+            : undefined,
           taskLists: typeof body.taskLists === 'string' ? body.taskLists : JSON.stringify(body.taskLists),
           customFieldDefinitions: typeof body.customFieldDefinitions === 'string' ? body.customFieldDefinitions : JSON.stringify(body.customFieldDefinitions),
           team: typeof body.team === 'string' ? body.team : JSON.stringify(body.team),

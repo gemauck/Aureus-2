@@ -2434,10 +2434,32 @@ const Projects = () => {
                 };
                 
                 
+                console.log('📤 Projects: Creating project with data:', {
+                    name: newProject.name,
+                    clientName: newProject.clientName,
+                    hasName: !!newProject.name,
+                    dataKeys: Object.keys(newProject)
+                });
+                
                 const apiResponse = await window.DatabaseAPI.createProject(newProject);
+                
+                console.log('📥 Projects: API response received:', {
+                    hasResponse: !!apiResponse,
+                    responseKeys: apiResponse ? Object.keys(apiResponse) : [],
+                    hasData: !!apiResponse?.data,
+                    hasProject: !!apiResponse?.data?.project,
+                    responseStructure: apiResponse
+                });
                 
                 // Extract the project from the response structure { data: { project: {...} } }
                 const savedProject = apiResponse?.data?.project || apiResponse?.project || apiResponse?.data;
+                
+                console.log('📦 Projects: Extracted project:', {
+                    hasProject: !!savedProject,
+                    hasId: !!savedProject?.id,
+                    projectId: savedProject?.id,
+                    projectName: savedProject?.name
+                });
                 
                 if (savedProject && savedProject.id) {
                     // Normalize: map clientName to client for frontend compatibility
@@ -2445,6 +2467,7 @@ const Projects = () => {
                         ...savedProject,
                         client: savedProject.clientName || savedProject.client || ''
                     };
+                    console.log('✅ Projects: Project created successfully:', normalizedProject.name);
                     setProjects([...projects, normalizedProject]);
                     
                     // Update client's projectIds for new project
@@ -2452,15 +2475,40 @@ const Projects = () => {
                         updateClientProjectIds(null, projectData.client, savedProject.id);
                     }
                 } else {
-                    console.error('❌ API did not return a valid project with id:', savedProject);
+                    console.error('❌ Projects: API did not return a valid project with id:', {
+                        savedProject,
+                        apiResponse,
+                        responseStructure: {
+                            'apiResponse?.data?.project': apiResponse?.data?.project,
+                            'apiResponse?.project': apiResponse?.project,
+                            'apiResponse?.data': apiResponse?.data
+                        }
+                    });
                     alert('Project created but failed to retrieve. Please refresh the page.');
                 }
             }
             setShowModal(false);
             setSelectedProject(null);
         } catch (error) {
-            console.error('❌ Error saving project:', error);
-            alert('Failed to save project: ' + error.message);
+            console.error('❌ Projects: Error saving project:', {
+                error,
+                message: error.message,
+                status: error.status,
+                code: error.code,
+                stack: error.stack,
+                projectData: selectedProject ? 'editing' : 'creating',
+                projectName: projectData?.name
+            });
+            
+            // Provide more helpful error messages
+            let errorMessage = 'Failed to save project';
+            if (error.message) {
+                errorMessage += ': ' + error.message;
+            } else if (error.status) {
+                errorMessage += ` (HTTP ${error.status})`;
+            }
+            
+            alert(errorMessage);
         }
     }, [selectedProject, projects, logout, updateClientProjectIds]);
 

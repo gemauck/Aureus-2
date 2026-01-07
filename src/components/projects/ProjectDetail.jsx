@@ -3110,6 +3110,10 @@ function initializeProjectDetail() {
             }
         }
         
+        // Build the updated tasks array first, then use it for both state update and save
+        // This ensures we're working with the correct data including new tasks
+        let updatedTasks;
+        
         if (isNewTask) {
             if (viewingTaskParent) {
                 const newSubtask = {
@@ -3119,7 +3123,7 @@ function initializeProjectDetail() {
                     subtasks: [],
                     status: updatedTaskData.status || 'To Do'
                 };
-                setTasks(tasks.map(t => {
+                updatedTasks = tasks.map(t => {
                     if (t.id === viewingTaskParent.id) {
                         return {
                             ...t,
@@ -3127,7 +3131,7 @@ function initializeProjectDetail() {
                         };
                     }
                     return t;
-                }));
+                });
             } else {
                 const newTask = {
                     ...updatedTaskData,
@@ -3135,44 +3139,42 @@ function initializeProjectDetail() {
                     subtasks: [],
                     status: updatedTaskData.status || 'To Do'
                 };
-                setTasks([...tasks, newTask]);
+                updatedTasks = [...tasks, newTask];
             }
         } else {
             if (viewingTaskParent) {
-                setTasks(tasks.map(t => {
+                updatedTasks = tasks.map(t => {
                     if (t.id === viewingTaskParent.id) {
+                        // Find the original subtask to preserve all fields
+                        const originalSubtask = (t.subtasks || []).find(st => st.id === updatedTaskData.id);
                         return {
                             ...t,
                             subtasks: (t.subtasks || []).map(st =>
-                                st.id === updatedTaskData.id ? updatedTaskData : st
+                                st.id === updatedTaskData.id 
+                                    ? { ...originalSubtask, ...updatedTaskData } // Merge to preserve all fields
+                                    : st
                             )
                         };
                     }
                     return t;
-                }));
+                });
             } else {
-                setTasks(tasks.map(t => t.id === updatedTaskData.id ? updatedTaskData : t));
+                // Find the original task to preserve all fields
+                const originalTask = tasks.find(t => t.id === updatedTaskData.id);
+                updatedTasks = tasks.map(t => 
+                    t.id === updatedTaskData.id 
+                        ? { ...originalTask, ...updatedTaskData } // Merge to preserve all fields
+                        : t
+                );
             }
         }
+        
+        // Update state with the new tasks array
+        setTasks(updatedTasks);
         
         // Immediately save to database to ensure checklist and other changes persist
         // Don't wait for the debounced useEffect - save immediately
         try {
-            const updatedTasks = viewingTaskParent 
-                ? tasks.map(t => {
-                    if (t.id === viewingTaskParent.id) {
-                        return {
-                            ...t,
-                            subtasks: (t.subtasks || []).map(st =>
-                                st.id === updatedTaskData.id ? updatedTaskData : st
-                            )
-                        };
-                    }
-                    return t;
-                })
-                : tasks.map(t => t.id === updatedTaskData.id ? updatedTaskData : t);
-            
-            
             await persistProjectData({ nextTasks: updatedTasks });
         } catch (error) {
             console.error('❌ Failed to save task update:', error);

@@ -93,13 +93,25 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
         setIsSaving(true);
         
         try {
+            let dataToSave;
             // If user is entering a new client name
             if (showNewClientInput && newClientName.trim()) {
-                const dataToSave = {...formData, client: newClientName.trim()};
-                await onSave(dataToSave);
+                dataToSave = {...formData, client: newClientName.trim()};
             } else {
-                await onSave(formData);
+                dataToSave = formData;
             }
+            
+            console.log('📝 ProjectModal: Submitting project data:', {
+                hasName: !!dataToSave.name,
+                name: dataToSave.name,
+                client: dataToSave.client,
+                type: dataToSave.type,
+                status: dataToSave.status,
+                allFields: Object.keys(dataToSave),
+                isNewClient: showNewClientInput && newClientName.trim()
+            });
+            
+            await onSave(dataToSave);
         } catch (error) {
             console.error('❌ Error in handleSubmit:', error);
             alert('Failed to save project: ' + error.message);
@@ -168,7 +180,6 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
                                     value={formData.client}
                                     onChange={handleClientChange}
                                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                    required
                                 >
                                     <option value="">Select Client</option>
                                     {clients && Array.isArray(clients) && clients.length > 0 ? (

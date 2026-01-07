@@ -7,13 +7,29 @@ import { withLogging } from '../_lib/logger.js'
 
 async function handler(req, res) {
   try {
+    // Extract ID from Express params first (most reliable)
+    let id = req.params?.id
     
-    const url = new URL(req.url, `http://${req.headers.host}`)
-    const pathSegments = url.pathname.split('/').filter(Boolean)
-    const id = req.params?.id || pathSegments[pathSegments.length - 1] // Get the ID from params or URL
-
+    // Fallback: extract from URL if params not available
+    if (!id) {
+      const url = new URL(req.url, `http://${req.headers.host}`)
+      const pathSegments = url.pathname.split('/').filter(Boolean)
+      // Find 'projects' in path and get the next segment
+      const projectsIndex = pathSegments.indexOf('projects')
+      if (projectsIndex >= 0 && pathSegments[projectsIndex + 1]) {
+        id = pathSegments[projectsIndex + 1]
+      } else {
+        // Last resort: use last segment
+        id = pathSegments[pathSegments.length - 1]
+      }
+    }
 
     if (!id) {
+      console.error('❌ No project ID found in request:', {
+        url: req.url,
+        params: req.params,
+        pathname: req.url ? new URL(req.url, `http://${req.headers.host}`).pathname : 'N/A'
+      })
       return badRequest(res, 'Project ID required')
     }
 
@@ -121,7 +137,9 @@ async function handler(req, res) {
         priority: body.priority,
         type: body.type,
         assignedTo: body.assignedTo,
-        tasksList: typeof body.tasksList === 'string' ? body.tasksList : JSON.stringify(body.tasksList),
+        tasksList: body.tasksList !== undefined && body.tasksList !== null 
+          ? (typeof body.tasksList === 'string' ? body.tasksList : JSON.stringify(body.tasksList))
+          : undefined,
         taskLists: typeof body.taskLists === 'string' ? body.taskLists : JSON.stringify(body.taskLists),
         customFieldDefinitions: typeof body.customFieldDefinitions === 'string' ? body.customFieldDefinitions : JSON.stringify(body.customFieldDefinitions),
         team: typeof body.team === 'string' ? body.team : JSON.stringify(body.team),
@@ -256,10 +274,30 @@ async function handler(req, res) {
     // Delete Project (DELETE /api/projects/[id])
     if (req.method === 'DELETE') {
       try {
+        console.log('🗑️ DELETE Project request:', {
+          id,
+          reqParams: req.params,
+          url: req.url,
+          pathname: req.url ? new URL(req.url, `http://${req.headers.host}`).pathname : 'N/A',
+          pathSegments: req.url ? new URL(req.url, `http://${req.headers.host}`).pathname.split('/').filter(Boolean) : []
+        })
+        
         // Check if project exists first
         const projectExists = await prisma.project.findUnique({ where: { id } })
+        console.log('🔍 Project lookup result:', {
+          id,
+          found: !!projectExists,
+          projectName: projectExists?.name || 'N/A'
+        })
+        
         if (!projectExists) {
-          console.error('❌ Project not found for deletion:', id)
+          console.error('❌ Project not found for deletion:', {
+            id,
+            idType: typeof id,
+            idLength: id?.length,
+            reqParams: req.params,
+            url: req.url
+          })
           return notFound(res, 'Project not found')
         }
         
