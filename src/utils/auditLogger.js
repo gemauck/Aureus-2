@@ -90,6 +90,44 @@ const AuditLogger = {
         return logEntry;
     },
     
+    // Migrate localStorage logs to backend
+    migrateLocalStorageLogs: async () => {
+        try {
+            const localLogs = JSON.parse(localStorage.getItem('auditLogs') || '[]');
+            if (localLogs.length === 0) {
+                return;
+            }
+            
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                console.warn('⚠️ No auth token available, cannot migrate logs');
+                return;
+            }
+            
+            console.log(`🔄 Migrating ${localLogs.length} logs from localStorage to backend...`);
+            
+            // Migrate logs in batches
+            for (const log of localLogs.slice(0, 100)) { // Limit to 100 to avoid overwhelming the server
+                try {
+                    await fetch('/api/audit-logs', {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(log)
+                    });
+                } catch (err) {
+                    console.warn('⚠️ Failed to migrate log:', log.id, err);
+                }
+            }
+            
+            console.log('✅ Migration complete');
+        } catch (error) {
+            console.error('❌ Error migrating logs:', error);
+        }
+    },
+    
     // Get all audit logs (from backend if available, otherwise from localStorage)
     getAll: async () => {
         try {
@@ -105,17 +143,37 @@ const AuditLogger = {
                 
                 if (response.ok) {
                     const data = await response.json();
-                    console.log('✅ Fetched audit logs from backend:', data.logs?.length || 0, 'logs');
+                    const logCount = data.logs?.length || 0;
+                    console.log('✅ Fetched audit logs from backend:', logCount, 'logs');
+                    
+                    // If no logs in backend but we have localStorage logs, try to migrate
+                    if (logCount === 0) {
+                        const localLogs = JSON.parse(localStorage.getItem('auditLogs') || '[]');
+                        if (localLogs.length > 0) {
+                            console.log('🔄 No backend logs found, but localStorage has logs. Migrating...');
+                            // Migrate in background (don't await)
+                            AuditLogger.migrateLocalStorageLogs().catch(err => {
+                                console.error('❌ Migration failed:', err);
+                            });
+                        }
+                    }
+                    
                     return data.logs || [];
                 } else {
                     const errorText = await response.text();
                     console.error('❌ Failed to fetch audit logs:', response.status, errorText);
+                    console.error('❌ Response headers:', Object.fromEntries(response.headers.entries()));
                 }
             } else {
                 console.warn('⚠️ No auth token available, using localStorage');
             }
         } catch (error) {
             console.error('❌ Error fetching audit logs from backend, using localStorage:', error);
+            console.error('❌ Error details:', {
+                message: error.message,
+                stack: error.stack,
+                name: error.name
+            });
         }
         
         // Fallback to localStorage

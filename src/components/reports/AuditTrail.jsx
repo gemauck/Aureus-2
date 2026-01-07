@@ -11,6 +11,7 @@ const AuditTrail = () => {
     const [dateRange, setDateRange] = useState('7'); // days
     const [currentPage, setCurrentPage] = useState(1);
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
     const logsPerPage = 50;
 
     const AuditLogger = window.AuditLogger;
@@ -77,16 +78,22 @@ const AuditTrail = () => {
     const loadLogs = async () => {
         if (!AuditLogger || typeof AuditLogger.getAll !== 'function') {
             console.error('AuditLogger.getAll not available');
+            setError('AuditLogger not available');
             setLogs([]);
             setIsLoading(false);
             return;
         }
         setIsLoading(true);
+        setError(null);
         try {
             const allLogs = await AuditLogger.getAll();
             setLogs(allLogs || []);
+            if ((allLogs || []).length === 0) {
+                setError('No audit logs found. Perform some actions to generate logs.');
+            }
         } catch (error) {
             console.error('Error loading audit logs:', error);
+            setError(`Failed to load audit logs: ${error.message}`);
             setLogs([]);
         } finally {
             setIsLoading(false);
@@ -305,6 +312,23 @@ const AuditTrail = () => {
                 </div>
             )}
 
+            {/* Error Message */}
+            {error && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-start gap-2">
+                    <i className="fas fa-exclamation-triangle text-yellow-600 mt-0.5"></i>
+                    <div className="flex-1">
+                        <p className="text-xs text-yellow-800 font-medium mb-1">Notice</p>
+                        <p className="text-xs text-yellow-700">{error}</p>
+                    </div>
+                    <button
+                        onClick={() => setError(null)}
+                        className="text-yellow-600 hover:text-yellow-800"
+                    >
+                        <i className="fas fa-times"></i>
+                    </button>
+                </div>
+            )}
+
             {/* Summary Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
@@ -391,19 +415,28 @@ const AuditTrail = () => {
                 </div>
 
                 <div className="mt-2 flex items-center justify-between">
-                    <button
-                        onClick={() => {
-                            setSearchTerm('');
-                            setFilterModule('all');
-                            setFilterAction('all');
-                            setFilterUser('all');
-                            setDateRange('7');
-                        }}
-                        className="text-xs text-gray-600 hover:text-gray-900 px-2 py-1 hover:bg-white rounded transition-colors"
-                    >
-                        <i className="fas fa-redo mr-1"></i>
-                        Reset Filters
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => {
+                                setSearchTerm('');
+                                setFilterModule('all');
+                                setFilterAction('all');
+                                setFilterUser('all');
+                                setDateRange('7');
+                            }}
+                            className="text-xs text-gray-600 hover:text-gray-900 px-2 py-1 hover:bg-white rounded transition-colors"
+                        >
+                            <i className="fas fa-redo mr-1"></i>
+                            Reset Filters
+                        </button>
+                        <button
+                            onClick={loadLogs}
+                            className="text-xs text-blue-600 hover:text-blue-900 px-2 py-1 hover:bg-blue-50 rounded transition-colors"
+                        >
+                            <i className="fas fa-sync-alt mr-1"></i>
+                            Refresh
+                        </button>
+                    </div>
 
                     <div className="flex items-center gap-2">
                         <button
