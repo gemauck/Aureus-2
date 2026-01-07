@@ -595,8 +595,6 @@ const evaluateDieselRefundEvidence = (data, options = {}) => {
     return result;
 };
 
-// Export for use in modules
-if (typeof module !== 'undefined' && module.exports) {
 // Make available globally (browser) - execute immediately
 (function() {
     if (typeof window !== 'undefined') {
