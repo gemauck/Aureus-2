@@ -240,16 +240,14 @@ const Helpdesk = () => {
                         return updated;
                     });
                     
-                    // Close modal first
+                    // Close modal first so user sees the ticket immediately
                     setShowModal(false);
                     setSelectedTicket(null);
                     
-                    // Reload tickets after a short delay to ensure API has indexed the new ticket
-                    // This ensures we get the full ticket data with all relations
-                    setTimeout(async () => {
-                        console.log('🔄 Reloading tickets after creation...');
-                        await loadTickets();
-                    }, 500);
+                    // Don't reload for new tickets - the optimistic update is sufficient
+                    // The ticket is already in state with all the data we need
+                    // If user refreshes the page, they'll get the latest from API
+                    console.log('✅ Ticket added to state, skipping reload to preserve optimistic update');
                 } else {
                     console.error('❌ No ticket in create response:', response);
                     console.error('❌ Response structure:', {
