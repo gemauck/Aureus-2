@@ -10,6 +10,7 @@ const AuditTrail = () => {
     const [filterUser, setFilterUser] = useState('all');
     const [dateRange, setDateRange] = useState('7'); // days
     const [currentPage, setCurrentPage] = useState(1);
+    const [isLoading, setIsLoading] = useState(true);
     const logsPerPage = 50;
 
     const AuditLogger = window.AuditLogger;
@@ -65,10 +66,6 @@ const AuditTrail = () => {
 
     // Load logs
     useEffect(() => {
-        // Initialize sample logs if empty
-        if (AuditLogger && typeof AuditLogger.initializeSampleLogs === 'function') {
-            AuditLogger.initializeSampleLogs();
-        }
         loadLogs();
     }, []);
 
@@ -77,14 +74,23 @@ const AuditTrail = () => {
         applyFilters();
     }, [logs, searchTerm, filterModule, filterAction, filterUser, dateRange]);
 
-    const loadLogs = () => {
+    const loadLogs = async () => {
         if (!AuditLogger || typeof AuditLogger.getAll !== 'function') {
             console.error('AuditLogger.getAll not available');
             setLogs([]);
+            setIsLoading(false);
             return;
         }
-        const allLogs = AuditLogger.getAll();
-        setLogs(allLogs);
+        setIsLoading(true);
+        try {
+            const allLogs = await AuditLogger.getAll();
+            setLogs(allLogs || []);
+        } catch (error) {
+            console.error('Error loading audit logs:', error);
+            setLogs([]);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const applyFilters = () => {
@@ -433,7 +439,14 @@ const AuditTrail = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
-                            {currentLogs.length > 0 ? currentLogs.map(log => (
+                            {isLoading ? (
+                                <tr>
+                                    <td colSpan="6" className="px-3 py-12 text-center">
+                                        <i className="fas fa-spinner fa-spin text-2xl text-gray-400 mb-2"></i>
+                                        <p className="text-xs text-gray-500">Loading audit logs...</p>
+                                    </td>
+                                </tr>
+                            ) : currentLogs.length > 0 ? currentLogs.map(log => (
                                 <tr key={log.id} className="hover:bg-gray-50">
                                     <td className="px-3 py-2.5 text-xs text-gray-900">
                                         {new Date(log.timestamp).toLocaleString('en-ZA', {

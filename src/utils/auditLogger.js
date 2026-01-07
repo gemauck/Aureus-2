@@ -4,8 +4,6 @@
 const AuditLogger = {
     // Log an action to the audit trail
     log: (action, module, details, user) => {
-        const auditLogs = JSON.parse(localStorage.getItem('auditLogs') || '[]');
-        
         const logEntry = {
             id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             timestamp: new Date().toISOString(),
@@ -20,6 +18,23 @@ const AuditLogger = {
             success: true
         };
         
+        // Save to backend database (fire and forget)
+        const token = window.storage?.getToken?.();
+        if (token) {
+            fetch('/api/audit-logs', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(logEntry)
+            }).catch(err => {
+                console.warn('Failed to save audit log to backend:', err);
+            });
+        }
+        
+        // Also save to localStorage as backup
+        const auditLogs = JSON.parse(localStorage.getItem('auditLogs') || '[]');
         auditLogs.unshift(logEntry); // Add to beginning
         
         // Keep only last 1000 entries
@@ -34,8 +49,6 @@ const AuditLogger = {
     
     // Log a failed action
     logError: (action, module, error, user) => {
-        const auditLogs = JSON.parse(localStorage.getItem('auditLogs') || '[]');
-        
         const logEntry = {
             id: `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             timestamp: new Date().toISOString(),
@@ -49,6 +62,23 @@ const AuditLogger = {
             success: false
         };
         
+        // Save to backend database (fire and forget)
+        const token = window.storage?.getToken?.();
+        if (token) {
+            fetch('/api/audit-logs', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(logEntry)
+            }).catch(err => {
+                console.warn('Failed to save audit log to backend:', err);
+            });
+        }
+        
+        // Also save to localStorage as backup
+        const auditLogs = JSON.parse(localStorage.getItem('auditLogs') || '[]');
         auditLogs.unshift(logEntry);
         
         if (auditLogs.length > 1000) {
@@ -60,8 +90,29 @@ const AuditLogger = {
         return logEntry;
     },
     
-    // Get all audit logs
-    getAll: () => {
+    // Get all audit logs (from backend if available, otherwise from localStorage)
+    getAll: async () => {
+        try {
+            const token = window.storage?.getToken?.();
+            if (token) {
+                const response = await fetch('/api/audit-logs', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    return data.logs || [];
+                }
+            }
+        } catch (error) {
+            console.warn('Error fetching audit logs from backend, using localStorage:', error);
+        }
+        
+        // Fallback to localStorage
         return JSON.parse(localStorage.getItem('auditLogs') || '[]');
     },
     
