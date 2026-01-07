@@ -141,8 +141,8 @@ const ProjectsDatabaseFirst = () => {
         return saved === 'list' ? 'list' : 'grid';
     });
     
-    // Sort state for list view
-    const [sortColumn, setSortColumn] = useState('name'); // Default sort by name
+    // Sort state for list view - default alphabetical by name
+    const [sortColumn, setSortColumn] = useState('name'); // Default sort by name (alphabetical)
     const [sortDirection, setSortDirection] = useState('asc'); // 'asc' or 'desc'
     
     // IMMEDIATE route check on mount - opens project from URL directly
