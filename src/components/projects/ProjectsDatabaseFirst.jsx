@@ -764,16 +764,20 @@ const ProjectsDatabaseFirst = () => {
     };
 
     // Handle column sorting
-    const handleSort = (column) => {
+    const handleSort = useCallback((column) => {
+        console.log('🖱️ Sort clicked:', { column, currentSortColumn: sortColumn, currentDirection: sortDirection });
         if (sortColumn === column) {
             // Toggle direction if clicking the same column
-            setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+            const newDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            console.log('🔄 Toggling sort direction:', newDirection);
+            setSortDirection(newDirection);
         } else {
             // Set new column and default to ascending
+            console.log('🔄 Setting new sort column:', column);
             setSortColumn(column);
             setSortDirection('asc');
         }
-    };
+    }, [sortColumn, sortDirection]);
 
     // Sort function - memoized to ensure proper reactivity
     const sortProjects = useCallback((a, b) => {
@@ -822,9 +826,11 @@ const ProjectsDatabaseFirst = () => {
     }, [sortColumn, sortDirection]);
 
     // Filter and search - memoized to ensure proper sorting
-    const safeProjects = Array.isArray(projects) ? projects.filter(Boolean) : [];
-
     const filteredProjects = useMemo(() => {
+        // Ensure projects is an array
+        const safeProjects = Array.isArray(projects) ? projects.filter(Boolean) : [];
+        
+        // Filter projects
         const filtered = safeProjects.filter(project => {
             const projectName = (project?.name || '').toLowerCase();
             const clientName = (project?.client || '').toLowerCase();
@@ -838,13 +844,26 @@ const ProjectsDatabaseFirst = () => {
         });
         
         // Always sort - default is alphabetical by name (asc)
-        return [...filtered].sort(sortProjects);
-    }, [safeProjects, searchTerm, filterStatus, filterType, sortProjects]);
+        // Create a new array to avoid mutating the original
+        const sorted = [...filtered].sort(sortProjects);
+        
+        // Debug: Log first few sorted items to verify sorting
+        if (sorted.length > 0 && sortColumn === 'name' && sortDirection === 'asc') {
+            console.log('✅ Projects sorted alphabetically:', sorted.slice(0, 3).map(p => p.name));
+        }
+        
+        return sorted;
+    }, [projects, searchTerm, filterStatus, filterType, sortProjects]);
 
     // Load data on mount
     useEffect(() => {
         loadProjects();
     }, []);
+    
+    // Debug: Log when sorting changes
+    useEffect(() => {
+        console.log('🔄 Sort state changed:', { sortColumn, sortDirection, projectsCount: projects.length });
+    }, [sortColumn, sortDirection, projects.length]);
 
     // Auto-refresh data every 2 minutes (only when page is visible)
     useEffect(() => {
