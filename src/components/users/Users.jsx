@@ -1,5 +1,5 @@
 // Get dependencies from window
-const { useState, useEffect } = React;
+const { useState, useEffect, useMemo, useCallback } = React;
 const storage = window.storage;
 
 const Users = () => {
@@ -18,6 +18,10 @@ const Users = () => {
     const [filterStatus, setFilterStatus] = useState('all');
     const [viewMode, setViewMode] = useState('table'); // 'grid' or 'table'
     const [forceUpdate, setForceUpdate] = useState(0);
+    
+    // Sort state - default alphabetical by name
+    const [sortColumn, setSortColumn] = useState('name'); // Default sort by name (alphabetical)
+    const [sortDirection, setSortDirection] = useState('asc'); // 'asc' or 'desc'
 
     // Role definitions with permissions (Admin > Manager > User > Guest hierarchy)
     const roleDefinitions = {
@@ -573,14 +577,81 @@ const Users = () => {
         }
     };
 
-    // Filter users
-    const filteredUsers = users.filter(user => {
-        const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            user.email.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesRole = filterRole === 'all' || user.role === filterRole;
-        const matchesStatus = filterStatus === 'all' || user.status === filterStatus;
-        return matchesSearch && matchesRole && matchesStatus;
-    });
+    // Handle column sorting
+    const handleSort = useCallback((column) => {
+        if (sortColumn === column) {
+            // Toggle direction if clicking the same column
+            setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+        } else {
+            // Set new column and default to ascending
+            setSortColumn(column);
+            setSortDirection('asc');
+        }
+    }, [sortColumn, sortDirection]);
+
+    // Sort function - memoized to ensure proper reactivity
+    const sortUsers = useCallback((a, b) => {
+        let aValue, bValue;
+        
+        switch (sortColumn) {
+            case 'name':
+                aValue = (a.name || '').toLowerCase();
+                bValue = (b.name || '').toLowerCase();
+                break;
+            case 'email':
+                aValue = (a.email || '').toLowerCase();
+                bValue = (b.email || '').toLowerCase();
+                break;
+            case 'role':
+                aValue = (a.role || '').toLowerCase();
+                bValue = (b.role || '').toLowerCase();
+                break;
+            case 'department':
+                aValue = (a.department || '').toLowerCase();
+                bValue = (b.department || '').toLowerCase();
+                break;
+            case 'status':
+                aValue = (a.status || '').toLowerCase();
+                bValue = (b.status || '').toLowerCase();
+                break;
+            case 'lastSeen':
+                aValue = a.lastSeenAt ? new Date(a.lastSeenAt).getTime() : 0;
+                bValue = b.lastSeenAt ? new Date(b.lastSeenAt).getTime() : 0;
+                break;
+            default:
+                aValue = (a.name || '').toLowerCase();
+                bValue = (b.name || '').toLowerCase();
+        }
+        
+        let comparison = 0;
+        if (sortColumn === 'lastSeen') {
+            // Numeric comparison for dates
+            comparison = aValue - bValue;
+        } else {
+            // String comparison for alphabetical sorting
+            comparison = aValue.localeCompare(bValue);
+        }
+        
+        return sortDirection === 'asc' ? comparison : -comparison;
+    }, [sortColumn, sortDirection]);
+
+    // Filter and sort users - memoized to ensure proper sorting
+    const filteredUsers = useMemo(() => {
+        // Filter users
+        const filtered = users.filter(user => {
+            const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                user.email.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesRole = filterRole === 'all' || user.role === filterRole;
+            const matchesStatus = filterStatus === 'all' || user.status === filterStatus;
+            return matchesSearch && matchesRole && matchesStatus;
+        });
+        
+        // Always sort - default is alphabetical by name (asc)
+        // Create a new array to avoid mutating the original
+        const sorted = [...filtered].sort(sortUsers);
+        
+        return sorted;
+    }, [users, searchTerm, filterRole, filterStatus, sortUsers]);
 
     // Get user count by role
     const getUserCountByRole = (role) => {
@@ -908,12 +979,84 @@ const Users = () => {
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
                                 <tr>
-                                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase">User</th>
-                                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Email</th>
-                                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Role</th>
-                                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Department</th>
-                                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Status</th>
-                                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Last Seen</th>
+                                    <th 
+                                        className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                                        onClick={() => handleSort('name')}
+                                    >
+                                        <div className="flex items-center space-x-2">
+                                            <span>User</span>
+                                            {sortColumn === 'name' ? (
+                                                <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600 text-sm`}></i>
+                                            ) : (
+                                                <i className={`fas fa-sort text-gray-400 opacity-50 text-sm`}></i>
+                                            )}
+                                        </div>
+                                    </th>
+                                    <th 
+                                        className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                                        onClick={() => handleSort('email')}
+                                    >
+                                        <div className="flex items-center space-x-2">
+                                            <span>Email</span>
+                                            {sortColumn === 'email' ? (
+                                                <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600 text-sm`}></i>
+                                            ) : (
+                                                <i className={`fas fa-sort text-gray-400 opacity-50 text-sm`}></i>
+                                            )}
+                                        </div>
+                                    </th>
+                                    <th 
+                                        className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                                        onClick={() => handleSort('role')}
+                                    >
+                                        <div className="flex items-center space-x-2">
+                                            <span>Role</span>
+                                            {sortColumn === 'role' ? (
+                                                <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600 text-sm`}></i>
+                                            ) : (
+                                                <i className={`fas fa-sort text-gray-400 opacity-50 text-sm`}></i>
+                                            )}
+                                        </div>
+                                    </th>
+                                    <th 
+                                        className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                                        onClick={() => handleSort('department')}
+                                    >
+                                        <div className="flex items-center space-x-2">
+                                            <span>Department</span>
+                                            {sortColumn === 'department' ? (
+                                                <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600 text-sm`}></i>
+                                            ) : (
+                                                <i className={`fas fa-sort text-gray-400 opacity-50 text-sm`}></i>
+                                            )}
+                                        </div>
+                                    </th>
+                                    <th 
+                                        className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                                        onClick={() => handleSort('status')}
+                                    >
+                                        <div className="flex items-center space-x-2">
+                                            <span>Status</span>
+                                            {sortColumn === 'status' ? (
+                                                <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600 text-sm`}></i>
+                                            ) : (
+                                                <i className={`fas fa-sort text-gray-400 opacity-50 text-sm`}></i>
+                                            )}
+                                        </div>
+                                    </th>
+                                    <th 
+                                        className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase cursor-pointer hover:bg-gray-100 transition-colors select-none"
+                                        onClick={() => handleSort('lastSeen')}
+                                    >
+                                        <div className="flex items-center space-x-2">
+                                            <span>Last Seen</span>
+                                            {sortColumn === 'lastSeen' ? (
+                                                <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} text-primary-600 text-sm`}></i>
+                                            ) : (
+                                                <i className={`fas fa-sort text-gray-400 opacity-50 text-sm`}></i>
+                                            )}
+                                        </div>
+                                    </th>
                                     <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Actions</th>
                                 </tr>
                             </thead>
