@@ -30,7 +30,7 @@ const TaskManagement = () => {
     const [isInlineAdding, setIsInlineAdding] = useState(false);
     const [inlineQuickError, setInlineQuickError] = useState('');
     const [sortKey, setSortKey] = useState('dueDate');
-    const [sortDir, note_setSortDir] = useState('asc'); // asc | desc
+    const [sortDir, setSortDir] = useState('asc'); // asc | desc
 
     // Function to update view and save to localStorage
     const updateView = (newView) => {
@@ -836,25 +836,24 @@ const TaskManagement = () => {
                             <div className={`${isDark ? 'bg-gray-900/40 text-gray-300 border-gray-700' : 'bg-gray-50 text-gray-600 border-gray-200'} border-b px-4 py-2 text-xs font-semibold`}>
                                 <div className="grid grid-cols-12 gap-3 items-center">
                                     <SortableTh label="Task" colSpan="col-span-4" sortKeyName="title" sortKey={sortKey} sortDir={sortDir} onSort={(k) => {
-                                        if (k === sortKey) note_setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); note_setSortDir('asc'); }
+                                        if (k === sortKey) setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); setSortDir('asc'); }
                                     }} isDark={isDark} />
-                                    <SortableTh label="Status" colSpan="col-span-2" sortKeyName="status" sortKey={sortKey} sortDir={sortDir} onSort={(k) => {
-                                        if (k === sortKey) note_setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); note_setSortDir('asc'); }
+                                    <SortableTh label="Status" colSpan="col-span-1" sortKeyName="status" sortKey={sortKey} sortDir={sortDir} onSort={(k) => {
+                                        if (k === sortKey) setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); setSortDir('asc'); }
                                     }} isDark={isDark} />
-                                    <div className="col-span-3 flex items-center gap-3">
-                                        <SortableTh label="Client" colSpan="col-span-6" sortKeyName="client" sortKey={sortKey} sortDir={sortDir} onSort={(k) => {
-                                            if (k === sortKey) note_setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); note_setSortDir('asc'); }
-                                        }} isDark={isDark} />
-                                        <SortableTh label="Lead" colSpan="col-span-6" sortKeyName="lead" sortKey={sortKey} sortDir={sortDir} onSort={(k) => {
-                                            if (k === sortKey) note_setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); note_setSortDir('asc'); }
-                                        }} isDark={isDark} />
-                                    </div>
-                                    <SortableTh label="Due Date" colSpan="col-span-2" sortKeyName="dueDate" sortKey={sortKey} sortDir={sortDir} onSort={(k) => {
-                                        if (k === sortKey) note_setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); note_setSortDir('asc'); }
+                                    <SortableTh label="Client" colSpan="col-span-2" sortKeyName="client" sortKey={sortKey} sortDir={sortDir} onSort={(k) => {
+                                        if (k === sortKey) setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); setSortDir('asc'); }
                                     }} isDark={isDark} />
-                                    <SortableTh label="Priority" colSpan="col-span-1 justify-end" sortKeyName="priority" sortKey={sortKey} sortDir={sortDir} onSort={(k) => {
-                                        if (k === sortKey) note_setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); note_setSortDir('asc'); }
-                                    }} isDark={isDark} alignRight />
+                                    <SortableTh label="Lead" colSpan="col-span-2" sortKeyName="lead" sortKey={sortKey} sortDir={sortDir} onSort={(k) => {
+                                        if (k === sortKey) setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); setSortDir('asc'); }
+                                    }} isDark={isDark} />
+                                    <SortableTh label="Due" colSpan="col-span-1" sortKeyName="dueDate" sortKey={sortKey} sortDir={sortDir} onSort={(k) => {
+                                        if (k === sortKey) setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); setSortDir('asc'); }
+                                    }} isDark={isDark} />
+                                    <SortableTh label="Priority" colSpan="col-span-1" sortKeyName="priority" sortKey={sortKey} sortDir={sortDir} onSort={(k) => {
+                                        if (k === sortKey) setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); setSortDir('asc'); }
+                                    }} isDark={isDark} />
+                                    <div className="col-span-1 text-right">Actions</div>
                                 </div>
                             </div>
 
@@ -1177,16 +1176,17 @@ const TaskListRow = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clie
     const statusLabel = (() => {
         const map = {
             'todo': 'To Do',
-            'in-progress': 'In Progress',
-            'completed': 'Completed',
-            'cancelled': 'Cancelled'
+            'in-progress': 'In Prog',
+            'completed': 'Done',
+            'cancelled': 'Cancel'
         };
         return map[task.status] || task.status || '—';
     })();
 
     const due = task.dueDate ? new Date(task.dueDate) : null;
     const isOverdue = due ? (due < new Date() && task.status !== 'completed') : false;
-    const dueLabel = due ? due.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+    const dueLabel = due ? due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+    const dueTitle = due ? due.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
 
     const priority = (task.priority || 'medium').toLowerCase();
 
@@ -1225,7 +1225,7 @@ const TaskListRow = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clie
                 </div>
 
                 {/* Status */}
-                <div className="col-span-2">
+                <div className="col-span-1">
                     <button
                         type="button"
                         onClick={handleStatusClick}
@@ -1236,29 +1236,40 @@ const TaskListRow = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clie
                     </button>
                 </div>
 
-                {/* Client / Lead */}
-                <div className="col-span-3 min-w-0">
+                {/* Client */}
+                <div className="col-span-2 min-w-0">
                     <div className={`text-sm truncate ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
                         {client?.name || '—'}
                     </div>
-                    <div className={`text-xs truncate ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {lead?.name || (task.leadId ? `Lead: ${task.leadId}` : '—')}
+                </div>
+
+                {/* Lead */}
+                <div className="col-span-2 min-w-0">
+                    <div className={`text-sm truncate ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                        {lead?.name || '—'}
                     </div>
                 </div>
 
                 {/* Due Date */}
-                <div className={`col-span-2 text-sm ${isOverdue ? 'text-red-600 font-semibold' : isDark ? 'text-gray-200' : 'text-gray-800'}`}>
+                <div
+                    className={`col-span-1 text-sm ${isOverdue ? 'text-red-600 font-semibold' : isDark ? 'text-gray-200' : 'text-gray-800'}`}
+                    title={dueTitle}
+                >
                     {dueLabel}
                 </div>
 
-                {/* Priority + Actions */}
-                <div className="col-span-1 flex items-center justify-end gap-2">
+                {/* Priority */}
+                <div className="col-span-1 flex items-center">
                     <span
                         className={`px-2 py-1 rounded text-xs font-semibold ${getPriorityColor(priority)} ${getPriorityTextColor(priority)}`}
                         title={`Priority: ${priority}`}
                     >
                         {priority}
                     </span>
+                </div>
+
+                {/* Actions */}
+                <div className="col-span-1 flex items-center justify-end gap-2">
                     <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); onEdit(task); }}
