@@ -1465,6 +1465,13 @@ function initializeProjectDetail() {
         // Only skip sync if ref is set AND we're not switching projects
         // This ensures that when navigating back, we always sync from the database
         if (normalizedValue !== hasWeeklyFMSReviewProcess) {
+            console.log('🔄 ProjectDetail: Syncing hasWeeklyFMSReviewProcess from prop', {
+                projectId: project?.id,
+                propValue: project.hasWeeklyFMSReviewProcess,
+                normalizedValue,
+                currentState: hasWeeklyFMSReviewProcess,
+                refValue: hasWeeklyFMSReviewProcessChangedRef.current
+            });
             // Always sync - the ref is reset when project.id changes anyway
             setHasWeeklyFMSReviewProcess(normalizedValue);
             // Reset the ref after syncing from prop to allow future syncs
@@ -1475,6 +1482,12 @@ function initializeProjectDetail() {
     // Also sync on mount to ensure we have the latest value
     useEffect(() => {
         const normalizedValue = normalizeHasWeeklyFMSReviewProcess(project.hasWeeklyFMSReviewProcess);
+        console.log('🔄 ProjectDetail: Syncing hasWeeklyFMSReviewProcess on project.id change', {
+            projectId: project?.id,
+            propValue: project.hasWeeklyFMSReviewProcess,
+            normalizedValue,
+            currentState: hasWeeklyFMSReviewProcess
+        });
         setHasWeeklyFMSReviewProcess(normalizedValue);
         // Reset the changed ref when project changes to allow sync from database
         hasWeeklyFMSReviewProcessChangedRef.current = false;

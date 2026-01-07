@@ -1590,7 +1590,9 @@ const Projects = () => {
                                 client: freshProjectData.clientName || freshProjectData.client || ''
                             };
                             console.log('✅ Projects: Refreshed project from database:', normalizedProject.name, {
-                                hasWeeklyFMSReviewProcess: normalizedProject.hasWeeklyFMSReviewProcess
+                                hasWeeklyFMSReviewProcess: normalizedProject.hasWeeklyFMSReviewProcess,
+                                hasWeeklyFMSReviewProcessType: typeof normalizedProject.hasWeeklyFMSReviewProcess,
+                                rawValue: freshProjectData.hasWeeklyFMSReviewProcess
                             });
                             
                             // Update projects array with fresh data
