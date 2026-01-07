@@ -87,8 +87,10 @@ const AuditTrail = () => {
         setError(null);
         try {
             const allLogs = await AuditLogger.getAll();
-            setLogs(allLogs || []);
-            if ((allLogs || []).length === 0) {
+            // Ensure allLogs is an array
+            const logsArray = Array.isArray(allLogs) ? allLogs : (allLogs?.logs && Array.isArray(allLogs.logs) ? allLogs.logs : []);
+            setLogs(logsArray);
+            if (logsArray.length === 0) {
                 setError('No audit logs found. Perform some actions to generate logs.');
             }
         } catch (error) {
@@ -101,7 +103,9 @@ const AuditTrail = () => {
     };
 
     const applyFilters = () => {
-        let filtered = [...logs];
+        // Ensure logs is an array
+        const logsArray = Array.isArray(logs) ? logs : [];
+        let filtered = [...logsArray];
         
         const currentUser = getCurrentUser();
         const userIsAdmin = isAdmin();
@@ -253,10 +257,11 @@ const AuditTrail = () => {
         }
     };
 
-    // Get unique values for filters
-    const modules = [...new Set(logs.map(log => log.module))];
-    const actions = [...new Set(logs.map(log => log.action))];
-    const users = [...new Set(logs.map(log => ({ id: log.userId, name: log.user })))];
+    // Get unique values for filters (ensure logs is an array)
+    const logsArray = Array.isArray(logs) ? logs : [];
+    const modules = [...new Set(logsArray.map(log => log.module))];
+    const actions = [...new Set(logsArray.map(log => log.action))];
+    const users = [...new Set(logsArray.map(log => ({ id: log.userId, name: log.user })))];
 
     // Pagination
     const indexOfLastLog = currentPage * logsPerPage;
