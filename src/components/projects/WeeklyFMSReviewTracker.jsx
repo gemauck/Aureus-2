@@ -377,7 +377,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             hasLoadedInitialDataRef.current = true;
             setIsLoading(false);
         }
-    }, [project?.documentSections, project?.id]);
+    }, [project?.weeklyFMSReviewSections, project?.documentSections, project?.id]);
     
     const refreshFromDatabase = useCallback(async (forceUpdate = false) => {
         if (!project?.id || !apiRef.current) return;
@@ -667,10 +667,22 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 // Fallback to documentSections API if weeklyFMSReviewSections API doesn't exist
                 await apiRef.current.saveDocumentSections(project.id, payload, options.skipParentUpdate);
             } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
+                const serialized = serializeSections(payload);
                 const updatePayload = {
-                    weeklyFMSReviewSections: serializeSections(payload)
+                    weeklyFMSReviewSections: serialized
                 };
-                await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                const result = await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                
+                // Update parent component's project prop if available and not skipping
+                if (!options.skipParentUpdate && window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                    const updatedProject = result?.data?.project || result?.project || result?.data;
+                    if (updatedProject) {
+                        window.updateViewingProject({
+                            ...updatedProject,
+                            weeklyFMSReviewSections: serialized
+                        });
+                    }
+                }
             } else {
                 throw new Error('No available API for saving document sections');
             }
@@ -1182,13 +1194,28 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             try {
                 const payload = sectionsRef.current || {};
                 
-                if (apiRef.current && typeof apiRef.current.saveDocumentSections === 'function') {
+                if (apiRef.current && typeof apiRef.current.saveWeeklyFMSReviewSections === 'function') {
+                    await apiRef.current.saveWeeklyFMSReviewSections(project.id, payload, false);
+                } else if (apiRef.current && typeof apiRef.current.saveDocumentSections === 'function') {
+                    // Fallback to documentSections API if weeklyFMSReviewSections API doesn't exist
                     await apiRef.current.saveDocumentSections(project.id, payload, false);
                 } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
+                    const serialized = serializeSections(payload);
                     const updatePayload = {
-                        documentSections: serializeSections(payload)
+                        weeklyFMSReviewSections: serialized
                     };
-                    await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                    const result = await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                    
+                    // Update parent component's project prop
+                    if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                        const updatedProject = result?.data?.project || result?.project || result?.data;
+                        if (updatedProject) {
+                            window.updateViewingProject({
+                                ...updatedProject,
+                                weeklyFMSReviewSections: serialized
+                            });
+                        }
+                    }
                 } else {
                     throw new Error('No available API for saving document sections');
                 }

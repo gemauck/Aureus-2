@@ -2184,7 +2184,15 @@ const Projects = () => {
                     if (value === true || value === 'true' || value === 1) return true;
                     if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
                     return false;
-                })()
+                })(),
+                // Ensure hasWeeklyFMSReviewProcess is properly included
+                hasWeeklyFMSReviewProcess: (() => {
+                    const value = fullProject.hasWeeklyFMSReviewProcess;
+                    if (value === true || value === 'true' || value === 1) return true;
+                    if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+                    return false;
+                })(),
+                weeklyFMSReviewSections: typeof fullProject.weeklyFMSReviewSections === 'string' ? JSON.parse(fullProject.weeklyFMSReviewSections || '[]') : (fullProject.weeklyFMSReviewSections || [])
             };
             
             // Expose a function to update viewingProject from child components
@@ -2213,7 +2221,14 @@ const Projects = () => {
                         if (value === true || value === 'true' || value === 1) return true;
                         if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
                         return false;
-                    })()
+                    })(),
+                    hasWeeklyFMSReviewProcess: (() => {
+                        const value = updatedProject.hasWeeklyFMSReviewProcess;
+                        if (value === true || value === 'true' || value === 1) return true;
+                        if (typeof value === 'string' && value.toLowerCase() === 'true') return true;
+                        return false;
+                    })(),
+                    weeklyFMSReviewSections: typeof updatedProject.weeklyFMSReviewSections === 'string' ? JSON.parse(updatedProject.weeklyFMSReviewSections || '[]') : (updatedProject.weeklyFMSReviewSections || [])
                 };
                 
                 // Use smart comparison to prevent unnecessary re-renders
@@ -2222,7 +2237,7 @@ const Projects = () => {
                         return normalized;
                     }
                     // Compare important fields to see if anything actually changed
-                    const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'tasks', 'taskLists', 'customFieldDefinitions', 'documents'];
+                    const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'hasWeeklyFMSReviewProcess', 'tasks', 'taskLists', 'customFieldDefinitions', 'documents', 'weeklyFMSReviewSections'];
                     const hasChanges = importantFields.some(field => {
                         const prevValue = prev[field];
                         const newValue = normalized[field];
@@ -2278,7 +2293,7 @@ const Projects = () => {
                     // If it's the same project ID, check if data actually changed
                     if (prev && prev.id === normalizedProject.id) {
                         // Compare important fields to see if anything actually changed
-                        const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'tasks', 'taskLists', 'documentSections', 'customFieldDefinitions', 'documents'];
+                        const importantFields = ['name', 'client', 'status', 'hasDocumentCollectionProcess', 'hasWeeklyFMSReviewProcess', 'tasks', 'taskLists', 'documentSections', 'weeklyFMSReviewSections', 'customFieldDefinitions', 'documents'];
                         const hasChanges = importantFields.some(field => {
                             const prevValue = prev[field];
                             const newValue = normalizedProject[field];

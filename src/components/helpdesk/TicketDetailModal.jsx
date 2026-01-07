@@ -2,6 +2,32 @@
 const { useState, useEffect, useRef } = React;
 const CommentInputWithMentions = window.CommentInputWithMentions;
 
+// Safe useAuth wrapper - always returns a consistent hook result
+const useAuthSafe = () => {
+    const useAuthHook = window.useAuth && typeof window.useAuth === 'function' ? window.useAuth : null;
+    
+    if (useAuthHook) {
+        try {
+            const authResult = useAuthHook();
+            if (authResult && typeof authResult === 'object') {
+                return authResult;
+            }
+        } catch (error) {
+            console.warn('⚠️ TicketDetailModal: useAuth hook threw an error:', error);
+        }
+    }
+    
+    // Return default auth object if useAuth is not available
+    return {
+        user: null,
+        logout: () => {
+            console.warn('⚠️ TicketDetailModal: useAuth not available, cannot logout');
+            window.location.hash = '#/login';
+        },
+        loading: false,
+    };
+};
+
 const TicketDetailModal = ({ 
     ticket, 
     onSave, 
@@ -9,6 +35,9 @@ const TicketDetailModal = ({
     onDelete
 }) => {
     const isCreating = !ticket || !ticket.id;
+    
+    // Get auth at component level (hooks must be called at top level)
+    const { user } = useAuthSafe();
     
     const [activeTab, setActiveTab] = useState('overview');
     const [isEditing, setIsEditing] = useState(isCreating);
@@ -163,10 +192,11 @@ const TicketDetailModal = ({
         if (!newComment.trim()) return;
 
         try {
+            // Use user from hook (called at component level)
             const comment = {
                 message: newComment,
-                userId: window.useAuth?.()?.user?.id,
-                userName: window.useAuth?.()?.user?.name || window.useAuth?.()?.user?.email,
+                userId: user?.id || user?.sub,
+                userName: user?.name || user?.email || 'Unknown User',
                 timestamp: new Date().toISOString(),
                 isInternal: false
             };

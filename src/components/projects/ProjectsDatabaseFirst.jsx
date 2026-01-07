@@ -74,9 +74,13 @@ const normalizeProject = (project) => {
     const parsedActivityLog = parseJSONField(project.activityLog, []);
     const parsedTeam = parseJSONField(project.team, []);
     const parsedDocumentSections = parseJSONField(project.documentSections, []);
+    const parsedWeeklyFMSReviewSections = parseJSONField(project.weeklyFMSReviewSections, []);
     const hasDocProcess = project.hasDocumentCollectionProcess === true ||
         project.hasDocumentCollectionProcess === 'true' ||
         project.hasDocumentCollectionProcess === 1;
+    const hasWeeklyFMSReview = project.hasWeeklyFMSReviewProcess === true ||
+        project.hasWeeklyFMSReviewProcess === 'true' ||
+        project.hasWeeklyFMSReviewProcess === 1;
 
     return {
         id: project.id,
@@ -104,6 +108,8 @@ const normalizeProject = (project) => {
         notes: project.notes || '',
         hasDocumentCollectionProcess: hasDocProcess,
         documentSections: parsedDocumentSections,
+        hasWeeklyFMSReviewProcess: hasWeeklyFMSReview,
+        weeklyFMSReviewSections: parsedWeeklyFMSReviewSections,
         monthlyProgress: typeof project.monthlyProgress === 'string'
             ? project.monthlyProgress
             : JSON.stringify(project.monthlyProgress || {}),

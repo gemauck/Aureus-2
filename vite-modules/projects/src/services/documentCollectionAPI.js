@@ -105,6 +105,50 @@ class DocumentCollectionAPI {
     }
 
     /**
+     * Save weekly FMS review sections to project
+     * @param {string} projectId - The project ID
+     * @param {Object|Array} sectionsPayload - Either a flat sections array (legacy)
+     *                                        or a `{ [year]: Section[] }` map (new, year‑scoped)
+     * @param {boolean} skipParentUpdate - If true, skip updating parent component (useful when modals are open)
+     */
+    async saveWeeklyFMSReviewSections(projectId, sectionsPayload, skipParentUpdate = false) {
+        if (!projectId) {
+            throw new Error('Project ID is required');
+        }
+
+        const payload =
+            sectionsPayload && typeof sectionsPayload === 'object'
+                ? sectionsPayload
+                : Array.isArray(sectionsPayload)
+                    ? sectionsPayload
+                    : [];
+
+        try {
+            const serialized = JSON.stringify(payload);
+            const result = await window.DatabaseAPI.updateProject(projectId, {
+                weeklyFMSReviewSections: serialized
+            });
+
+            // Update parent component's project prop if available and not skipping
+            // Skip parent update when modals/forms are open to prevent them from closing
+            if (!skipParentUpdate && window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                const updatedProject = result?.data?.project || result?.project || result?.data;
+                if (updatedProject) {
+                    window.updateViewingProject({
+                        ...updatedProject,
+                        weeklyFMSReviewSections: serialized
+                    });
+                }
+            }
+
+            return result;
+        } catch (error) {
+            console.error('❌ Error saving weekly FMS review sections:', error);
+            throw error;
+        }
+    }
+
+    /**
      * Fetch fresh project data from database
      */
     async fetchProject(projectId) {
