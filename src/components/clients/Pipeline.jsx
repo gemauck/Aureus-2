@@ -901,7 +901,12 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 case 'status':
                     return (a, b) => directionMultiplier * normalizeLifecycleStage(a.status).localeCompare(normalizeLifecycleStage(b.status));
                 case 'stage':
-                    return (a, b) => directionMultiplier * (a.stage || '').localeCompare(b.stage || '');
+                    return (a, b) => {
+                        const stageOrder = { 'Awareness': 1, 'Interest': 2, 'Desire': 3, 'Action': 4 };
+                        const stageA = stageOrder[a.stage] || 0;
+                        const stageB = stageOrder[b.stage] || 0;
+                        return directionMultiplier * (stageA - stageB);
+                    };
                 default:
                     return () => 0;
             }
@@ -1660,7 +1665,10 @@ function doesOpportunityBelongToClient(opportunity, client) {
                 >
                     <button
                         type="button"
-                        onClick={() => handleListSort(column)}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleListSort(column);
+                        }}
                         className={`flex items-center gap-2 transition-colors ${
                             isActive ? 'text-gray-900' : 'text-gray-500 hover:text-gray-700'
                         }`}
@@ -1680,15 +1688,15 @@ function doesOpportunityBelongToClient(opportunity, client) {
                             <thead className="bg-gray-50">
                                 <tr>
                                     {renderSortableHeader('Name', 'name')}
-                                    {renderSortableHeader('Company', 'company')}
                                     {renderSortableHeader('Type', 'type')}
+                                    {renderSortableHeader('Stage', 'stage')}
                                     {renderSortableHeader('Status', 'status')}
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {items.length === 0 ? (
                                     <tr>
-                                        <td colSpan="4" className="px-4 py-12 text-center text-sm text-gray-500">
+                                        <td colSpan="5" className="px-4 py-12 text-center text-sm text-gray-500">
                                             <i className="fas fa-list-ul text-3xl text-gray-300 mb-3"></i>
                                             <p>No leads or opportunities match your filters.</p>
                                             <p className="text-xs text-gray-400 mt-1">Adjust filters to see more results.</p>
@@ -1727,12 +1735,20 @@ function doesOpportunityBelongToClient(opportunity, client) {
                                                         </span>
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-2 text-sm text-gray-700">
-                                                    {isLead ? (item.company || 'Lead') : (item.clientName || 'Unknown Client')}
-                                                </td>
                                                 <td className="px-6 py-2">
                                                     <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${isLead ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
                                                         {isLead ? 'Lead' : 'Opportunity'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-2">
+                                                    <span className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full ${
+                                                        item.stage === 'Awareness' ? 'bg-gray-100 text-gray-800' :
+                                                        item.stage === 'Interest' ? 'bg-blue-100 text-blue-800' :
+                                                        item.stage === 'Desire' ? 'bg-yellow-100 text-yellow-800' :
+                                                        item.stage === 'Action' ? 'bg-green-100 text-green-800' :
+                                                        'bg-gray-100 text-gray-800'
+                                                    }`}>
+                                                        {item.stage || 'Awareness'}
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-2">
