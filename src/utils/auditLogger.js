@@ -92,9 +92,24 @@ const AuditLogger = {
     
     // Migrate localStorage logs to backend
     migrateLocalStorageLogs: async () => {
+        // Prevent multiple migrations from running simultaneously
+        if (window._auditLogMigrationInProgress) {
+            console.log('⏸️ Audit log migration already in progress, skipping...');
+            return { migrated: 0, failed: 0, total: 0, skipped: true };
+        }
+        
+        // Check if migration was already completed in this session
+        const migrationKey = 'audit_log_migration_completed';
+        if (sessionStorage.getItem(migrationKey)) {
+            return { migrated: 0, failed: 0, total: 0, skipped: true };
+        }
+        
         try {
+            window._auditLogMigrationInProgress = true;
+            
             const localLogs = JSON.parse(localStorage.getItem('auditLogs') || '[]');
             if (localLogs.length === 0) {
+                sessionStorage.setItem(migrationKey, 'true');
                 return { migrated: 0, total: 0 };
             }
             
@@ -104,15 +119,28 @@ const AuditLogger = {
                 return { migrated: 0, total: localLogs.length };
             }
             
-            console.log(`🔄 Migrating ${localLogs.length} logs from localStorage to backend...`);
+            console.log(`🔄 Migrating ${localLogs.length} logs from localStorage to backend (rate-limited)...`);
             
             let migrated = 0;
             let failed = 0;
-            const logsToMigrate = localLogs.slice(0, 100); // Limit to 100 to avoid overwhelming the server
+            let rateLimited = false;
+            // Reduce batch size to 20 and process slowly to avoid rate limits
+            const BATCH_SIZE = 20;
+            const DELAY_BETWEEN_REQUESTS = 1000; // 1 second between requests
+            const DELAY_AFTER_429 = 10000; // 10 seconds after rate limit
             
-            // Migrate logs with rate limiting to avoid 429 errors
+            const logsToMigrate = localLogs.slice(0, BATCH_SIZE);
+            
+            // Migrate logs with aggressive rate limiting to avoid 429 errors
             for (let i = 0; i < logsToMigrate.length; i++) {
                 const log = logsToMigrate[i];
+                
+                // Skip if we hit rate limit - don't retry immediately
+                if (rateLimited) {
+                    console.log(`⏸️ Rate limit detected, stopping migration. Will resume on next page load.`);
+                    break;
+                }
+                
                 try {
                     const response = await fetch('/api/audit-logs', {
                         method: 'POST',
@@ -125,42 +153,68 @@ const AuditLogger = {
                     
                     if (response.ok) {
                         migrated++;
-                        // Log progress every 10 logs
-                        if (migrated % 10 === 0) {
+                        // Remove migrated log from localStorage
+                        const remainingLogs = JSON.parse(localStorage.getItem('auditLogs') || '[]');
+                        const index = remainingLogs.findIndex(l => l.id === log.id);
+                        if (index !== -1) {
+                            remainingLogs.splice(index, 1);
+                            localStorage.setItem('auditLogs', JSON.stringify(remainingLogs));
+                        }
+                        
+                        // Log progress every 5 logs
+                        if (migrated % 5 === 0) {
                             console.log(`📊 Migration progress: ${migrated}/${logsToMigrate.length} migrated`);
                         }
                     } else if (response.status === 429) {
-                        // Rate limited - wait and retry
-                        const retryAfter = response.headers.get('Retry-After') || '5';
+                        // Rate limited - stop migration and mark for later
+                        rateLimited = true;
+                        const retryAfter = response.headers.get('Retry-After') || '10';
                         const waitTime = parseInt(retryAfter) * 1000;
-                        console.warn(`⏳ Rate limited. Waiting ${waitTime/1000}s before retrying...`);
-                        await new Promise(resolve => setTimeout(resolve, waitTime));
-                        // Retry this log
-                        i--;
-                        continue;
+                        console.warn(`⏳ Rate limited (429). Stopping migration. Will resume on next page load.`);
+                        // Don't retry immediately - let it resume on next page load
+                        failed++;
+                        break;
                     } else {
-                        const errorText = await response.text();
-                        console.warn('⚠️ Failed to migrate log:', log.id, response.status, errorText);
+                        // For other errors, log but continue (don't spam console)
+                        if (failed < 3) { // Only log first 3 errors
+                            const errorText = await response.text().catch(() => 'Unknown error');
+                            console.warn('⚠️ Failed to migrate log:', log.id, response.status, errorText.substring(0, 50));
+                        }
                         failed++;
                     }
                     
-                    // Add small delay between requests to avoid rate limiting (50ms)
-                    if (i < logsToMigrate.length - 1) {
-                        await new Promise(resolve => setTimeout(resolve, 50));
+                    // Add delay between requests to avoid rate limiting (1 second)
+                    if (i < logsToMigrate.length - 1 && !rateLimited) {
+                        await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_REQUESTS));
                     }
                 } catch (err) {
-                    console.warn('⚠️ Failed to migrate log:', log.id, err);
+                    // Only log first few errors to avoid spam
+                    if (failed < 3) {
+                        console.warn('⚠️ Failed to migrate log:', log.id, err.message);
+                    }
                     failed++;
-                    // Add delay even on error to avoid overwhelming
-                    await new Promise(resolve => setTimeout(resolve, 50));
+                    // Add delay even on error
+                    if (i < logsToMigrate.length - 1 && !rateLimited) {
+                        await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_REQUESTS));
+                    }
                 }
             }
             
-            console.log(`✅ Migration complete: ${migrated} migrated, ${failed} failed`);
-            return { migrated, failed, total: localLogs.length };
+            // Mark migration as completed for this session if we finished the batch
+            if (!rateLimited && migrated + failed >= logsToMigrate.length) {
+                sessionStorage.setItem(migrationKey, 'true');
+            }
+            
+            if (migrated > 0 || failed > 0) {
+                console.log(`✅ Migration batch complete: ${migrated} migrated, ${failed} failed${rateLimited ? ' (rate limited)' : ''}`);
+            }
+            
+            return { migrated, failed, total: localLogs.length, rateLimited };
         } catch (error) {
             console.error('❌ Error migrating logs:', error);
             return { migrated: 0, failed: 0, total: 0, error: error.message };
+        } finally {
+            window._auditLogMigrationInProgress = false;
         }
     },
     
@@ -180,12 +234,18 @@ const AuditLogger = {
                 if (response.ok) {
                     const data = await response.json();
                     const logCount = data.logs?.length || 0;
-                    console.log('✅ Fetched audit logs from backend:', logCount, 'logs');
+                    // Only log on first fetch or when logs exist (reduce spam)
+                    if (logCount > 0 || !window._auditLogsFetched) {
+                        console.log('✅ Fetched audit logs from backend:', logCount, 'logs');
+                        window._auditLogsFetched = true;
+                    }
                     
-                    // If no logs in backend but we have localStorage logs, try to migrate
-                    if (logCount === 0) {
+                    // If no logs in backend but we have localStorage logs, try to migrate (only once per session)
+                    const migrationAttemptedKey = 'audit_log_migration_attempted';
+                    if (logCount === 0 && !sessionStorage.getItem(migrationAttemptedKey)) {
                         const localLogs = JSON.parse(localStorage.getItem('auditLogs') || '[]');
                         if (localLogs.length > 0) {
+                            sessionStorage.setItem(migrationAttemptedKey, 'true');
                             console.log('🔄 No backend logs found, but localStorage has logs. Migrating...');
                             // Migrate and wait for completion, then re-fetch
                             const migrationResult = await AuditLogger.migrateLocalStorageLogs();
