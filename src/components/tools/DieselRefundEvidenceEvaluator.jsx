@@ -16,7 +16,7 @@
         const { useState, useRef } = window.React;
 
         const DieselRefundEvidenceEvaluator = () => {
-    const [inputData, setInputData] = useState('');
+            const [inputData, setInputData] = useState('');
     const [evaluationResult, setEvaluationResult] = useState(null);
     const [isEvaluating, setIsEvaluating] = useState(false);
     const [error, setError] = useState(null);
@@ -411,9 +411,10 @@
                 </div>
             )}
         </div>
-    );
+        );
+    };
     
-        // Register component on window
+    // Register component on window
         if (typeof window !== 'undefined') {
             window.DieselRefundEvidenceEvaluator = DieselRefundEvidenceEvaluator;
             console.log('✅ DieselRefundEvidenceEvaluator component registered');
