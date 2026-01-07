@@ -3749,19 +3749,37 @@ function initializeProjectDetail() {
                         });
                     }
                     
-                    // Always reload and update to ensure parent component knows about the change
-                    // This ensures persistence when navigating away and back
-                    const refreshedProject = await window.DatabaseAPI.getProject(project.id);
-                    const updatedProject = refreshedProject?.data?.project || refreshedProject?.project || refreshedProject?.data;
-                    if (updatedProject) {
-                        // Update the project prop by triggering a re-render with updated data
-                        // This ensures the component has the latest data from the database
-                        
-                        // Try to update parent component's viewingProject state if possible
-                        // This ensures the prop is updated immediately
-                        // The updateViewingProject function has smart comparison to prevent unnecessary re-renders
+                    // Only reload and update if we're not in weekly FMS review view
+                    // (weekly FMS review manages its own state and updates)
+                    const isWeeklyFMSReviewView = activeSection === 'weeklyFMSReview';
+                    
+                    if (!isWeeklyFMSReviewView) {
+                        const refreshedProject = await window.DatabaseAPI.getProject(project.id);
+                        const updatedProject = refreshedProject?.data?.project || refreshedProject?.project || refreshedProject?.data;
+                        if (updatedProject) {
+                            // Update the project prop by triggering a re-render with updated data
+                            // This ensures the component has the latest data from the database
+                            
+                            // Try to update parent component's viewingProject state if possible
+                            // This ensures the prop is updated immediately
+                            // The updateViewingProject function has smart comparison to prevent unnecessary re-renders
+                            if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                                window.updateViewingProject(updatedProject);
+                            }
+                        }
+                    } else {
+                        // We're in weekly FMS review view - just update parent component directly
+                        // The weekly FMS review tracker will handle its own state updates
                         if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                            window.updateViewingProject(updatedProject);
+                            // Use the response from the updateProject call
+                            const updatedProject = apiResponse?.data?.project || apiResponse?.project || apiResponse?.data;
+                            if (updatedProject) {
+                                window.updateViewingProject({
+                                    ...updatedProject,
+                                    hasWeeklyFMSReviewProcess: true,
+                                    weeklyFMSReviewSections: sectionsToSave
+                                });
+                            }
                         }
                     }
                 } catch (reloadError) {
