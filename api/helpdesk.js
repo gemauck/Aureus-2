@@ -243,7 +243,9 @@ async function handler(req, res) {
         // Generate ticket number
         const ticketNumber = await generateTicketNumber()
 
-        // Build ticket data
+        // Build ticket data - ensure type is always explicitly set
+        const ticketType = (body.type && body.type.trim() !== '') ? body.type.trim() : 'internal'
+        
         const ticketData = {
           ticketNumber,
           title: body.title.trim(),
@@ -251,7 +253,7 @@ async function handler(req, res) {
           status: body.status || 'open',
           priority: body.priority || 'medium',
           category: body.category || 'general',
-          type: body.type || 'internal',
+          type: ticketType, // Always explicitly set
           createdById: userId,
           assignedToId: body.assignedToId || null,
           clientId: body.clientId || null,
@@ -268,11 +270,6 @@ async function handler(req, res) {
           }]),
           customFields: JSON.stringify(typeof body.customFields === 'object' ? body.customFields : {}),
           dueDate: body.dueDate ? new Date(body.dueDate) : null
-        }
-
-        // Ensure type is always set (fallback to default if missing)
-        if (!ticketData.type || ticketData.type.trim() === '') {
-          ticketData.type = 'internal'
         }
 
         console.log('📝 Creating ticket with data:', {
