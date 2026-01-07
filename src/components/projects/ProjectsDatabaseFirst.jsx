@@ -483,11 +483,12 @@ const ProjectsDatabaseFirst = () => {
             setIsLoading(false);
             
             // Handle specific error types
-            if (error?.message?.includes?.('Unauthorized') || error?.message?.includes?.('401')) {
+            if (error?.message?.includes?.('Unauthorized') || error?.message?.includes?.('401') || error?.status === 401) {
                 console.warn('⚠️ Unauthorized - redirecting to login');
                 window.storage?.removeToken?.();
                 window.storage?.removeUser?.();
                 window.location.hash = '#/login';
+                return []; // Return empty array to prevent further processing
             } else if (error?.message?.includes?.('timeout') || error?.message?.includes?.('Request timeout')) {
                 // Retry once on timeout
                 if (retryCount < 1) {
@@ -614,16 +615,75 @@ const ProjectsDatabaseFirst = () => {
                 return;
             }
 
-            await window.api.deleteProject(projectId);
+            // Find the project to get its name for better error messages
+            const projectToDelete = projects.find(p => p.id === projectId);
+            console.log('🗑️ Deleting project:', {
+                projectId,
+                projectName: projectToDelete?.name || 'Unknown',
+                projectExists: !!projectToDelete,
+                idType: typeof projectId,
+                idLength: projectId?.length
+            });
+
+            // Check if project exists before attempting deletion
+            if (!projectToDelete) {
+                console.warn('⚠️ Project not found in local state, may have already been deleted');
+                // Still try to delete from server in case it exists there
+                // but don't show error if it doesn't exist
+            }
+
+            try {
+                await window.api.deleteProject(projectId);
+                console.log('✅ Project deleted successfully:', projectId);
+            } catch (deleteError) {
+                // If project not found (404), it's already deleted - that's fine
+                if (deleteError?.status === 404 || deleteError?.message?.includes('not found')) {
+                    console.log('ℹ️ Project already deleted (404) - removing from local state');
+                } else {
+                    throw deleteError; // Re-throw other errors
+                }
+            }
             
-            // Update local state
+            // Update local state (remove project even if server said 404)
             setProjects(prev => prev.filter(p => p.id !== projectId));
             setSelectedProject(null);
-            await loadProjects();
+            
+            // Only reload if we successfully deleted (not if it was already gone)
+            if (projectToDelete) {
+                await loadProjects();
+            }
             
         } catch (error) {
-            console.error('❌ Failed to delete project from database:', error);
-            alert('Failed to delete project from database. Please try again.');
+            console.error('❌ Failed to delete project from database:', {
+                error,
+                message: error.message,
+                status: error.status,
+                code: error.code,
+                projectId,
+                projectName: projects.find(p => p.id === projectId)?.name || 'Unknown'
+            });
+            
+            // Provide more helpful error messages
+            let errorMessage = 'Failed to delete project';
+            if (error.message) {
+                if (error.message.includes('not found') || error.status === 404) {
+                    // Project already deleted - just remove from local state
+                    setProjects(prev => prev.filter(p => p.id !== projectId));
+                    setSelectedProject(null);
+                    return; // Don't show error for already-deleted projects
+                } else if (error.message.includes('Unauthorized') || error.status === 401) {
+                    errorMessage = 'Session expired. Please log in again.';
+                    window.storage?.removeToken?.();
+                    window.storage?.removeUser?.();
+                    window.location.hash = '#/login';
+                } else {
+                    errorMessage += ': ' + error.message;
+                }
+            } else if (error.status) {
+                errorMessage += ` (HTTP ${error.status})`;
+            }
+            
+            alert(errorMessage);
         }
     };
 
@@ -764,13 +824,28 @@ const ProjectsDatabaseFirst = () => {
         loadProjects();
     }, []);
 
-    // Auto-refresh data every 30 seconds
+    // Auto-refresh data every 2 minutes (only when page is visible)
     useEffect(() => {
+        // Only auto-refresh if page is visible
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                return; // Don't refresh when page is hidden
+            }
+        };
+        
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        
         const interval = setInterval(() => {
-            loadProjects();
-        }, 30000); // 30 seconds
+            // Only refresh if page is visible
+            if (!document.hidden) {
+                loadProjects();
+            }
+        }, 120000); // 2 minutes (reduced frequency)
 
-        return () => clearInterval(interval);
+        return () => {
+            clearInterval(interval);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, []);
 
     if (showProgressTracker) {
