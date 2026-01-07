@@ -1748,7 +1748,15 @@ function initializeProjectDetail() {
             }
             
             
+            console.log('💾 Saving project data:', { projectId: project.id, updatePayload });
             const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
+            console.log('✅ Project save response:', apiResponse);
+            
+            // Check if save was successful - API returns { data: { project: ... } }
+            const savedProject = apiResponse?.project || apiResponse?.data?.project;
+            if (!savedProject && apiResponse?.error) {
+                throw new Error(apiResponse.error.message || 'Failed to save project');
+            }
             
             if (window.dataService && typeof window.dataService.getProjects === 'function') {
                 const savedProjects = await window.dataService.getProjects();
@@ -1780,6 +1788,12 @@ function initializeProjectDetail() {
             }
         } catch (error) {
             console.error('❌ Error saving project data:', error);
+            console.error('❌ Error details:', {
+                message: error.message,
+                stack: error.stack,
+                projectId: project.id,
+                updatePayload: updatePayload ? Object.keys(updatePayload) : null
+            });
             alert('Failed to save project changes: ' + error.message);
             throw error;
         }
