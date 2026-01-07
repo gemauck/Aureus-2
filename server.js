@@ -783,6 +783,55 @@ app.all('/api/helpdesk/email-webhook', async (req, res, next) => {
   }
 })
 
+// Gmail API watcher endpoint (checks Gmail for new emails)
+app.post('/api/helpdesk/gmail-watcher', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'helpdesk', 'gmail-watcher.js'))
+    if (!handler) {
+      console.error('❌ Gmail watcher handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in Gmail watcher handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: process.env.NODE_ENV === 'development' ? e.message : 'Failed to check Gmail',
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
+// Gmail OAuth endpoints
+app.get('/api/helpdesk/gmail-auth', async (req, res, next) => {
+  try {
+    const { handleGmailAuth } = await import(path.join(apiDir, 'helpdesk', 'gmail-auth.js'))
+    if (handleGmailAuth) {
+      return handleGmailAuth(req, res)
+    }
+    return res.status(404).json({ error: 'Gmail auth handler not found' })
+  } catch (e) {
+    console.error('❌ Error in Gmail auth handler:', e)
+    return res.status(500).json({ error: 'Internal server error', message: e.message })
+  }
+})
+
+app.get('/api/helpdesk/gmail-callback', async (req, res, next) => {
+  try {
+    const { handleGmailCallback } = await import(path.join(apiDir, 'helpdesk', 'gmail-auth.js'))
+    if (handleGmailCallback) {
+      return handleGmailCallback(req, res)
+    }
+    return res.status(404).json({ error: 'Gmail callback handler not found' })
+  } catch (e) {
+    console.error('❌ Error in Gmail callback handler:', e)
+    return res.status(500).json({ error: 'Internal server error', message: e.message })
+  }
+})
+
 // Explicit mapping for audit-logs operations (GET, POST /api/audit-logs)
 app.all('/api/audit-logs', async (req, res, next) => {
   try {
