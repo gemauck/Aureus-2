@@ -270,6 +270,20 @@ async function handler(req, res) {
           dueDate: body.dueDate ? new Date(body.dueDate) : null
         }
 
+        // Ensure type is always set (fallback to default if missing)
+        if (!ticketData.type || ticketData.type.trim() === '') {
+          ticketData.type = 'internal'
+        }
+
+        console.log('📝 Creating ticket with data:', {
+          ticketNumber: ticketData.ticketNumber,
+          title: ticketData.title,
+          type: ticketData.type,
+          status: ticketData.status,
+          priority: ticketData.priority,
+          createdById: ticketData.createdById
+        })
+
         const ticket = await prisma.ticket.create({
           data: ticketData,
           include: {
