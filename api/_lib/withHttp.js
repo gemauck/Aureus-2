@@ -53,7 +53,8 @@ export function withHttp(handler) {
       return res.end()
     }
 
-    return handler(req, res)
+    // Await the handler to properly catch async errors
+    return await handler(req, res)
   }
 }
 

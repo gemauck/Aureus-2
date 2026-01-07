@@ -771,7 +771,9 @@ app.all('/api/clients', async (req, res, next) => {
       console.error('❌ Clients handler not found')
       return res.status(404).json({ error: 'API endpoint not found' })
     }
-    return handler(req, res)
+    // Await the handler to properly catch async errors
+    const result = await handler(req, res)
+    return result
   } catch (e) {
     console.error('❌ Error in clients handler:', e)
     console.error('❌ Error stack:', e.stack)
