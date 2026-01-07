@@ -150,7 +150,9 @@ const Tools = () => {
         console.log('🔧 Tools array recalculated:', {
             totalTools: toolsArray.length,
             dieselRefundComponent: !!toolComponents.DieselRefundEvidenceEvaluator,
-            allComponents: Object.keys(toolComponents).map(k => ({ key: k, exists: !!toolComponents[k] }))
+            toolsVersion: toolsVersion,
+            allComponents: Object.keys(toolComponents).map(k => ({ key: k, exists: !!toolComponents[k] })),
+            toolsArray: toolsArray.map(t => ({ id: t.id, name: t.name, hasComponent: !!t.component }))
         });
         return toolsArray;
     }, [toolComponents, toolsVersion]); // Include toolsVersion to force recalculation
