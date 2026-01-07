@@ -140,10 +140,11 @@ let lastLeadsApiCallTimestamp = 0;
 let lastLiveDataSyncTime = 0;
 let lastLiveDataClientsHash = null;
 let isLeadsLoading = false; // Prevent concurrent loadLeads calls
+let isClientsLoading = false; // Prevent concurrent loadClients calls
 const CACHE_DURATION = 60000; // 60 seconds
-const API_CALL_INTERVAL = 10000; // Only call API every 10 seconds max (reduced for faster updates)
-const FORCE_REFRESH_MIN_INTERVAL = 2000; // Minimum 2 seconds between force refresh calls
-const LIVE_SYNC_THROTTLE = 2000; // Skip LiveDataSync updates if data hasn't changed in 2 seconds
+const API_CALL_INTERVAL = 30000; // Only call API every 30 seconds max (increased to prevent 429 errors)
+const FORCE_REFRESH_MIN_INTERVAL = 5000; // Minimum 5 seconds between force refresh calls (increased)
+const LIVE_SYNC_THROTTLE = 5000; // Skip LiveDataSync updates if data hasn't changed in 5 seconds (increased)
 
 const PIPELINE_STAGES = ['Awareness', 'Interest', 'Desire', 'Action'];
 const PIPELINE_STAGE_ALIASES = {
@@ -1405,6 +1406,14 @@ const Clients = React.memo(() => {
     
     // Function to load clients (can be called to refresh) - MOVED BEFORE useEffects
     const loadClients = async (forceRefresh = false) => {
+        // Prevent concurrent calls - if already loading, skip unless force refresh
+        if (isClientsLoading && !forceRefresh) {
+            console.log('⏭️ Skipping loadClients - already in progress');
+            return;
+        }
+        
+        // Set loading flag
+        isClientsLoading = true;
         const loadStartTime = performance.now();
         try {
             // If force refresh, clear caches first
@@ -2049,6 +2058,9 @@ const Clients = React.memo(() => {
             if (fallbackClients && fallbackClients.length > 0) {
                 setClients(fallbackClients);
             }
+        } finally {
+            // Always reset loading flag
+            isClientsLoading = false;
         }
         // Projects are now handled by ProjectsDatabaseFirst component only
         // No localStorage persistence for projects
@@ -2292,10 +2304,18 @@ const Clients = React.memo(() => {
 
     // PERFORMANCE FIX: Optimize view mode switching - only refresh if data is stale
     // Skip if user is editing to prevent data loss
+    // CRITICAL FIX: Removed clients.length from deps to prevent infinite loops
+    const hasClientsRef = useRef(false);
+    useEffect(() => {
+        if (clients.length > 0) {
+            hasClientsRef.current = true;
+        }
+    }, [clients.length]);
+    
     useEffect(() => {
         if (viewMode === 'clients' && !isUserEditingRef.current) {
             // Check if we already have clients data - if so, use it (fast!)
-            if (clients.length > 0) {
+            if (hasClientsRef.current) {
                 // Trigger background sync to update in background without blocking UI
                 if (window.LiveDataSync?.forceSync) {
                     window.LiveDataSync.forceSync().catch(() => {});
@@ -2317,7 +2337,7 @@ const Clients = React.memo(() => {
                 }
             }, 100);
         }
-    }, [viewMode, clients.length]);
+    }, [viewMode]); // Removed clients.length to prevent infinite loops
 
     // Ensure leads are loaded from localStorage if state is empty
     // Use ref to track if we've already attempted restoration to prevent re-runs
@@ -3336,14 +3356,50 @@ const Clients = React.memo(() => {
     // Leads are now database-only, no localStorage sync needed
 
     const handleClientModalClose = async () => {
-        setViewMode('clients');
-        setEditingClientId(null);
-        selectedClientRef.current = null;
-        isFormOpenRef.current = false;
-        setCurrentTab('overview');
-        // Refresh data from server
-        await loadClients(true);
-        startSync();
+        try {
+            setViewMode('clients');
+            setEditingClientId(null);
+            selectedClientRef.current = null;
+            isFormOpenRef.current = false;
+            setCurrentTab('overview');
+            
+            // Clear the URL path to go back to clients list
+            if (window.RouteState && window.RouteState.navigate) {
+                try {
+                    window.RouteState.navigate({
+                        page: 'clients',
+                        segments: [],
+                        search: '',
+                        hash: '',
+                        replace: false,
+                        preserveSearch: false,
+                        preserveHash: false
+                    });
+                } catch (routeError) {
+                    console.warn('⚠️ Failed to update URL on client modal close:', routeError);
+                }
+            }
+            
+            // Refresh data from server
+            try {
+                await loadClients(true);
+            } catch (loadError) {
+                console.error('⚠️ Failed to refresh clients on modal close:', loadError);
+            }
+            
+            try {
+                startSync();
+            } catch (syncError) {
+                console.error('⚠️ Failed to start sync on modal close:', syncError);
+            }
+        } catch (error) {
+            console.error('⚠️ Error in handleClientModalClose:', error);
+            // Still try to close the modal even if there's an error
+            setViewMode('clients');
+            setEditingClientId(null);
+            selectedClientRef.current = null;
+            isFormOpenRef.current = false;
+        }
     };
 
     const handleLeadModalClose = async () => {
@@ -7543,7 +7599,8 @@ const Clients = React.memo(() => {
                 <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                         <button 
-                        onClick={handleClientModalClose}
+                            type="button"
+                            onClick={handleClientModalClose}
                             className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'} flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200`}
                             title="Go back"
                         >
