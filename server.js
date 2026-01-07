@@ -245,8 +245,25 @@ const app = express()
 const PORT = process.env.PORT || 3000
 
 // Application version info for cache-busting and client refresh prompts
-const APP_VERSION = process.env.APP_VERSION || pkg.version || '0.0.0'
+// Use dynamic version that changes on each deployment/restart
+// Priority: APP_VERSION env var > timestamp-based version > package version
+// Using timestamp ensures version changes on each server restart, triggering update notifications
+const getAppVersion = () => {
+  if (process.env.APP_VERSION) {
+    return process.env.APP_VERSION
+  }
+  // Use timestamp-based version (changes on each server start/restart)
+  // This ensures version changes even if APP_VERSION is not set, triggering update notifications
+  // Format: package.version-timestamp (e.g., "0.1.20-1734567890123")
+  return `${pkg.version}-${Date.now()}`
+}
+const APP_VERSION = getAppVersion()
 const APP_BUILD_TIME = process.env.APP_BUILD_TIME || new Date().toISOString()
+
+// Log version info for debugging
+console.log('📦 App Version:', APP_VERSION)
+console.log('📦 Build Time:', APP_BUILD_TIME)
+console.log('📦 Version endpoint will return:', { version: APP_VERSION, buildTime: APP_BUILD_TIME })
 
 // Trust proxy to work behind Nginx
 app.set('trust proxy', 1)

@@ -778,10 +778,26 @@
                             'Accept': 'application/json',
                         },
                     });
-                    if (!res.ok) return null;
-                    const data = await res.json().catch(() => null);
-                    return data && typeof data.version === 'string' ? data.version : null;
-                } catch {
+                    if (!res.ok) {
+                        console.warn('⚠️ Version endpoint returned non-OK status:', res.status, res.statusText);
+                        return null;
+                    }
+                    const contentType = res.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        console.warn('⚠️ Version endpoint returned non-JSON content:', contentType);
+                        // Try to parse as JSON anyway (some servers don't set content-type correctly)
+                    }
+                    const data = await res.json().catch((err) => {
+                        console.warn('⚠️ Failed to parse version endpoint response as JSON:', err);
+                        return null;
+                    });
+                    if (!data || typeof data.version !== 'string') {
+                        console.warn('⚠️ Version endpoint response missing or invalid version field:', data);
+                        return null;
+                    }
+                    return data.version;
+                } catch (err) {
+                    console.warn('⚠️ Error fetching version from endpoint:', err);
                     return null;
                 }
             }
@@ -822,17 +838,31 @@
                 lastCheckTime = now;
 
                 const latest = await fetchCurrentVersion();
-                if (!latest) return;
+                if (!latest) {
+                    console.warn('⚠️ Version check: Could not fetch current version from server');
+                    return;
+                }
 
                 const stored = getStoredVersion();
                 const dismissed = getDismissedVersion();
 
+                console.log('🔍 Version check:', { stored, latest, dismissed, forceShow });
+
                 // If version changed
                 if (stored && stored !== latest) {
+                    console.log('✅ New version detected!', { old: stored, new: latest });
                     // Show banner if user hasn't dismissed this specific new version
                     if (dismissed !== latest || forceShow) {
+                        console.log('📢 Showing update notification banner');
                         showBanner();
+                    } else {
+                        console.log('ℹ️ New version available but user dismissed it');
                     }
+                } else if (!stored) {
+                    // First time - just store the version
+                    console.log('📦 First version check - storing version:', latest);
+                } else {
+                    console.log('✅ Version unchanged:', latest);
                 }
 
                 // Always update stored version
