@@ -118,7 +118,7 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
     const [draggedOverStage, setDraggedOverStage] = useState(null);
     const [dataLoaded, setDataLoaded] = useState(false); // Track when data is fully loaded from API
     const [fallbackDeal, setFallbackDeal] = useState(null); // { type: 'lead' | 'opportunity', id, data, client }
-    const [listSortColumn, setListSortColumn] = useState(null);
+    const [listSortColumn, setListSortColumn] = useState('name'); // Default to alphabetical by name
     const [listSortDirection, setListSortDirection] = useState('asc');
     const [usingCachedOpportunities, setUsingCachedOpportunities] = useState(false);
     
