@@ -597,14 +597,16 @@ const evaluateDieselRefundEvidence = (data, options = {}) => {
 
 // Export for use in modules
 if (typeof module !== 'undefined' && module.exports) {
-// Make available globally (browser)
-if (typeof window !== 'undefined') {
-    window.evaluateDieselRefundEvidence = evaluateDieselRefundEvidence;
-    window.dieselRefundEvidenceEvaluator = {
-        evaluate: evaluateDieselRefundEvidence
-    };
-    console.log('✅ evaluateDieselRefundEvidence utility function registered');
-}
+// Make available globally (browser) - execute immediately
+(function() {
+    if (typeof window !== 'undefined') {
+        window.evaluateDieselRefundEvidence = evaluateDieselRefundEvidence;
+        window.dieselRefundEvidenceEvaluator = {
+            evaluate: evaluateDieselRefundEvidence
+        };
+        console.log('✅ evaluateDieselRefundEvidence utility function registered');
+    }
+})();
 
 // CommonJS export (for Node.js if needed)
 if (typeof module !== 'undefined' && module.exports) {
