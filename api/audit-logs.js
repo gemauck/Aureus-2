@@ -1,7 +1,7 @@
 import { prisma } from './_lib/prisma.js';
-import { authRequired } from './_lib/authRequired.js';
+import { verifyToken } from './_lib/jwt.js';
 import { parseJsonBody } from './_lib/body.js';
-import { created, ok, badRequest, serverError } from './_lib/response.js';
+import { created, ok, badRequest, serverError, unauthorized } from './_lib/response.js';
 
 async function handler(req, res) {
   try {
@@ -10,8 +10,48 @@ async function handler(req, res) {
     const pathSegments = url.pathname.split('/').filter(Boolean);
     
     // Get authenticated user
-    const user = await authRequired(req, res);
-    if (!user) return; // authRequired already sent response
+    let user = req.user;
+    if (!user) {
+      const authHeader = req.headers['authorization'] || '';
+      if (authHeader.startsWith('Bearer ')) {
+        const token = authHeader.slice(7);
+        const payload = verifyToken(token);
+        if (payload && payload.sub) {
+          user = {
+            ...payload,
+            id: payload.sub,
+            role: payload.role
+          };
+        }
+      }
+    }
+    
+    if (!user || !user.id) {
+      return unauthorized(res);
+    }
+    
+    // Load full user from database to get role
+    try {
+      const dbUser = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true
+        }
+      });
+      
+      if (dbUser) {
+        user = {
+          ...user,
+          ...dbUser
+        };
+      }
+    } catch (userError) {
+      console.error('❌ Failed to load user:', userError);
+      return serverError(res, 'Failed to load user', userError.message);
+    }
 
     // Create Audit Log (POST /api/audit-logs)
     if (req.method === 'POST' && pathSegments.length === 1 && pathSegments[0] === 'audit-logs') {
@@ -20,17 +60,20 @@ async function handler(req, res) {
       if (!body.action) return badRequest(res, 'action required');
       if (!body.module) return badRequest(res, 'module required');
 
+      // Always use authenticated user's ID as actorId (for security)
+      const actorId = user.id;
+      
       const auditLogData = {
-        actorId: body.userId || user.id,
+        actorId: actorId,
         action: body.action,
         entity: body.module,
-        entityId: body.entityId || 'system',
+        entityId: body.entityId || body.module || 'system',
         diff: JSON.stringify({
           user: body.user || user.name || 'System',
-          userId: body.userId || user.id,
+          userId: actorId,
           userRole: body.userRole || user.role || 'System',
           details: body.details || {},
-          ipAddress: body.ipAddress || req.headers['x-forwarded-for'] || req.connection.remoteAddress || 'N/A',
+          ipAddress: body.ipAddress || req.headers['x-forwarded-for'] || req.connection?.remoteAddress || 'N/A',
           sessionId: body.sessionId || 'N/A',
           success: body.success !== undefined ? body.success : true
         }),
@@ -51,9 +94,11 @@ async function handler(req, res) {
             }
           }
         });
+        console.log('✅ Audit log created:', auditLog.id, 'for user:', user.id);
         return created(res, { auditLog });
       } catch (dbError) {
         console.error('❌ Database error creating audit log:', dbError);
+        console.error('❌ Audit log data:', JSON.stringify(auditLogData, null, 2));
         return serverError(res, 'Failed to create audit log', dbError.message);
       }
     }
@@ -98,6 +143,7 @@ async function handler(req, res) {
       }
 
       try {
+        console.log('📊 Fetching audit logs with where clause:', JSON.stringify(where, null, 2));
         const [auditLogs, total] = await Promise.all([
           prisma.auditLog.findMany({
             where,
@@ -120,9 +166,16 @@ async function handler(req, res) {
           prisma.auditLog.count({ where })
         ]);
 
+        console.log(`✅ Found ${auditLogs.length} audit logs (total: ${total}) for user: ${user.id}, role: ${user.role}`);
+
         // Transform logs to match the frontend format
         const transformedLogs = auditLogs.map(log => {
-          const diff = JSON.parse(log.diff || '{}');
+          let diff = {};
+          try {
+            diff = JSON.parse(log.diff || '{}');
+          } catch (e) {
+            console.warn('⚠️ Failed to parse diff for log:', log.id, e);
+          }
           return {
             id: log.id,
             timestamp: log.createdAt.toISOString(),
@@ -146,6 +199,7 @@ async function handler(req, res) {
         });
       } catch (dbError) {
         console.error('❌ Database error fetching audit logs:', dbError);
+        console.error('❌ Error stack:', dbError.stack);
         return serverError(res, 'Failed to fetch audit logs', dbError.message);
       }
     }

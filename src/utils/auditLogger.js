@@ -105,15 +105,23 @@ const AuditLogger = {
                 
                 if (response.ok) {
                     const data = await response.json();
+                    console.log('✅ Fetched audit logs from backend:', data.logs?.length || 0, 'logs');
                     return data.logs || [];
+                } else {
+                    const errorText = await response.text();
+                    console.error('❌ Failed to fetch audit logs:', response.status, errorText);
                 }
+            } else {
+                console.warn('⚠️ No auth token available, using localStorage');
             }
         } catch (error) {
-            console.warn('Error fetching audit logs from backend, using localStorage:', error);
+            console.error('❌ Error fetching audit logs from backend, using localStorage:', error);
         }
         
         // Fallback to localStorage
-        return JSON.parse(localStorage.getItem('auditLogs') || '[]');
+        const localLogs = JSON.parse(localStorage.getItem('auditLogs') || '[]');
+        console.log('📦 Using localStorage logs:', localLogs.length, 'logs');
+        return localLogs;
     },
     
     // Get logs by date range
