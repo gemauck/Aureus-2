@@ -712,7 +712,11 @@ const TicketDetailModal = ({
                                 </div>
                                 <div className="flex justify-end">
                                     <button
-                                        onClick={async () => {
+                                        type="button"
+                                        onClick={async (e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            
                                             // Save notes immediately
                                             if (ticket?.id) {
                                                 try {
@@ -738,18 +742,31 @@ const TicketDetailModal = ({
                                                             credentials: 'include',
                                                             body: JSON.stringify(updateData)
                                                         });
-                                                        if (!fetchResponse.ok) throw new Error(`HTTP error! status: ${fetchResponse.status}`);
+                                                        if (!fetchResponse.ok) {
+                                                            const errorText = await fetchResponse.text();
+                                                            throw new Error(`HTTP error! status: ${fetchResponse.status}, body: ${errorText}`);
+                                                        }
                                                     }
                                                     
-                                                    // Reload ticket to get updated data
+                                                    // Update current customFields state immediately
+                                                    setCurrentCustomFields(customFields);
+                                                    
+                                                    // Reload ticket to get updated data (but don't close modal)
                                                     await loadTicketDetails();
                                                     
-                                                    // Update current customFields state
-                                                    setCurrentCustomFields(customFields);
+                                                    // Show success feedback
+                                                    console.log('✅ Notes saved successfully');
                                                 } catch (error) {
                                                     console.error('Error saving notes:', error);
                                                     alert(`Failed to save notes: ${error.message}`);
                                                 }
+                                            } else {
+                                                // For new tickets, just update the state - notes will be saved when ticket is created
+                                                setCurrentCustomFields({
+                                                    ...currentCustomFields,
+                                                    notes: notes || ''
+                                                });
+                                                console.log('✅ Notes will be saved when ticket is created');
                                             }
                                         }}
                                         className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
