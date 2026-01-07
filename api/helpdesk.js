@@ -271,12 +271,40 @@ async function handler(req, res) {
             source: ticketType === 'email' ? 'email' : 'manual'
           }]),
           customFields: JSON.stringify(typeof body.customFields === 'object' ? body.customFields : {}),
-          dueDate: body.dueDate ? new Date(body.dueDate) : null,
-          // Email fields - only set if provided (for email-created tickets)
-          ...(body.sourceEmail && { sourceEmail: body.sourceEmail }),
-          ...(body.emailThreadId && { emailThreadId: body.emailThreadId }),
-          ...(body.emailMessageId && { emailMessageId: body.emailMessageId }),
-          ...(body.emailSubject && { emailSubject: body.emailSubject })
+          dueDate: body.dueDate ? new Date(body.dueDate) : null
+        }
+
+        // Email fields - only add if provided AND columns exist in database
+        // These fields may not exist until migration runs, so we check if they're provided
+        // and only add them if they are (for email-created tickets)
+        if (body.sourceEmail) {
+          try {
+            ticketData.sourceEmail = body.sourceEmail
+          } catch (e) {
+            // Column doesn't exist yet, skip it
+            console.warn('⚠️ sourceEmail column not available yet, skipping')
+          }
+        }
+        if (body.emailThreadId) {
+          try {
+            ticketData.emailThreadId = body.emailThreadId
+          } catch (e) {
+            console.warn('⚠️ emailThreadId column not available yet, skipping')
+          }
+        }
+        if (body.emailMessageId) {
+          try {
+            ticketData.emailMessageId = body.emailMessageId
+          } catch (e) {
+            console.warn('⚠️ emailMessageId column not available yet, skipping')
+          }
+        }
+        if (body.emailSubject) {
+          try {
+            ticketData.emailSubject = body.emailSubject
+          } catch (e) {
+            console.warn('⚠️ emailSubject column not available yet, skipping')
+          }
         }
 
         console.log('📝 Creating ticket with data:', {
