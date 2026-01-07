@@ -3,6 +3,7 @@ import Projects from './components/Projects';
 import ProjectDetail from './components/ProjectDetail';
 import ProjectModal from './components/ProjectModal';
 import MonthlyDocumentCollectionTracker from './components/MonthlyDocumentCollectionTracker';
+import WeeklyFMSReviewTracker from './components/WeeklyFMSReviewTracker';
 // Import API service to ensure it's included in the build and registers on window
 import './services/documentCollectionAPI.js';
 
@@ -19,10 +20,10 @@ const ProjectsModule = () => {
 };
 
 // Export components for use in other modules
-export { Projects, ProjectDetail, ProjectModal, MonthlyDocumentCollectionTracker };
+export { Projects, ProjectDetail, ProjectModal, MonthlyDocumentCollectionTracker, WeeklyFMSReviewTracker };
 
 // Also expose to window for backwards compatibility
-// NOTE: Only MonthlyDocumentCollectionTracker should be exposed here
+// NOTE: Only MonthlyDocumentCollectionTracker and WeeklyFMSReviewTracker should be exposed here
 // The old Projects, ProjectDetail, and ProjectModal should NOT be exposed
 // as they conflict with newer versions in src/components/projects/
 if (typeof window !== 'undefined') {
@@ -30,6 +31,12 @@ if (typeof window !== 'undefined') {
   if (!window.MonthlyDocumentCollectionTracker || typeof window.MonthlyDocumentCollectionTracker !== 'function') {
     window.MonthlyDocumentCollectionTracker = MonthlyDocumentCollectionTracker;
     console.log('✅ ProjectsModule: MonthlyDocumentCollectionTracker exposed to window');
+  }
+  
+  // Expose WeeklyFMSReviewTracker
+  if (!window.WeeklyFMSReviewTracker || typeof window.WeeklyFMSReviewTracker !== 'function') {
+    window.WeeklyFMSReviewTracker = WeeklyFMSReviewTracker;
+    console.log('✅ ProjectsModule: WeeklyFMSReviewTracker exposed to window');
   }
   
   // DO NOT expose old Projects components - they will conflict with newer versions
