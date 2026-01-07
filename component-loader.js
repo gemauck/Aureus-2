@@ -77,6 +77,7 @@
         'utils/entityUrl.js',
         'utils/componentUrlRouting.js',
         'utils/mentionHelper.js',
+        'utils/dieselRefundEvidenceEvaluator.js',
         
         // Hooks
         'hooks/usePersistence.js',
