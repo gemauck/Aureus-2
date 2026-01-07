@@ -148,12 +148,31 @@ async function handler(req, res) {
     
     if (req.method === 'DELETE') {
       try {
+        // First, check if opportunity exists
+        const existing = await prisma.opportunity.findUnique({ where: { id } })
+        if (!existing) {
+          console.error('❌ Opportunity not found:', id)
+          return notFound(res, `Opportunity with ID ${id} not found`)
+        }
+        
+        // Delete related StarredOpportunity records first to avoid foreign key constraint errors
+        await prisma.starredOpportunity.deleteMany({
+          where: { opportunityId: id }
+        })
+        
+        // Now delete the opportunity
         await prisma.opportunity.delete({ 
           where: { id } 
         })
+        
         return ok(res, { deleted: true })
       } catch (dbError) {
         console.error('❌ Database error deleting opportunity:', dbError)
+        console.error('❌ Error details:', {
+          message: dbError.message,
+          code: dbError.code,
+          meta: dbError.meta
+        })
         return serverError(res, 'Failed to delete opportunity', dbError.message)
       }
     }
