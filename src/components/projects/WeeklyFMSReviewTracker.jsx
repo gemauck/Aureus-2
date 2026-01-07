@@ -354,20 +354,60 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         try {
             const snapshotKey = getSnapshotKey(project.id);
             const normalizedFromProp = normalizeSectionsByYear(project.weeklyFMSReviewSections || project.documentSections);
+            const propYearKeys = Object.keys(normalizedFromProp || {});
+            const propHasData = propYearKeys.length > 0 && 
+                propYearKeys.some(year => {
+                    const yearSections = normalizedFromProp[year] || [];
+                    return Array.isArray(yearSections) && yearSections.length > 0;
+                });
+            
             let normalized = normalizedFromProp;
             
-            const yearKeys = Object.keys(normalizedFromProp || {});
-            
-            // If prop has no data but we have a local snapshot, restore from snapshot
-            if ((!normalizedFromProp || yearKeys.length === 0) && snapshotKey && window.localStorage) {
+            // CRITICAL: Always check localStorage as backup, even if prop has data
+            // This ensures we don't lose data if the prop hasn't been refreshed yet
+            if (snapshotKey && window.localStorage) {
                 try {
                     const snapshotString = window.localStorage.getItem(snapshotKey);
                     if (snapshotString) {
                         const snapshotParsed = JSON.parse(snapshotString);
                         const snapshotMap = normalizeSectionsByYear(snapshotParsed);
                         const snapshotYears = Object.keys(snapshotMap || {});
-                        if (snapshotYears.length > 0) {
-                            normalized = snapshotMap;
+                        const snapshotHasData = snapshotYears.length > 0 &&
+                            snapshotYears.some(year => {
+                                const yearSections = snapshotMap[year] || [];
+                                return Array.isArray(yearSections) && yearSections.length > 0;
+                            });
+                        
+                        // Use localStorage if:
+                        // 1. Prop has no data, OR
+                        // 2. localStorage has more sections (more recent save)
+                        if (snapshotHasData) {
+                            if (!propHasData) {
+                                // Prop is empty, use localStorage
+                                normalized = snapshotMap;
+                                console.log('💾 Restored from localStorage (prop was empty)', {
+                                    snapshotYears,
+                                    sectionsCount: snapshotYears.reduce((sum, year) => 
+                                        sum + (snapshotMap[year]?.length || 0), 0
+                                    )
+                                });
+                            } else {
+                                // Both have data - compare and use the one with more sections
+                                const propSectionCount = propYearKeys.reduce((sum, year) => 
+                                    sum + ((normalizedFromProp[year] || []).length), 0
+                                );
+                                const snapshotSectionCount = snapshotYears.reduce((sum, year) => 
+                                    sum + ((snapshotMap[year] || []).length), 0
+                                );
+                                
+                                if (snapshotSectionCount > propSectionCount) {
+                                    normalized = snapshotMap;
+                                    console.log('💾 Using localStorage (has more sections)', {
+                                        propCount: propSectionCount,
+                                        snapshotCount: snapshotSectionCount
+                                    });
+                                }
+                            }
                         }
                     }
                 } catch (snapshotError) {
@@ -1165,18 +1205,29 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     };
     
     const handleSaveSection = (sectionData) => {
+        // Calculate the new state before updating
+        let updatedSectionsByYear = { ...sectionsByYear };
+        const currentYearSections = updatedSectionsByYear[selectedYear] || [];
+        
         if (editingSection) {
-            setSections(prev => prev.map(s => 
+            updatedSectionsByYear[selectedYear] = currentYearSections.map(s => 
                 s.id === editingSection.id ? { ...s, ...sectionData } : s
-            ));
+            );
         } else {
             const newSection = {
                 id: Date.now(),
                 ...sectionData,
                 documents: []
             };
-            setSections(prev => [...prev, newSection]);
+            updatedSectionsByYear[selectedYear] = [...currentYearSections, newSection];
         }
+        
+        // Update state
+        setSectionsByYear(updatedSectionsByYear);
+        // CRITICAL: Update ref immediately so save has the latest data
+        sectionsRef.current = updatedSectionsByYear;
+        // Update timestamp
+        lastChangeTimestampRef.current = Date.now();
         
         setShowSectionModal(false);
         setEditingSection(null);
@@ -1188,32 +1239,57 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             saveTimeoutRef.current = null;
         }
         
-        // Use requestAnimationFrame to ensure state has updated before saving
-        requestAnimationFrame(() => {
-            // Small delay to ensure state is fully updated and ref is synced
-            setTimeout(() => {
-                if (project?.id && !isSavingRef.current) {
-                    const payload = sectionsRef.current || {};
-                    const serialized = serializeSections(payload);
-                    
-                    // CRITICAL: Save to localStorage immediately as backup
-                    const snapshotKey = getSnapshotKey(project.id);
-                    if (snapshotKey && window.localStorage) {
-                        try {
-                            window.localStorage.setItem(snapshotKey, serialized);
-                            console.log('💾 Section change saved to localStorage immediately');
-                        } catch (storageError) {
-                            console.warn('⚠️ Failed to save section to localStorage:', storageError);
+        // Save immediately with the calculated state
+        if (project?.id && !isSavingRef.current) {
+            const serialized = serializeSections(updatedSectionsByYear);
+            
+            // CRITICAL: Save to localStorage immediately as backup
+            const snapshotKey = getSnapshotKey(project.id);
+            if (snapshotKey && window.localStorage) {
+                try {
+                    window.localStorage.setItem(snapshotKey, serialized);
+                    console.log('💾 Section change saved to localStorage immediately', {
+                        hasData: Object.keys(updatedSectionsByYear).length > 0,
+                        yearKeys: Object.keys(updatedSectionsByYear),
+                        sectionCount: updatedSectionsByYear[selectedYear]?.length || 0
+                    });
+                } catch (storageError) {
+                    console.warn('⚠️ Failed to save section to localStorage:', storageError);
+                }
+            }
+            
+            // Update lastSavedSnapshot so we know it's saved
+            lastSavedSnapshotRef.current = serialized;
+            
+            // Save to database immediately - update parent so project prop gets refreshed
+            isSavingRef.current = true;
+            (async () => {
+                try {
+                    if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
+                        const updatePayload = {
+                            weeklyFMSReviewSections: serialized
+                        };
+                        const result = await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                        
+                        // Update parent component's project prop so it has the latest data
+                        if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                            const updatedProject = result?.data?.project || result?.project || result?.data;
+                            if (updatedProject) {
+                                window.updateViewingProject({
+                                    ...updatedProject,
+                                    weeklyFMSReviewSections: serialized
+                                });
+                                console.log('✅ Project prop updated with new sections');
+                            }
                         }
                     }
-                    
-                    // Then save to database
-                    saveToDatabase({ skipParentUpdate: true }).catch(error => {
-                        console.error('❌ Error saving section to database:', error);
-                    });
+                } catch (error) {
+                    console.error('❌ Error saving section to database:', error);
+                } finally {
+                    isSavingRef.current = false;
                 }
-            }, 150);
-        });
+            })();
+        }
     };
     
     // Actual deletion logic extracted to separate function
