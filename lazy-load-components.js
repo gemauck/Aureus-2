@@ -158,6 +158,7 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
         // Utils and integrations
         './src/utils/permissions.js',
         './src/utils/whatsapp.js',
+        './src/utils/dieselRefundEvidenceEvaluator.js',
         './src/services/GoogleCalendarService.js',
         './src/components/calendar/GoogleCalendarSync.jsx'
     ].filter(path => {
