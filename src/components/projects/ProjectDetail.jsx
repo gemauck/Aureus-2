@@ -3669,25 +3669,20 @@ function initializeProjectDetail() {
                         });
                     }
                     
-                    // Only reload and update if we're not in weekly FMS review view
-                    // (weekly FMS review manages its own state and updates)
-                    const isWeeklyFMSReviewView = activeSection === 'weeklyFMSReview';
-                    
-                    if (!isWeeklyFMSReviewView) {
-                        const refreshedProject = await window.DatabaseAPI.getProject(project.id);
-                        const updatedProject = refreshedProject?.data?.project || refreshedProject?.project || refreshedProject?.data;
-                        if (updatedProject) {
-                            // Update the project prop by triggering a re-render with updated data
-                            // This ensures the component has the latest data from the database
-                            
-                            // Try to update parent component's viewingProject state if possible
-                            // This ensures the prop is updated immediately
-                            // The updateViewingProject function has smart comparison to prevent unnecessary re-renders
-                            if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                                window.updateViewingProject(updatedProject);
-                            }
+                    // Always reload and update to ensure parent component knows about the change
+                    // This ensures persistence when navigating away and back
+                    const refreshedProject = await window.DatabaseAPI.getProject(project.id);
+                    const updatedProject = refreshedProject?.data?.project || refreshedProject?.project || refreshedProject?.data;
+                    if (updatedProject) {
+                        // Update the project prop by triggering a re-render with updated data
+                        // This ensures the component has the latest data from the database
+                        
+                        // Try to update parent component's viewingProject state if possible
+                        // This ensures the prop is updated immediately
+                        // The updateViewingProject function has smart comparison to prevent unnecessary re-renders
+                        if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                            window.updateViewingProject(updatedProject);
                         }
-                    } else {
                     }
                 } catch (reloadError) {
                     console.warn('⚠️ Failed to reload project after save:', reloadError);
