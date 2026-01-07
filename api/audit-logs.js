@@ -59,15 +59,19 @@ async function handler(req, res) {
       // Always use authenticated user's ID as actorId (for security)
       const actorId = user.id;
       
+      // Always use the authenticated user's information from database, not from body
+      const userName = user.name || user.email || 'System';
+      const userRole = user.role || 'System';
+      
       const auditLogData = {
         actorId: actorId,
         action: body.action,
         entity: body.module,
         entityId: body.entityId || body.module || 'system',
         diff: JSON.stringify({
-          user: body.user || user.name || 'System',
+          user: userName, // Always use authenticated user's name
           userId: actorId,
-          userRole: body.userRole || user.role || 'System',
+          userRole: userRole, // Always use authenticated user's role
           details: body.details || {},
           ipAddress: body.ipAddress || req.headers['x-forwarded-for'] || req.connection?.remoteAddress || 'N/A',
           sessionId: body.sessionId || 'N/A',
@@ -174,12 +178,22 @@ async function handler(req, res) {
           } catch (e) {
             console.warn('⚠️ Failed to parse diff for log:', log.id, e);
           }
+          // Prioritize actor relation (database user) over diff (which might have 'System')
+          // This ensures we show the actual user name from the database
+          const userName = log.actor?.name || log.actor?.email || diff.user || 'System';
+          const userRole = log.actor?.role || diff.userRole || 'System';
+          
+          // Log if actor is missing (for debugging)
+          if (!log.actor && log.actorId) {
+            console.warn(`⚠️ Audit log ${log.id} has actorId ${log.actorId} but actor relation is missing`);
+          }
+          
           return {
             id: log.id,
             timestamp: log.createdAt.toISOString(),
-            user: diff.user || log.actor?.name || 'System',
+            user: userName,
             userId: log.actorId,
-            userRole: diff.userRole || log.actor?.role || 'System',
+            userRole: userRole,
             action: log.action,
             module: log.entity,
             details: diff.details || {},
