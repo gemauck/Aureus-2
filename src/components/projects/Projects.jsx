@@ -1438,14 +1438,39 @@ const Projects = () => {
                             const projectToOpen = projects.find(p => String(p.id) === String(projectId));
                             if (projectToOpen && (!viewingProject || String(viewingProject.id) !== String(projectId))) {
                                 console.log('✅ Projects: Opening project from route (retry):', projectToOpen.name);
-                                setViewingProject(projectToOpen);
-                                setShowModal(false);
-                                if (taskId) {
-                                    setTimeout(() => {
-                                        window.dispatchEvent(new CustomEvent('openTask', {
-                                            detail: { taskId: taskId, tab: 'details' }
-                                        }));
-                                    }, 1500);
+                                
+                                // CRITICAL: Always refresh from database to ensure we have latest data
+                                if (window.DatabaseAPI?.getProject) {
+                                    window.DatabaseAPI.getProject(projectId)
+                                        .then(response => {
+                                            const freshProjectData = response?.data?.project || response?.project || response?.data;
+                                            if (freshProjectData) {
+                                                const normalizedProject = {
+                                                    ...freshProjectData,
+                                                    client: freshProjectData.clientName || freshProjectData.client || ''
+                                                };
+                                                setProjects(prev => prev.map(p => String(p.id) === String(projectId) ? normalizedProject : p));
+                                                setViewingProject(normalizedProject);
+                                                setShowModal(false);
+                                                if (taskId) {
+                                                    setTimeout(() => {
+                                                        window.dispatchEvent(new CustomEvent('openTask', {
+                                                            detail: { taskId: taskId, tab: 'details' }
+                                                        }));
+                                                    }, 1500);
+                                                }
+                                            } else {
+                                                setViewingProject(projectToOpen);
+                                                setShowModal(false);
+                                            }
+                                        })
+                                        .catch(() => {
+                                            setViewingProject(projectToOpen);
+                                            setShowModal(false);
+                                        });
+                                } else {
+                                    setViewingProject(projectToOpen);
+                                    setShowModal(false);
                                 }
                             }
                         }
@@ -1551,23 +1576,67 @@ const Projects = () => {
         
         if (projectToOpen) {
             console.log('✅ Projects: Found project, opening from URL:', projectToOpen.name);
-            // Directly set viewingProject - this is the simplest and most reliable way
-            console.log('✅ Projects: Setting viewingProject directly from route check');
-            setViewingProject(projectToOpen);
-            setShowModal(false);
             
-            // Handle task opening if specified
-            if (taskId) {
-                console.log('📋 Projects: Task ID found in route, will open task:', taskId);
-                setTimeout(() => {
-                    console.log('📋 Projects: Dispatching openTask event for task:', taskId);
-                    window.dispatchEvent(new CustomEvent('openTask', {
-                        detail: { 
-                            taskId: taskId,
-                            tab: 'details'
+            // CRITICAL: Always refresh from database to ensure we have latest data (especially hasWeeklyFMSReviewProcess)
+            // This ensures that when navigating back, we get the updated project data
+            if (window.DatabaseAPI?.getProject) {
+                console.log('🔄 Projects: Refreshing project from database to ensure latest data...');
+                window.DatabaseAPI.getProject(projectId)
+                    .then(response => {
+                        const freshProjectData = response?.data?.project || response?.project || response?.data;
+                        if (freshProjectData) {
+                            const normalizedProject = {
+                                ...freshProjectData,
+                                client: freshProjectData.clientName || freshProjectData.client || ''
+                            };
+                            console.log('✅ Projects: Refreshed project from database:', normalizedProject.name, {
+                                hasWeeklyFMSReviewProcess: normalizedProject.hasWeeklyFMSReviewProcess
+                            });
+                            
+                            // Update projects array with fresh data
+                            setProjects(prev => {
+                                const exists = prev.find(p => String(p.id) === String(projectId));
+                                if (exists) {
+                                    return prev.map(p => String(p.id) === String(projectId) ? normalizedProject : p);
+                                }
+                                return [...prev, normalizedProject];
+                            });
+                            
+                            // Set viewingProject with fresh data
+                            setViewingProject(normalizedProject);
+                            setShowModal(false);
+                            
+                            // Handle task opening if specified
+                            if (taskId) {
+                                console.log('📋 Projects: Task ID found in route, will open task:', taskId);
+                                setTimeout(() => {
+                                    console.log('📋 Projects: Dispatching openTask event for task:', taskId);
+                                    window.dispatchEvent(new CustomEvent('openTask', {
+                                        detail: { 
+                                            taskId: taskId,
+                                            tab: 'details'
+                                        }
+                                    }));
+                                }, 2000); // Give ProjectDetail time to load
+                            }
+                        } else {
+                            // Fallback to cached project if refresh fails
+                            console.warn('⚠️ Projects: Failed to get fresh project data, using cached:', projectToOpen.name);
+                            setViewingProject(projectToOpen);
+                            setShowModal(false);
                         }
-                    }));
-                }, 2000); // Give ProjectDetail time to load
+                    })
+                    .catch(error => {
+                        console.error('❌ Projects: Failed to refresh project from database, using cached:', error);
+                        // Fallback to cached project if refresh fails
+                        setViewingProject(projectToOpen);
+                        setShowModal(false);
+                    });
+            } else {
+                // Fallback if DatabaseAPI not available
+                console.log('⚠️ Projects: DatabaseAPI not available, using cached project');
+                setViewingProject(projectToOpen);
+                setShowModal(false);
             }
         } else {
             console.log('⚠️ Projects: Project not found in loaded projects and API fetch failed, route:', projectId, 'Available project IDs:', projects.map(p => p.id));
