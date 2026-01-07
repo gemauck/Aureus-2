@@ -232,9 +232,11 @@ async function handler(req, res) {
         }
       }
       
-      // Handle hasWeeklyFMSReviewProcess separately if provided
+      // Handle hasWeeklyFMSReviewProcess separately if provided - normalize to boolean
       if (body.hasWeeklyFMSReviewProcess !== undefined && body.hasWeeklyFMSReviewProcess !== null) {
-        updateData.hasWeeklyFMSReviewProcess = body.hasWeeklyFMSReviewProcess;
+        updateData.hasWeeklyFMSReviewProcess = typeof body.hasWeeklyFMSReviewProcess === 'boolean'
+          ? body.hasWeeklyFMSReviewProcess
+          : Boolean(body.hasWeeklyFMSReviewProcess === true || body.hasWeeklyFMSReviewProcess === 'true' || body.hasWeeklyFMSReviewProcess === 1);
       }
       
       // Handle monthlyProgress separately if provided - with validation for safety
