@@ -183,6 +183,13 @@ async function handler(req, res) {
         const totalAllLogs = await prisma.auditLog.count();
         console.log('📊 Total audit logs in database (no filter):', totalAllLogs);
         
+        // Debug: Get the 3 most recent logs directly
+        const recentLogs = await prisma.auditLog.findMany({
+          take: 3,
+          orderBy: { createdAt: 'desc' }
+        });
+        console.log('📊 Most recent 3 logs (raw):', recentLogs.map(l => ({ id: l.id, action: l.action, actorId: l.actorId, createdAt: l.createdAt })));
+        
         const [auditLogs, total] = await Promise.all([
           prisma.auditLog.findMany({
             where,
@@ -244,6 +251,7 @@ async function handler(req, res) {
         return ok(res, {
           logs: transformedLogs,
           total,
+          totalAllLogs, // Debug: total logs in database without any filter
           limit,
           offset
         });
