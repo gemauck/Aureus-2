@@ -56,12 +56,31 @@ async function handler(req, res) {
       if (!body.action) return badRequest(res, 'action required');
       if (!body.module) return badRequest(res, 'module required');
 
-      // Always use authenticated user's ID as actorId (for security)
-      const actorId = user.id;
+      // For admins migrating logs, preserve the original userId from the log
+      // For regular users, always use their own ID (security)
+      let actorId = user.id;
+      let actorName = user.name || user.email || 'System';
+      let actorRole = user.role || 'System';
       
-      // Always use the authenticated user's information from database, not from body
-      const userName = user.name || user.email || 'System';
-      const userRole = user.role || 'System';
+      // If admin and body has userId (migration scenario), try to use that user
+      const isAdmin = user.role?.toLowerCase() === 'admin';
+      if (isAdmin && body.userId && body.userId !== 'system' && body.userId !== user.id) {
+        try {
+          const originalUser = await prisma.user.findUnique({
+            where: { id: body.userId },
+            select: { id: true, name: true, email: true, role: true }
+          });
+          if (originalUser) {
+            actorId = originalUser.id;
+            actorName = originalUser.name || originalUser.email || 'System';
+            actorRole = originalUser.role || 'System';
+            console.log(`🔄 Migrating log for original user: ${actorName} (${actorId})`);
+          }
+        } catch (userLookupError) {
+          console.warn('⚠️ Could not find original user for migration, using current user:', body.userId, userLookupError.message);
+          // Fall back to current user
+        }
+      }
       
       const auditLogData = {
         actorId: actorId,
@@ -69,9 +88,9 @@ async function handler(req, res) {
         entity: body.module,
         entityId: body.entityId || body.module || 'system',
         diff: JSON.stringify({
-          user: userName, // Always use authenticated user's name
+          user: actorName, // Use the actor's name (original user if migrated, current user otherwise)
           userId: actorId,
-          userRole: userRole, // Always use authenticated user's role
+          userRole: actorRole, // Use the actor's role
           details: body.details || {},
           ipAddress: body.ipAddress || req.headers['x-forwarded-for'] || req.connection?.remoteAddress || 'N/A',
           sessionId: body.sessionId || 'N/A',
