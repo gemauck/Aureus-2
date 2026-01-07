@@ -1238,7 +1238,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         setShowSectionModal(true);
     };
     
-    const handleSaveSection = (sectionData) => {
+    const handleSaveSection = async (sectionData) => {
         // Calculate the new state before updating
         let updatedSectionsByYear = { ...sectionsByYear };
         const currentYearSections = updatedSectionsByYear[selectedYear] || [];
@@ -1273,7 +1273,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             saveTimeoutRef.current = null;
         }
         
-        // Save immediately with the calculated state
+        // Save immediately with the calculated state - AWAIT to ensure it completes
         if (project?.id && !isSavingRef.current) {
             const serialized = serializeSections(updatedSectionsByYear);
             
@@ -1292,56 +1292,56 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                 }
             }
             
-            // Update lastSavedSnapshot so we know it's saved
-            lastSavedSnapshotRef.current = serialized;
-            
-            // Save to database immediately using API service (like Document Collection does)
-            // This ensures parent component is properly updated
+            // Save to database immediately using API service - AWAIT to ensure parent update completes
             isSavingRef.current = true;
-            (async () => {
-                try {
-                    console.log('💾 Saving weekly review sections to database...', {
-                        projectId: project.id,
-                        serializedLength: serialized.length,
-                        hasData: Object.keys(updatedSectionsByYear).length > 0,
-                        yearKeys: Object.keys(updatedSectionsByYear)
-                    });
+            try {
+                console.log('💾 Saving weekly review sections to database...', {
+                    projectId: project.id,
+                    serializedLength: serialized.length,
+                    hasData: Object.keys(updatedSectionsByYear).length > 0,
+                    yearKeys: Object.keys(updatedSectionsByYear)
+                });
+                
+                // Use API service first (like Document Collection) - this handles parent updates automatically
+                if (apiRef.current && typeof apiRef.current.saveWeeklyFMSReviewSections === 'function') {
+                    const result = await apiRef.current.saveWeeklyFMSReviewSections(project.id, updatedSectionsByYear, false);
+                    console.log('✅ Saved via API service (with parent update)', { result: !!result });
+                } else if (apiRef.current && typeof apiRef.current.saveDocumentSections === 'function') {
+                    // Fallback to documentSections API if weeklyFMSReviewSections API doesn't exist
+                    // NOTE: This will save to documentSections field, not weeklyFMSReviewSections!
+                    console.warn('⚠️ Using documentSections API fallback - data will be saved to wrong field!');
+                    await apiRef.current.saveDocumentSections(project.id, updatedSectionsByYear, false);
+                    console.log('✅ Saved via documentSections API (fallback)');
+                } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
+                    console.log('⚠️ API service not available, using direct DatabaseAPI call');
+                    // Final fallback - direct API call with manual parent update
+                    const updatePayload = {
+                        weeklyFMSReviewSections: serialized
+                    };
+                    const result = await window.DatabaseAPI.updateProject(project.id, updatePayload);
                     
-                    // Use API service first (like Document Collection) - this handles parent updates automatically
-                    if (apiRef.current && typeof apiRef.current.saveWeeklyFMSReviewSections === 'function') {
-                        await apiRef.current.saveWeeklyFMSReviewSections(project.id, updatedSectionsByYear, false);
-                        console.log('✅ Saved via API service (with parent update)');
-                    } else if (apiRef.current && typeof apiRef.current.saveDocumentSections === 'function') {
-                        // Fallback to documentSections API if weeklyFMSReviewSections API doesn't exist
-                        await apiRef.current.saveDocumentSections(project.id, updatedSectionsByYear, false);
-                        console.log('✅ Saved via documentSections API (fallback)');
-                    } else if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
-                        // Final fallback - direct API call with manual parent update
-                        const updatePayload = {
-                            weeklyFMSReviewSections: serialized
-                        };
-                        const result = await window.DatabaseAPI.updateProject(project.id, updatePayload);
-                        
-                        // Update parent component's project prop so it has the latest data
-                        if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
-                            const updatedProject = result?.data?.project || result?.project || result?.data;
-                            if (updatedProject) {
-                                window.updateViewingProject({
-                                    ...updatedProject,
-                                    weeklyFMSReviewSections: serialized
-                                });
-                                console.log('✅ Project prop updated with new sections');
-                            }
+                    // Update parent component's project prop so it has the latest data
+                    if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                        const updatedProject = result?.data?.project || result?.project || result?.data;
+                        if (updatedProject) {
+                            window.updateViewingProject({
+                                ...updatedProject,
+                                weeklyFMSReviewSections: serialized
+                            });
+                            console.log('✅ Project prop updated with new sections');
                         }
-                    } else {
-                        console.error('❌ No available API for saving weekly review sections');
                     }
-                } catch (error) {
-                    console.error('❌ Error saving section to database:', error);
-                } finally {
-                    isSavingRef.current = false;
+                } else {
+                    console.error('❌ No available API for saving weekly review sections');
                 }
-            })();
+                
+                // Update lastSavedSnapshot AFTER successful save
+                lastSavedSnapshotRef.current = serialized;
+            } catch (error) {
+                console.error('❌ Error saving section to database:', error);
+            } finally {
+                isSavingRef.current = false;
+            }
         }
     };
     
@@ -2347,13 +2347,13 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             description: editingSection?.description || ''
         });
         
-        const handleSubmit = (e) => {
+        const handleSubmit = async (e) => {
             e.preventDefault();
             if (!formData.name.trim()) {
                 alert('Please enter a section name');
                 return;
             }
-            handleSaveSection(formData);
+            await handleSaveSection(formData);
         };
         
         return (
