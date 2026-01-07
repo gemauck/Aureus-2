@@ -47,7 +47,7 @@ const TicketDetailModal = ({
         try {
             let response;
             if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
-                response = await window.DatabaseAPI.makeRequest(`/api/helpdesk/${ticket.id}`, { method: 'GET' });
+                response = await window.DatabaseAPI.makeRequest(`/helpdesk/${ticket.id}`, { method: 'GET' });
             } else {
                 const fetchResponse = await fetch(`/api/helpdesk/${ticket.id}`, {
                     method: 'GET',
@@ -110,7 +110,7 @@ const TicketDetailModal = ({
                 if (ticketData.id) {
                     // Update
                     if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
-                        response = await window.DatabaseAPI.makeRequest(`/api/helpdesk/${ticketData.id}`, {
+                        response = await window.DatabaseAPI.makeRequest(`/helpdesk/${ticketData.id}`, {
                             method: 'PATCH',
                             body: JSON.stringify(ticketData),
                             headers: { 'Content-Type': 'application/json' }
@@ -128,7 +128,7 @@ const TicketDetailModal = ({
                 } else {
                     // Create
                     if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
-                        response = await window.DatabaseAPI.makeRequest('/api/helpdesk', {
+                        response = await window.DatabaseAPI.makeRequest('/helpdesk', {
                             method: 'POST',
                             body: JSON.stringify(ticketData),
                             headers: { 'Content-Type': 'application/json' }
@@ -174,7 +174,7 @@ const TicketDetailModal = ({
             // Add comment via API
             if (ticket?.id) {
                 if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
-                    await window.DatabaseAPI.makeRequest(`/api/helpdesk/${ticket.id}/comments`, {
+                    await window.DatabaseAPI.makeRequest(`/helpdesk/${ticket.id}/comments`, {
                         method: 'POST',
                         body: JSON.stringify({ message: newComment }),
                         headers: { 'Content-Type': 'application/json' }
@@ -244,7 +244,7 @@ const TicketDetailModal = ({
         try {
             let response;
             if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
-                response = await window.DatabaseAPI.makeRequest('/api/users', { method: 'GET' });
+                response = await window.DatabaseAPI.makeRequest('/users', { method: 'GET' });
             } else {
                 const fetchResponse = await fetch('/api/users', { method: 'GET', credentials: 'include' });
                 if (!fetchResponse.ok) return;
@@ -263,7 +263,7 @@ const TicketDetailModal = ({
             if (!clientId) return;
             let response;
             if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
-                response = await window.DatabaseAPI.makeRequest(`/api/projects?clientId=${clientId}`, { method: 'GET' });
+                response = await window.DatabaseAPI.makeRequest(`/projects?clientId=${clientId}`, { method: 'GET' });
             } else {
                 const fetchResponse = await fetch(`/api/projects?clientId=${clientId}`, { method: 'GET', credentials: 'include' });
                 if (!fetchResponse.ok) return;
@@ -281,7 +281,7 @@ const TicketDetailModal = ({
         try {
             let response;
             if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
-                response = await window.DatabaseAPI.makeRequest('/api/clients', { method: 'GET' });
+                response = await window.DatabaseAPI.makeRequest('/clients', { method: 'GET' });
             } else {
                 const fetchResponse = await fetch('/api/clients', { method: 'GET', credentials: 'include' });
                 if (!fetchResponse.ok) return;

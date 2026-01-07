@@ -80,13 +80,14 @@ const Helpdesk = () => {
             if (searchTerm) params.append('search', searchTerm);
             
             const queryString = params.toString();
-            const url = `/api/helpdesk${queryString ? `?${queryString}` : ''}`;
+            const endpoint = `/helpdesk${queryString ? `?${queryString}` : ''}`;
             
             // Use DatabaseAPI.makeRequest if available, otherwise use fetch
             let response;
             if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
-                response = await window.DatabaseAPI.makeRequest(url, { method: 'GET' });
+                response = await window.DatabaseAPI.makeRequest(endpoint, { method: 'GET' });
             } else {
+                const url = `/api${endpoint}`;
                 const fetchResponse = await fetch(url, {
                     method: 'GET',
                     headers: {
@@ -141,7 +142,7 @@ const Helpdesk = () => {
                 // Update existing ticket
                 let response;
                 if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
-                    response = await window.DatabaseAPI.makeRequest(`/api/helpdesk/${ticketData.id}`, {
+                    response = await window.DatabaseAPI.makeRequest(`/helpdesk/${ticketData.id}`, {
                         method: 'PATCH',
                         body: JSON.stringify(ticketData),
                         headers: { 'Content-Type': 'application/json' }
@@ -164,7 +165,7 @@ const Helpdesk = () => {
                 // Create new ticket
                 let response;
                 if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
-                    response = await window.DatabaseAPI.makeRequest('/api/helpdesk', {
+                    response = await window.DatabaseAPI.makeRequest('/helpdesk', {
                         method: 'POST',
                         body: JSON.stringify(ticketData),
                         headers: { 'Content-Type': 'application/json' }
@@ -204,7 +205,7 @@ const Helpdesk = () => {
 
         try {
             if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
-                await window.DatabaseAPI.makeRequest(`/api/helpdesk/${ticketId}`, { method: 'DELETE' });
+                await window.DatabaseAPI.makeRequest(`/helpdesk/${ticketId}`, { method: 'DELETE' });
             } else {
                 const fetchResponse = await fetch(`/api/helpdesk/${ticketId}`, {
                     method: 'DELETE',
