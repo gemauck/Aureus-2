@@ -29,6 +29,8 @@ const TaskManagement = () => {
     const [inlineQuickDescription, setInlineQuickDescription] = useState('');
     const [isInlineAdding, setIsInlineAdding] = useState(false);
     const [inlineQuickError, setInlineQuickError] = useState('');
+    const [sortKey, setSortKey] = useState('dueDate');
+    const [sortDir, note_setSortDir] = useState('asc'); // asc | desc
 
     // Function to update view and save to localStorage
     const updateView = (newView) => {
@@ -299,6 +301,69 @@ const TaskManagement = () => {
 
         return filtered;
     }, [tasks, searchQuery]);
+
+    // Sort tasks for List view (uses display values like client/lead names)
+    const sortedListTasks = useMemo(() => {
+        const list = [...filteredTasks];
+
+        const toStr = (v) => (v === null || v === undefined ? '' : String(v)).toLowerCase();
+        const safeDate = (v) => {
+            if (!v) return null;
+            const d = new Date(v);
+            return isNaN(d.getTime()) ? null : d;
+        };
+
+        const statusOrder = { 'todo': 1, 'in-progress': 2, 'completed': 3, 'cancelled': 4 };
+        const priorityOrder = { 'urgent': 1, 'high': 2, 'medium': 3, 'low': 4 };
+
+        const compare = (a, b) => {
+            const dir = sortDir === 'desc' ? -1 : 1;
+
+            if (sortKey === 'title') {
+                return dir * toStr(a.title).localeCompare(toStr(b.title));
+            }
+            if (sortKey === 'status') {
+                const av = statusOrder[a.status] || 99;
+                const bv = statusOrder[b.status] || 99;
+                return dir * (av - bv);
+            }
+            if (sortKey === 'client') {
+                const an = toStr(clients.find(c => c.id === a.clientId)?.name || '');
+                const bn = toStr(clients.find(c => c.id === b.clientId)?.name || '');
+                return dir * an.localeCompare(bn);
+            }
+            if (sortKey === 'lead') {
+                const an = toStr(leads.find(l => l.id === a.leadId)?.name || '');
+                const bn = toStr(leads.find(l => l.id === b.leadId)?.name || '');
+                return dir * an.localeCompare(bn);
+            }
+            if (sortKey === 'dueDate') {
+                const ad = safeDate(a.dueDate);
+                const bd = safeDate(b.dueDate);
+                // Nulls always last
+                if (!ad && !bd) return 0;
+                if (!ad) return 1;
+                if (!bd) return -1;
+                return dir * (ad.getTime() - bd.getTime());
+            }
+            if (sortKey === 'priority') {
+                const av = priorityOrder[toStr(a.priority)] || 99;
+                const bv = priorityOrder[toStr(b.priority)] || 99;
+                return dir * (av - bv);
+            }
+
+            return 0;
+        };
+
+        list.sort((a, b) => {
+            const primary = compare(a, b);
+            if (primary !== 0) return primary;
+            // Stable-ish tie-breaker: title
+            return toStr(a.title).localeCompare(toStr(b.title));
+        });
+
+        return list;
+    }, [filteredTasks, sortKey, sortDir, clients, leads]);
 
     // Group tasks by status for kanban view
     const kanbanTasks = useMemo(() => {
@@ -770,17 +835,32 @@ const TaskManagement = () => {
                             {/* Header */}
                             <div className={`${isDark ? 'bg-gray-900/40 text-gray-300 border-gray-700' : 'bg-gray-50 text-gray-600 border-gray-200'} border-b px-4 py-2 text-xs font-semibold`}>
                                 <div className="grid grid-cols-12 gap-3 items-center">
-                                    <div className="col-span-4">Task</div>
-                                    <div className="col-span-2">Status</div>
-                                    <div className="col-span-3">Client / Lead</div>
-                                    <div className="col-span-2">Due Date</div>
-                                    <div className="col-span-1 text-right">Priority</div>
+                                    <SortableTh label="Task" colSpan="col-span-4" sortKeyName="title" sortKey={sortKey} sortDir={sortDir} onSort={(k) => {
+                                        if (k === sortKey) note_setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); note_setSortDir('asc'); }
+                                    }} isDark={isDark} />
+                                    <SortableTh label="Status" colSpan="col-span-2" sortKeyName="status" sortKey={sortKey} sortDir={sortDir} onSort={(k) => {
+                                        if (k === sortKey) note_setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); note_setSortDir('asc'); }
+                                    }} isDark={isDark} />
+                                    <div className="col-span-3 flex items-center gap-3">
+                                        <SortableTh label="Client" colSpan="col-span-6" sortKeyName="client" sortKey={sortKey} sortDir={sortDir} onSort={(k) => {
+                                            if (k === sortKey) note_setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); note_setSortDir('asc'); }
+                                        }} isDark={isDark} />
+                                        <SortableTh label="Lead" colSpan="col-span-6" sortKeyName="lead" sortKey={sortKey} sortDir={sortDir} onSort={(k) => {
+                                            if (k === sortKey) note_setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); note_setSortDir('asc'); }
+                                        }} isDark={isDark} />
+                                    </div>
+                                    <SortableTh label="Due Date" colSpan="col-span-2" sortKeyName="dueDate" sortKey={sortKey} sortDir={sortDir} onSort={(k) => {
+                                        if (k === sortKey) note_setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); note_setSortDir('asc'); }
+                                    }} isDark={isDark} />
+                                    <SortableTh label="Priority" colSpan="col-span-1 justify-end" sortKeyName="priority" sortKey={sortKey} sortDir={sortDir} onSort={(k) => {
+                                        if (k === sortKey) note_setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); note_setSortDir('asc'); }
+                                    }} isDark={isDark} alignRight />
                                 </div>
                             </div>
 
                             {/* Rows */}
                             <div className="divide-y divide-gray-200/10">
-                                {filteredTasks.map(task => (
+                                {sortedListTasks.map(task => (
                                     <TaskListRow
                                         key={task.id}
                                         task={task}
@@ -1069,6 +1149,23 @@ const TaskCard = ({ task, isDark, onEdit, onDelete, onQuickStatusToggle, clients
                 </div>
             </div>
         </div>
+    );
+};
+
+const SortableTh = ({ label, colSpan, sortKeyName, sortKey, sortDir, onSort, isDark, alignRight = false }) => {
+    const active = sortKey === sortKeyName;
+    const icon = !active ? 'fa-sort' : sortDir === 'asc' ? 'fa-sort-up' : 'fa-sort-down';
+
+    return (
+        <button
+            type="button"
+            onClick={() => onSort(sortKeyName)}
+            className={`${colSpan} flex items-center gap-2 hover:opacity-90 transition-opacity ${alignRight ? 'ml-auto justify-end text-right' : ''}`}
+            title={`Sort by ${label}`}
+        >
+            <span>{label}</span>
+            <i className={`fas ${icon} ${isDark ? 'text-gray-400' : 'text-gray-400'} text-[10px]`}></i>
+        </button>
     );
 };
 
