@@ -175,8 +175,12 @@ const Tools = () => {
                                 </div>
                                 <h3 className="text-sm font-semibold text-gray-900 mb-1">{tool.name}</h3>
                                 <p className="text-xs text-gray-600 leading-relaxed">{tool.description}</p>
+                                {!hasComponent && (
+                                    <p className="text-[10px] text-gray-400 mt-1 italic">Loading...</p>
+                                )}
                             </button>
-                        ))}
+                            );
+                        })}
                     </div>
 
                     {/* Quick Stats */}
