@@ -839,22 +839,19 @@
 
                 const latest = await fetchCurrentVersion();
                 if (!latest) {
-                    // Only log errors, not every failed check
-                    if (forceShow) {
-                        console.warn('⚠️ Version check: Could not fetch current version from server');
-                    }
+                    // Log errors to help debug
+                    console.warn('⚠️ Version check: Could not fetch current version from server');
                     return;
                 }
 
                 const stored = getStoredVersion();
                 const dismissed = getDismissedVersion();
 
-                // Only log when version changes or on first check
-                const versionChanged = stored && stored !== latest;
-                const isFirstCheck = !stored;
+                // Log version check for debugging
+                console.log('🔍 Version check:', { stored, latest, dismissed, forceShow });
 
                 // If version changed
-                if (versionChanged) {
+                if (stored && stored !== latest) {
                     console.log('✅ New version detected!', { old: stored, new: latest });
                     // Show banner if user hasn't dismissed this specific new version
                     if (dismissed !== latest || forceShow) {
@@ -863,13 +860,12 @@
                     } else {
                         console.log('ℹ️ New version available but user dismissed it');
                     }
-                } else if (isFirstCheck) {
-                    // First time - just store the version (only log on initial load)
-                    if (forceShow) {
-                        console.log('📦 First version check - storing version:', latest);
-                    }
+                } else if (!stored) {
+                    // First time - just store the version
+                    console.log('📦 First version check - storing version:', latest);
+                } else {
+                    console.log('✅ Version unchanged:', latest);
                 }
-                // Don't log when version is unchanged - reduces console spam
 
                 // Always update stored version
                 setStoredVersion(latest);

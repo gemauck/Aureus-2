@@ -245,14 +245,14 @@ const app = express()
 const PORT = process.env.PORT || 3000
 
 // Application version info for cache-busting and client refresh prompts
-// Use dynamic version that changes on each deployment/restart
-// Priority: APP_VERSION env var > timestamp-based version > package version
-// Using timestamp ensures version changes on each server restart, triggering update notifications
+// Use dynamic version that changes on each deployment
+// Priority: APP_VERSION env var (set by deployment script) > timestamp-based version > package version
 const getAppVersion = () => {
   if (process.env.APP_VERSION) {
+    // Use the version set by deployment script (git commit hash or timestamp)
     return process.env.APP_VERSION
   }
-  // Use timestamp-based version (changes on each server start/restart)
+  // Fallback: Use timestamp-based version (changes on each server start/restart)
   // This ensures version changes even if APP_VERSION is not set, triggering update notifications
   // Format: package.version-timestamp (e.g., "0.1.20-1734567890123")
   return `${pkg.version}-${Date.now()}`
