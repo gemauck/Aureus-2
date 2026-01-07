@@ -8,7 +8,7 @@ const AuditTrail = () => {
     const [filterModule, setFilterModule] = useState('all');
     const [filterAction, setFilterAction] = useState('all');
     const [filterUser, setFilterUser] = useState('all');
-    const [dateRange, setDateRange] = useState('7'); // days
+    const [dateRange, setDateRange] = useState('all'); // Show all logs by default
     const [currentPage, setCurrentPage] = useState(1);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState(null);
