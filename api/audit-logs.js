@@ -5,10 +5,6 @@ import { created, ok, badRequest, serverError, unauthorized } from './_lib/respo
 
 async function handler(req, res) {
   try {
-    // Parse URL to get path segments
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    const pathSegments = url.pathname.split('/').filter(Boolean);
-    
     // Get authenticated user
     let user = req.user;
     if (!user) {
@@ -54,7 +50,7 @@ async function handler(req, res) {
     }
 
     // Create Audit Log (POST /api/audit-logs)
-    if (req.method === 'POST' && pathSegments.length === 1 && pathSegments[0] === 'audit-logs') {
+    if (req.method === 'POST') {
       const body = await parseJsonBody(req);
       
       if (!body.action) return badRequest(res, 'action required');
@@ -104,7 +100,9 @@ async function handler(req, res) {
     }
 
     // Get Audit Logs (GET /api/audit-logs)
-    if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'audit-logs') {
+    if (req.method === 'GET') {
+      // Parse query parameters from req.url
+      const url = new URL(req.url, `http://${req.headers.host}`);
       const queryParams = url.searchParams;
       const userId = queryParams.get('userId');
       const module = queryParams.get('module');
