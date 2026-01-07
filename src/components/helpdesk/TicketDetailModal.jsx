@@ -65,6 +65,22 @@ const TicketDetailModal = ({
     // Activity log state
     const [activityLog, setActivityLog] = useState(ticket?.activityLog || []);
 
+    // Notes state
+    const [notes, setNotes] = useState(() => {
+        if (ticket?.customFields && typeof ticket.customFields === 'object') {
+            return ticket.customFields.notes || '';
+        }
+        return '';
+    });
+    
+    // Track current customFields to preserve other fields when saving notes
+    const [currentCustomFields, setCurrentCustomFields] = useState(() => {
+        if (ticket?.customFields && typeof ticket.customFields === 'object') {
+            return ticket.customFields;
+        }
+        return {};
+    });
+
     // Load full ticket data if we have an ID
     useEffect(() => {
         if (ticket?.id && !isCreating) {
@@ -103,6 +119,15 @@ const TicketDetailModal = ({
                 });
                 setComments(t.comments || []);
                 setActivityLog(t.activityLog || []);
+                
+                // Load notes from customFields
+                if (t.customFields && typeof t.customFields === 'object') {
+                    setNotes(t.customFields.notes || '');
+                    setCurrentCustomFields(t.customFields);
+                } else {
+                    setNotes('');
+                    setCurrentCustomFields({});
+                }
             }
         } catch (error) {
             console.error('Error loading ticket details:', error);
@@ -126,11 +151,18 @@ const TicketDetailModal = ({
 
         setIsSaving(true);
         try {
+            // Prepare customFields with notes, preserving other custom fields
+            const customFields = {
+                ...currentCustomFields,
+                notes: notes || ''
+            };
+            
             const ticketData = {
                 ...formData,
                 id: ticket?.id,
                 // Ensure type is always set
-                type: formData.type || 'internal'
+                type: formData.type || 'internal',
+                customFields: customFields
             };
             
             // Remove id if creating new ticket
@@ -451,7 +483,7 @@ const TicketDetailModal = ({
                     {/* Tabs */}
                     <div className="border-b border-gray-200 dark:border-gray-600">
                         <nav className="flex -mb-px">
-                            {['overview', 'comments', 'timeline'].map((tab) => (
+                            {['overview', 'notes', 'comments', 'timeline'].map((tab) => (
                                 <button
                                     key={tab}
                                     onClick={() => setActiveTab(tab)}
@@ -658,6 +690,73 @@ const TicketDetailModal = ({
                                         />
                                     </div>
                                 )}
+                            </div>
+                        )}
+
+                        {activeTab === 'notes' && (
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                        Notes
+                                    </label>
+                                    <textarea
+                                        value={notes}
+                                        onChange={(e) => setNotes(e.target.value)}
+                                        rows={12}
+                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Add your notes here..."
+                                    />
+                                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                        These notes are private and only visible to you and other team members.
+                                    </p>
+                                </div>
+                                <div className="flex justify-end">
+                                    <button
+                                        onClick={async () => {
+                                            // Save notes immediately
+                                            if (ticket?.id) {
+                                                try {
+                                                    const customFields = {
+                                                        ...currentCustomFields,
+                                                        notes: notes || ''
+                                                    };
+                                                    
+                                                    const updateData = {
+                                                        customFields: customFields
+                                                    };
+                                                    
+                                                    if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
+                                                        await window.DatabaseAPI.makeRequest(`/helpdesk/${ticket.id}`, {
+                                                            method: 'PATCH',
+                                                            body: JSON.stringify(updateData),
+                                                            headers: { 'Content-Type': 'application/json' }
+                                                        });
+                                                    } else {
+                                                        const fetchResponse = await fetch(`/api/helpdesk/${ticket.id}`, {
+                                                            method: 'PATCH',
+                                                            headers: { 'Content-Type': 'application/json' },
+                                                            credentials: 'include',
+                                                            body: JSON.stringify(updateData)
+                                                        });
+                                                        if (!fetchResponse.ok) throw new Error(`HTTP error! status: ${fetchResponse.status}`);
+                                                    }
+                                                    
+                                                    // Reload ticket to get updated data
+                                                    await loadTicketDetails();
+                                                    
+                                                    // Update current customFields state
+                                                    setCurrentCustomFields(customFields);
+                                                } catch (error) {
+                                                    console.error('Error saving notes:', error);
+                                                    alert(`Failed to save notes: ${error.message}`);
+                                                }
+                                            }
+                                        }}
+                                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Save Notes
+                                    </button>
+                                </div>
                             </div>
                         )}
 
