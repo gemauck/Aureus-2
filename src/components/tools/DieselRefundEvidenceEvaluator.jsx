@@ -2,7 +2,7 @@
 const { useState, useRef } = React;
 
 const DieselRefundEvidenceEvaluator = () => {
-            const [inputData, setInputData] = useState('');
+    const [inputData, setInputData] = useState('');
     const [evaluationResult, setEvaluationResult] = useState(null);
     const [isEvaluating, setIsEvaluating] = useState(false);
     const [error, setError] = useState(null);
