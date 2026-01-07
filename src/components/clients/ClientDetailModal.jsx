@@ -507,9 +507,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Job cards state
     const [jobCards, setJobCards] = useState([]);
     const [loadingJobCards, setLoadingJobCards] = useState(false);
-    const [selectedJobCard, setSelectedJobCard] = useState(null);
-    const [isJobCardModalOpen, setIsJobCardModalOpen] = useState(false);
-    const [clientsForJobCard, setClientsForJobCard] = useState([]);
     
     // Refs to prevent duplicate loading calls
     const isLoadingJobCardsRef = useRef(false);
@@ -679,87 +676,19 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     }, [activeTab, client?.id, loadJobCards]);
 
-    // Load clients for JobCardModal when opening
-    useEffect(() => {
-        if (isJobCardModalOpen && clientsForJobCard.length === 0) {
-            const loadClients = async () => {
-                try {
-                    const cachedClients = window.storage?.getClients?.() || [];
-                    if (cachedClients.length > 0) {
-                        setClientsForJobCard(cachedClients);
-                    } else {
-                        // Fetch from API if not in cache
-                        const token = window.storage?.getToken?.();
-                        if (token) {
-                            const response = await fetch('/api/clients?type=client&pageSize=1000', {
-                                headers: {
-                                    Authorization: `Bearer ${token}`,
-                                    'Content-Type': 'application/json'
-                                }
-                            });
-                            if (response.ok) {
-                                const data = await response.json();
-                                const clients = data.clients || data.data?.clients || data.data || [];
-                                setClientsForJobCard(clients);
-                            }
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error loading clients for job card modal:', error);
-                }
-            };
-            loadClients();
-        }
-    }, [isJobCardModalOpen, clientsForJobCard.length]);
-
-    // Handle job card click
+    // Handle job card click - navigate to full job card detail page
     const handleJobCardClick = (jobCard) => {
-        setSelectedJobCard(jobCard);
-        setIsJobCardModalOpen(true);
-    };
-
-    // Handle job card save
-    const handleJobCardSave = async (jobCardData) => {
-        try {
-            const token = window.storage?.getToken?.();
-            if (!token) {
-                alert('You must be logged in to save job cards.');
-                return;
-            }
-
-            const url = jobCardData.id && jobCardData.id !== Date.now().toString()
-                ? `/api/jobcards/${encodeURIComponent(jobCardData.id)}`
-                : '/api/jobcards';
-
-            const method = jobCardData.id && jobCardData.id !== Date.now().toString() ? 'PUT' : 'POST';
-
-            const response = await fetch(url, {
-                method,
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(jobCardData)
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText || 'Failed to save job card');
-            }
-
-            // Reload job cards after saving
-            await loadJobCards();
-        } catch (error) {
-            console.error('Error saving job card:', error);
-            alert('Failed to save job card: ' + (error.message || 'Unknown error'));
-            throw error;
+        // Navigate to service-maintenance page with job card ID
+        const jobCardId = jobCard.id || jobCard.jobCardNumber;
+        if (jobCardId) {
+            // Use the navigation event system to navigate to the full job card detail page
+            window.dispatchEvent(new CustomEvent('navigateToPage', { 
+                detail: { 
+                    page: 'service-maintenance',
+                    subpath: [jobCardId]
+                } 
+            }));
         }
-    };
-
-    // Handle job card modal close
-    const handleJobCardModalClose = () => {
-        setIsJobCardModalOpen(false);
-        setSelectedJobCard(null);
     };
     
     const [editingContact, setEditingContact] = useState(null);
@@ -4685,16 +4614,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     </form>
                 </div>
             </div>
-        {/* Job Card Modal */}
-        {window.JobCardModal && (
-            <window.JobCardModal
-                isOpen={isJobCardModalOpen}
-                onClose={handleJobCardModalClose}
-                jobCard={selectedJobCard}
-                onSave={handleJobCardSave}
-                clients={clientsForJobCard}
-            />
-        )}
         </div>
     );
 };

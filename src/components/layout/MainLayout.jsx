@@ -346,7 +346,8 @@ const MainLayout = () => {
     React.useEffect(() => {
         const handleNavigate = (event) => {
             if (event.detail && event.detail.page) {
-                navigateToPage(event.detail.page);
+                const subpath = event.detail.subpath || [];
+                navigateToPage(event.detail.page, { subpath });
             }
         };
         
