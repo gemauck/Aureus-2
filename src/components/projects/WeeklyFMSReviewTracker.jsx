@@ -590,6 +590,35 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     }, [project?.id, refreshFromDatabase]);
     
     // ============================================================
+    // Handle navigation with save - ensures data is saved before navigating away
+    const handleBackWithSave = useCallback(async () => {
+        // Check if there are unsaved changes
+        const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
+        
+        if (hasUnsavedChanges && !isSavingRef.current && project?.id) {
+            // Clear any pending debounced saves
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
+            }
+            
+            // Save immediately before navigating
+            console.log('💾 Saving before navigation...');
+            try {
+                await saveToDatabase({ skipParentUpdate: true });
+                console.log('✅ Save complete, navigating...');
+            } catch (error) {
+                console.error('❌ Error saving before navigation:', error);
+                // Still navigate even if save fails - unmount handler will try again
+            }
+        }
+        
+        // Call original onBack handler
+        if (typeof onBack === 'function') {
+            onBack();
+        }
+    }, [project?.id, onBack]);
+    
     // SIMPLE AUTO-SAVE - Debounced, saves entire state
     // ============================================================
     //
@@ -762,8 +791,45 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         return () => {
             const hasUnsavedChanges = serializeSections(sectionsRef.current) !== lastSavedSnapshotRef.current;
             if (hasUnsavedChanges && !isSavingRef.current) {
-                // Fire-and-forget save on unmount; parent update is optional here
-                saveToDatabase({ skipParentUpdate: true });
+                // CRITICAL: Save synchronously on unmount to prevent data loss during navigation
+                // Use both localStorage (immediate) and fetch with keepalive (continues after navigation)
+                const payload = sectionsRef.current || {};
+                const serialized = serializeSections(payload);
+                
+                // 1. Save to localStorage immediately (synchronous)
+                const snapshotKey = getSnapshotKey(project.id);
+                if (snapshotKey && window.localStorage) {
+                    try {
+                        window.localStorage.setItem(snapshotKey, serialized);
+                        console.log('💾 Saved weekly review snapshot to localStorage on unmount');
+                    } catch (storageError) {
+                        console.warn('⚠️ Failed to save weekly review snapshot to localStorage:', storageError);
+                    }
+                }
+                
+                // 2. Send to API with keepalive (continues after page unloads)
+                try {
+                    const token = window.storage?.getToken?.();
+                    if (token && window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
+                        // Use fetch with keepalive to ensure request continues after navigation
+                        fetch(`/api/projects/${project.id}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            },
+                            body: JSON.stringify({
+                                weeklyFMSReviewSections: serialized
+                            }),
+                            keepalive: true // Critical: allows request to continue after page unloads
+                        }).catch(error => {
+                            console.warn('⚠️ Background save on unmount failed (non-critical):', error);
+                        });
+                        console.log('💾 Initiated background save on unmount');
+                    }
+                } catch (error) {
+                    console.warn('⚠️ Failed to initiate background save on unmount:', error);
+                }
             }
         };
     }, [project?.id]);
@@ -2825,7 +2891,7 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <button onClick={onBack} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
+                    <button onClick={handleBackWithSave} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
                         <i className="fas fa-arrow-left"></i>
                     </button>
                     <div>
