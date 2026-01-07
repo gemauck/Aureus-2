@@ -108,9 +108,11 @@ const AuditLogger = {
             
             let migrated = 0;
             let failed = 0;
+            const logsToMigrate = localLogs.slice(0, 100); // Limit to 100 to avoid overwhelming the server
             
-            // Migrate logs in batches
-            for (const log of localLogs.slice(0, 100)) { // Limit to 100 to avoid overwhelming the server
+            // Migrate logs with rate limiting to avoid 429 errors
+            for (let i = 0; i < logsToMigrate.length; i++) {
+                const log = logsToMigrate[i];
                 try {
                     const response = await fetch('/api/audit-logs', {
                         method: 'POST',
@@ -123,14 +125,34 @@ const AuditLogger = {
                     
                     if (response.ok) {
                         migrated++;
+                        // Log progress every 10 logs
+                        if (migrated % 10 === 0) {
+                            console.log(`📊 Migration progress: ${migrated}/${logsToMigrate.length} migrated`);
+                        }
+                    } else if (response.status === 429) {
+                        // Rate limited - wait and retry
+                        const retryAfter = response.headers.get('Retry-After') || '5';
+                        const waitTime = parseInt(retryAfter) * 1000;
+                        console.warn(`⏳ Rate limited. Waiting ${waitTime/1000}s before retrying...`);
+                        await new Promise(resolve => setTimeout(resolve, waitTime));
+                        // Retry this log
+                        i--;
+                        continue;
                     } else {
                         const errorText = await response.text();
                         console.warn('⚠️ Failed to migrate log:', log.id, response.status, errorText);
                         failed++;
                     }
+                    
+                    // Add small delay between requests to avoid rate limiting (50ms)
+                    if (i < logsToMigrate.length - 1) {
+                        await new Promise(resolve => setTimeout(resolve, 50));
+                    }
                 } catch (err) {
                     console.warn('⚠️ Failed to migrate log:', log.id, err);
                     failed++;
+                    // Add delay even on error to avoid overwhelming
+                    await new Promise(resolve => setTimeout(resolve, 50));
                 }
             }
             
