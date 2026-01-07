@@ -216,12 +216,30 @@ const Helpdesk = () => {
                 
                 if (savedTicket) {
                     console.log('✅ Ticket created successfully. Adding to list...');
-                    // Add to local state
+                    // Add to local state - use functional update to ensure we have latest state
                     setTickets(prev => {
+                        // Check if ticket already exists (avoid duplicates)
+                        const exists = prev.some(t => t.id === savedTicket.id);
+                        if (exists) {
+                            console.log('⚠️ Ticket already in list, updating instead...');
+                            return prev.map(t => t.id === savedTicket.id ? savedTicket : t);
+                        }
                         const updated = [savedTicket, ...prev];
                         console.log('📋 Updated tickets list. New count:', updated.length);
+                        console.log('📋 Ticket IDs in list:', updated.map(t => t.id));
                         return updated;
                     });
+                    
+                    // Close modal first
+                    setShowModal(false);
+                    setSelectedTicket(null);
+                    
+                    // Reload tickets after a short delay to ensure API has indexed the new ticket
+                    // This ensures we get the full ticket data with all relations
+                    setTimeout(async () => {
+                        console.log('🔄 Reloading tickets after creation...');
+                        await loadTickets();
+                    }, 500);
                 } else {
                     console.error('❌ No ticket in create response:', response);
                     console.error('❌ Response structure:', {
@@ -232,13 +250,23 @@ const Helpdesk = () => {
                     });
                     throw new Error('No ticket data in response');
                 }
-            }
-            
+            } else {
+                // Update path - close modal immediately
+            // Close modal first so user sees the ticket immediately
             setShowModal(false);
             setSelectedTicket(null);
             
-            // Reload to get fresh data
-            await loadTickets();
+            // Don't reload immediately - the ticket is already in state
+            // The optimistic update is sufficient. If user refreshes, they'll get the latest from API
+            // Only reload if we're updating an existing ticket (to get latest data)
+            if (ticketData.id) {
+                // For updates, reload to get fresh data with relations
+                setTimeout(async () => {
+                    console.log('🔄 Reloading tickets after update...');
+                    await loadTickets();
+                }, 300);
+            }
+            }
         } catch (error) {
             console.error('❌ Error saving ticket:', error);
             console.error('❌ Error details:', {
