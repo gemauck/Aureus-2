@@ -84,7 +84,7 @@ const normalizeProject = (project) => {
         client: project.clientName || project.client || '',
         clientName: project.clientName || project.client || '',
         clientId: project.clientId || null,
-        type: project.type || 'Project',
+        type: project.type || 'Monthly Review',
         status: project.status || 'Active',
         startDate: formatDate(project.startDate),
         dueDate: formatDate(project.dueDate),
@@ -532,7 +532,7 @@ const ProjectsDatabaseFirst = () => {
                 id: selectedProject ? selectedProject.id : Date.now().toString(),
                 name: projectData.name || '',
                 client: projectData.client || '',
-                type: projectData.type || 'Project',
+                type: projectData.type || 'Monthly Review',
                 status: projectData.status || 'Active',
                 startDate: projectData.startDate || new Date().toISOString().split('T')[0],
                 dueDate: projectData.dueDate || '',
@@ -1171,11 +1171,9 @@ const ProjectsDatabaseFirst = () => {
                             className={`px-3 py-2 ${isDark ? 'bg-gray-700 text-gray-100 border-gray-600' : 'bg-white text-gray-900 border-gray-200'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500`}
                         >
                             <option>All Types</option>
+                            <option>General</option>
                             <option>Monthly Review</option>
                             <option>Audit</option>
-                            <option>Analysis</option>
-                            <option>Implementation</option>
-                            <option>Consultation</option>
                         </select>
                     </div>
                 </div>

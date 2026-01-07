@@ -189,6 +189,12 @@ async function handler(req, res) {
         return badRequest(res, 'name required')
       }
 
+      // Validate project type - only allow General, Monthly Review, or Audit
+      const allowedTypes = ['General', 'Monthly Review', 'Audit'];
+      if (body.type && !allowedTypes.includes(body.type)) {
+        return badRequest(res, `Invalid project type. Allowed types are: ${allowedTypes.join(', ')}`)
+      }
+
       // Find or create client by name if clientName is provided
       let clientId = null;
       if (body.clientName) {
@@ -251,7 +257,7 @@ async function handler(req, res) {
         taskLists: typeof body.taskLists === 'string' ? body.taskLists : JSON.stringify(Array.isArray(body.taskLists) ? body.taskLists : []),
         customFieldDefinitions: typeof body.customFieldDefinitions === 'string' ? body.customFieldDefinitions : JSON.stringify(Array.isArray(body.customFieldDefinitions) ? body.customFieldDefinitions : []),
         team: typeof body.team === 'string' ? body.team : JSON.stringify(Array.isArray(body.team) ? body.team : []),
-        type: body.type || 'Project',
+        type: body.type || 'Monthly Review',
         assignedTo: body.assignedTo || '',
         notes: body.notes || '',
         ownerId: req.user?.sub || null,

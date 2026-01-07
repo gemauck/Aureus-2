@@ -94,6 +94,11 @@ async function handler(req, res) {
 
       body = body || {}
 
+      // Validate project type - only allow General, Monthly Review, or Audit
+      const allowedTypes = ['General', 'Monthly Review', 'Audit'];
+      if (body.type && !allowedTypes.includes(body.type)) {
+        return badRequest(res, `Invalid project type. Allowed types are: ${allowedTypes.join(', ')}`)
+      }
       
       // Find or create client by name if clientName is provided
       let clientId = null;

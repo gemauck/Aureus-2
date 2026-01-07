@@ -214,6 +214,7 @@ export function ProjectModal({ project, onSave, onClose, onDelete }) {
                                 onChange={(e) => setFormData({...formData, type: e.target.value})}
                                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                             >
+                                <option>General</option>
                                 <option>Monthly Review</option>
                                 <option>Audit</option>
                             </select>
