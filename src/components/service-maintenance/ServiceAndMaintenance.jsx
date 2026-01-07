@@ -126,20 +126,37 @@ const ServiceAndMaintenance = () => {
         
         if (window.RouteState) {
           const route = window.RouteState.getRoute();
+          console.log('🔍 RouteState route:', route);
           if (route.page === 'service-maintenance' && route.segments && route.segments.length > 0) {
             jobCardId = route.segments[0];
+            console.log('✅ Found job card ID from RouteState:', jobCardId);
+          } else {
+            console.log('⚠️ RouteState: page is', route.page, 'segments:', route.segments);
           }
         } else {
           // Fallback: parse from URL pathname
           const pathname = window.location.pathname || '';
+          const hash = window.location.hash || '';
+          console.log('🔍 Parsing from pathname:', pathname, 'hash:', hash);
           const segments = pathname.split('/').filter(Boolean);
           const serviceIndex = segments.indexOf('service-maintenance');
           if (serviceIndex >= 0 && segments[serviceIndex + 1]) {
             jobCardId = segments[serviceIndex + 1];
+            console.log('✅ Found job card ID from pathname:', jobCardId);
+          } else {
+            // Also check hash
+            const hashSegments = hash.replace('#', '').split('/').filter(Boolean);
+            const hashServiceIndex = hashSegments.indexOf('service-maintenance');
+            if (hashServiceIndex >= 0 && hashSegments[hashServiceIndex + 1]) {
+              jobCardId = hashSegments[hashServiceIndex + 1];
+              console.log('✅ Found job card ID from hash:', jobCardId);
+            }
           }
         }
 
         if (jobCardId) {
+          console.log('🔍 Loading job card from URL:', jobCardId);
+          
           // Check if we already have this job card loaded
           if (selectedJobCard && (selectedJobCard.id === jobCardId || selectedJobCard.jobCardNumber === jobCardId)) {
             // Already showing the correct job card
@@ -152,32 +169,73 @@ const ServiceAndMaintenance = () => {
           // Load the job card from API
           const token = window.storage?.getToken?.();
           if (!token) {
+            console.warn('⚠️ No auth token available');
             return;
           }
 
           try {
-            const response = await fetch(`/api/jobcards/${encodeURIComponent(jobCardId)}`, {
+            // Try to fetch by ID first
+            console.log(`📡 Fetching job card: /api/jobcards/${encodeURIComponent(jobCardId)}`);
+            let response = await fetch(`/api/jobcards/${encodeURIComponent(jobCardId)}`, {
               headers: {
                 Authorization: `Bearer ${token}`,
                 'Content-Type': 'application/json'
               }
             });
 
+            console.log(`📥 Response status: ${response.status}`);
+
+            // If not found by ID, try searching by jobCardNumber
+            if (response.status === 404 && jobCardId.startsWith('JC')) {
+              console.log('🔍 Job card not found by ID, searching by jobCardNumber...');
+              // Fetch all job cards and find by jobCardNumber
+              const listResponse = await fetch(`/api/jobcards?pageSize=1000`, {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+                }
+              });
+              
+              if (listResponse.ok) {
+                const listData = await listResponse.json();
+                const jobCards = listData.jobCards || listData.data?.jobCards || listData.data || [];
+                console.log(`📋 Found ${jobCards.length} job cards, searching for ${jobCardId}...`);
+                const foundJobCard = jobCards.find(jc => 
+                  jc.jobCardNumber === jobCardId || jc.id === jobCardId
+                );
+                
+                if (foundJobCard) {
+                  console.log('✅ Found job card by jobCardNumber:', foundJobCard);
+                  setSelectedJobCard(foundJobCard);
+                  setShowJobCardDetail(true);
+                  return;
+                } else {
+                  console.warn('❌ Job card not found in list');
+                }
+              }
+            }
+
             if (response.ok) {
               const data = await response.json();
               const jobCard = data.jobCard || data.data?.jobCard || data.data || data;
               if (jobCard && jobCard.id) {
+                console.log('✅ Loaded job card:', jobCard);
                 setSelectedJobCard(jobCard);
                 setShowJobCardDetail(true);
+              } else {
+                console.warn('⚠️ Job card data missing ID:', jobCard);
               }
             } else if (response.status === 404) {
-              console.warn(`Job card ${jobCardId} not found`);
+              console.warn(`❌ Job card ${jobCardId} not found (404)`);
               // Clear the detail view if job card not found
               setShowJobCardDetail(false);
               setSelectedJobCard(null);
+            } else {
+              const errorText = await response.text();
+              console.error(`❌ Error loading job card: ${response.status}`, errorText);
             }
           } catch (error) {
-            console.error('Error loading job card from URL:', error);
+            console.error('❌ Error loading job card from URL:', error);
           }
         } else {
           // No job card ID in URL - close detail view if open
