@@ -58,8 +58,27 @@ async function generateTicketNumber() {
   return `${prefix}${sequence.toString().padStart(4, '0')}`
 }
 
+// Check if Ticket table exists
+async function checkTicketTableExists() {
+  try {
+    await prisma.$queryRaw`SELECT 1 FROM "Ticket" LIMIT 1`
+    return true
+  } catch (error) {
+    if (error.code === 'P2021' || error.message?.includes('does not exist') || error.message?.includes('relation') || error.message?.includes('table')) {
+      return false
+    }
+    throw error
+  }
+}
+
 async function handler(req, res) {
   try {
+    // Check if Ticket table exists
+    const tableExists = await checkTicketTableExists()
+    if (!tableExists) {
+      return serverError(res, 'Ticket table not found', 'The Ticket table has not been created yet. Please run the database migration: npx prisma migrate deploy')
+    }
+
     const urlPath = req.url.split('?')[0].split('#')[0].replace(/^\/api\//, '/')
     const pathSegments = urlPath.split('/').filter(Boolean)
     const id = pathSegments[pathSegments.length - 1]
