@@ -424,6 +424,12 @@ model Ticket {
   activityLog     String          @default("[]")
   customFields    String          @default("{}")
   
+  // Email Integration
+  sourceEmail     String?         // Email address that created this ticket
+  emailThreadId   String?          // Thread ID for email threading (Message-ID or In-Reply-To)
+  emailMessageId  String?          // Unique message ID from email provider
+  emailSubject    String?          // Original email subject
+  
   // Timestamps
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
@@ -451,6 +457,9 @@ model Ticket {
   @@index([category])
   @@index([createdById])
   @@index([assignedToId])
+  @@index([emailThreadId])
+  @@index([emailMessageId])
+  @@index([sourceEmail])
   @@index([clientId])
   @@index([projectId])
   @@index([createdAt])

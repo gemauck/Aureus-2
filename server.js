@@ -736,6 +736,29 @@ app.all('/api/helpdesk/stats', async (req, res, next) => {
   }
 })
 
+// Email webhook endpoint for helpdesk (no auth required - uses webhook secret)
+app.all('/api/helpdesk/email-webhook', async (req, res, next) => {
+  try {
+    // Use express.urlencoded and express.json middleware for webhook payloads
+    const handler = await loadHandler(path.join(apiDir, 'helpdesk', 'email-webhook.js'))
+    if (!handler) {
+      console.error('❌ Helpdesk email webhook handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in helpdesk email webhook handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: process.env.NODE_ENV === 'development' ? e.message : 'Failed to process email webhook',
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
 // Explicit mapping for audit-logs operations (GET, POST /api/audit-logs)
 app.all('/api/audit-logs', async (req, res, next) => {
   try {

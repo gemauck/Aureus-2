@@ -33,7 +33,7 @@ function parseTicketJsonFields(ticket) {
 }
 
 // Generate unique ticket number: TKT-YYYY-NNNN
-async function generateTicketNumber() {
+export async function generateTicketNumber() {
   const year = new Date().getFullYear()
   const prefix = `TKT-${year}-`
   
