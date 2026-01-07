@@ -232,7 +232,9 @@ const AuditLogger = {
                 });
                 
                 if (response.ok) {
-                    const data = await response.json();
+                    const responseData = await response.json();
+                    // API wraps response in { data: { logs: [...] } }
+                    const data = responseData.data || responseData;
                     const logCount = data.logs?.length || 0;
                     // Only log on first fetch or when logs exist (reduce spam)
                     if (logCount > 0 || !window._auditLogsFetched) {
@@ -260,7 +262,9 @@ const AuditLogger = {
                                     }
                                 });
                                 if (retryResponse.ok) {
-                                    const retryData = await retryResponse.json();
+                                    const retryResponseData = await retryResponse.json();
+                                    // API wraps response in { data: { logs: [...] } }
+                                    const retryData = retryResponseData.data || retryResponseData;
                                     const retryLogCount = retryData.logs?.length || 0;
                                     console.log('✅ Re-fetched audit logs from backend after migration:', retryLogCount, 'logs');
                                     return retryData.logs || [];
