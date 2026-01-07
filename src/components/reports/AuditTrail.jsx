@@ -338,7 +338,7 @@ const AuditTrail = () => {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                     <p className="text-[10px] text-blue-600 font-medium mb-0.5">Total Logs</p>
-                    <p className="text-xl font-bold text-blue-900">{logs.length}</p>
+                    <p className="text-xl font-bold text-blue-900">{Array.isArray(logs) ? logs.length : 0}</p>
                 </div>
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                     <p className="text-[10px] text-green-600 font-medium mb-0.5">Filtered Results</p>
