@@ -76,13 +76,7 @@ const Tools = () => {
                 TankSizeCalculator: window.TankSizeCalculator,
                 DieselRefundEvidenceEvaluator: window.DieselRefundEvidenceEvaluator
             };
-            setToolComponents(prev => {
-                const hasChanged = Object.keys(components).some(key => 
-                    !!components[key] !== !!prev[key]
-                );
-                // Always return new components if changed, otherwise return prev to avoid unnecessary re-renders
-                return hasChanged ? components : prev;
-            });
+            setToolComponents(components); // Always update to detect late-loading components
         }, 2000); // Check every 2 seconds
         
         // Cleanup
