@@ -163,21 +163,35 @@ const TicketDetailModal = ({
                     }
                 } else {
                     // Create
-                    if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
-                        response = await window.DatabaseAPI.makeRequest('/helpdesk', {
-                            method: 'POST',
-                            body: JSON.stringify(ticketData),
-                            headers: { 'Content-Type': 'application/json' }
-                        });
-                    } else {
-                        const fetchResponse = await fetch('/api/helpdesk', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            credentials: 'include',
-                            body: JSON.stringify(ticketData)
-                        });
-                        if (!fetchResponse.ok) throw new Error(`HTTP error! status: ${fetchResponse.status}`);
-                        response = await fetchResponse.json();
+                    console.log('📝 Creating ticket with data:', ticketData);
+                    try {
+                        if (window.DatabaseAPI && window.DatabaseAPI.makeRequest) {
+                            response = await window.DatabaseAPI.makeRequest('/helpdesk', {
+                                method: 'POST',
+                                body: JSON.stringify(ticketData),
+                                headers: { 'Content-Type': 'application/json' }
+                            });
+                            console.log('✅ DatabaseAPI response:', response);
+                        } else {
+                            const fetchResponse = await fetch('/api/helpdesk', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                credentials: 'include',
+                                body: JSON.stringify(ticketData)
+                            });
+                            console.log('✅ Fetch response status:', fetchResponse.status);
+                            if (!fetchResponse.ok) {
+                                const errorText = await fetchResponse.text();
+                                console.error('❌ Fetch error response:', errorText);
+                                throw new Error(`HTTP error! status: ${fetchResponse.status}, body: ${errorText}`);
+                            }
+                            response = await fetchResponse.json();
+                            console.log('✅ Fetch response data:', response);
+                        }
+                    } catch (error) {
+                        console.error('❌ Error creating ticket:', error);
+                        alert(`Failed to create ticket: ${error.message}`);
+                        throw error;
                     }
                 }
                 
