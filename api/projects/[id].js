@@ -194,6 +194,49 @@ async function handler(req, res) {
       } else {
       }
       
+      // Handle weeklyFMSReviewSections separately if provided - ensure it's properly saved
+      if (body.weeklyFMSReviewSections !== undefined && body.weeklyFMSReviewSections !== null) {
+        try {
+          
+          if (typeof body.weeklyFMSReviewSections === 'string') {
+            // Already a string, validate it's valid JSON
+            const trimmed = body.weeklyFMSReviewSections.trim();
+            if (trimmed === '') {
+              // Empty string means empty object/array
+              updateData.weeklyFMSReviewSections = JSON.stringify({});
+            } else {
+              try {
+                // Validate it's valid JSON
+                const parsed = JSON.parse(trimmed);
+                // If it parsed successfully, use it as-is (it's already a stringified JSON)
+                updateData.weeklyFMSReviewSections = trimmed;
+              } catch (parseError) {
+                console.error('❌ Invalid weeklyFMSReviewSections JSON string:', parseError);
+                // If string is invalid JSON, stringify it (might be double-encoded or corrupted)
+                updateData.weeklyFMSReviewSections = JSON.stringify(body.weeklyFMSReviewSections);
+              }
+            }
+          } else if (Array.isArray(body.weeklyFMSReviewSections)) {
+            // It's an array, stringify it
+            updateData.weeklyFMSReviewSections = JSON.stringify(body.weeklyFMSReviewSections);
+          } else if (typeof body.weeklyFMSReviewSections === 'object') {
+            // It's an object, stringify it
+            updateData.weeklyFMSReviewSections = JSON.stringify(body.weeklyFMSReviewSections);
+          } else {
+            // It's something else (number, boolean, etc.), stringify it
+            updateData.weeklyFMSReviewSections = JSON.stringify(body.weeklyFMSReviewSections);
+          }
+        } catch (error) {
+          console.error('❌ Error processing weeklyFMSReviewSections:', error);
+          // Don't fail the entire update, but log the error
+        }
+      }
+      
+      // Handle hasWeeklyFMSReviewProcess separately if provided
+      if (body.hasWeeklyFMSReviewProcess !== undefined && body.hasWeeklyFMSReviewProcess !== null) {
+        updateData.hasWeeklyFMSReviewProcess = body.hasWeeklyFMSReviewProcess;
+      }
+      
       // Handle monthlyProgress separately if provided - with validation for safety
       if (body.monthlyProgress !== undefined && body.monthlyProgress !== null) {
         try {
