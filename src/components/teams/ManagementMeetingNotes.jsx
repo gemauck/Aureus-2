@@ -508,11 +508,14 @@ const ManagementMeetingNotes = () => {
     const [editingFields, setEditingFields] = useState({}); // { [departmentNotesId-field]: true/false }
     const [tempFieldValues, setTempFieldValues] = useState({}); // { [departmentNotesId-field]: value }
     
-    // Save status removed - saves happen silently in background
+    // Auto-save state - tracks save status per department for visual feedback
+    // 'idle' = no changes, 'saving' = currently saving, 'saved' = recently saved, 'error' = save failed
+    const [autoSaveStatus, setAutoSaveStatus] = useState({}); // { [departmentNotesId]: 'idle' | 'saving' | 'saved' | 'error' }
     
-    // Removed: isBlockingNavigation - no longer needed since we don't auto-save
-
-    // No change tracking - values are saved directly from form fields when Save button is clicked
+    // Refs for auto-save debouncing
+    const autoSaveTimers = useRef({}); // { [departmentNotesId]: timeoutId }
+    const AUTO_SAVE_DELAY = 1000; // 1 second delay after last keystroke (Google Docs style)
+    const savedStatusTimers = useRef({}); // { [departmentNotesId]: timeoutId } - for clearing "Saved" status
 
     const weekCardRefs = useRef({});
     
@@ -1248,6 +1251,15 @@ const ManagementMeetingNotes = () => {
         window.ManagementMeetingNotesRef = managementMeetingNotesRef;
         return () => {
             delete window.ManagementMeetingNotesRef;
+        };
+    }, []);
+    
+    // Cleanup auto-save timers on unmount
+    useEffect(() => {
+        return () => {
+            // Clear all pending auto-save timers
+            Object.values(autoSaveTimers.current).forEach(timer => clearTimeout(timer));
+            Object.values(savedStatusTimers.current).forEach(timer => clearTimeout(timer));
         };
     }, []);
 
@@ -2178,8 +2190,122 @@ const ManagementMeetingNotes = () => {
     const fieldChangeDebounceTimers = useRef({});
     const DEBOUNCE_DELAY = 300; // 300ms debounce delay
     
-    // Track field changes - NO auto-save, only updates local state
-    // Debounced to prevent excessive updates on every keystroke
+    // Auto-save function - saves department notes after a delay (Google Docs style)
+    const triggerAutoSave = useCallback(async (departmentNotesId) => {
+        if (!departmentNotesId) return;
+        
+        // Find the department note to get current values
+        const week = currentMonthlyNotes?.weeklyNotes?.find(w => 
+            w.departmentNotes?.some(dn => dn.id === departmentNotesId)
+        );
+        if (!week) return;
+        
+        const deptNote = week.departmentNotes?.find(dn => dn.id === departmentNotesId);
+        if (!deptNote) return;
+        
+        // Get current values from state
+        let attachments = [];
+        try {
+            if (deptNote.attachments) {
+                attachments = typeof deptNote.attachments === 'string' 
+                    ? JSON.parse(deptNote.attachments) 
+                    : deptNote.attachments;
+            }
+        } catch (e) {
+            console.warn('Error parsing attachments:', e);
+        }
+        
+        const fieldsToSave = {
+            successes: deptNote.successes || '',
+            weekToFollow: deptNote.weekToFollow || '',
+            frustrations: deptNote.frustrations || '',
+            attachments: JSON.stringify(attachments)
+        };
+        
+        // Check if there are actual changes to save
+        const lastSavedKey = `${departmentNotesId}`;
+        const lastSaved = lastSavedValues.current[lastSavedKey];
+        const currentHash = JSON.stringify(fieldsToSave);
+        
+        if (lastSaved === currentHash) {
+            // No changes to save
+            return;
+        }
+        
+        try {
+            // Set saving status
+            setAutoSaveStatus(prev => ({ ...prev, [departmentNotesId]: 'saving' }));
+            
+            // Validate DatabaseAPI
+            if (!window.DatabaseAPI || typeof window.DatabaseAPI.updateDepartmentNotes !== 'function') {
+                throw new Error('Database API is not available');
+            }
+            
+            // Save to database
+            const response = await window.DatabaseAPI.updateDepartmentNotes(departmentNotesId, fieldsToSave);
+            
+            if (!response) {
+                throw new Error('No response from database API');
+            }
+            
+            // Check for errors in response
+            if (response.error || (response.message && response.message.toLowerCase().includes('error'))) {
+                throw new Error(response.error || response.message);
+            }
+            
+            // Save successful - update last saved hash
+            lastSavedValues.current[lastSavedKey] = currentHash;
+            
+            // Update local state with saved values
+            const monthlyId = currentMonthlyNotes?.id || null;
+            updateDepartmentNotesLocalBatched(
+                departmentNotesId,
+                {
+                    successes: fieldsToSave.successes,
+                    weekToFollow: fieldsToSave.weekToFollow,
+                    frustrations: fieldsToSave.frustrations,
+                    attachments: fieldsToSave.attachments
+                },
+                monthlyId
+            );
+            
+            // Set saved status
+            setAutoSaveStatus(prev => ({ ...prev, [departmentNotesId]: 'saved' }));
+            
+            // Clear "Saved" status after 2 seconds
+            if (savedStatusTimers.current[departmentNotesId]) {
+                clearTimeout(savedStatusTimers.current[departmentNotesId]);
+            }
+            savedStatusTimers.current[departmentNotesId] = setTimeout(() => {
+                setAutoSaveStatus(prev => ({ ...prev, [departmentNotesId]: 'idle' }));
+            }, 2000);
+            
+        } catch (error) {
+            console.error('Auto-save error:', error);
+            setAutoSaveStatus(prev => ({ ...prev, [departmentNotesId]: 'error' }));
+            
+            // Clear error status after 3 seconds
+            setTimeout(() => {
+                setAutoSaveStatus(prev => ({ ...prev, [departmentNotesId]: 'idle' }));
+            }, 3000);
+        }
+    }, [currentMonthlyNotes, updateDepartmentNotesLocalBatched]);
+    
+    // Schedule auto-save with debouncing - called when any field changes
+    const scheduleAutoSave = useCallback((departmentNotesId) => {
+        // Clear any existing timer for this department
+        if (autoSaveTimers.current[departmentNotesId]) {
+            clearTimeout(autoSaveTimers.current[departmentNotesId]);
+        }
+        
+        // Set new timer - saves after AUTO_SAVE_DELAY ms of inactivity
+        autoSaveTimers.current[departmentNotesId] = setTimeout(() => {
+            triggerAutoSave(departmentNotesId);
+            delete autoSaveTimers.current[departmentNotesId];
+        }, AUTO_SAVE_DELAY);
+    }, [triggerAutoSave]);
+    
+    // Track field changes - with auto-save triggered after typing stops
     const handleFieldChange = (departmentNotesId, field, value) => {
         // Update local state immediately for responsive UI (no debounce on UI updates)
         const monthlyId = currentMonthlyNotes?.id || null;
@@ -2216,15 +2342,25 @@ const ManagementMeetingNotes = () => {
             delete fieldChangeDebounceTimers.current[fieldKey];
         }, DEBOUNCE_DELAY);
         
-        // NO AUTO-SAVE - changes are only saved when Save button is clicked
+        // Schedule auto-save after user stops typing (Google Docs style)
+        scheduleAutoSave(departmentNotesId);
     };
     
-    // Update field value on blur (just updates local state)
+    // Update field value on blur - triggers immediate save to prevent data loss
     const handleFieldBlur = (departmentNotesId, field, value) => {
         // Update local state with the value
         const monthlyId = currentMonthlyNotes?.id || null;
         updateDepartmentNotesLocal(departmentNotesId, field, value, monthlyId);
-        // No tracking, no auto-save - only saved when Save button is clicked
+        
+        // Clear any pending auto-save timer and save immediately on blur
+        // This ensures data is saved when user clicks away from the field
+        if (autoSaveTimers.current[departmentNotesId]) {
+            clearTimeout(autoSaveTimers.current[departmentNotesId]);
+            delete autoSaveTimers.current[departmentNotesId];
+        }
+        
+        // Trigger immediate save on blur
+        triggerAutoSave(departmentNotesId);
     };
     
     // Handle file upload for attachments
@@ -2308,6 +2444,9 @@ const ManagementMeetingNotes = () => {
             const monthlyId = currentMonthlyNotes?.id || null;
             updateDepartmentNotesLocal(departmentNotesId, 'attachments', JSON.stringify(updatedAttachments), monthlyId);
             
+            // Trigger auto-save for attachment changes
+            triggerAutoSave(departmentNotesId);
+            
         } catch (error) {
             console.error('Error uploading attachments:', error);
             alert(`Failed to upload files: ${error.message}`);
@@ -2343,6 +2482,9 @@ const ManagementMeetingNotes = () => {
         // Update local state
         const monthlyId = currentMonthlyNotes?.id || null;
         updateDepartmentNotesLocal(departmentNotesId, 'attachments', JSON.stringify(updatedAttachments), monthlyId);
+        
+        // Trigger auto-save for attachment deletion
+        triggerAutoSave(departmentNotesId);
     };
 
     // Save all fields for a department at once
@@ -4086,10 +4228,31 @@ const ManagementMeetingNotes = () => {
                                             ) : (
                                                 <>
                                                     <div className="flex items-center justify-between mb-3">
-                                                        <h4 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? `text-${dept.color}-300` : `text-${dept.color}-700`}`}>
-                                                            <i className={`fas ${dept.icon} ${isDark ? `text-${dept.color}-400` : `text-${dept.color}-600`}`}></i>
-                                                            {dept.name}
-                                                        </h4>
+                                                        <div className="flex items-center gap-2">
+                                                            <h4 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? `text-${dept.color}-300` : `text-${dept.color}-700`}`}>
+                                                                <i className={`fas ${dept.icon} ${isDark ? `text-${dept.color}-400` : `text-${dept.color}-600`}`}></i>
+                                                                {dept.name}
+                                                            </h4>
+                                                            {/* Auto-save status indicator */}
+                                                            {autoSaveStatus[deptNote.id] === 'saving' && (
+                                                                <span className={`text-xs flex items-center gap-1 ${isDark ? 'text-slate-400' : 'text-gray-400'}`}>
+                                                                    <i className="fas fa-circle-notch fa-spin text-xs"></i>
+                                                                    Saving...
+                                                                </span>
+                                                            )}
+                                                            {autoSaveStatus[deptNote.id] === 'saved' && (
+                                                                <span className={`text-xs flex items-center gap-1 ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                                                                    <i className="fas fa-check text-xs"></i>
+                                                                    Saved
+                                                                </span>
+                                                            )}
+                                                            {autoSaveStatus[deptNote.id] === 'error' && (
+                                                                <span className={`text-xs flex items-center gap-1 ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                                                                    <i className="fas fa-exclamation-triangle text-xs"></i>
+                                                                    Save failed
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         <div className="flex gap-2">
                                                             {currentMonthlyNotes.userAllocations?.filter((a) => a.departmentId === dept.id).length > 0 && (
                                                                 <div className="flex gap-1">
@@ -4493,40 +4656,6 @@ const ManagementMeetingNotes = () => {
                                                         >
                                                             <i className="fas fa-plus mr-1"></i>
                                                             Add Action Item
-                                                        </button>
-
-                                                        {/* Save Button */}
-                                                        <button
-                                                            type="button"
-                                                            disabled={saving || loading}
-                                                            onClick={async (e) => {
-                                                                e.preventDefault();
-                                                                e.stopPropagation();
-                                                                console.log('💾 Save button clicked for department:', deptNote.id);
-                                                                
-                                                                // CRITICAL: Preserve button reference and scroll position before save
-                                                                const buttonElement = e.currentTarget;
-                                                                const currentScrollPosition = window.scrollY || window.pageYOffset;
-                                                                
-                                                                await handleSaveDepartment(deptNote.id, e);
-                                                                
-                                                                // CRITICAL: Restore focus and scroll position after save to prevent jump
-                                                                // This prevents the browser from scrolling to top when button loses focus
-                                                                requestAnimationFrame(() => {
-                                                                    if (buttonElement && document.body.contains(buttonElement)) {
-                                                                        buttonElement.focus({ preventScroll: true });
-                                                                    }
-                                                                    window.scrollTo({ top: currentScrollPosition, behavior: 'instant' });
-                                                                });
-                                                                
-                                                                setTimeout(() => {
-                                                                    window.scrollTo({ top: currentScrollPosition, behavior: 'instant' });
-                                                                }, 0);
-                                                            }}
-                                                            className={`w-full text-xs px-3 py-2 rounded font-medium transition ${saving || loading ? 'opacity-50 cursor-not-allowed' : ''} ${isDark ? 'bg-primary-600 text-white hover:bg-primary-700' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
-                                                        >
-                                                            <i className={`fas ${saving ? 'fa-spinner fa-spin' : 'fa-save'} mr-1`}></i>
-                                                            {saving ? 'Saving...' : 'Save'}
                                                         </button>
                                                     </div>
                                                 </>
