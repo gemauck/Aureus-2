@@ -103,9 +103,19 @@ const Helpdesk = () => {
                 response = await fetchResponse.json();
             }
             
-            if (response && response.tickets) {
-                setTickets(response.tickets);
+            // Handle response format: API returns { data: { tickets: [...], pagination: {...} } }
+            const ticketsData = response?.tickets || response?.data?.tickets;
+            
+            if (ticketsData && Array.isArray(ticketsData)) {
+                console.log(`✅ Loaded ${ticketsData.length} tickets from API`);
+                setTickets(ticketsData);
             } else {
+                console.warn('⚠️ No tickets in response:', {
+                    hasResponse: !!response,
+                    hasTickets: !!response?.tickets,
+                    hasDataTickets: !!response?.data?.tickets,
+                    responseKeys: response ? Object.keys(response) : []
+                });
                 setTickets([]);
             }
         } catch (error) {
