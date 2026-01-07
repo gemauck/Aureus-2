@@ -258,10 +258,11 @@ const AuditTrail = () => {
     };
 
     // Get unique values for filters (ensure logs is an array)
-    const logsArray = Array.isArray(logs) ? logs : [];
-    const modules = [...new Set(logsArray.map(log => log.module))];
-    const actions = [...new Set(logsArray.map(log => log.action))];
-    const users = [...new Set(logsArray.map(log => ({ id: log.userId, name: log.user })))];
+    // CRITICAL: Always ensure logs is an array before using .map()
+    const logsArray = Array.isArray(logs) ? logs : (logs && typeof logs === 'object' && logs.logs && Array.isArray(logs.logs) ? logs.logs : []);
+    const modules = logsArray.length > 0 ? [...new Set(logsArray.map(log => log.module))] : [];
+    const actions = logsArray.length > 0 ? [...new Set(logsArray.map(log => log.action))] : [];
+    const users = logsArray.length > 0 ? [...new Set(logsArray.map(log => ({ id: log.userId, name: log.user })))] : [];
 
     // Pagination
     const indexOfLastLog = currentPage * logsPerPage;
