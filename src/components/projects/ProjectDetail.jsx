@@ -1748,14 +1748,33 @@ function initializeProjectDetail() {
             }
             
             
-            console.log('💾 Saving project data:', { projectId: project.id, updatePayload });
-            const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
-            console.log('✅ Project save response:', apiResponse);
+            console.log('💾 Saving project data:', { 
+                projectId: project.id, 
+                hasTasks: !!tasksToSave,
+                tasksCount: tasksToSave?.length || 0,
+                updatePayloadKeys: Object.keys(updatePayload)
+            });
             
-            // Check if save was successful - API returns { data: { project: ... } }
-            const savedProject = apiResponse?.project || apiResponse?.data?.project;
-            if (!savedProject && apiResponse?.error) {
-                throw new Error(apiResponse.error.message || 'Failed to save project');
+            try {
+                const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                console.log('✅ Project save response:', apiResponse);
+                
+                // Check if save was successful - API returns { data: { project: ... } }
+                const savedProject = apiResponse?.project || apiResponse?.data?.project;
+                if (!savedProject) {
+                    if (apiResponse?.error) {
+                        throw new Error(apiResponse.error.message || 'Failed to save project');
+                    } else {
+                        // Response might be successful but project not in expected format
+                        console.warn('⚠️ Project save response missing project data:', apiResponse);
+                        // Don't throw - the save might have succeeded even if response format is unexpected
+                    }
+                } else {
+                    console.log('✅ Project saved successfully:', savedProject.id);
+                }
+            } catch (saveError) {
+                console.error('❌ Error in updateProject call:', saveError);
+                throw saveError;
             }
             
             if (window.dataService && typeof window.dataService.getProjects === 'function') {
