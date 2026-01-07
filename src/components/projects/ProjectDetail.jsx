@@ -804,15 +804,18 @@ function initializeProjectDetail() {
     useEffect(() => {
         if (!project?.id) return;
         
-        const currentUrl = window.location.href;
+        const currentPathname = window.location.pathname;
         const expectedPath = `/projects/${project.id}`;
         
-        // If URL doesn't have project ID in path, fix it immediately
-        if (!currentUrl.includes(project.id) || !window.location.pathname.includes(project.id)) {
+        // Check if pathname exactly matches expected path (not just contains project ID)
+        // This prevents false positives when one project ID is a substring of another
+        const pathMatches = currentPathname === expectedPath || currentPathname.startsWith(expectedPath + '/');
+        
+        // Only fix URL if pathname doesn't match expected path
+        if (!pathMatches) {
             console.log('🔧 ProjectDetail: URL missing project ID, fixing...', {
-                currentUrl,
-                expectedPath,
-                currentPathname: window.location.pathname
+                currentPathname,
+                expectedPath
             });
             
             // Preserve any existing search params (like task=)
