@@ -1,5 +1,5 @@
 // Database-First Projects Component - No localStorage dependency
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
 const DEFAULT_TASK_LISTS = [
     { id: 1, name: 'To Do', color: 'blue' },
@@ -775,8 +775,8 @@ const ProjectsDatabaseFirst = () => {
         }
     };
 
-    // Sort function
-    const sortProjects = (a, b) => {
+    // Sort function - memoized to ensure proper reactivity
+    const sortProjects = useCallback((a, b) => {
         let aValue, bValue;
         
         switch (sortColumn) {
@@ -814,18 +814,18 @@ const ProjectsDatabaseFirst = () => {
             // Numeric comparison for dates
             comparison = aValue - bValue;
         } else {
-            // String comparison
+            // String comparison for alphabetical sorting
             comparison = aValue.localeCompare(bValue);
         }
         
         return sortDirection === 'asc' ? comparison : -comparison;
-    };
+    }, [sortColumn, sortDirection]);
 
-    // Filter and search
+    // Filter and search - memoized to ensure proper sorting
     const safeProjects = Array.isArray(projects) ? projects.filter(Boolean) : [];
 
-    const filteredProjects = safeProjects
-        .filter(project => {
+    const filteredProjects = useMemo(() => {
+        const filtered = safeProjects.filter(project => {
             const projectName = (project?.name || '').toLowerCase();
             const clientName = (project?.client || '').toLowerCase();
             const normalizedSearch = (searchTerm || '').toLowerCase();
@@ -835,8 +835,11 @@ const ProjectsDatabaseFirst = () => {
             const matchesStatus = filterStatus === 'All Status' || project.status === filterStatus;
             const matchesType = filterType === 'All Types' || project.type === filterType;
             return matchesSearch && matchesStatus && matchesType;
-        })
-        .sort(sortProjects);
+        });
+        
+        // Always sort - default is alphabetical by name (asc)
+        return [...filtered].sort(sortProjects);
+    }, [safeProjects, searchTerm, filterStatus, filterType, sortProjects]);
 
     // Load data on mount
     useEffect(() => {
