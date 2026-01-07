@@ -128,8 +128,15 @@ const TicketDetailModal = ({
         try {
             const ticketData = {
                 ...formData,
-                id: ticket?.id
+                id: ticket?.id,
+                // Ensure type is always set
+                type: formData.type || 'internal'
             };
+            
+            // Remove id if creating new ticket
+            if (!ticket?.id) {
+                delete ticketData.id;
+            }
             
             if (onSave) {
                 await onSave(ticketData);

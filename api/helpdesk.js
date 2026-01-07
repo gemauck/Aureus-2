@@ -322,6 +322,17 @@ async function handler(req, res) {
         return created(res, { ticket: parsedTicket })
       } catch (error) {
         console.error('❌ Error creating ticket:', error)
+        console.error('❌ Error details:', {
+          message: error.message,
+          code: error.code,
+          meta: error.meta,
+          ticketData: {
+            ticketNumber: ticketData?.ticketNumber,
+            title: ticketData?.title,
+            type: ticketData?.type,
+            createdById: ticketData?.createdById
+          }
+        })
         return serverError(res, 'Failed to create ticket', error.message)
       }
     }
