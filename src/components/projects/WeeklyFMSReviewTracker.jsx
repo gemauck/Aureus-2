@@ -350,6 +350,14 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
     const loadFromProjectProp = useCallback(() => {
         if (!project?.id) return;
         
+        console.log('📥 Loading weekly review sections from project prop...', {
+            projectId: project.id,
+            hasWeeklyFMSReviewSections: !!project.weeklyFMSReviewSections,
+            hasDocumentSections: !!project.documentSections,
+            weeklyFMSReviewSectionsType: typeof project.weeklyFMSReviewSections,
+            weeklyFMSReviewSectionsLength: project.weeklyFMSReviewSections?.length || 0
+        });
+        
         setIsLoading(true);
         try {
             const snapshotKey = getSnapshotKey(project.id);
@@ -360,6 +368,15 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     const yearSections = normalizedFromProp[year] || [];
                     return Array.isArray(yearSections) && yearSections.length > 0;
                 });
+            
+            console.log('📥 Normalized from prop:', {
+                propYearKeys,
+                propHasData,
+                sectionCounts: propYearKeys.reduce((acc, year) => {
+                    acc[year] = (normalizedFromProp[year] || []).length;
+                    return acc;
+                }, {})
+            });
             
             let normalized = normalizedFromProp;
             
@@ -414,6 +431,17 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                     console.warn('⚠️ Failed to restore document collection snapshot from localStorage:', snapshotError);
                 }
             }
+            
+            const finalYearKeys = Object.keys(normalized || {});
+            const finalSectionCount = finalYearKeys.reduce((sum, year) => 
+                sum + ((normalized[year] || []).length), 0
+            );
+            
+            console.log('📥 Final loaded data:', {
+                finalYearKeys,
+                finalSectionCount,
+                source: normalized === normalizedFromProp ? 'prop' : 'localStorage'
+            });
             
             setSectionsByYear(normalized);
             lastSavedSnapshotRef.current = serializeSections(normalized);
@@ -1265,11 +1293,29 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
             isSavingRef.current = true;
             (async () => {
                 try {
+                    console.log('💾 Saving weekly review sections to database...', {
+                        projectId: project.id,
+                        serializedLength: serialized.length,
+                        hasData: Object.keys(updatedSectionsByYear).length > 0,
+                        yearKeys: Object.keys(updatedSectionsByYear)
+                    });
+                    
                     if (window.DatabaseAPI && typeof window.DatabaseAPI.updateProject === 'function') {
                         const updatePayload = {
                             weeklyFMSReviewSections: serialized
                         };
+                        console.log('📤 Update payload:', {
+                            hasWeeklyFMSReviewSections: !!updatePayload.weeklyFMSReviewSections,
+                            payloadLength: updatePayload.weeklyFMSReviewSections?.length || 0
+                        });
+                        
                         const result = await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                        
+                        console.log('✅ Database save response:', {
+                            success: !!result,
+                            hasProject: !!(result?.data?.project || result?.project || result?.data),
+                            responseKeys: result ? Object.keys(result) : []
+                        });
                         
                         // Update parent component's project prop so it has the latest data
                         if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
@@ -1279,9 +1325,18 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
                                     ...updatedProject,
                                     weeklyFMSReviewSections: serialized
                                 });
-                                console.log('✅ Project prop updated with new sections');
+                                console.log('✅ Project prop updated with new sections', {
+                                    projectId: updatedProject.id,
+                                    hasWeeklyFMSReviewSections: !!updatedProject.weeklyFMSReviewSections
+                                });
+                            } else {
+                                console.warn('⚠️ No project data in response to update parent prop');
                             }
+                        } else {
+                            console.warn('⚠️ updateViewingProject function not available');
                         }
+                    } else {
+                        console.error('❌ DatabaseAPI.updateProject not available');
                     }
                 } catch (error) {
                     console.error('❌ Error saving section to database:', error);
