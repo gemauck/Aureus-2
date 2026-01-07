@@ -261,16 +261,24 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
 
     // Year‑scoped setter: only updates the array for the active year
     const setSections = (updater) => {
+        // CRITICAL: Update timestamp when sections change so save logic can detect changes
+        lastChangeTimestampRef.current = Date.now();
+        
         setSectionsByYear(prev => {
             const prevForYear = prev[selectedYear] || [];
             const nextForYear = typeof updater === 'function'
                 ? updater(prevForYear)
                 : (updater || []);
             
-            return {
+            const updated = {
                 ...prev,
                 [selectedYear]: nextForYear
             };
+            
+            // CRITICAL: Keep ref in sync immediately so save functions have latest data
+            sectionsRef.current = updated;
+            
+            return updated;
         });
     };
 
@@ -1172,6 +1180,40 @@ const WeeklyFMSReviewTracker = ({ project, onBack }) => {
         
         setShowSectionModal(false);
         setEditingSection(null);
+        
+        // CRITICAL: Force immediate save when adding/editing sections to prevent data loss
+        // Clear any pending debounced save and save immediately
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+        
+        // Use requestAnimationFrame to ensure state has updated before saving
+        requestAnimationFrame(() => {
+            // Small delay to ensure state is fully updated and ref is synced
+            setTimeout(() => {
+                if (project?.id && !isSavingRef.current) {
+                    const payload = sectionsRef.current || {};
+                    const serialized = serializeSections(payload);
+                    
+                    // CRITICAL: Save to localStorage immediately as backup
+                    const snapshotKey = getSnapshotKey(project.id);
+                    if (snapshotKey && window.localStorage) {
+                        try {
+                            window.localStorage.setItem(snapshotKey, serialized);
+                            console.log('💾 Section change saved to localStorage immediately');
+                        } catch (storageError) {
+                            console.warn('⚠️ Failed to save section to localStorage:', storageError);
+                        }
+                    }
+                    
+                    // Then save to database
+                    saveToDatabase({ skipParentUpdate: true }).catch(error => {
+                        console.error('❌ Error saving section to database:', error);
+                    });
+                }
+            }, 150);
+        });
     };
     
     // Actual deletion logic extracted to separate function
