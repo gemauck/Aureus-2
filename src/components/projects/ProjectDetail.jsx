@@ -1765,6 +1765,7 @@ function initializeProjectDetail() {
                             customFieldDefinitions: customFieldDefinitionsToSave, 
                             documents: documentsToSave, 
                             hasDocumentCollectionProcess: hasDocumentCollectionProcessToSave,
+                            hasWeeklyFMSReviewProcess: hasWeeklyFMSReviewProcessToSave,
                             documentSections: normalizedSections
                         };
                     });
@@ -1782,7 +1783,7 @@ function initializeProjectDetail() {
             alert('Failed to save project changes: ' + error.message);
             throw error;
         }
-    }, [project.id, serializedDocumentSections, documentSectionsArray, taskLists, customFieldDefinitions, documents, hasDocumentCollectionProcess]);
+    }, [project.id, serializedDocumentSections, documentSectionsArray, taskLists, customFieldDefinitions, documents, hasDocumentCollectionProcess, hasWeeklyFMSReviewProcess]);
     
     // Track if hasDocumentCollectionProcess was explicitly changed by user
     const hasDocumentCollectionProcessChangedRef = useRef(false);
@@ -1843,6 +1844,63 @@ function initializeProjectDetail() {
             }
         };
     }, [tasks, taskLists, customFieldDefinitions, documents, hasDocumentCollectionProcess, project.hasDocumentCollectionProcess, persistProjectData, project]);
+
+    // Save hasWeeklyFMSReviewProcess back to project whenever it changes
+    useEffect(() => {
+        // Skip save if this was triggered by manual weekly FMS review process addition
+        // This prevents the debounced save from overwriting an explicit save
+        if (skipNextSaveRef.current) {
+            // Don't reset skipNextSaveRef here - it will be reset by the explicit save handler
+            return;
+        }
+        
+        // Normalize project prop value for comparison
+        const projectHasProcess = project.hasWeeklyFMSReviewProcess === true || 
+                                  project.hasWeeklyFMSReviewProcess === 'true' ||
+                                  project.hasWeeklyFMSReviewProcess === 1 ||
+                                  (typeof project.hasWeeklyFMSReviewProcess === 'string' && project.hasWeeklyFMSReviewProcess.toLowerCase() === 'true');
+        
+        // Only include hasWeeklyFMSReviewProcess in save if:
+        // 1. It was explicitly changed by the user (tracked by ref), OR
+        // 2. It differs from the project prop (meaning user changed it)
+        // Otherwise, exclude it from the save to prevent overwriting the database value
+        const shouldIncludeHasProcess = hasWeeklyFMSReviewProcessChangedRef.current || 
+                                       (hasWeeklyFMSReviewProcess !== projectHasProcess);
+        
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+        }
+        
+        saveTimeoutRef.current = setTimeout(() => {
+            // Double-check that hasWeeklyFMSReviewProcess wasn't explicitly changed
+            // This prevents race conditions where the flag might have been reset
+            if (shouldIncludeHasProcess && hasWeeklyFMSReviewProcessChangedRef.current) {
+                // Include hasWeeklyFMSReviewProcess in save
+                persistProjectData({
+                    nextHasWeeklyFMSReviewProcess: hasWeeklyFMSReviewProcess
+                }).catch(() => {});
+                // Reset the flag after saving
+                hasWeeklyFMSReviewProcessChangedRef.current = false;
+            } else if (!shouldIncludeHasProcess) {
+                // Exclude hasWeeklyFMSReviewProcess from save to prevent overwriting database value
+                persistProjectData({
+                    excludeHasWeeklyFMSReviewProcess: true
+                }).catch(() => {});
+            } else {
+                // Flag was reset but we thought we should include it - skip to be safe
+                persistProjectData({
+                    excludeHasWeeklyFMSReviewProcess: true
+                }).catch(() => {});
+            }
+        }, 1500); // Increased debounce to 1.5 seconds to avoid excessive API calls
+        
+        return () => {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
+            }
+        };
+    }, [tasks, taskLists, customFieldDefinitions, documents, hasWeeklyFMSReviewProcess, project.hasWeeklyFMSReviewProcess, persistProjectData, project]);
 
     // Get document status color
     const getDocumentStatusColor = (status) => {
@@ -3552,6 +3610,7 @@ function initializeProjectDetail() {
     };
     
     const handleAddWeeklyFMSReviewProcess = async () => {
+        
         try {
             // Cancel any pending debounced saves to prevent overwriting
             if (saveTimeoutRef.current) {
@@ -3570,14 +3629,72 @@ function initializeProjectDetail() {
             setShowDocumentProcessDropdown(false);
             
             // Immediately save to database to ensure persistence
+            // Ensure weeklyFMSReviewSections is properly serialized
+            const sectionsToSave = '[]';
+            
             const updatePayload = {
                 hasWeeklyFMSReviewProcess: true,
-                weeklyFMSReviewSections: '[]'
+                weeklyFMSReviewSections: sectionsToSave
             };
             
             const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
             
-            // Update local data service if available
+            // Reload project from database to ensure state is in sync
+            // Also clear any cache to ensure we get fresh data
+            if (window.DatabaseAPI && typeof window.DatabaseAPI.getProject === 'function') {
+                try {
+                    // Clear cache for this project to ensure we get fresh data
+                    if (window.DatabaseAPI._responseCache) {
+                        const cacheKeysToDelete = [];
+                        window.DatabaseAPI._responseCache.forEach((value, key) => {
+                            if (key.includes(`/projects/${project.id}`) || key.includes(`projects/${project.id}`)) {
+                                cacheKeysToDelete.push(key);
+                            }
+                        });
+                        cacheKeysToDelete.forEach(key => {
+                            window.DatabaseAPI._responseCache.delete(key);
+                        });
+                    }
+                    
+                    // Also clear projects list cache to ensure fresh data
+                    if (window.DatabaseAPI._responseCache) {
+                        const projectsListCacheKeys = [];
+                        window.DatabaseAPI._responseCache.forEach((value, key) => {
+                            if (key.includes('/projects') && !key.includes(`/projects/${project.id}`)) {
+                                projectsListCacheKeys.push(key);
+                            }
+                        });
+                        projectsListCacheKeys.forEach(key => {
+                            window.DatabaseAPI._responseCache.delete(key);
+                        });
+                    }
+                    
+                    // Only reload and update if we're not in weekly FMS review view
+                    // (weekly FMS review manages its own state and updates)
+                    const isWeeklyFMSReviewView = activeSection === 'weeklyFMSReview';
+                    
+                    if (!isWeeklyFMSReviewView) {
+                        const refreshedProject = await window.DatabaseAPI.getProject(project.id);
+                        const updatedProject = refreshedProject?.data?.project || refreshedProject?.project || refreshedProject?.data;
+                        if (updatedProject) {
+                            // Update the project prop by triggering a re-render with updated data
+                            // This ensures the component has the latest data from the database
+                            
+                            // Try to update parent component's viewingProject state if possible
+                            // This ensures the prop is updated immediately
+                            // The updateViewingProject function has smart comparison to prevent unnecessary re-renders
+                            if (window.updateViewingProject && typeof window.updateViewingProject === 'function') {
+                                window.updateViewingProject(updatedProject);
+                            }
+                        }
+                    } else {
+                    }
+                } catch (reloadError) {
+                    console.warn('⚠️ Failed to reload project after save:', reloadError);
+                }
+            }
+            
+            // Also update localStorage for consistency
             if (window.dataService && typeof window.dataService.getProjects === 'function') {
                 const savedProjects = await window.dataService.getProjects();
                 if (savedProjects) {
@@ -3599,16 +3716,25 @@ function initializeProjectDetail() {
                 }
             }
             
-            // Reset the flag after saving
-            hasWeeklyFMSReviewProcessChangedRef.current = false;
-            skipNextSaveRef.current = false;
             
+            // Keep the flag set for longer to prevent any debounced saves from overwriting
+            // Reset flag after a delay to allow any pending useEffect to complete
+            setTimeout(() => {
+                skipNextSaveRef.current = false;
+            }, 3000);
+            
+            // Keep the changed flag set for even longer to prevent sync from overwriting
+            // This ensures that when we navigate back, the value from the database will be used
+            // But we don't want to reset it too early, or the sync might overwrite it
+            setTimeout(() => {
+                hasWeeklyFMSReviewProcessChangedRef.current = false;
+            }, 10000); // Increased to 10 seconds to ensure navigation completes
         } catch (error) {
-            console.error('❌ Error adding Weekly FMS Review process:', error);
-            alert('Failed to add Weekly FMS Review process: ' + error.message);
+            console.error('❌ Error saving weekly FMS review process:', error);
+            alert('Failed to save weekly FMS review process: ' + error.message);
             // Revert state on error
             setHasWeeklyFMSReviewProcess(false);
-            hasWeeklyFMSReviewProcessChangedRef.current = false;
+            skipNextSaveRef.current = false;
         }
     };
 
