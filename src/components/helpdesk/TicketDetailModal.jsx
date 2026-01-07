@@ -42,6 +42,7 @@ const TicketDetailModal = ({
     const [activeTab, setActiveTab] = useState('overview');
     const [isEditing, setIsEditing] = useState(isCreating);
     const [isSaving, setIsSaving] = useState(false);
+    const [isSavingNotes, setIsSavingNotes] = useState(false);
     
     // Form state
     const [formData, setFormData] = useState({
@@ -713,12 +714,17 @@ const TicketDetailModal = ({
                                 <div className="flex justify-end">
                                     <button
                                         type="button"
+                                        disabled={isSavingNotes}
                                         onClick={async (e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
                                             
+                                            // Prevent multiple clicks
+                                            if (isSavingNotes) return;
+                                            
                                             // Save notes immediately
                                             if (ticket?.id) {
+                                                setIsSavingNotes(true);
                                                 try {
                                                     const customFields = {
                                                         ...currentCustomFields,
@@ -754,21 +760,22 @@ const TicketDetailModal = ({
                                                     // Show success feedback
                                                     console.log('✅ Notes saved successfully');
                                                     
-                                                    // Reload ticket to get updated data (but don't close modal)
-                                                    // Only reload if ticket still exists
-                                                    if (ticket?.id) {
-                                                        try {
-                                                            await loadTicketDetails();
-                                                        } catch (reloadError) {
-                                                            console.warn('⚠️ Could not reload ticket details:', reloadError);
-                                                            // Don't show error to user, notes are already saved
-                                                        }
-                                                    }
+                                                    // Don't reload ticket details - it might cause issues
+                                                    // The notes are already saved and state is updated
+                                                    // User can refresh manually if needed
                                                 } catch (error) {
                                                     console.error('❌ Error saving notes:', error);
+                                                    
+                                                    // Check if it's an authentication error
+                                                    if (error.message?.includes('401') || error.message?.includes('403') || error.message?.includes('Unauthorized')) {
+                                                        alert('Authentication error. Please refresh the page and try again.');
+                                                        return;
+                                                    }
+                                                    
                                                     // Don't redirect or close modal on error
                                                     alert(`Failed to save notes: ${error.message}\n\nPlease try again.`);
-                                                    return; // Stop execution on error
+                                                } finally {
+                                                    setIsSavingNotes(false);
                                                 }
                                             } else {
                                                 // For new tickets, just update the state - notes will be saved when ticket is created
@@ -781,7 +788,7 @@ const TicketDetailModal = ({
                                         }}
                                         className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                        Save Notes
+                                        {isSavingNotes ? 'Saving...' : 'Save Notes'}
                                     </button>
                                 </div>
                             </div>
